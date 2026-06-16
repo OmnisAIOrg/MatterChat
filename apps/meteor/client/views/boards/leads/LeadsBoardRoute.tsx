@@ -1,7 +1,7 @@
-import { Box, Button, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Callout, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
 import { Page, PageHeader } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouteParameter, useRouter, useSetModal } from '@rocket.chat/ui-contexts';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEndpoint, useRouteParameter, useRouter, useSetModal, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,11 +26,19 @@ const LeadsBoardRoute = () => {
 	const router = useRouter();
 	const setModal = useSetModal();
 	const queryClient = useQueryClient();
+	const dispatchToastMessage = useToastMessageDispatch();
+
+	// Public master switch. When CasePro is NOT enabled the intake board runs
+	// local-only (no read-through pull / write-through push), so we surface a
+	// banner and the Sync action is hidden. Only `CasePro_Enabled` is a public
+	// setting, so it is the sole signal the client can legitimately read.
+	const caseProEnabled = useSetting('CasePro_Enabled', false);
 
 	// CardDetail drawer is opened via ?cardId= on this route.
 	const cardId = useRouteParameter('cardId');
 
 	const ensureLeadsBoard = useEndpoint('POST', '/v1/boards.leads.ensureBoard');
+	const syncFromCasePro = useEndpoint('POST', '/v1/boards.leads.syncFromCasePro');
 
 	const { data, isLoading, isError, refetch } = useQuery({
 		queryKey: ['boards', 'leads', 'ensureBoard'],
@@ -40,6 +48,32 @@ const LeadsBoardRoute = () => {
 
 	const board = data?.board;
 	const boardId = board?._id;
+
+	const syncMutation = useMutation({
+		mutationFn: () => syncFromCasePro({}),
+		onSuccess: (result) => {
+			const { total, created, updated, skipped } = result;
+			dispatchToastMessage({
+				type: 'success',
+				message: t('Boards_Leads_Sync_Result', {
+					created,
+					updated,
+					skipped,
+					total,
+					defaultValue: 'Pulled {{total}} intakes ({{created}} new, {{updated}} updated, {{skipped}} skipped)',
+				}),
+			});
+			// Refresh the kanban cards so newly pulled / restaged leads appear.
+			if (result.boardId) {
+				void queryClient.invalidateQueries({ queryKey: ['boards', 'cards', result.boardId] });
+			} else if (boardId) {
+				void queryClient.invalidateQueries({ queryKey: ['boards', 'cards', boardId] });
+			}
+		},
+		onError: (error) => {
+			dispatchToastMessage({ type: 'error', message: error });
+		},
+	});
 
 	const handleCloseCard = useCallback(() => {
 		router.navigate({ name: 'boards-leads' });
@@ -103,11 +137,32 @@ const LeadsBoardRoute = () => {
 						</Box>
 					}
 				>
-					<Button primary small onClick={handleNewLead}>
-						<Icon name='plus' size='x16' mie={4} />
-						{t('Boards_New_Lead', { defaultValue: 'New Lead' })}
-					</Button>
+					<ButtonGroup>
+						{caseProEnabled && (
+							<Button small onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+								{syncMutation.isPending ? (
+									<Throbber inheritColor size='x12' mie={4} />
+								) : (
+									<Icon name='reload' size='x16' mie={4} />
+								)}
+								{t('Boards_Leads_SyncFromCasePro', { defaultValue: 'Sync from CasePro' })}
+							</Button>
+						)}
+						<Button primary small onClick={handleNewLead}>
+							<Icon name='plus' size='x16' mie={4} />
+							{t('Boards_New_Lead', { defaultValue: 'New Lead' })}
+						</Button>
+					</ButtonGroup>
 				</PageHeader>
+				{!caseProEnabled && (
+					<Box pi={24} pbs={16}>
+						<Callout type='info' icon='info-circled' title={t('Boards_Leads_LocalOnly_Title', { defaultValue: 'Intake is local-only' })}>
+							{t('Boards_Leads_LocalOnly_Description', {
+								defaultValue: 'CasePro is not connected, so leads stay on this board and are not synced to CasePro intake. Enable CasePro to sync.',
+							})}
+						</Callout>
+					</Box>
+				)}
 				<BoardView board={board} lists={lists} />
 			</Page>
 			{cardId && boardId && <CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />}

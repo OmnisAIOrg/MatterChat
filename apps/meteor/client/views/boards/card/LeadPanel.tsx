@@ -1,6 +1,6 @@
 import type { ICommunication, ILead, Serialized } from '@rocket.chat/core-typings';
 import { Box, Button, ButtonGroup, Divider, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
-import { useEndpoint, useMethod, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -58,16 +58,18 @@ const commIcon = (kind: ICommunication['kind']): 'phone' | 'message' | 'mail' | 
 
 const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement => {
 	const { t } = useTranslation();
+	const router = useRouter();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 
 	const getLead = useEndpoint('GET', '/v1/boards.leads.get');
 	const qualifyLead = useMethod('boards.leadQualify');
 	const assignLead = useMethod('boards.leadAssign');
-	// Convert-to-Matter is a later M-phase; call the method optimistically and surface a
-	// friendly "coming soon" if it is not registered yet. Kept as a string so this file
-	// typechecks before the convert method exists.
-	const convertToMatter = useMethod('boards.leadConvertToMatter' as never);
+	// Convert-to-Matter (M3 sync service): creates a CasePro matter from the intake at
+	// "POA Received", binds a matter card, and marks the lead converted. The server is
+	// the conversion gate (requires caseproIntakeId, POA-Received column, not-already-
+	// converted) and throws a descriptive error otherwise, which we surface on failure.
+	const convertToMatter = useMethod('boards.leadConvertToMatter');
 
 	const leadQueryKey = ['boards', 'leads', 'get', leadId];
 
@@ -102,16 +104,16 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 	});
 
 	const convertMutation = useMutation({
-		mutationFn: () => (convertToMatter as unknown as (p: { leadId: string }) => Promise<unknown>)({ leadId }),
-		onSuccess: () => {
+		mutationFn: () => convertToMatter({ leadId }),
+		onSuccess: (result) => {
 			dispatchToastMessage({ type: 'success', message: t('Boards_Lead_Converted', { defaultValue: 'Converted to matter' }) });
 			invalidate();
+			// Jump the user to the freshly created matter's card on the Matters board.
+			if (result?.matterCard?._id) {
+				router.navigate({ name: 'boards-matters', params: { cardId: result.matterCard._id } });
+			}
 		},
-		onError: () =>
-			dispatchToastMessage({
-				type: 'info',
-				message: t('Boards_Lead_ConvertComingSoon', { defaultValue: 'Convert to matter is coming soon' }),
-			}),
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
 	});
 
 	if (isLoading) {
@@ -138,6 +140,10 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 	const qualified = lead.qualification?.qualified;
 	const score = lead.qualification?.score;
 	const converted = Boolean(lead.convertedMatterId);
+	// Convert needs a synced CasePro intake; a local-only lead (no caseproIntakeId)
+	// cannot become a CasePro matter until it is synced. The POA-Received column gate
+	// is enforced server-side and reported via the onError toast.
+	const canConvert = Boolean(lead.caseproIntakeId) && !converted;
 
 	return (
 		<Box pi={4}>
@@ -261,14 +267,25 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 					small
 					primary
 					width='100%'
-					disabled={convertMutation.isPending || converted}
+					disabled={convertMutation.isPending || !canConvert}
 					onClick={() => convertMutation.mutate()}
 				>
-					<Icon name='arrow-forward' size='x16' mie={4} />
+					{convertMutation.isPending ? (
+						<Throbber inheritColor size='x12' mie={4} />
+					) : (
+						<Icon name='arrow-forward' size='x16' mie={4} />
+					)}
 					{converted
 						? t('Boards_Lead_AlreadyConverted', { defaultValue: 'Converted to matter' })
 						: t('Boards_Lead_ConvertToMatter', { defaultValue: 'Convert to matter' })}
 				</Button>
+				{!converted && !lead.caseproIntakeId && (
+					<Box fontScale='micro' color='hint' mbs={4} textAlign='center'>
+						{t('Boards_Lead_ConvertNeedsSync', {
+							defaultValue: 'Sync this lead to CasePro before converting to a matter.',
+						})}
+					</Box>
+				)}
 			</Box>
 		</Box>
 	);

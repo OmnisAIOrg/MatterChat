@@ -97,6 +97,10 @@ export interface ILead extends IRocketChatRecord {
 	cardId?: string; // -> boards_cards._id (the cardType:'lead' card; 1:1 link)
 	boardId?: string; // -> boards_boards._id (the canonical Leads board)
 
+	// CasePro intake sync (M3): CasePro is SoR, this doc is the synced working view.
+	caseproIntakeId?: string; // -> CasePro intake_questionnaires.id (the 1:1 sync key)
+	caseproIntakeNumber?: string; // -> CasePro intake_questionnaires.intake_id (human ref)
+
 	// classification
 	caseTypeId?: string; // -> CasePro case_types.id (practice area)
 	practiceArea?: string; // denormalized practice-area name for display

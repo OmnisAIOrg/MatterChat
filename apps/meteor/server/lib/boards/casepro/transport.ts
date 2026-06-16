@@ -41,8 +41,11 @@ export type CaseProQueryResult = {
 };
 
 /**
- * The transport contract. Three verbs, mirroring the CasePro connector surface
- * that the discovery docs describe (`query_entities`, `get_entity`, `list_schema`).
+ * The transport contract. Five verbs: three reads, two writes. Reads mirror the
+ * CasePro connector's `query_entities` / `get_entity` / `list_schema`; writes
+ * mirror `create_entity` / `update_entity`. Intake sync (M3 leads) is the first
+ * consumer of the writes — capture creates a party + intake_questionnaires row,
+ * drag/qualify/convert patch one.
  */
 export interface ICaseProTransport {
 	/** Page rows for an entity+filter. NEVER groups/aggregates (aggregate_data is broken). */
@@ -51,6 +54,10 @@ export interface ICaseProTransport {
 	get(entity: string, id: string): Promise<CaseProRow | null>;
 	/** Schema/diagnostics for an entity (admin "test connection"). */
 	listSchema(entity: string): Promise<unknown>;
+	/** Create a row for an entity; returns the created row WITH its server-assigned `id`. */
+	create(entity: string, data: CaseProRow): Promise<CaseProRow>;
+	/** Patch a row by id; returns the full updated row. */
+	update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow>;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +74,12 @@ const STUB_PROVIDER_ID_B = 'stub-medprov-b';
 const STUB_LIEN_ID = 'stub-lien-1';
 
 /** Lookup tables (small, org-stable in real CasePro). */
-const STUB_CASE_TYPES: CaseProRow[] = [{ id: 'stub-casetype-mva', case_type_name: 'Motor Vehicle Accident' }];
+const STUB_CASE_TYPES: CaseProRow[] = [
+	{ id: 'stub-casetype-mva', case_type_name: 'Motor Vehicle Accident' },
+	{ id: 'stub-casetype-pi', case_type_name: 'Personal Injury' },
+	{ id: 'stub-casetype-slipfall', case_type_name: 'Slip and Fall' },
+	{ id: 'stub-casetype-premises', case_type_name: 'Premises Liability' },
+];
 const STUB_MATTER_STAGES: CaseProRow[] = [
 	{ id: 'stub-stage-prelit', matter_stage_name: 'Pre-Litigation', order_index: 4 },
 	{ id: 'stub-stage-intake', matter_stage_name: 'Intake', order_index: 1 },
@@ -172,10 +184,109 @@ const STUB_EXPENSES: CaseProRow[] = [
 	{ id: 'stub-exp-2', matter_id: STUB_MATTER_ID, amount: '850.25', status: 'active' },
 ];
 
+// ---------------------------------------------------------------------------
+// Intake (Leads/Intake pillar — M3) stub data.
+// The lead/intake entity is `intake_questionnaires`; the 8 pipeline stages are
+// `intake_stages` (board columns). A read-through pull returns the seeded rows
+// across several stages; writes (capture/qualify/drag/convert) mutate the live map.
+// ---------------------------------------------------------------------------
+
+/** The 8 real intake pipeline stages, by order_index (= the Leads board columns). */
+const STUB_INTAKE_STAGES: CaseProRow[] = [
+	{ id: 'stub-intakestage-new', intake_stage_name: 'New Lead / Initial Contact', order_index: 1 },
+	{ id: 'stub-intakestage-pending', intake_stage_name: 'Pending Intake Completion', order_index: 2 },
+	{ id: 'stub-intakestage-eval', intake_stage_name: 'Further Evaluation', order_index: 3 },
+	{ id: 'stub-intakestage-poasent', intake_stage_name: 'POA Sent', order_index: 4 },
+	{ id: 'stub-intakestage-poarecv', intake_stage_name: 'POA Received', order_index: 5 },
+	{ id: 'stub-intakestage-declined-unq', intake_stage_name: 'Declined-Unqualified', order_index: 6 },
+	{ id: 'stub-intakestage-declined-lost', intake_stage_name: 'Declined-Lost Lead', order_index: 7 },
+	{ id: 'stub-intakestage-noresponse', intake_stage_name: 'No Response', order_index: 8 },
+];
+
+/** Prospective-client parties referenced by the seeded intakes (the global parties pool). */
+const STUB_INTAKE_PARTIES: CaseProRow[] = [
+	{ id: 'stub-party-lead-1', record_type: 'Individual', full_name: 'Maria Gomez', first_name: 'Maria', last_name: 'Gomez', email: 'maria.gomez@example.com', telephone_number: '555-0201' },
+	{ id: 'stub-party-lead-2', record_type: 'Individual', full_name: 'Andre Wilson', first_name: 'Andre', last_name: 'Wilson', email: 'andre.wilson@example.com', telephone_number: '555-0202' },
+	{ id: 'stub-party-lead-3', record_type: 'Individual', full_name: 'Priya Patel', first_name: 'Priya', last_name: 'Patel', email: 'priya.patel@example.com', telephone_number: '555-0203' },
+	{ id: 'stub-party-lead-4', record_type: 'Individual', full_name: 'Tom Becker', first_name: 'Tom', last_name: 'Becker', email: 'tom.becker@example.com', telephone_number: '555-0204' },
+];
+
+/** Representative existing intakes spread across stages so a read-through pull renders. */
+const STUB_INTAKE_QUESTIONNAIRES: CaseProRow[] = [
+	{
+		id: 'stub-intake-1',
+		intake_id: 'INT-1001',
+		intake_stage_id: 'stub-intakestage-new',
+		party_id: 'stub-party-lead-1',
+		case_type_id: 'stub-casetype-mva',
+		status: 'open',
+		intake_status: 'New',
+		source: 'Web Form',
+		incident_date: '2026-05-20',
+		form_data: { howHeard: 'Google', hasAttorney: false },
+		form_schema: null,
+		template_id: 'stub-intaketmpl-mva',
+		matter_id: null,
+		litbox_workspace_id: null,
+		custom_fields: {},
+	},
+	{
+		id: 'stub-intake-2',
+		intake_id: 'INT-1002',
+		intake_stage_id: 'stub-intakestage-pending',
+		party_id: 'stub-party-lead-2',
+		case_type_id: 'stub-casetype-slipfall',
+		status: 'open',
+		intake_status: 'Awaiting Forms',
+		source: 'Referral',
+		incident_date: '2026-04-11',
+		form_data: { howHeard: 'Friend', injuries: ['ankle'] },
+		form_schema: null,
+		template_id: 'stub-intaketmpl-pi',
+		matter_id: null,
+		litbox_workspace_id: null,
+		custom_fields: {},
+	},
+	{
+		id: 'stub-intake-3',
+		intake_id: 'INT-1003',
+		intake_stage_id: 'stub-intakestage-eval',
+		party_id: 'stub-party-lead-3',
+		case_type_id: 'stub-casetype-pi',
+		status: 'open',
+		intake_status: 'Under Review',
+		source: 'Phone',
+		incident_date: '2026-03-02',
+		form_data: { howHeard: 'TV Ad', priorClaims: false },
+		form_schema: null,
+		template_id: 'stub-intaketmpl-pi',
+		matter_id: null,
+		litbox_workspace_id: null,
+		custom_fields: {},
+	},
+	{
+		id: 'stub-intake-4',
+		intake_id: 'INT-1004',
+		intake_stage_id: 'stub-intakestage-poasent',
+		party_id: 'stub-party-lead-4',
+		case_type_id: 'stub-casetype-premises',
+		status: 'open',
+		intake_status: 'Retainer Sent',
+		source: 'Web Form',
+		incident_date: '2026-02-18',
+		form_data: { howHeard: 'Billboard' },
+		form_schema: null,
+		template_id: 'stub-intaketmpl-pi',
+		matter_id: null,
+		litbox_workspace_id: null,
+		custom_fields: {},
+	},
+];
+
 /** entity -> seed rows. Anything not listed returns []. */
 const STUB_TABLES: Record<string, CaseProRow[]> = {
 	matters: STUB_MATTERS,
-	parties: STUB_PARTIES,
+	parties: [...STUB_PARTIES, ...STUB_INTAKE_PARTIES],
 	case_types: STUB_CASE_TYPES,
 	matter_stages: STUB_MATTER_STAGES,
 	matter_sub_stages: STUB_MATTER_SUB_STAGES,
@@ -188,7 +299,14 @@ const STUB_TABLES: Record<string, CaseProRow[]> = {
 	liens: STUB_LIENS,
 	reductions: STUB_REDUCTIONS,
 	expenses: STUB_EXPENSES,
+	intake_stages: STUB_INTAKE_STAGES,
+	intake_questionnaires: STUB_INTAKE_QUESTIONNAIRES,
 };
+
+/** Narrow an unknown to a non-empty string, else undefined. */
+function str(value: unknown): string | undefined {
+	return typeof value === 'string' && value !== '' ? value : undefined;
+}
 
 /** Local, in-memory equality matcher supporting the `{ $in: [...] }` one-hop join. */
 function rowMatches(row: CaseProRow, filter?: Record<string, unknown>): boolean {
@@ -206,20 +324,64 @@ function rowMatches(row: CaseProRow, filter?: Record<string, unknown>): boolean 
 }
 
 export class StubTransport implements ICaseProTransport {
+	/**
+	 * Per-instance live store seeded from the module tables. Created/updated rows
+	 * land here so subsequent get/query reflect them — that's what makes the
+	 * capture → drag → qualify → convert intake flow testable with no credentials.
+	 * Each instance gets its own deep-ish copy so tests don't bleed into each other.
+	 */
+	private readonly store: Record<string, CaseProRow[]> = Object.fromEntries(
+		Object.entries(STUB_TABLES).map(([entity, rows]) => [entity, rows.map((row) => ({ ...row }))]),
+	);
+
+	private seq = 0;
+
+	private table(entity: string): CaseProRow[] {
+		if (!this.store[entity]) {
+			this.store[entity] = [];
+		}
+		return this.store[entity];
+	}
+
+	/** Deterministic-ish stub id (no uuid dep): entity-prefixed + monotonic + time. */
+	private nextId(entity: string): string {
+		this.seq += 1;
+		return `stub-${entity}-${Date.now().toString(36)}-${this.seq}`;
+	}
+
 	async query(entity: string, query: CaseProQuery = {}): Promise<CaseProQueryResult> {
-		const all = (STUB_TABLES[entity] ?? []).filter((row) => rowMatches(row, query.filter));
+		const all = this.table(entity).filter((row) => rowMatches(row, query.filter));
 		const offset = query.offset ?? 0;
 		const limit = query.limit ?? all.length;
-		return { data: all.slice(offset, offset + limit), total: all.length };
+		return { data: all.slice(offset, offset + limit).map((row) => ({ ...row })), total: all.length };
 	}
 
 	async get(entity: string, id: string): Promise<CaseProRow | null> {
-		return (STUB_TABLES[entity] ?? []).find((row) => row.id === id) ?? null;
+		const row = this.table(entity).find((r) => r.id === id);
+		return row ? { ...row } : null;
 	}
 
 	async listSchema(entity: string): Promise<unknown> {
-		const sample = (STUB_TABLES[entity] ?? [])[0] ?? {};
+		const sample = this.table(entity)[0] ?? {};
 		return { entity, columns: Object.keys(sample), stub: true };
+	}
+
+	async create(entity: string, data: CaseProRow): Promise<CaseProRow> {
+		const id = str(data.id) ?? this.nextId(entity);
+		const row: CaseProRow = { ...data, id };
+		this.table(entity).push(row);
+		return { ...row };
+	}
+
+	async update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow> {
+		const rows = this.table(entity);
+		const idx = rows.findIndex((r) => r.id === id);
+		if (idx === -1) {
+			throw new Error(`CasePro stub update(${entity}, ${id}): row not found`);
+		}
+		const next: CaseProRow = { ...rows[idx], ...patch, id };
+		rows[idx] = next;
+		return { ...next };
 	}
 }
 
@@ -293,6 +455,47 @@ export class RestTransport implements ICaseProTransport {
 			throw new Error(`CasePro listSchema(${entity}) failed: ${res.status}`);
 		}
 		return res.json();
+	}
+
+	/**
+	 * TODO(auth): write verbs need the SAME CentralizedAuth/KeyGate handshake the
+	 * reads do (see {@link authHeaders}), plus — critically — a writer identity so
+	 * CasePro stamps created_by/updated_by. Until that seam is wired, the live
+	 * transport must NOT be used for writes in production; the stub backs all tests.
+	 */
+	async create(entity: string, data: CaseProRow): Promise<CaseProRow> {
+		const res = await fetch(this.url('create_entity'), {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify({ entity, data }),
+			ignoreSsrfValidation: true,
+		});
+		if (!res.ok) {
+			throw new Error(`CasePro create(${entity}) failed: ${res.status}`);
+		}
+		const json = (await res.json()) as { data?: CaseProRow };
+		if (!json.data) {
+			throw new Error(`CasePro create(${entity}) returned no row`);
+		}
+		return json.data;
+	}
+
+	async update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow> {
+		const res = await fetch(this.url('update_entity'), {
+			// PATCH semantics; some connectors expose this as POST update_entity — keep POST to match the read verbs.
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify({ entity, id, patch }),
+			ignoreSsrfValidation: true,
+		});
+		if (!res.ok) {
+			throw new Error(`CasePro update(${entity}, ${id}) failed: ${res.status}`);
+		}
+		const json = (await res.json()) as { data?: CaseProRow };
+		if (!json.data) {
+			throw new Error(`CasePro update(${entity}, ${id}) returned no row`);
+		}
+		return json.data;
 	}
 }
 

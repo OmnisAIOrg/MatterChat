@@ -9,6 +9,8 @@ import {
 	isBoardsLeadsAssignProps,
 	isBoardsLeadsLogCommProps,
 	isBoardsLeadsReferralSourceUpsertProps,
+	isBoardsLeadsSyncFromCaseProProps,
+	isBoardsLeadsConvertToMatterProps,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
@@ -23,6 +25,9 @@ import {
 	upsertReferralSource,
 	listLeads,
 	getLeadInfo,
+	convertToMatter,
+	pullFromCasePro,
+	isCaseProEnabled,
 } from '../../../../server/lib/boards/leads';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -264,5 +269,53 @@ API.v1.post(
 		const { source, created } = await upsertReferralSource(userId, fields, sourceId);
 
 		return API.v1.success({ source, created });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// CasePro intake sync + conversion
+// ---------------------------------------------------------------------------
+
+API.v1.post(
+	'boards.leads.syncFromCasePro',
+	{
+		authRequired: true,
+		body: isBoardsLeadsSyncFromCaseProProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!isCaseProEnabled()) {
+			return API.v1.failure('CasePro is not enabled; nothing to sync');
+		}
+
+		const result = await pullFromCasePro(userId);
+
+		return API.v1.success(result);
+	},
+);
+
+API.v1.post(
+	'boards.leads.convertToMatter',
+	{
+		authRequired: true,
+		body: isBoardsLeadsConvertToMatterProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { leadId } = this.bodyParams;
+
+		const { lead, matterId, matterCard, mattersBoardId } = await convertToMatter(userId, leadId);
+
+		return API.v1.success({ lead, matterId, matterCard, mattersBoardId });
 	},
 );

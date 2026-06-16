@@ -15,9 +15,13 @@ import type {
 import { Boards, BoardsLists, BoardsCards, BoardsActivities, BoardsLeads, BoardsCommunications, BoardsReferralSources } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { caseProClient } from '../casepro';
+import type { IntakeCaptureInput } from '../casepro';
 import { createBoard, createList } from '../service';
 import { emitBoardEvent } from '../events';
+import { ensureMattersBoard, bindMatterCard } from '../matters';
 import { assertBoardRole } from '../permissions';
+import { pushCreate, pushStage, pushQualify } from './caseproSync';
 import { nextLeadRefNo, nextSeq } from './refNo';
 
 /**
@@ -130,6 +134,12 @@ export type CreateLeadFields = {
 	tags?: string[];
 	/** when true, skip the phone/email dedupe short-circuit and force-create. */
 	allowDuplicate?: boolean;
+	/**
+	 * Optional explicit CasePro-shaped capture payload for the write-through. When
+	 * omitted (and CasePro is enabled) one is derived from the lead's contact +
+	 * classification. Ignored entirely when CasePro is disabled.
+	 */
+	caseproCapture?: IntakeCaptureInput;
 };
 
 export type CreateLeadResult = {
@@ -226,9 +236,20 @@ export async function createLead(uid: string, fields: CreateLeadFields): Promise
 	});
 	emitBoardEvent('card.created', { boardId: board._id, listId: entryList._id, cardId: card._id, actor: uid });
 
-	const lead = await BoardsLeads.findOneById(leadId);
+	let lead = await BoardsLeads.findOneById(leadId);
 	if (!lead) {
 		throw new Meteor.Error('error-lead-not-found', 'Lead not found after create', { method: 'leads.create' });
+	}
+
+	// CasePro write-through (no-op + swallowed when disabled/unconfigured): create the
+	// party + intake_questionnaires upstream and stamp the sync key back onto the lead.
+	try {
+		const pushed = await pushCreate(uid, lead, fields.caseproCapture);
+		if (pushed.synced) {
+			lead = (await BoardsLeads.findOneById(leadId)) ?? lead;
+		}
+	} catch {
+		// the board is the working view; a failed upstream create must NOT fail capture.
 	}
 
 	return { lead, card, refNo };
@@ -372,7 +393,19 @@ export async function updateLead(uid: string, leadId: string, patch: UpdateLeadP
 				toListId: patch.statusId,
 			});
 		}
-	} else if (current.boardId) {
+	}
+
+	// CasePro write-through on a stage change: map the new column -> intake_stage_id.
+	// No-op + swallowed when CasePro is disabled or the lead has no caseproIntakeId.
+	if (statusChanged && patch.statusId) {
+		try {
+			await pushStage(uid, current, patch.statusId);
+		} catch {
+			// the upstream write is best-effort; the local move already happened.
+		}
+	}
+
+	if (!statusChanged && current.boardId) {
 		await BoardsActivities.log({
 			boardId: current.boardId,
 			...(current.cardId ? { cardId: current.cardId } : {}),
@@ -419,6 +452,14 @@ export async function qualifyLead(uid: string, leadId: string, qualification: IL
 			to: { qualification },
 			ts: new Date(),
 		});
+	}
+
+	// CasePro write-through: persist intake_status + scoring rationale into form_data.
+	// No-op + swallowed when CasePro is disabled or the lead has no caseproIntakeId.
+	try {
+		await pushQualify(uid, current, qualification);
+	} catch {
+		// best-effort; the local qualification already persisted.
 	}
 
 	const lead = await BoardsLeads.findOneById(leadId);
@@ -662,4 +703,137 @@ export async function markLeadLost(uid: string, leadId: string, reason: LeadLost
 		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.markLost' });
 	}
 	return lead;
+}
+
+// ---------------------------------------------------------------------------
+// syncLeadStageFromCard (kanban seam — called from the boards.cardMove path)
+// ---------------------------------------------------------------------------
+
+/**
+ * Kanban → lead sync hook. When a `cardType:'lead'` card is moved on the leads
+ * board (the M1 `boards.cardMove` path), the linked lead's `statusId` must follow
+ * the column AND the change must write through to CasePro. This is the least-
+ * invasive seam: `cardMove` calls this AFTER the card has already moved, so we
+ * only reconcile the lead doc + push the stage (we do NOT move the card again).
+ *
+ * No-op for non-lead cards / cards with no linked lead. Best-effort: a CasePro
+ * write failure never rolls back the (already-committed) card move.
+ */
+export async function syncLeadStageFromCard(uid: string, cardId: string, toListId: string): Promise<void> {
+	const lead = await BoardsLeads.findOneByCardId(cardId);
+	if (!lead) {
+		return; // not a lead card (or no linked lead) — nothing to sync
+	}
+	if (lead.statusId !== toListId) {
+		await BoardsLeads.setStatus(lead._id, toListId);
+	}
+	try {
+		await pushStage(uid, lead, toListId);
+	} catch {
+		// best-effort upstream write; the card + lead status already moved locally.
+	}
+}
+
+// ---------------------------------------------------------------------------
+// convertToMatter (POA Received → create CasePro matter + bind a matter card)
+// ---------------------------------------------------------------------------
+
+export type ConvertToMatterResult = {
+	lead: ILead;
+	matterId: string;
+	matterCard: IBoardCard;
+	mattersBoardId: string;
+};
+
+/**
+ * Convert a lead at "POA Received" into a CasePro matter:
+ *   1. guard the lead sits on the POA-Received column (the conversion gate),
+ *   2. `caseProClient.createMatterFromIntake` — creates the CasePro `matters` row
+ *      and stamps `intake_questionnaires.matter_id` (the upstream link),
+ *   3. ensure a Matters board + `bindMatterCard` (reuses the M3a matters service)
+ *      so the new matter shows on the matters pipeline,
+ *   4. `BoardsLeads.markConverted` (records matterId + matter card id + actor),
+ *   5. activity log on both the lead card and the new matter card.
+ *
+ * Requires CasePro to be enabled AND the lead to carry `caseproIntakeId` — a lead
+ * with no upstream intake cannot be converted through this path.
+ */
+export async function convertToMatter(uid: string, leadId: string): Promise<ConvertToMatterResult> {
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.convertToMatter' });
+	}
+	if (lead.boardId) {
+		await assertBoardRole(lead.boardId, uid, 'member', 'leads.convertToMatter');
+	}
+	if (lead.convertedMatterId || lead.convertedAt) {
+		throw new Meteor.Error('error-lead-already-converted', 'Lead already converted to a matter', {
+			method: 'leads.convertToMatter',
+		});
+	}
+	if (!lead.caseproIntakeId) {
+		throw new Meteor.Error('error-lead-no-intake', 'Lead has no CasePro intake to convert', {
+			method: 'leads.convertToMatter',
+		});
+	}
+
+	// guard: the lead must be on the "POA Received" column (the conversion gate).
+	const POA_RECEIVED = INTAKE_STAGE_NAMES[4];
+	const currentList = await BoardsLists.findOneById(lead.statusId);
+	if (!currentList || currentList.title !== POA_RECEIVED) {
+		throw new Meteor.Error('error-lead-not-at-poa-received', `Lead must be at "${POA_RECEIVED}" to convert`, {
+			method: 'leads.convertToMatter',
+		});
+	}
+
+	// 1. create the CasePro matter from the intake (sets intake.matter_id upstream).
+	const matterName =
+		lead.contact?.fullName ||
+		[lead.contact?.firstName, lead.contact?.lastName].filter(Boolean).join(' ').trim() ||
+		`Matter from intake ${lead.caseproIntakeNumber ?? lead.caseproIntakeId}`;
+	const { matterId } = await caseProClient.createMatterFromIntake(lead.caseproIntakeId, {
+		matter_name: matterName,
+	});
+
+	// 2. ensure the matters board + bind a card for the new matter (reuse M3a service).
+	const { board: mattersBoard, lists: matterLists } = await ensureMattersBoard(uid);
+	const entryMatterList = [...matterLists].sort((a, b) => a.position - b.position)[0];
+	if (!entryMatterList) {
+		throw new Meteor.Error('error-matters-board-not-seeded', 'Matters board has no stage lists', {
+			method: 'leads.convertToMatter',
+		});
+	}
+	const matterCard = await bindMatterCard(uid, mattersBoard._id, entryMatterList._id, matterId);
+
+	// 3. mark the lead converted (records matterId + matter card id + actor).
+	await BoardsLeads.markConverted(leadId, { matterId, matterCardId: matterCard._id, byUserId: uid });
+
+	// 4. activity log on the lead card and on the new matter card.
+	const now = new Date();
+	if (lead.boardId) {
+		await BoardsActivities.log({
+			boardId: lead.boardId,
+			...(lead.cardId ? { cardId: lead.cardId } : {}),
+			actor: uid,
+			verb: 'card.linked',
+			to: { convertedToMatter: matterId, matterCardId: matterCard._id, caseproIntakeId: lead.caseproIntakeId },
+			ts: now,
+		});
+	}
+	await BoardsActivities.log({
+		boardId: mattersBoard._id,
+		listId: matterCard.listId,
+		cardId: matterCard._id,
+		actor: uid,
+		verb: 'card.linked',
+		to: { convertedFromLeadId: leadId, refNo: lead.refNo, matterId },
+		ts: now,
+	});
+
+	const converted = await BoardsLeads.findOneById(leadId);
+	if (!converted) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found after convert', { method: 'leads.convertToMatter' });
+	}
+
+	return { lead: converted, matterId, matterCard, mattersBoardId: mattersBoard._id };
 }

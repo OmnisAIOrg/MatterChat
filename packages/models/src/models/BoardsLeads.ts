@@ -16,6 +16,7 @@ export class BoardsLeadsRaw extends BaseRaw<ILead> implements IBoardsLeadsModel 
 	protected override modelIndexes(): IndexDescription[] {
 		return [
 			{ key: { cardId: 1 }, unique: true, sparse: true },
+			{ key: { caseproIntakeId: 1 }, unique: true, sparse: true },
 			{ key: { statusId: 1, archived: 1 } },
 			{ key: { boardId: 1, archived: 1 } },
 			{ key: { 'contact.phone': 1 }, sparse: true },
@@ -27,6 +28,10 @@ export class BoardsLeadsRaw extends BaseRaw<ILead> implements IBoardsLeadsModel 
 
 	public findOneByCardId(cardId: string, options?: FindOptions<ILead>): Promise<ILead | null> {
 		return this.findOne({ cardId }, options);
+	}
+
+	public findOneByCaseproIntakeId(caseproIntakeId: string, options?: FindOptions<ILead>): Promise<ILead | null> {
+		return this.findOne({ caseproIntakeId }, options);
 	}
 
 	public findByBoard(boardId: string, options?: FindOptions<ILead>): FindCursor<ILead> {

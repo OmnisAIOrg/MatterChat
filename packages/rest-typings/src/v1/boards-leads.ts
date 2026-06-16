@@ -431,6 +431,36 @@ export const isBoardsLeadsReferralSourceUpsertProps = ajv.compile<BoardsLeadsRef
 );
 
 // ---------------------------------------------------------------------------
+// CasePro intake sync + conversion (M3 sync service)
+// ---------------------------------------------------------------------------
+
+type BoardsLeadsSyncFromCaseProProps = Record<string, never>;
+
+const BoardsLeadsSyncFromCaseProSchema = {
+	type: 'object',
+	properties: {},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsLeadsSyncFromCaseProProps = ajv.compile<BoardsLeadsSyncFromCaseProProps>(
+	BoardsLeadsSyncFromCaseProSchema,
+);
+
+type BoardsLeadsConvertToMatterProps = { leadId: string };
+
+const BoardsLeadsConvertToMatterSchema = {
+	type: 'object',
+	properties: { leadId: { type: 'string', minLength: 1 } },
+	required: ['leadId'],
+	additionalProperties: false,
+};
+
+export const isBoardsLeadsConvertToMatterProps = ajv.compile<BoardsLeadsConvertToMatterProps>(
+	BoardsLeadsConvertToMatterSchema,
+);
+
+// ---------------------------------------------------------------------------
 // Endpoint type map
 // ---------------------------------------------------------------------------
 
@@ -461,6 +491,23 @@ export type BoardsLeadsEndpoints = {
 	};
 	'/v1/boards.leads.referralSource.upsert': {
 		POST: (params: BoardsLeadsReferralSourceUpsertProps) => { source: IReferralSource; created: boolean };
+	};
+	'/v1/boards.leads.syncFromCasePro': {
+		POST: (params: BoardsLeadsSyncFromCaseProProps) => {
+			total: number;
+			created: number;
+			updated: number;
+			skipped: number;
+			boardId: string;
+		};
+	};
+	'/v1/boards.leads.convertToMatter': {
+		POST: (params: BoardsLeadsConvertToMatterProps) => {
+			lead: ILead;
+			matterId: string;
+			matterCard: IBoardCard;
+			mattersBoardId: string;
+		};
 	};
 };
 

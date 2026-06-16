@@ -5,3 +5,5 @@ import './leadQualify';
 import './leadAssign';
 import './leadLogComm';
 import './referralSourceUpsert';
+import './leadConvertToMatter';
+import './leadSyncFromCasePro';

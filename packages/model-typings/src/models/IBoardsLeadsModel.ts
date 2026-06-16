@@ -7,6 +7,9 @@ export interface IBoardsLeadsModel extends IBaseModel<ILead> {
 	/** The 1:1 card link finder (unique-sparse on cardId). */
 	findOneByCardId(cardId: string, options?: FindOptions<ILead>): Promise<ILead | null>;
 
+	/** The CasePro intake sync-key finder (unique-sparse on caseproIntakeId). */
+	findOneByCaseproIntakeId(caseproIntakeId: string, options?: FindOptions<ILead>): Promise<ILead | null>;
+
 	findByBoard(boardId: string, options?: FindOptions<ILead>): FindCursor<ILead>;
 	findByStatus(statusId: string, options?: FindOptions<ILead>): FindCursor<ILead>;
 	findByOwner(ownerId: string, options?: FindOptions<ILead>): FindCursor<ILead>;
