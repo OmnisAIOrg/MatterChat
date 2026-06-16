@@ -10,7 +10,10 @@ import {
 	BoardsActivitiesRaw,
 	BoardsBoardsRaw,
 	BoardsCardsRaw,
+	BoardsCommunicationsRaw,
+	BoardsLeadsRaw,
 	BoardsListsRaw,
+	BoardsReferralSourcesRaw,
 	CalendarEventRaw,
 	CallHistoryRaw,
 	CredentialTokensRaw,
@@ -97,6 +100,9 @@ registerModel('IBoardsBoardsModel', new BoardsBoardsRaw(db, trashCollection));
 registerModel('IBoardsListsModel', new BoardsListsRaw(db, trashCollection));
 registerModel('IBoardsCardsModel', new BoardsCardsRaw(db, trashCollection));
 registerModel('IBoardsActivitiesModel', new BoardsActivitiesRaw(db));
+registerModel('IBoardsLeadsModel', new BoardsLeadsRaw(db, trashCollection));
+registerModel('IBoardsReferralSourcesModel', new BoardsReferralSourcesRaw(db, trashCollection));
+registerModel('IBoardsCommunicationsModel', new BoardsCommunicationsRaw(db));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));

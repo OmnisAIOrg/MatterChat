@@ -9,3 +9,5 @@ import './cardCreate';
 import './cardUpdate';
 import './cardMove';
 import './cardArchive';
+import './leads';
+import './matters';

@@ -84,6 +84,9 @@ import type {
 	IBoardsListsModel,
 	IBoardsCardsModel,
 	IBoardsActivitiesModel,
+	IBoardsLeadsModel,
+	IBoardsReferralSourcesModel,
+	IBoardsCommunicationsModel,
 } from '@rocket.chat/model-typings';
 import type { Collection, Db } from 'mongodb';
 
@@ -206,6 +209,9 @@ export const Boards = proxify<IBoardsBoardsModel>('IBoardsBoardsModel');
 export const BoardsLists = proxify<IBoardsListsModel>('IBoardsListsModel');
 export const BoardsCards = proxify<IBoardsCardsModel>('IBoardsCardsModel');
 export const BoardsActivities = proxify<IBoardsActivitiesModel>('IBoardsActivitiesModel');
+export const BoardsLeads = proxify<IBoardsLeadsModel>('IBoardsLeadsModel');
+export const BoardsReferralSources = proxify<IBoardsReferralSourcesModel>('IBoardsReferralSourcesModel');
+export const BoardsCommunications = proxify<IBoardsCommunicationsModel>('IBoardsCommunicationsModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
 	'IOmnichannelServiceLevelAgreementsModel',
 );

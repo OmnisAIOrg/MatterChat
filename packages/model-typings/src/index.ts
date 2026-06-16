@@ -85,3 +85,6 @@ export type * from './models/IBoardsBoardsModel';
 export type * from './models/IBoardsListsModel';
 export type * from './models/IBoardsCardsModel';
 export type * from './models/IBoardsActivitiesModel';
+export type * from './models/IBoardsLeadsModel';
+export type * from './models/IBoardsReferralSourcesModel';
+export type * from './models/IBoardsCommunicationsModel';

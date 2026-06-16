@@ -1,0 +1,665 @@
+import type {
+	IBoard,
+	IBoardList,
+	IBoardCard,
+	ILead,
+	ILeadContact,
+	ILeadIncident,
+	ILeadQualification,
+	ILeadAttribution,
+	LeadCapturedChannel,
+	LeadLostReason,
+	ICommunication,
+	IReferralSource,
+} from '@rocket.chat/core-typings';
+import { Boards, BoardsLists, BoardsCards, BoardsActivities, BoardsLeads, BoardsCommunications, BoardsReferralSources } from '@rocket.chat/models';
+import { Meteor } from 'meteor/meteor';
+
+import { createBoard, createList } from '../service';
+import { emitBoardEvent } from '../events';
+import { assertBoardRole } from '../permissions';
+import { nextLeadRefNo, nextSeq } from './refNo';
+
+/**
+ * Leads server service (M3b). The single place lead mutation logic lives so the
+ * Meteor methods AND the REST routes both call into it. Mirrors the M1 board
+ * service convention: resolve board access → write model → bump rev → activity
+ * log → automation event seam → return the fresh doc.
+ *
+ * Leads are MatterChat-owned (CasePro has no pre-conversion lead entity). A lead
+ * is 1:1 with a `cardType:'lead'` card on the canonical Leads board; the lead's
+ * intake STATUS is the `boards_lists._id` of the column the card sits in (no
+ * separate stage collection — per 00-MASTER-PLAN). We seed those 8 columns from
+ * the REAL CasePro intake_stages names.
+ */
+
+// ---------------------------------------------------------------------------
+// Leads board + intake-stage columns
+// ---------------------------------------------------------------------------
+
+/**
+ * The 8 REAL CasePro intake stages, in order. Seeded as the canonical Leads
+ * board's columns. The first ("New Lead / Initial Contact") is the entry column
+ * every new lead lands on; the last three are terminal-lost; "POA Received" is
+ * the conversion gate. `caseproStageId` is filled later by the M2 CasePro sync —
+ * here we seed by name so the board is usable offline/local-first.
+ */
+export const INTAKE_STAGE_NAMES = [
+	'New Lead / Initial Contact',
+	'Pending Intake Completion',
+	'Further Evaluation',
+	'POA Sent',
+	'POA Received',
+	'Declined-Unqualified',
+	'Declined-Lost Lead',
+	'No Response',
+] as const;
+
+export type IntakeStageName = (typeof INTAKE_STAGE_NAMES)[number];
+
+const LEADS_BOARD_TITLE = 'Leads';
+
+export type EnsureLeadsBoardResult = { board: IBoard; lists: IBoardList[]; created: boolean };
+
+/**
+ * Find (or create + seed) the workspace's leads-pipeline board. Idempotent: a
+ * second call returns the existing board and its lists. Seeds any missing intake
+ * columns by name (so a partially-seeded board self-heals). The caller becomes a
+ * board admin on creation so they immediately pass `assertBoardRole`.
+ */
+export async function ensureLeadsBoard(uid: string): Promise<EnsureLeadsBoardResult> {
+	// reuse the first existing leads-pipeline board the user can see, else create
+	const existing = await Boards.findByPipelineType('leads').toArray();
+	const board = existing.find((b) => !b.archived) ?? null;
+
+	if (board) {
+		const lists = await seedMissingStages(uid, board._id);
+		return { board, lists, created: false };
+	}
+
+	const created = await createBoard(uid, { title: LEADS_BOARD_TITLE, pipelineType: 'leads' });
+	const lists = await seedMissingStages(uid, created._id);
+	return { board: created, lists, created: true };
+}
+
+/** Create any intake-stage columns the board is missing, return all in order. */
+async function seedMissingStages(uid: string, boardId: string): Promise<IBoardList[]> {
+	const current = await BoardsLists.findByBoard(boardId).toArray();
+	const haveByTitle = new Set(current.map((l) => l.title));
+
+	let position = await BoardsLists.maxPosition(boardId);
+	for (const name of INTAKE_STAGE_NAMES) {
+		if (haveByTitle.has(name)) {
+			continue;
+		}
+		position += 1024;
+		// createList enforces member role + audit-logs the list.created activity
+		await createList(uid, { boardId, title: name, position });
+	}
+
+	return BoardsLists.findByBoard(boardId).toArray();
+}
+
+/** The entry column ("New Lead / Initial Contact") for a leads board. */
+async function getEntryList(boardId: string): Promise<IBoardList> {
+	const lists = await BoardsLists.findByBoard(boardId).toArray();
+	const entry = lists.find((l) => l.title === INTAKE_STAGE_NAMES[0]) ?? lists[0];
+	if (!entry) {
+		throw new Meteor.Error('error-leads-board-not-seeded', 'Leads board has no columns', { method: 'leads.create' });
+	}
+	return entry;
+}
+
+// ---------------------------------------------------------------------------
+// createLead
+// ---------------------------------------------------------------------------
+
+export type CreateLeadFields = {
+	contact: ILeadContact;
+	caseTypeId?: string;
+	practiceArea?: string;
+	preferredContact?: ILead['preferredContact'];
+	incident?: ILeadIncident;
+	qualification?: ILeadQualification;
+	attribution?: ILeadAttribution;
+	solDate?: Date;
+	solComputedFrom?: ILead['solComputedFrom'];
+	capturedChannel?: LeadCapturedChannel;
+	questionnaireId?: string;
+	litboxWorkspaceId?: string;
+	tags?: string[];
+	/** when true, skip the phone/email dedupe short-circuit and force-create. */
+	allowDuplicate?: boolean;
+};
+
+export type CreateLeadResult = {
+	lead: ILead;
+	card: IBoardCard;
+	refNo: number;
+	/** set when an open lead already matched the contact phone/email (dedupe). */
+	duplicateOf?: ILead;
+};
+
+/**
+ * Create a lead: dedupe on phone/email → allocate refNo → insert the
+ * `boards_leads` record → create the `cardType:'lead'` card on the entry column
+ * linked back to the lead → write the 1:1 cardId onto the lead → activity log.
+ *
+ * Dedupe: if an open lead already matches the contact phone OR email we DO NOT
+ * create a second one (unless `allowDuplicate`); we return the existing lead in
+ * `duplicateOf` and re-load its card so callers can surface a merge/link prompt.
+ */
+export async function createLead(uid: string, fields: CreateLeadFields): Promise<CreateLeadResult> {
+	const contact = fields.contact ?? {};
+	const phone = contact.phone ?? contact.mobile;
+	const email = contact.email;
+
+	if (!fields.allowDuplicate && (phone || email)) {
+		const matches = await BoardsLeads.findByPhoneOrEmail(phone, email).toArray();
+		const open = matches.find((l) => !l.archived && !l.convertedAt && !l.lostAt);
+		if (open) {
+			const existingCard = open.cardId ? await BoardsCards.findOneById(open.cardId) : null;
+			return {
+				lead: open,
+				card: existingCard as IBoardCard,
+				refNo: open.refNo,
+				duplicateOf: open,
+			};
+		}
+	}
+
+	const { board } = await ensureLeadsBoard(uid);
+	const entryList = await getEntryList(board._id);
+
+	const now = new Date();
+	const refNo = await nextLeadRefNo();
+
+	const leadDoc: Omit<ILead, '_id' | '_updatedAt'> = {
+		refNo,
+		boardId: board._id,
+		statusId: entryList._id,
+		contact,
+		...(fields.caseTypeId ? { caseTypeId: fields.caseTypeId } : {}),
+		...(fields.practiceArea ? { practiceArea: fields.practiceArea } : {}),
+		...(fields.preferredContact ? { preferredContact: fields.preferredContact } : {}),
+		...(fields.incident ? { incident: fields.incident } : {}),
+		...(fields.qualification ? { qualification: fields.qualification } : {}),
+		...(fields.attribution ? { attribution: fields.attribution } : {}),
+		...(fields.solDate ? { solDate: fields.solDate } : {}),
+		...(fields.solComputedFrom ? { solComputedFrom: fields.solComputedFrom } : {}),
+		...(fields.questionnaireId ? { questionnaireId: fields.questionnaireId } : {}),
+		...(fields.litboxWorkspaceId ? { litboxWorkspaceId: fields.litboxWorkspaceId } : {}),
+		...(fields.tags ? { tags: fields.tags } : {}),
+		capturedAt: now,
+		capturedChannel: fields.capturedChannel ?? 'manual',
+		capturedByUserId: uid,
+		lastActivityAt: now,
+		archived: false,
+		rev: 0,
+		createdBy: uid,
+		createdAt: now,
+	};
+
+	const { insertedId: leadId } = await BoardsLeads.insertOne(leadDoc);
+
+	// create the kanban face — a cardType:'lead' card linked to the lead
+	const composedName = contact.fullName || [contact.firstName, contact.lastName].filter(Boolean).join(' ').trim();
+	const title = composedName || `Lead #${refNo}`;
+	const card = await createCardForLead(uid, {
+		boardId: board._id,
+		listId: entryList._id,
+		title,
+		leadId,
+	});
+
+	// back-link the card onto the lead (the 1:1 unique-sparse cardId)
+	await BoardsLeads.updateOne({ _id: leadId }, { $set: { cardId: card._id }, $inc: { rev: 1 } });
+
+	await BoardsActivities.log({
+		boardId: board._id,
+		listId: entryList._id,
+		cardId: card._id,
+		actor: uid,
+		verb: 'card.created',
+		to: { kind: 'lead', leadId, refNo, title },
+		ts: now,
+	});
+	emitBoardEvent('card.created', { boardId: board._id, listId: entryList._id, cardId: card._id, actor: uid });
+
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found after create', { method: 'leads.create' });
+	}
+
+	return { lead, card, refNo };
+}
+
+/**
+ * Insert a `cardType:'lead'` card carrying the discriminated `{kind:'lead', leadId}`
+ * link. We write the card doc directly (not the M1 `createCard`) because the link
+ * union + lead card type must be set atomically at insert.
+ */
+async function createCardForLead(
+	uid: string,
+	params: { boardId: string; listId: string; title: string; leadId: string },
+): Promise<IBoardCard> {
+	await assertBoardRole(params.boardId, uid, 'member', 'leads.create');
+
+	const position = (await BoardsCards.maxPosition(params.listId)) + 1024;
+	const cardNumber = await Boards.nextCardNumber(params.boardId);
+	const now = new Date();
+
+	const doc: Omit<IBoardCard, '_id' | '_updatedAt'> = {
+		boardId: params.boardId,
+		listId: params.listId,
+		title: params.title,
+		position,
+		cardType: 'lead',
+		link: { kind: 'lead', leadId: params.leadId },
+		labels: [],
+		assignees: [],
+		watchers: [],
+		fieldValues: {},
+		checklists: [],
+		attachments: [],
+		comments: [],
+		cardNumber,
+		archived: false,
+		rev: 0,
+		createdBy: uid,
+		createdAt: now,
+	};
+
+	const { insertedId } = await BoardsCards.insertOne(doc);
+	const card = await BoardsCards.findOneById(insertedId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Lead card not found after create', { method: 'leads.create' });
+	}
+	return card;
+}
+
+// ---------------------------------------------------------------------------
+// updateLead
+// ---------------------------------------------------------------------------
+
+export type UpdateLeadPatch = Partial<
+	Pick<
+		ILead,
+		| 'contact'
+		| 'preferredContact'
+		| 'caseTypeId'
+		| 'practiceArea'
+		| 'incident'
+		| 'attribution'
+		| 'solDate'
+		| 'solComputedFrom'
+		| 'solAtRisk'
+		| 'subStatus'
+		| 'tags'
+		| 'litboxWorkspaceId'
+		| 'channelRoomId'
+	>
+> & {
+	/** move the lead to a different intake-stage column (mirrors the card move). */
+	statusId?: string;
+};
+
+/**
+ * Patch a lead's editable fields. When `statusId` changes we also move the
+ * linked card to that column (so the kanban face stays in sync) and log the
+ * transition. Other field edits log a `field.changed` activity.
+ */
+export async function updateLead(uid: string, leadId: string, patch: UpdateLeadPatch): Promise<ILead> {
+	const current = await BoardsLeads.findOneById(leadId);
+	if (!current) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.update' });
+	}
+	if (current.boardId) {
+		await assertBoardRole(current.boardId, uid, 'member', 'leads.update');
+	}
+
+	const set: Record<string, unknown> = { lastActivityAt: new Date() };
+	const fieldKeys: (keyof UpdateLeadPatch)[] = [
+		'contact',
+		'preferredContact',
+		'caseTypeId',
+		'practiceArea',
+		'incident',
+		'attribution',
+		'solDate',
+		'solComputedFrom',
+		'solAtRisk',
+		'subStatus',
+		'tags',
+		'litboxWorkspaceId',
+		'channelRoomId',
+	];
+	for (const key of fieldKeys) {
+		if (patch[key] !== undefined) {
+			set[key] = patch[key];
+		}
+	}
+
+	const statusChanged = typeof patch.statusId === 'string' && patch.statusId !== current.statusId;
+	if (statusChanged) {
+		set.statusId = patch.statusId;
+	}
+
+	await BoardsLeads.updateOne({ _id: leadId }, { $set: set, $inc: { rev: 1 } });
+
+	// keep the kanban card in sync on a status change
+	if (statusChanged && current.cardId && current.boardId && patch.statusId) {
+		const targetList = await BoardsLists.findOneById(patch.statusId);
+		if (targetList && targetList.boardId === current.boardId && !targetList.archived) {
+			const position = (await BoardsCards.maxPosition(patch.statusId)) + 1024;
+			await BoardsCards.move(current.cardId, patch.statusId, position, patch.subStatus);
+			await BoardsActivities.log({
+				boardId: current.boardId,
+				listId: patch.statusId,
+				cardId: current.cardId,
+				actor: uid,
+				verb: 'card.moved',
+				from: { listId: current.statusId },
+				to: { listId: patch.statusId, subStatus: patch.subStatus },
+				ts: new Date(),
+			});
+			emitBoardEvent('card.moved', {
+				boardId: current.boardId,
+				listId: patch.statusId,
+				cardId: current.cardId,
+				actor: uid,
+				fromListId: current.statusId,
+				toListId: patch.statusId,
+			});
+		}
+	} else if (current.boardId) {
+		await BoardsActivities.log({
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			verb: 'field.changed',
+			to: set,
+			ts: new Date(),
+		});
+	}
+
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.update' });
+	}
+	return lead;
+}
+
+// ---------------------------------------------------------------------------
+// qualifyLead
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist a qualification/scoring result on the lead. Pure data write (scoring
+ * computation itself — rule weights, AI — is a later phase); this stores whatever
+ * the caller computed.
+ */
+export async function qualifyLead(uid: string, leadId: string, qualification: ILeadQualification): Promise<ILead> {
+	const current = await BoardsLeads.findOneById(leadId);
+	if (!current) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.qualify' });
+	}
+	if (current.boardId) {
+		await assertBoardRole(current.boardId, uid, 'member', 'leads.qualify');
+	}
+
+	await BoardsLeads.setQualification(leadId, qualification);
+
+	if (current.boardId) {
+		await BoardsActivities.log({
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			verb: 'field.changed',
+			to: { qualification },
+			ts: new Date(),
+		});
+	}
+
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.qualify' });
+	}
+	return lead;
+}
+
+// ---------------------------------------------------------------------------
+// assignLead (round-robin via a cursor on the leads board doc)
+// ---------------------------------------------------------------------------
+
+export type AssignLeadParams = {
+	/** explicit owner; omit to round-robin across the board members (member role). */
+	ownerId?: string;
+	/** speed-to-lead due time; if omitted, no SLA is set here. */
+	slaDueAt?: Date;
+	/** assignment pool override; defaults to the board's member/admin user ids. */
+	pool?: string[];
+};
+
+export type AssignLeadResult = { lead: ILead; ownerId: string; slaDueAt?: Date };
+
+/**
+ * Assign a lead's owner. If no explicit `ownerId` is given we round-robin across
+ * the assignment pool (board members by default), advancing a cursor stored on
+ * the leads board doc so successive unassigned leads spread across the team.
+ *
+ * The cursor lives in `IBoard.fieldValues`-free space: we keep it on a dedicated
+ * `boards_counters` doc keyed by board id (no M1 board-model edit needed).
+ */
+export async function assignLead(uid: string, leadId: string, params: AssignLeadParams = {}): Promise<AssignLeadResult> {
+	const current = await BoardsLeads.findOneById(leadId);
+	if (!current) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.assign' });
+	}
+	const boardId = current.boardId;
+	if (boardId) {
+		await assertBoardRole(boardId, uid, 'member', 'leads.assign');
+	}
+
+	let ownerId = params.ownerId;
+	if (!ownerId) {
+		ownerId = await pickRoundRobinOwner(boardId, params.pool);
+	}
+	if (!ownerId) {
+		throw new Meteor.Error('error-no-assignment-pool', 'No assignment pool available', { method: 'leads.assign' });
+	}
+
+	await BoardsLeads.setOwner(leadId, ownerId, params.slaDueAt, uid);
+
+	if (boardId) {
+		await BoardsActivities.log({
+			boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			verb: 'member.added',
+			to: { ownerId, slaDueAt: params.slaDueAt },
+			ts: new Date(),
+		});
+	}
+
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.assign' });
+	}
+	return { lead, ownerId, ...(params.slaDueAt ? { slaDueAt: params.slaDueAt } : {}) };
+}
+
+/** Round-robin selection across the board's member pool, cursor-advanced. */
+async function pickRoundRobinOwner(boardId: string | undefined, poolOverride?: string[]): Promise<string | undefined> {
+	let pool = poolOverride;
+	if ((!pool || pool.length === 0) && boardId) {
+		const board = await Boards.findOneById(boardId);
+		pool = (board?.members ?? []).filter((m) => m.role !== 'observer').map((m) => m.userId);
+	}
+	if (!pool || pool.length === 0) {
+		return undefined;
+	}
+	// advance a per-board cursor; modulo into the pool
+	const seq = await nextSeq(boardId ? `leadAssign:${boardId}` : 'leadAssign:global');
+	return pool[(seq - 1) % pool.length];
+}
+
+// ---------------------------------------------------------------------------
+// logCommunication
+// ---------------------------------------------------------------------------
+
+export type LogCommunicationParams = Omit<ICommunication, '_id' | '_updatedAt' | 'leadId' | 'ts' | 'byUserId'> & {
+	ts?: Date;
+};
+
+export type LogCommunicationResult = { commId: string; communication: ICommunication };
+
+/**
+ * Append a communication to a lead's timeline. On an inbound comm we also call
+ * `recordContact` (updates lastContactedAt / first-contact SLA timestamp, clears
+ * coldSince). Returns the persisted communication.
+ */
+export async function logCommunication(uid: string, leadId: string, params: LogCommunicationParams): Promise<LogCommunicationResult> {
+	const current = await BoardsLeads.findOneById(leadId);
+	if (!current) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.logComm' });
+	}
+	if (current.boardId) {
+		await assertBoardRole(current.boardId, uid, 'member', 'leads.logComm');
+	}
+
+	const ts = params.ts ?? new Date();
+	const entry: Omit<ICommunication, '_id' | '_updatedAt'> = {
+		...params,
+		leadId,
+		ts,
+		byUserId: uid,
+	};
+
+	const commId = await BoardsCommunications.log(entry);
+
+	// any logged comm counts as contact; recordContact also handles the SLA $min
+	await BoardsLeads.recordContact(leadId, ts);
+
+	if (current.boardId) {
+		await BoardsActivities.log({
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			verb: 'comment.added',
+			to: { commId, kind: params.kind, direction: params.direction },
+			ts,
+		});
+	}
+
+	const communication = await BoardsCommunications.findOneById(commId);
+	if (!communication) {
+		throw new Meteor.Error('error-comm-not-found', 'Communication not found after log', { method: 'leads.logComm' });
+	}
+	return { commId, communication };
+}
+
+// ---------------------------------------------------------------------------
+// upsertReferralSource
+// ---------------------------------------------------------------------------
+
+export type UpsertReferralSourceFields = Partial<Omit<IReferralSource, '_id' | '_updatedAt' | 'createdAt' | 'createdBy'>> & {
+	name: string;
+	type: IReferralSource['type'];
+};
+
+export type UpsertReferralSourceResult = { source: IReferralSource; created: boolean };
+
+/**
+ * Create or update an inbound referral / marketing source. When `sourceId` is
+ * given we patch; otherwise we insert a new directory entry. Dedupe-by-name is
+ * intentionally NOT enforced here (firms can have same-named contacts); callers
+ * that want match-or-create pass an existing `sourceId`.
+ */
+export async function upsertReferralSource(
+	uid: string,
+	fields: UpsertReferralSourceFields,
+	sourceId?: string,
+): Promise<UpsertReferralSourceResult> {
+	if (sourceId) {
+		const existing = await BoardsReferralSources.findOneById(sourceId);
+		if (!existing) {
+			throw new Meteor.Error('error-referral-source-not-found', 'Referral source not found', { method: 'referralSource.upsert' });
+		}
+		const { name, type, contact, defaultFeePct, channel, utmSource, monthlySpend, campaigns, caseproPartyId, notes, active } = fields;
+		await BoardsReferralSources.updateSource(sourceId, {
+			name,
+			type,
+			...(contact !== undefined ? { contact } : {}),
+			...(defaultFeePct !== undefined ? { defaultFeePct } : {}),
+			...(channel !== undefined ? { channel } : {}),
+			...(utmSource !== undefined ? { utmSource } : {}),
+			...(monthlySpend !== undefined ? { monthlySpend } : {}),
+			...(campaigns !== undefined ? { campaigns } : {}),
+			...(caseproPartyId !== undefined ? { caseproPartyId } : {}),
+			...(notes !== undefined ? { notes } : {}),
+			...(active !== undefined ? { active } : {}),
+		});
+		const source = await BoardsReferralSources.findOneById(sourceId);
+		if (!source) {
+			throw new Meteor.Error('error-referral-source-not-found', 'Referral source not found', { method: 'referralSource.upsert' });
+		}
+		return { source, created: false };
+	}
+
+	const now = new Date();
+	const doc: Omit<IReferralSource, '_id' | '_updatedAt'> = {
+		name: fields.name,
+		type: fields.type,
+		...(fields.contact !== undefined ? { contact: fields.contact } : {}),
+		...(fields.defaultFeePct !== undefined ? { defaultFeePct: fields.defaultFeePct } : {}),
+		...(fields.channel !== undefined ? { channel: fields.channel } : {}),
+		...(fields.utmSource !== undefined ? { utmSource: fields.utmSource } : {}),
+		...(fields.monthlySpend !== undefined ? { monthlySpend: fields.monthlySpend } : {}),
+		...(fields.campaigns !== undefined ? { campaigns: fields.campaigns } : {}),
+		...(fields.caseproPartyId !== undefined ? { caseproPartyId: fields.caseproPartyId } : {}),
+		...(fields.notes !== undefined ? { notes: fields.notes } : {}),
+		active: fields.active ?? true,
+		createdBy: uid,
+		createdAt: now,
+	};
+	const { insertedId } = await BoardsReferralSources.insertOne(doc);
+	const source = await BoardsReferralSources.findOneById(insertedId);
+	if (!source) {
+		throw new Meteor.Error('error-referral-source-not-found', 'Referral source not found after create', { method: 'referralSource.upsert' });
+	}
+	return { source, created: true };
+}
+
+// ---------------------------------------------------------------------------
+// markLost (exit helper used by REST/methods status flow)
+// ---------------------------------------------------------------------------
+
+export async function markLeadLost(uid: string, leadId: string, reason: LeadLostReason): Promise<ILead> {
+	const current = await BoardsLeads.findOneById(leadId);
+	if (!current) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.markLost' });
+	}
+	if (current.boardId) {
+		await assertBoardRole(current.boardId, uid, 'member', 'leads.markLost');
+	}
+
+	await BoardsLeads.markLost(leadId, reason, uid);
+
+	if (current.boardId) {
+		await BoardsActivities.log({
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			verb: 'field.changed',
+			to: { lostReason: reason },
+			ts: new Date(),
+		});
+	}
+
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.markLost' });
+	}
+	return lead;
+}

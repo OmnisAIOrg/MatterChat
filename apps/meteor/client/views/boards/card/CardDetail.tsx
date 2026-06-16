@@ -13,6 +13,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getCardTypeIcon } from '../lib/icons';
+import LeadPanel from './LeadPanel';
+import MatterPanel from './MatterPanel';
 
 type CardDetailProps = {
 	boardId: string;
@@ -204,6 +206,16 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 
 				{!isLoading && card && tab === 'detail' && (
 					<Box>
+						{card.cardType === 'lead' && card.link?.kind === 'lead' && (
+							<Box mbe={16}>
+								<LeadPanel leadId={card.link.leadId} boardId={boardId} cardId={cardId} />
+							</Box>
+						)}
+						{card.cardType === 'matter' && (
+							<Box mbe={16}>
+								<MatterPanel card={card} />
+							</Box>
+						)}
 						<Box mbe={12}>
 							<Box fontScale='c1' color='hint' mbe={4}>
 								{t('Title')}

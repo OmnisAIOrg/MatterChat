@@ -13,12 +13,12 @@ declare module '@rocket.chat/ui-contexts' {
 			pattern: '/boards/board/:id/:view?/:cardId?';
 		};
 		'boards-matters': {
-			pathname: '/boards/matters';
-			pattern: '/boards/matters';
+			pathname: `/boards/matters${`/${string}` | ''}`;
+			pattern: '/boards/matters/:cardId?';
 		};
 		'boards-leads': {
-			pathname: '/boards/leads';
-			pattern: '/boards/leads';
+			pathname: `/boards/leads${`/${string}` | ''}`;
+			pattern: '/boards/leads/:cardId?';
 		};
 		'boards-inbox': {
 			pathname: '/boards/inbox';
@@ -51,4 +51,16 @@ registerBoardsRoute('', {
 registerBoardsRoute('/board/:id/:view?/:cardId?', {
 	name: 'boards-board',
 	component: lazy(() => import('./BoardRouter')),
+});
+
+// Matters pillar (M3a): the matters-pipeline board (13 CasePro stages) + CasePro snapshot panel.
+registerBoardsRoute('/matters/:cardId?', {
+	name: 'boards-matters',
+	component: lazy(() => import('./matters/MattersBoardRoute')),
+});
+
+// Leads/Intake pillar (M3b): the 8-stage intake board + lead capture + intake panel.
+registerBoardsRoute('/leads/:cardId?', {
+	name: 'boards-leads',
+	component: lazy(() => import('./leads/LeadsBoardRoute')),
 });
