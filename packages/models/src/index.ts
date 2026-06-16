@@ -80,6 +80,10 @@ import type {
 	IMediaCallNegotiationsModel,
 	ICallHistoryModel,
 	IAbacAttributesModel,
+	IBoardsBoardsModel,
+	IBoardsListsModel,
+	IBoardsCardsModel,
+	IBoardsActivitiesModel,
 } from '@rocket.chat/model-typings';
 import type { Collection, Db } from 'mongodb';
 
@@ -198,6 +202,10 @@ export const UsersSessions = proxify<IUsersSessionsModel>('IUsersSessionsModel')
 export const VideoConference = proxify<IVideoConferenceModel>('IVideoConferenceModel');
 export const WebdavAccounts = proxify<IWebdavAccountsModel>('IWebdavAccountsModel');
 export const CalendarEvent = proxify<ICalendarEventModel>('ICalendarEventModel');
+export const Boards = proxify<IBoardsBoardsModel>('IBoardsBoardsModel');
+export const BoardsLists = proxify<IBoardsListsModel>('IBoardsListsModel');
+export const BoardsCards = proxify<IBoardsCardsModel>('IBoardsCardsModel');
+export const BoardsActivities = proxify<IBoardsActivitiesModel>('IBoardsActivitiesModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
 	'IOmnichannelServiceLevelAgreementsModel',
 );

@@ -47,3 +47,4 @@ import './toggleFavorite';
 import './unmuteUserInRoom';
 import './userPresence';
 import './userSetUtcOffset';
+import './boards';

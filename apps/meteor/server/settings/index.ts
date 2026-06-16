@@ -1,6 +1,7 @@
 import { createAccountSettings } from './accounts';
 import { createAnalyticsSettings } from './analytics';
 import { createAssetsSettings } from './assets';
+import { createBoardsSettings } from './boards';
 import { createBotsSettings } from './bots';
 import { createCasSettings } from './cas';
 import { createCrowdSettings } from './crowd';
@@ -41,6 +42,7 @@ await Promise.all([
 	createAccountSettings(),
 	createAnalyticsSettings(),
 	createAssetsSettings(),
+	createBoardsSettings(),
 	createBotsSettings(),
 	createCasSettings(),
 	createCrowdSettings(),

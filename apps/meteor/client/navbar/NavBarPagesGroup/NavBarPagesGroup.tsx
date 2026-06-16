@@ -2,6 +2,7 @@ import { NavBarGroup } from '@rocket.chat/fuselage';
 import { useLayout, usePermission } from '@rocket.chat/ui-contexts';
 import { useTranslation } from 'react-i18next';
 
+import NavBarItemBoards from './NavBarItemBoards';
 import NavBarItemCreateNew from './NavBarItemCreateNew';
 import NavBarItemDirectoryPage from './NavBarItemDirectoryPage';
 import NavBarItemHomePage from './NavBarItemHomePage';
@@ -24,6 +25,7 @@ const NavBarPagesGroup = () => {
 				<>
 					<NavBarItemHomePage title={t('Home')} />
 					<NavBarItemDirectoryPage title={t('Directory')} />
+					<NavBarItemBoards title={t('Boards')} />
 				</>
 			)}
 			{showMarketplace && !isMobile && <NavBarItemMarketPlaceMenu />}

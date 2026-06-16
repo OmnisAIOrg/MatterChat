@@ -81,3 +81,7 @@ export type * from './updater';
 export type * from './models/IWorkspaceCredentialsModel';
 export type * from './models/ICallHistoryModel';
 export type * from './models/IAbacAttributesModel';
+export type * from './models/IBoardsBoardsModel';
+export type * from './models/IBoardsListsModel';
+export type * from './models/IBoardsCardsModel';
+export type * from './models/IBoardsActivitiesModel';

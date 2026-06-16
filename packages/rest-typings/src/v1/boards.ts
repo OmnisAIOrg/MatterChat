@@ -1,0 +1,410 @@
+import type {
+	IBoard,
+	IBoardList,
+	IBoardCard,
+	IBoardActivity,
+	BoardsPipelineType,
+	BoardsCardType,
+	IBoardCardLink,
+} from '@rocket.chat/core-typings';
+
+import { ajvQuery, ajv } from './Ajv';
+import { type PaginatedRequest } from '../helpers/PaginatedRequest';
+import { type PaginatedResult } from '../helpers/PaginatedResult';
+
+// ---------------------------------------------------------------------------
+// GET params (ajvQuery — coerces URL query strings)
+// ---------------------------------------------------------------------------
+
+type BoardsListProps = PaginatedRequest<{ pipelineType?: BoardsPipelineType; starred?: boolean }>;
+
+const BoardsListSchema = {
+	type: 'object',
+	properties: {
+		count: { type: 'number', nullable: true },
+		offset: { type: 'number', nullable: true },
+		sort: { type: 'string', nullable: true },
+		query: { type: 'string', nullable: true },
+		pipelineType: { type: 'string', enum: ['leads', 'matters', 'general'], nullable: true },
+		starred: { type: 'boolean', nullable: true },
+	},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsListProps = ajvQuery.compile<BoardsListProps>(BoardsListSchema);
+
+type BoardsInfoProps = { boardId: string };
+
+const BoardsInfoSchema = {
+	type: 'object',
+	properties: { boardId: { type: 'string', minLength: 1 } },
+	required: ['boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsInfoProps = ajvQuery.compile<BoardsInfoProps>(BoardsInfoSchema);
+
+type BoardsCardsProps = PaginatedRequest<{ boardId: string; listId?: string }>;
+
+const BoardsCardsSchema = {
+	type: 'object',
+	properties: {
+		count: { type: 'number', nullable: true },
+		offset: { type: 'number', nullable: true },
+		sort: { type: 'string', nullable: true },
+		query: { type: 'string', nullable: true },
+		boardId: { type: 'string', minLength: 1 },
+		listId: { type: 'string', nullable: true },
+	},
+	required: ['boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardsProps = ajvQuery.compile<BoardsCardsProps>(BoardsCardsSchema);
+
+type BoardsCardProps = { cardId: string };
+
+const BoardsCardSchema = {
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 } },
+	required: ['cardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardProps = ajvQuery.compile<BoardsCardProps>(BoardsCardSchema);
+
+type BoardsListsProps = { boardId: string };
+
+const BoardsListsSchema = {
+	type: 'object',
+	properties: { boardId: { type: 'string', minLength: 1 } },
+	required: ['boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsListsProps = ajvQuery.compile<BoardsListsProps>(BoardsListsSchema);
+
+type BoardsActivitiesProps = PaginatedRequest<{ boardId: string; cardId?: string }>;
+
+const BoardsActivitiesSchema = {
+	type: 'object',
+	properties: {
+		count: { type: 'number', nullable: true },
+		offset: { type: 'number', nullable: true },
+		sort: { type: 'string', nullable: true },
+		query: { type: 'string', nullable: true },
+		boardId: { type: 'string', minLength: 1 },
+		cardId: { type: 'string', nullable: true },
+	},
+	required: ['boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsActivitiesProps = ajvQuery.compile<BoardsActivitiesProps>(BoardsActivitiesSchema);
+
+// ---------------------------------------------------------------------------
+// POST bodies (ajv)
+// ---------------------------------------------------------------------------
+
+type BoardsCreateProps = { title: string; pipelineType?: BoardsPipelineType; description?: string; teamId?: string };
+
+const BoardsCreateSchema = {
+	type: 'object',
+	properties: {
+		title: { type: 'string', minLength: 1 },
+		pipelineType: { type: 'string', enum: ['leads', 'matters', 'general'], nullable: true },
+		description: { type: 'string', nullable: true },
+		teamId: { type: 'string', nullable: true },
+	},
+	required: ['title'],
+	additionalProperties: false,
+};
+
+export const isBoardsCreateProps = ajv.compile<BoardsCreateProps>(BoardsCreateSchema);
+
+type BoardsUpdateProps = {
+	boardId: string;
+	patch: {
+		title?: string;
+		description?: string;
+		icon?: string;
+		background?: { kind: 'color' | 'image'; value: string };
+		visibility?: 'private' | 'team' | 'shared';
+	};
+};
+
+const BoardsUpdateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		patch: {
+			type: 'object',
+			properties: {
+				title: { type: 'string', nullable: true },
+				description: { type: 'string', nullable: true },
+				icon: { type: 'string', nullable: true },
+				background: {
+					type: 'object',
+					nullable: true,
+					properties: {
+						kind: { type: 'string', enum: ['color', 'image'] },
+						value: { type: 'string' },
+					},
+					required: ['kind', 'value'],
+					additionalProperties: false,
+				},
+				visibility: { type: 'string', enum: ['private', 'team', 'shared'], nullable: true },
+			},
+			required: [],
+			additionalProperties: false,
+		},
+	},
+	required: ['boardId', 'patch'],
+	additionalProperties: false,
+};
+
+export const isBoardsUpdateProps = ajv.compile<BoardsUpdateProps>(BoardsUpdateSchema);
+
+type BoardsArchiveProps = { boardId: string };
+
+const BoardsArchiveSchema = {
+	type: 'object',
+	properties: { boardId: { type: 'string', minLength: 1 } },
+	required: ['boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsArchiveProps = ajv.compile<BoardsArchiveProps>(BoardsArchiveSchema);
+
+type BoardsListCreateProps = { boardId: string; title: string; position?: number; caseproStageId?: string };
+
+const BoardsListCreateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		title: { type: 'string', minLength: 1 },
+		position: { type: 'number', nullable: true },
+		caseproStageId: { type: 'string', nullable: true },
+	},
+	required: ['boardId', 'title'],
+	additionalProperties: false,
+};
+
+export const isBoardsListCreateProps = ajv.compile<BoardsListCreateProps>(BoardsListCreateSchema);
+
+type BoardsListUpdateProps = {
+	listId: string;
+	patch: { title?: string; wipLimit?: number; subStatuses?: string[]; collapsed?: boolean };
+};
+
+const BoardsListUpdateSchema = {
+	type: 'object',
+	properties: {
+		listId: { type: 'string', minLength: 1 },
+		patch: {
+			type: 'object',
+			properties: {
+				title: { type: 'string', nullable: true },
+				wipLimit: { type: 'number', nullable: true },
+				subStatuses: { type: 'array', items: { type: 'string' }, nullable: true },
+				collapsed: { type: 'boolean', nullable: true },
+			},
+			required: [],
+			additionalProperties: false,
+		},
+	},
+	required: ['listId', 'patch'],
+	additionalProperties: false,
+};
+
+export const isBoardsListUpdateProps = ajv.compile<BoardsListUpdateProps>(BoardsListUpdateSchema);
+
+type BoardsListMoveProps = { listId: string; position: number };
+
+const BoardsListMoveSchema = {
+	type: 'object',
+	properties: {
+		listId: { type: 'string', minLength: 1 },
+		position: { type: 'number' },
+	},
+	required: ['listId', 'position'],
+	additionalProperties: false,
+};
+
+export const isBoardsListMoveProps = ajv.compile<BoardsListMoveProps>(BoardsListMoveSchema);
+
+type BoardsListArchiveProps = { listId: string };
+
+const BoardsListArchiveSchema = {
+	type: 'object',
+	properties: { listId: { type: 'string', minLength: 1 } },
+	required: ['listId'],
+	additionalProperties: false,
+};
+
+export const isBoardsListArchiveProps = ajv.compile<BoardsListArchiveProps>(BoardsListArchiveSchema);
+
+type BoardsCardCreateProps = {
+	boardId: string;
+	listId: string;
+	title: string;
+	position?: number;
+	cardType?: BoardsCardType;
+	description?: string;
+	link?: IBoardCardLink;
+};
+
+const BoardsCardCreateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		listId: { type: 'string', minLength: 1 },
+		title: { type: 'string', minLength: 1 },
+		position: { type: 'number', nullable: true },
+		cardType: { type: 'string', enum: ['task', 'lead', 'matter', 'document', 'evidence'], nullable: true },
+		description: { type: 'string', nullable: true },
+		// link is a discriminated union; accept any object here, the service validates shape
+		link: { type: 'object', nullable: true },
+	},
+	required: ['boardId', 'listId', 'title'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardCreateProps = ajv.compile<BoardsCardCreateProps>(BoardsCardCreateSchema);
+
+type BoardsCardUpdateProps = {
+	cardId: string;
+	patch: {
+		title?: string;
+		description?: string;
+		startDate?: string;
+		dueDate?: string;
+		dueComplete?: boolean;
+		subStatus?: string;
+		assignees?: string[];
+		watchers?: string[];
+		cover?: { kind: 'color' | 'image' | 'attachment'; value: string };
+	};
+};
+
+const BoardsCardUpdateSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		patch: {
+			type: 'object',
+			properties: {
+				title: { type: 'string', nullable: true },
+				description: { type: 'string', nullable: true },
+				startDate: { type: 'string', nullable: true },
+				dueDate: { type: 'string', nullable: true },
+				dueComplete: { type: 'boolean', nullable: true },
+				subStatus: { type: 'string', nullable: true },
+				assignees: { type: 'array', items: { type: 'string' }, nullable: true },
+				watchers: { type: 'array', items: { type: 'string' }, nullable: true },
+				cover: {
+					type: 'object',
+					nullable: true,
+					properties: {
+						kind: { type: 'string', enum: ['color', 'image', 'attachment'] },
+						value: { type: 'string' },
+					},
+					required: ['kind', 'value'],
+					additionalProperties: false,
+				},
+			},
+			required: [],
+			additionalProperties: false,
+		},
+	},
+	required: ['cardId', 'patch'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardUpdateProps = ajv.compile<BoardsCardUpdateProps>(BoardsCardUpdateSchema);
+
+type BoardsCardMoveProps = { cardId: string; toListId: string; position: number; subStatus?: string };
+
+const BoardsCardMoveSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		toListId: { type: 'string', minLength: 1 },
+		position: { type: 'number' },
+		subStatus: { type: 'string', nullable: true },
+	},
+	required: ['cardId', 'toListId', 'position'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardMoveProps = ajv.compile<BoardsCardMoveProps>(BoardsCardMoveSchema);
+
+type BoardsCardArchiveProps = { cardId: string };
+
+const BoardsCardArchiveSchema = {
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 } },
+	required: ['cardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardArchiveProps = ajv.compile<BoardsCardArchiveProps>(BoardsCardArchiveSchema);
+
+// ---------------------------------------------------------------------------
+// Endpoint type map
+// ---------------------------------------------------------------------------
+
+export type BoardsEndpoints = {
+	'/v1/boards.list': {
+		GET: (params: BoardsListProps) => PaginatedResult<{ boards: IBoard[] }>;
+	};
+	'/v1/boards.info': {
+		GET: (params: BoardsInfoProps) => { board: IBoard; lists: IBoardList[] };
+	};
+	'/v1/boards.create': {
+		POST: (params: BoardsCreateProps) => { board: IBoard };
+	};
+	'/v1/boards.update': {
+		POST: (params: BoardsUpdateProps) => { board: IBoard };
+	};
+	'/v1/boards.archive': {
+		POST: (params: BoardsArchiveProps) => { success: true };
+	};
+	'/v1/boards.lists': {
+		GET: (params: BoardsListsProps) => { lists: IBoardList[] };
+	};
+	'/v1/boards.list.create': {
+		POST: (params: BoardsListCreateProps) => { list: IBoardList };
+	};
+	'/v1/boards.list.update': {
+		POST: (params: BoardsListUpdateProps) => { list: IBoardList };
+	};
+	'/v1/boards.list.move': {
+		POST: (params: BoardsListMoveProps) => { list: IBoardList };
+	};
+	'/v1/boards.list.archive': {
+		POST: (params: BoardsListArchiveProps) => { success: true };
+	};
+	'/v1/boards.cards': {
+		GET: (params: BoardsCardsProps) => PaginatedResult<{ cards: IBoardCard[] }>;
+	};
+	'/v1/boards.card': {
+		GET: (params: BoardsCardProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.create': {
+		POST: (params: BoardsCardCreateProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.update': {
+		POST: (params: BoardsCardUpdateProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.move': {
+		POST: (params: BoardsCardMoveProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.archive': {
+		POST: (params: BoardsCardArchiveProps) => { success: true };
+	};
+	'/v1/boards.activities': {
+		GET: (params: BoardsActivitiesProps) => PaginatedResult<{ activities: IBoardActivity[] }>;
+	};
+};

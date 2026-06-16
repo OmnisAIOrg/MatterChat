@@ -7,6 +7,10 @@ import {
 	AvatarsRaw,
 	BannersDismissRaw,
 	BannersRaw,
+	BoardsActivitiesRaw,
+	BoardsBoardsRaw,
+	BoardsCardsRaw,
+	BoardsListsRaw,
 	CalendarEventRaw,
 	CallHistoryRaw,
 	CredentialTokensRaw,
@@ -89,6 +93,10 @@ registerModel('IAvatarsModel', new AvatarsRaw(db));
 registerModel('IBannersDismissModel', new BannersDismissRaw(db));
 registerModel('IBannersModel', new BannersRaw(db));
 registerModel('ICalendarEventModel', new CalendarEventRaw(db));
+registerModel('IBoardsBoardsModel', new BoardsBoardsRaw(db, trashCollection));
+registerModel('IBoardsListsModel', new BoardsListsRaw(db, trashCollection));
+registerModel('IBoardsCardsModel', new BoardsCardsRaw(db, trashCollection));
+registerModel('IBoardsActivitiesModel', new BoardsActivitiesRaw(db));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));

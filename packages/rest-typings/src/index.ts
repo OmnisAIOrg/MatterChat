@@ -7,6 +7,7 @@ import type { AssetsEndpoints } from './v1/assets';
 import type { AuthEndpoints } from './v1/auth';
 import type { AutoTranslateEndpoints } from './v1/autoTranslate';
 import type { BannersEndpoints } from './v1/banners';
+import type { BoardsEndpoints } from './v1/boards';
 import type { CalendarEndpoints } from './v1/calendar';
 import type { ChannelsEndpoints } from './v1/channels';
 import type { ChatEndpoints } from './v1/chat';
@@ -87,6 +88,7 @@ export interface Endpoints
 		ImportEndpoints,
 		FederationEndpoints,
 		CalendarEndpoints,
+		BoardsEndpoints,
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
@@ -256,6 +258,7 @@ export * from './v1/e2e';
 export * from './v1/import';
 export * from './v1/email-inbox';
 export * from './v1/calendar';
+export * from './v1/boards';
 export * from './v1/federation';
 export * from './v1/rooms';
 export * from './v1/groups';

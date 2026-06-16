@@ -3562,6 +3562,68 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@dnd-kit/accessibility@npm:^3.1.1":
+  version: 3.1.1
+  resolution: "@dnd-kit/accessibility@npm:3.1.1"
+  dependencies:
+    tslib: "npm:^2.0.0"
+  peerDependencies:
+    react: ">=16.8.0"
+  checksum: 10/961000456a36700a9cd13be51147a818bc100f7dfabb332b80438d02e06f3b556aa0ff46ddf13bdff3b70bc8f9b63dd5a392cc285597ab1f7026e672660c54b6
+  languageName: node
+  linkType: hard
+
+"@dnd-kit/core@npm:^6.1.0":
+  version: 6.3.1
+  resolution: "@dnd-kit/core@npm:6.3.1"
+  dependencies:
+    "@dnd-kit/accessibility": "npm:^3.1.1"
+    "@dnd-kit/utilities": "npm:^3.2.2"
+    tslib: "npm:^2.0.0"
+  peerDependencies:
+    react: ">=16.8.0"
+    react-dom: ">=16.8.0"
+  checksum: 10/a5ae6fa8404765712aa80e308f58cb79bac9a306c274ec8272c405c2a59dd277d24b966348fe8ca6340bb3f0d75f90b8a021fa781edcf65255114d3cf2bef891
+  languageName: node
+  linkType: hard
+
+"@dnd-kit/modifiers@npm:^7.0.0":
+  version: 7.0.0
+  resolution: "@dnd-kit/modifiers@npm:7.0.0"
+  dependencies:
+    "@dnd-kit/utilities": "npm:^3.2.2"
+    tslib: "npm:^2.0.0"
+  peerDependencies:
+    "@dnd-kit/core": ^6.1.0
+    react: ">=16.8.0"
+  checksum: 10/9ee0b7b86c23c15f6820d76ec398724597abc9d9e31cf58836e7f0b9935e33f9136a60ee9600eb27818447623f07786d4fed3f1d685d9cc6d860d8f6c5354ae3
+  languageName: node
+  linkType: hard
+
+"@dnd-kit/sortable@npm:^8.0.0":
+  version: 8.0.0
+  resolution: "@dnd-kit/sortable@npm:8.0.0"
+  dependencies:
+    "@dnd-kit/utilities": "npm:^3.2.2"
+    tslib: "npm:^2.0.0"
+  peerDependencies:
+    "@dnd-kit/core": ^6.1.0
+    react: ">=16.8.0"
+  checksum: 10/e2e0d37ace13db2e6aceb65a803195ef29e1a33a37e7722a988d7a9c1aacce77472a93b2adcd8e6780ac98b3d5640c5481892f530177c2eb966df235726942ad
+  languageName: node
+  linkType: hard
+
+"@dnd-kit/utilities@npm:^3.2.2":
+  version: 3.2.2
+  resolution: "@dnd-kit/utilities@npm:3.2.2"
+  dependencies:
+    tslib: "npm:^2.0.0"
+  peerDependencies:
+    react: ">=16.8.0"
+  checksum: 10/6cfe46a5fcdaced943982e7ae66b08b89235493e106eb5bc833737c25905e13375c6ecc3aa0c357d136cb21dae3966213dba063f19b7a60b1235a29a7b05ff84
+  languageName: node
+  linkType: hard
+
 "@dual-bundle/import-meta-resolve@npm:^4.1.0":
   version: 4.1.0
   resolution: "@dual-bundle/import-meta-resolve@npm:4.1.0"
@@ -9866,7 +9928,7 @@ __metadata:
     "@rocket.chat/fuselage-hooks": "npm:^0.41.0"
     "@rocket.chat/fuselage-tokens": "npm:~0.33.2"
     "@rocket.chat/gazzodown": "workspace:^"
-    "@rocket.chat/logo": "npm:^0.32.5"
+    "@rocket.chat/logo": "patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch"
     "@rocket.chat/message-parser": "workspace:^"
     "@rocket.chat/random": "workspace:~"
     "@rocket.chat/ui-contexts": "workspace:^"
@@ -9966,7 +10028,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@rocket.chat/logo@npm:^0.32.5":
+"@rocket.chat/logo@npm:0.32.5":
   version: 0.32.5
   resolution: "@rocket.chat/logo@npm:0.32.5"
   dependencies:
@@ -9975,6 +10037,18 @@ __metadata:
     react: "*"
     react-dom: "*"
   checksum: 10/c46e8711ec112b439f582ac84713e57b0c692419f609809e97a9798dbde35dd6575269442264e654453c66c75df92a30911b73a9c219a0a5ca3b8338e2366148
+  languageName: node
+  linkType: hard
+
+"@rocket.chat/logo@patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch":
+  version: 0.32.5
+  resolution: "@rocket.chat/logo@patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch::version=0.32.5&hash=f6a529"
+  dependencies:
+    "@rocket.chat/styled": "npm:^0.33.0"
+  peerDependencies:
+    react: "*"
+    react-dom: "*"
+  checksum: 10/79f71aef5fabb6de1ac3f62b8117a695d4ec9db26a846d48c7205e90fcd068987be4feaea55d50616ec4a1f8134db4c355adccffc5c01d6d28ec57c92d2d80b8
   languageName: node
   linkType: hard
 
@@ -10078,6 +10152,10 @@ __metadata:
     "@bugsnag/plugin-react": "npm:~7.19.0"
     "@datastructures-js/priority-queue": "npm:^6.3.5"
     "@date-fns/tz": "npm:^1.4.1"
+    "@dnd-kit/core": "npm:^6.1.0"
+    "@dnd-kit/modifiers": "npm:^7.0.0"
+    "@dnd-kit/sortable": "npm:^8.0.0"
+    "@dnd-kit/utilities": "npm:^3.2.2"
     "@faker-js/faker": "npm:~8.0.2"
     "@google-cloud/storage": "npm:^7.19.0"
     "@kaciras/deasync": "npm:^1.1.0"
@@ -10131,7 +10209,7 @@ __metadata:
     "@rocket.chat/livechat": "workspace:^"
     "@rocket.chat/log-format": "workspace:^"
     "@rocket.chat/logger": "workspace:^"
-    "@rocket.chat/logo": "npm:^0.32.5"
+    "@rocket.chat/logo": "patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch"
     "@rocket.chat/media-calls": "workspace:^"
     "@rocket.chat/media-signaling": "workspace:^"
     "@rocket.chat/memo": "npm:~0.31.25"
@@ -11124,7 +11202,7 @@ __metadata:
     "@rocket.chat/icons": "npm:~0.47.0"
     "@rocket.chat/jest-presets": "workspace:~"
     "@rocket.chat/layout": "npm:^0.34.2"
-    "@rocket.chat/logo": "npm:^0.32.5"
+    "@rocket.chat/logo": "patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch"
     "@rocket.chat/mock-providers": "workspace:^"
     "@rocket.chat/models": "workspace:~"
     "@rocket.chat/onboarding-ui": "npm:~0.36.2"
@@ -11391,7 +11469,7 @@ __metadata:
     "@rocket.chat/fuselage-tokens": "npm:~0.33.2"
     "@rocket.chat/fuselage-ui-kit": "workspace:~"
     "@rocket.chat/icons": "npm:~0.47.0"
-    "@rocket.chat/logo": "npm:^0.32.5"
+    "@rocket.chat/logo": "patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch"
     "@rocket.chat/styled": "npm:^0.33.0"
     "@rocket.chat/tsconfig": "workspace:*"
     "@rocket.chat/ui-avatar": "workspace:^"

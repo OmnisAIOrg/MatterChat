@@ -208,11 +208,32 @@ export const createLayoutSettings = () =>
 			});
 		});
 		await this.section('Custom CSS', async function () {
-			await this.add('theme-custom-css', '', {
-				type: 'code',
-				code: 'text/css',
-				multiline: true,
-				public: true,
-			});
+			// MatterChat — OmnisAI house brand. Recolor Rocket.Chat's primary accent
+			// (default pink/red) to Omnis blue #3353F8 (hover #243DC4).
+			await this.add(
+				'theme-custom-css',
+				[
+					'/* MatterChat — OmnisAI house brand */',
+					':root {',
+					'  --rcx-color-button-primary-background: #3353F8;',
+					'  --rcx-color-button-primary-hover-background: #243DC4;',
+					'  --rcx-color-button-primary-press-background: #1C32A8;',
+					'  --rcx-color-button-primary-focus-background: #3353F8;',
+					'  --rcx-color-button-primary-focus-shadow: 0 0 0 2px rgba(51, 83, 248, 0.5);',
+					'}',
+					'/* MatterChat logo 2.5x bigger on auth/login/wizard screens */',
+					'img[alt="MatterChat"] {',
+					'  transform: scale(2.5);',
+					'  transform-origin: center;',
+					'  margin: 1.6em 0;',
+					'}',
+				].join('\n'),
+				{
+					type: 'code',
+					code: 'text/css',
+					multiline: true,
+					public: true,
+				},
+			);
 		});
 	});
