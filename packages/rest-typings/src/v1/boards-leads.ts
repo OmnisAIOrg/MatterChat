@@ -343,11 +343,12 @@ type BoardsLeadsReferralSourceUpsertProps = {
 	fields: {
 		name: string;
 		type: IReferralSource['type'];
+		kind?: IReferralSource['kind'];
 		contact?: IReferralSource['contact'];
 		defaultFeePct?: number;
 		channel?: IReferralSource['channel'];
 		utmSource?: string;
-		monthlySpend?: number;
+		monthlySpend?: IReferralSource['monthlySpend'];
 		campaigns?: IReferralSource['campaigns'];
 		caseproPartyId?: string;
 		notes?: string;
@@ -360,6 +361,7 @@ const ReferralSourceFieldsSchema = {
 	properties: {
 		name: { type: 'string', minLength: 1 },
 		type: { type: 'string', enum: ['person', 'firm', 'campaign', 'internal'] },
+		kind: { type: 'string', enum: ['referral', 'marketing', 'both'], nullable: true },
 		contact: {
 			type: 'object',
 			nullable: true,
@@ -379,7 +381,16 @@ const ReferralSourceFieldsSchema = {
 			nullable: true,
 		},
 		utmSource: { type: 'string', nullable: true },
-		monthlySpend: { type: 'number', nullable: true },
+		monthlySpend: {
+			type: 'array',
+			nullable: true,
+			items: {
+				type: 'object',
+				properties: { month: { type: 'string' }, amount: { type: 'number' } },
+				required: ['month', 'amount'],
+				additionalProperties: false,
+			},
+		},
 		campaigns: {
 			type: 'array',
 			nullable: true,

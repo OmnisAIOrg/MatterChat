@@ -1,4 +1,4 @@
-import type { IReferralSource, ReferralSourceType, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
+import type { IReferralSource, ReferralSourceType, ReferralSourceKind, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
 import type { IBoardsReferralSourcesModel } from '@rocket.chat/model-typings';
 import type { Collection, Db, DeleteResult, FindCursor, FindOptions, IndexDescription, UpdateResult } from 'mongodb';
 
@@ -17,6 +17,7 @@ export class BoardsReferralSourcesRaw extends BaseRaw<IReferralSource> implement
 		return [
 			{ key: { active: 1 } },
 			{ key: { type: 1 } },
+			{ key: { kind: 1, active: 1 } },
 			{ key: { utmSource: 1 }, sparse: true },
 			{ key: { 'campaigns.utmCampaign': 1 }, sparse: true },
 		];
@@ -36,6 +37,23 @@ export class BoardsReferralSourcesRaw extends BaseRaw<IReferralSource> implement
 
 	public findByCampaignUtm(utmCampaign: string): Promise<IReferralSource | null> {
 		return this.findOne({ 'campaigns.utmCampaign': utmCampaign });
+	}
+
+	public findByKind(kind: ReferralSourceKind, options?: FindOptions<IReferralSource>): FindCursor<IReferralSource> {
+		// 'both' rows count as either referral or marketing
+		const filter = kind === 'both' ? { kind } : { kind: { $in: [kind, 'both'] as ReferralSourceKind[] } };
+		return this.find({ ...filter, active: true }, options);
+	}
+
+	public findMarketingSources(options?: FindOptions<IReferralSource>): FindCursor<IReferralSource> {
+		return this.find({ kind: { $in: ['marketing', 'both'] as ReferralSourceKind[] }, active: true }, options);
+	}
+
+	public setMonthlySpend(sourceId: string, month: string, amount: number): Promise<UpdateResult> {
+		// replace the month's entry if present, else push a new one (two-step keeps it idempotent)
+		return this.updateOne({ _id: sourceId }, { $pull: { monthlySpend: { month } } }).then(() =>
+			this.updateOne({ _id: sourceId }, { $push: { monthlySpend: { month, amount } } }),
+		);
 	}
 
 	public updateSource(sourceId: string, patch: Partial<IReferralSource>): Promise<UpdateResult> {

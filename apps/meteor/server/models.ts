@@ -11,9 +11,15 @@ import {
 	BoardsBoardsRaw,
 	BoardsCardsRaw,
 	BoardsCommunicationsRaw,
+	BoardsDeadlinesRaw,
 	BoardsLeadsRaw,
 	BoardsListsRaw,
+	BoardsPlaybooksRaw,
+	BoardsReferralsOutRaw,
 	BoardsReferralSourcesRaw,
+	BoardsSequenceEnrollmentsRaw,
+	BoardsSequencesRaw,
+	BoardsSignupPacketsRaw,
 	CalendarEventRaw,
 	CallHistoryRaw,
 	CredentialTokensRaw,
@@ -103,6 +109,12 @@ registerModel('IBoardsActivitiesModel', new BoardsActivitiesRaw(db));
 registerModel('IBoardsLeadsModel', new BoardsLeadsRaw(db, trashCollection));
 registerModel('IBoardsReferralSourcesModel', new BoardsReferralSourcesRaw(db, trashCollection));
 registerModel('IBoardsCommunicationsModel', new BoardsCommunicationsRaw(db));
+registerModel('IBoardsPlaybooksModel', new BoardsPlaybooksRaw(db, trashCollection));
+registerModel('IBoardsDeadlinesModel', new BoardsDeadlinesRaw(db, trashCollection));
+registerModel('IBoardsSequencesModel', new BoardsSequencesRaw(db, trashCollection));
+registerModel('IBoardsSequenceEnrollmentsModel', new BoardsSequenceEnrollmentsRaw(db, trashCollection));
+registerModel('IBoardsReferralsOutModel', new BoardsReferralsOutRaw(db, trashCollection));
+registerModel('IBoardsSignupPacketsModel', new BoardsSignupPacketsRaw(db, trashCollection));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));

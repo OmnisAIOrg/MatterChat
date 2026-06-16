@@ -87,6 +87,12 @@ import type {
 	IBoardsLeadsModel,
 	IBoardsReferralSourcesModel,
 	IBoardsCommunicationsModel,
+	IBoardsPlaybooksModel,
+	IBoardsDeadlinesModel,
+	IBoardsSequencesModel,
+	IBoardsSequenceEnrollmentsModel,
+	IBoardsReferralsOutModel,
+	IBoardsSignupPacketsModel,
 } from '@rocket.chat/model-typings';
 import type { Collection, Db } from 'mongodb';
 
@@ -212,6 +218,12 @@ export const BoardsActivities = proxify<IBoardsActivitiesModel>('IBoardsActiviti
 export const BoardsLeads = proxify<IBoardsLeadsModel>('IBoardsLeadsModel');
 export const BoardsReferralSources = proxify<IBoardsReferralSourcesModel>('IBoardsReferralSourcesModel');
 export const BoardsCommunications = proxify<IBoardsCommunicationsModel>('IBoardsCommunicationsModel');
+export const BoardsPlaybooks = proxify<IBoardsPlaybooksModel>('IBoardsPlaybooksModel');
+export const BoardsDeadlines = proxify<IBoardsDeadlinesModel>('IBoardsDeadlinesModel');
+export const BoardsSequences = proxify<IBoardsSequencesModel>('IBoardsSequencesModel');
+export const BoardsSequenceEnrollments = proxify<IBoardsSequenceEnrollmentsModel>('IBoardsSequenceEnrollmentsModel');
+export const BoardsReferralsOut = proxify<IBoardsReferralsOutModel>('IBoardsReferralsOutModel');
+export const BoardsSignupPackets = proxify<IBoardsSignupPacketsModel>('IBoardsSignupPacketsModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
 	'IOmnichannelServiceLevelAgreementsModel',
 );
