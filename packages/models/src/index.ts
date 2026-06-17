@@ -95,6 +95,8 @@ import type {
 	IBoardsSequenceEnrollmentsModel,
 	IBoardsReferralsOutModel,
 	IBoardsSignupPacketsModel,
+	IBoardsAutomationsModel,
+	IBoardsAutomationRunsModel,
 } from '@rocket.chat/model-typings';
 import type { Collection, Db } from 'mongodb';
 
@@ -228,6 +230,8 @@ export const BoardsSequences = proxify<IBoardsSequencesModel>('IBoardsSequencesM
 export const BoardsSequenceEnrollments = proxify<IBoardsSequenceEnrollmentsModel>('IBoardsSequenceEnrollmentsModel');
 export const BoardsReferralsOut = proxify<IBoardsReferralsOutModel>('IBoardsReferralsOutModel');
 export const BoardsSignupPackets = proxify<IBoardsSignupPacketsModel>('IBoardsSignupPacketsModel');
+export const BoardsAutomations = proxify<IBoardsAutomationsModel>('IBoardsAutomationsModel');
+export const BoardsAutomationRuns = proxify<IBoardsAutomationRunsModel>('IBoardsAutomationRunsModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
 	'IOmnichannelServiceLevelAgreementsModel',
 );

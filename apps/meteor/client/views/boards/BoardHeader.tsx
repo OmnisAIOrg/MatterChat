@@ -1,10 +1,11 @@
 import type { IBoard, Serialized } from '@rocket.chat/core-typings';
-import { Box, Icon, Tabs } from '@rocket.chat/fuselage';
+import { Box, ButtonGroup, Icon, Tabs } from '@rocket.chat/fuselage';
 import { PageHeader } from '@rocket.chat/ui-client';
 import { useRouter } from '@rocket.chat/ui-contexts';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { BoardAutomationsButton } from './automation';
 import { getPipelineTypeIcon } from './lib/icons';
 
 type BoardView = 'board' | 'calendar' | 'table';
@@ -39,17 +40,22 @@ const BoardHeader = ({ board, view }: BoardHeaderProps) => {
 			}
 			onClickBack={goHome}
 		>
-			<Tabs>
-				<Tabs.Item selected={view === 'board'} onClick={goToView('board')}>
-					{t('Boards_View_Board')}
-				</Tabs.Item>
-				<Tabs.Item selected={view === 'calendar'} onClick={goToView('calendar')}>
-					{t('Boards_View_Calendar')}
-				</Tabs.Item>
-				<Tabs.Item selected={view === 'table'} onClick={goToView('table')}>
-					{t('Boards_View_Table')}
-				</Tabs.Item>
-			</Tabs>
+			<Box display='flex' alignItems='center' justifyContent='space-between' width='100%'>
+				<Tabs>
+					<Tabs.Item selected={view === 'board'} onClick={goToView('board')}>
+						{t('Boards_View_Board')}
+					</Tabs.Item>
+					<Tabs.Item selected={view === 'calendar'} onClick={goToView('calendar')}>
+						{t('Boards_View_Calendar')}
+					</Tabs.Item>
+					<Tabs.Item selected={view === 'table'} onClick={goToView('table')}>
+						{t('Boards_View_Table')}
+					</Tabs.Item>
+				</Tabs>
+				<ButtonGroup>
+					<BoardAutomationsButton boardId={board._id} />
+				</ButtonGroup>
+			</Box>
 		</PageHeader>
 	);
 };

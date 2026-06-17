@@ -96,3 +96,5 @@ export type * from './models/IBoardsSequencesModel';
 export type * from './models/IBoardsSequenceEnrollmentsModel';
 export type * from './models/IBoardsReferralsOutModel';
 export type * from './models/IBoardsSignupPacketsModel';
+export type * from './models/IBoardsAutomationsModel';
+export type * from './models/IBoardsAutomationRunsModel';

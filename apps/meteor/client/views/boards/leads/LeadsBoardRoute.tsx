@@ -6,6 +6,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import LeadCaptureModal from './LeadCaptureModal';
+import { BoardAutomationsButton } from '../automation';
 import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
 import { getPipelineTypeIcon } from '../lib/icons';
@@ -148,6 +149,7 @@ const LeadsBoardRoute = () => {
 								{t('Boards_Leads_SyncFromCasePro', { defaultValue: 'Sync from CasePro' })}
 							</Button>
 						)}
+						<BoardAutomationsButton boardId={board._id} />
 						<Button primary small onClick={handleNewLead}>
 							<Icon name='plus' size='x16' mie={4} />
 							{t('Boards_New_Lead', { defaultValue: 'New Lead' })}

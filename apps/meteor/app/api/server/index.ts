@@ -9,6 +9,7 @@ import './default/info';
 import './v1/assets';
 import './v1/calendar';
 import './v1/boards';
+import './v1/boards-automations';
 import './v1/boards-leads';
 import './v1/boards-matters';
 import './v1/call-history';

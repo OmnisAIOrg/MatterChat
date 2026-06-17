@@ -8,6 +8,8 @@ import {
 	BannersDismissRaw,
 	BannersRaw,
 	BoardsActivitiesRaw,
+	BoardsAutomationRunsRaw,
+	BoardsAutomationsRaw,
 	BoardsBoardsRaw,
 	BoardsCardsRaw,
 	BoardsCommTemplatesRaw,
@@ -119,6 +121,8 @@ registerModel('IBoardsSequencesModel', new BoardsSequencesRaw(db, trashCollectio
 registerModel('IBoardsSequenceEnrollmentsModel', new BoardsSequenceEnrollmentsRaw(db, trashCollection));
 registerModel('IBoardsReferralsOutModel', new BoardsReferralsOutRaw(db, trashCollection));
 registerModel('IBoardsSignupPacketsModel', new BoardsSignupPacketsRaw(db, trashCollection));
+registerModel('IBoardsAutomationsModel', new BoardsAutomationsRaw(db, trashCollection));
+registerModel('IBoardsAutomationRunsModel', new BoardsAutomationRunsRaw(db));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));

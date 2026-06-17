@@ -1,10 +1,11 @@
-import { Box, Button, Callout, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Callout, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
 import { Page, PageHeader } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouteParameter, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { BoardAutomationsButton } from '../automation';
 import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
 
@@ -127,14 +128,17 @@ const MattersBoardRoute = () => {
 						</Box>
 					}
 				>
-					<Button primary onClick={handleSync} disabled={seedMutation.isPending}>
-						{seedMutation.isPending ? (
-							<Throbber inheritColor size='x12' />
-						) : (
-							<Icon name='reload' size='x16' mie={4} />
-						)}
-						{t('Boards_Matters_Sync_From_CasePro', { defaultValue: 'Sync from CasePro' })}
-					</Button>
+					<ButtonGroup>
+						<BoardAutomationsButton boardId={board._id} small={false} />
+						<Button primary onClick={handleSync} disabled={seedMutation.isPending}>
+							{seedMutation.isPending ? (
+								<Throbber inheritColor size='x12' />
+							) : (
+								<Icon name='reload' size='x16' mie={4} />
+							)}
+							{t('Boards_Matters_Sync_From_CasePro', { defaultValue: 'Sync from CasePro' })}
+						</Button>
+					</ButtonGroup>
 				</PageHeader>
 
 				{!caseProEnabled && (

@@ -151,4 +151,10 @@ export const {
 		permissionGranted: (): boolean =>
 			hasAtLeastOnePermission(['view-privileged-setting', 'edit-privileged-setting', 'manage-selected-settings']),
 	},
+	{
+		href: '/admin/boards-automations',
+		i18nLabel: 'Boards_Automations',
+		icon: 'lightning',
+		permissionGranted: (): boolean => hasPermission('boards-manage-automations'),
+	},
 ]);

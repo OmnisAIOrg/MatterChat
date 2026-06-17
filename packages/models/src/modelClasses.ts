@@ -12,6 +12,8 @@ export * from './models/BoardsBoards';
 export * from './models/BoardsLists';
 export * from './models/BoardsCards';
 export * from './models/BoardsActivities';
+export * from './models/BoardsAutomations';
+export * from './models/BoardsAutomationRuns';
 export * from './models/BoardsLeads';
 export * from './models/BoardsReferralSources';
 export * from './models/BoardsCommunications';

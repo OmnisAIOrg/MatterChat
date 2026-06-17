@@ -447,6 +447,23 @@ export async function updateLead(uid: string, leadId: string, patch: UpdateLeadP
 		}
 	}
 
+	// Automation seam (M7): higher-level lead lifecycle event. The `card.moved` above is
+	// the raw kanban move; `lead.statusChanged` lets intake automations trigger on the
+	// lead's intake STATUS transition (the column == status per the master plan) — e.g.
+	// "moved to Further Evaluation → notify attorney". Carries the from/to statusId +
+	// linked card. Fire-and-forget (emitBoardEvent never throws).
+	if (statusChanged && patch.statusId && current.boardId) {
+		emitBoardEvent('lead.statusChanged', {
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			leadId,
+			fromStatusId: current.statusId,
+			toStatusId: patch.statusId,
+			...(patch.subStatus ? { subStatus: patch.subStatus } : {}),
+		});
+	}
+
 	// CasePro write-through on a stage change: map the new column -> intake_stage_id.
 	// No-op + swallowed when CasePro is disabled or the lead has no caseproIntakeId.
 	if (statusChanged && patch.statusId) {
@@ -509,6 +526,24 @@ export async function qualifyLead(uid: string, leadId: string, qualification: IL
 			verb: 'field.changed',
 			to: { qualification },
 			ts: new Date(),
+		});
+	}
+
+	// Automation seam (M7): the qualification decision is the intake gate automations
+	// branch on — `lead.qualified` (e.g. start sign-up sequence / notify attorney) vs
+	// `lead.disqualified` (e.g. label + send decline drip). We only emit a terminal
+	// event when the decision is explicit (true/false); an undefined `qualified` is a
+	// scoring update, not a decision, so it carries no lifecycle event. Fire-and-forget.
+	if (current.boardId && typeof qualification.qualified === 'boolean') {
+		emitBoardEvent(qualification.qualified ? 'lead.qualified' : 'lead.disqualified', {
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			leadId,
+			...(qualification.score !== undefined ? { score: qualification.score } : {}),
+			...(qualification.qualified === false && qualification.disqualifyReason
+				? { disqualifyReason: qualification.disqualifyReason }
+				: {}),
 		});
 	}
 
@@ -783,6 +818,20 @@ export async function markLeadLost(uid: string, leadId: string, reason: LeadLost
 		});
 	}
 
+	// Automation seam (M7): the lead reached a terminal lost state. Lets automations
+	// fire a "lost lead" follow-up (e.g. re-engagement drip, mark the source's ROI,
+	// notify the intake manager). Carries the structured `LeadLostReason` for condition
+	// matching. Fire-and-forget (emitBoardEvent never throws).
+	if (current.boardId) {
+		emitBoardEvent('lead.lost', {
+			boardId: current.boardId,
+			...(current.cardId ? { cardId: current.cardId } : {}),
+			actor: uid,
+			leadId,
+			reason,
+		});
+	}
+
 	const lead = await BoardsLeads.findOneById(leadId);
 	if (!lead) {
 		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'leads.markLost' });
@@ -862,6 +911,23 @@ export async function syncLeadStageFromCard(uid: string, cardId: string, toListI
 		await pushStage(uid, lead, toListId);
 	} catch {
 		// best-effort upstream write; the card + lead status already moved locally.
+	}
+
+	// Automation seam (M7): mirror the drag-driven status change as the higher-level
+	// `lead.statusChanged` (the same event `updateLead` emits for an in-panel status
+	// change), so intake automations fire identically whether the lead was dragged on
+	// the kanban or moved via the LeadPanel. `lead.statusId` here is the pre-move value
+	// (the local doc predates `setStatus`). A terminal lost exit additionally emitted
+	// `lead.lost` via `markLeadLost` above. Fire-and-forget (emitBoardEvent never throws).
+	if (lead.boardId && lead.statusId !== toListId) {
+		emitBoardEvent('lead.statusChanged', {
+			boardId: lead.boardId,
+			...(lead.cardId ? { cardId: lead.cardId } : {}),
+			actor: uid,
+			leadId: lead._id,
+			fromStatusId: lead.statusId,
+			toStatusId: toListId,
+		});
 	}
 }
 
@@ -967,6 +1033,25 @@ export async function convertToMatter(uid: string, leadId: string): Promise<Conv
 		to: { convertedFromLeadId: leadId, refNo: lead.refNo, matterId },
 		ts: now,
 	});
+
+	// Automation seam (M7): the lead crossed the conversion gate into a CasePro matter.
+	// Scoped to the LEADS board (where the lead-lifecycle automations live) and carries
+	// the new matterId + matter card + matters board so an automation can hand off (e.g.
+	// notify the case manager, kick the Intake stage playbook, request a LitBox folder).
+	// The matter card's own creation/link events fire from the matters service. Fire-and-
+	// forget (emitBoardEvent never throws).
+	if (lead.boardId) {
+		emitBoardEvent('lead.converted', {
+			boardId: lead.boardId,
+			...(lead.cardId ? { cardId: lead.cardId } : {}),
+			actor: uid,
+			leadId,
+			refNo: lead.refNo,
+			matterId,
+			matterCardId: matterCard._id,
+			mattersBoardId: mattersBoard._id,
+		});
+	}
 
 	const converted = await BoardsLeads.findOneById(leadId);
 	if (!converted) {

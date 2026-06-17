@@ -14,6 +14,7 @@ import { caseProClient } from './caseProClient';
 import type { CaseProLitigationDate } from './caseProClientTypes';
 import { createDeadline } from './deadlines';
 import { LITIGATION_ORDER_INDEX_RANGE, MATTER_STAGE_SEEDS, normalizeStageName } from './stages';
+import { emitBoardEvent } from '../events';
 
 /**
  * Stage playbooks for the matters pipeline (M5 — see matters-case-management.md §4
@@ -419,6 +420,24 @@ export async function applyMatterStageEntry(uid: string, cardId: string, toListI
 			// best-effort; a deadline failure never blocks the stage change.
 		}
 	}
+
+	// Automation seam (M7): the matter just entered a new stage column. The card's
+	// `card.moved` low-level event already fired from `moveCard`; this higher-level
+	// `matter.stageChanged` lets matters-pipeline automations (Demand timer, Stage
+	// playbook, SOL watch, Write-back) trigger on the *stage* rather than the raw list.
+	// `card.listId` is already `toListId` here (the move committed in `moveCard` before
+	// this seam runs), so the prior stage isn't recoverable without a signature change —
+	// we carry the accurate destination stage (id + name) + the linked matterId. Fire-
+	// and-forget: emitBoardEvent never throws and must never block the stage change.
+	emitBoardEvent('matter.stageChanged', {
+		boardId: card.boardId,
+		listId: toListId,
+		cardId: card._id,
+		actor: uid,
+		toListId,
+		toStage: list.title,
+		...(card.link?.kind === 'matter' ? { matterId: card.link.matterId } : {}),
+	});
 
 	return { playbook, stageDeadlinesCreated, litigationDeadlinesCreated };
 }

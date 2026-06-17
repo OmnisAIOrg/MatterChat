@@ -8,6 +8,7 @@ import type { AuthEndpoints } from './v1/auth';
 import type { AutoTranslateEndpoints } from './v1/autoTranslate';
 import type { BannersEndpoints } from './v1/banners';
 import type { BoardsEndpoints } from './v1/boards';
+import type { BoardsAutomationsEndpoints } from './v1/boards-automations';
 import type { BoardsLeadsEndpoints } from './v1/boards-leads';
 import type { BoardsMattersEndpoints } from './v1/boards-matters';
 import type { CalendarEndpoints } from './v1/calendar';
@@ -93,6 +94,7 @@ export interface Endpoints
 		BoardsEndpoints,
 		BoardsLeadsEndpoints,
 		BoardsMattersEndpoints,
+		BoardsAutomationsEndpoints,
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
@@ -263,6 +265,7 @@ export * from './v1/import';
 export * from './v1/email-inbox';
 export * from './v1/calendar';
 export * from './v1/boards';
+export * from './v1/boards-automations';
 export * from './v1/boards-leads';
 export * from './v1/boards-matters';
 export * from './v1/federation';

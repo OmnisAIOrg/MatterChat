@@ -38,6 +38,8 @@ export type * from './ISignUpPacket';
 export type * from './IPlaybookTemplate';
 export type * from './IBoardDeadline';
 export type * from './ISequence';
+export type * from './IAutomation';
+export type * from './IAutomationRun';
 export type * from './ICustomSound';
 export type * from './ICloud';
 export * from './IServerEvent';

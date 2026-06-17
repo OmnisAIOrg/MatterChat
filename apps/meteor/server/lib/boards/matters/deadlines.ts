@@ -8,6 +8,8 @@ import type {
 import { BoardsCards, BoardsDeadlines, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { emitBoardEvent } from '../events';
+
 /**
  * The safety-critical SOL / deadline engine (M5, matters depth — see
  * matters-case-management.md §5 and differentiators.md §4: "No missed-SOL").
@@ -209,6 +211,23 @@ export async function createDeadline(uid: string, fields: CreateDeadlineFields):
 		ts: now,
 	});
 
+	// Automation seam (M7): a new tracked deadline exists. Lets deadline-aware
+	// automations react the moment one is stamped (e.g. notify on a high-risk SOL/filing
+	// deadline, or label a card "Awaiting Response" off a Demand-Sent response timer).
+	// The cron's SOL/deadline tickler separately synthesizes `deadline.due` as each
+	// reminder window arrives. Fire-and-forget (emitBoardEvent never throws).
+	emitBoardEvent('deadline.created', {
+		boardId: card.boardId,
+		listId: card.listId,
+		cardId: card._id,
+		actor: uid,
+		deadlineId: insertedId,
+		kind: fields.kind,
+		dueDate: fields.dueDate,
+		highRisk,
+		...(matterId ? { matterId } : {}),
+	});
+
 	return deadline;
 }
 
@@ -355,6 +374,19 @@ export async function acknowledgeDeadline(uid: string, deadlineId: string): Prom
 		verb: 'field.changed',
 		to: { deadlineAcknowledged: deadlineId, kind: current.kind },
 		ts: new Date(),
+	});
+
+	// Automation seam (M7): the mandatory acknowledgement on a (typically high-risk
+	// SOL/filing) deadline was satisfied — lets automations clear an escalation label,
+	// stop a nag sequence, or notify the supervising attorney. Fire-and-forget.
+	emitBoardEvent('deadline.acknowledged', {
+		boardId: current.boardId,
+		cardId: current.cardId,
+		actor: uid,
+		deadlineId,
+		kind: current.kind,
+		highRisk: current.highRisk ?? false,
+		...(current.matterId ? { matterId: current.matterId } : {}),
 	});
 
 	const deadline = await BoardsDeadlines.findOneById(deadlineId);
