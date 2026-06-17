@@ -14,10 +14,52 @@ export const {
 		permissionGranted: (): boolean => hasPermission('boards-matters-view'),
 	},
 	{
+		href: '/boards/matters/calendar',
+		i18nLabel: 'Boards_Matters_Deadlines',
+		icon: 'calendar',
+		permissionGranted: (): boolean => hasPermission('boards-matters-view'),
+	},
+	{
+		href: '/boards/matters/caseload',
+		i18nLabel: 'Boards_Matters_Caseload',
+		icon: 'team',
+		permissionGranted: (): boolean => hasPermission('boards-matters-view'),
+	},
+	{
+		href: '/boards/matters/reports',
+		i18nLabel: 'Boards_Matters_Reports',
+		icon: 'dashboard',
+		permissionGranted: (): boolean => hasPermission('boards-matters-reports-view'),
+	},
+	{
 		href: '/boards/leads',
 		i18nLabel: 'Boards_Leads',
 		icon: 'magnifier',
 		permissionGranted: (): boolean => hasPermission('boards-leads-view'),
+	},
+	{
+		href: '/boards/leads/templates',
+		i18nLabel: 'Boards_Leads_Templates',
+		icon: 'mail',
+		permissionGranted: (): boolean => hasPermission('boards-leads-templates-manage'),
+	},
+	{
+		href: '/boards/leads/referrals',
+		i18nLabel: 'Boards_Leads_Referrals_Out',
+		icon: 'user-plus',
+		permissionGranted: (): boolean => hasPermission('boards-leads-referrals-manage'),
+	},
+	{
+		href: '/boards/leads/marketing',
+		i18nLabel: 'Boards_Leads_Marketing_ROI',
+		icon: 'dashboard',
+		permissionGranted: (): boolean => hasPermission('boards-leads-marketing-manage'),
+	},
+	{
+		href: '/boards/leads/reports',
+		i18nLabel: 'Boards_Leads_Report_Funnel',
+		icon: 'report',
+		permissionGranted: (): boolean => hasPermission('boards-leads-reports-view'),
 	},
 	{
 		divider: true,

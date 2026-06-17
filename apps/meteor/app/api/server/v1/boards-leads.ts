@@ -11,9 +11,29 @@ import {
 	isBoardsLeadsReferralSourceUpsertProps,
 	isBoardsLeadsSyncFromCaseProProps,
 	isBoardsLeadsConvertToMatterProps,
+	isBoardsLeadsRunConflictCheckProps,
+	isBoardsLeadsCheckDuplicatesProps,
+	isBoardsLeadsComputeScoreProps,
+	isBoardsLeadsComputeSolProps,
+	isBoardsLeadsTimelineProps,
+	isBoardsLeadsTemplateListProps,
+	isBoardsLeadsTemplateUpsertProps,
+	isBoardsLeadsTemplateSendProps,
+	isBoardsLeadsCreateTaskProps,
+	isBoardsLeadsSequencesListProps,
+	isBoardsLeadsSequencesEnrollProps,
+	isBoardsLeadsSequencesAdvanceProps,
+	isBoardsLeadsReferralOutUpsertProps,
+	isBoardsLeadsReferralOutSetStatusProps,
+	isBoardsLeadsMarketingSourceRoiProps,
+	isBoardsLeadsSignupPacketGenerateProps,
+	isBoardsLeadsSignupPacketSetStatusProps,
+	isBoardsLeadsReportFunnelProps,
+	isBoardsLeadsReportScoreboardProps,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
+import { BoardsLeads } from '@rocket.chat/models';
 
 import {
 	ensureLeadsBoard,
@@ -28,9 +48,38 @@ import {
 	convertToMatter,
 	pullFromCasePro,
 	isCaseProEnabled,
+	runConflictCheck,
+	checkDuplicates,
+	computeScore,
+	computeLeadSol,
+	getTimeline,
+	listCommTemplates,
+	upsertCommTemplate,
+	sendTemplate,
+	createTask,
+	listSequences,
+	enrollLead,
+	advanceEnrollment,
+	createReferralOut,
+	updateReferralOutStatus,
+	sourceRoi,
+	generateSignupPacket,
+	setSignupPacketStatus,
+	funnel,
+	scoreboard,
 } from '../../../../server/lib/boards/leads';
+import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
+
+/** Load a lead or throw the canonical not-found failure (shared by the by-leadId reads). */
+async function requireLead(leadId: string) {
+	const lead = await BoardsLeads.findOneById(leadId);
+	if (!lead) {
+		throw new Error('error-lead-not-found');
+	}
+	return lead;
+}
 
 // Permissive success schema — lead/board docs are large/nested; we validate the
 // `success` flag and pass the payload through (same approach boards.ts uses).
@@ -317,5 +366,435 @@ API.v1.post(
 		const { lead, matterId, matterCard, mattersBoardId } = await convertToMatter(userId, leadId);
 
 		return API.v1.success({ lead, matterId, matterCard, mattersBoardId });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — conflict / dedupe / scoring / SOL (GET reads over a lead)
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.leads.runConflictCheck',
+	{
+		authRequired: true,
+		query: isBoardsLeadsRunConflictCheckProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-leads-conflict-check'))) {
+			return API.v1.unauthorized();
+		}
+		const lead = await requireLead(this.queryParams.leadId);
+		const result = await runConflictCheck(lead);
+		return API.v1.success(result);
+	},
+);
+
+API.v1.get(
+	'boards.leads.checkDuplicates',
+	{
+		authRequired: true,
+		query: isBoardsLeadsCheckDuplicatesProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-leads-view'))) {
+			return API.v1.unauthorized();
+		}
+		const lead = await requireLead(this.queryParams.leadId);
+		const result = await checkDuplicates(lead);
+		return API.v1.success(result);
+	},
+);
+
+API.v1.get(
+	'boards.leads.computeScore',
+	{
+		authRequired: true,
+		query: isBoardsLeadsComputeScoreProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-leads-view'))) {
+			return API.v1.unauthorized();
+		}
+		const lead = await requireLead(this.queryParams.leadId);
+		const result = computeScore(lead);
+		return API.v1.success(result);
+	},
+);
+
+API.v1.get(
+	'boards.leads.computeSol',
+	{
+		authRequired: true,
+		query: isBoardsLeadsComputeSolProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-leads-view'))) {
+			return API.v1.unauthorized();
+		}
+		const lead = await requireLead(this.queryParams.leadId);
+		const result = computeLeadSol(lead);
+		return API.v1.success(result);
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — communications timeline
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.leads.timeline',
+	{
+		authRequired: true,
+		query: isBoardsLeadsTimelineProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const communications = await getTimeline(userId, this.queryParams.leadId);
+		return API.v1.success({ communications });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — comm templates
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.leads.template.list',
+	{
+		authRequired: true,
+		query: isBoardsLeadsTemplateListProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { channel } = this.queryParams;
+		const templates = await listCommTemplates(userId, channel);
+		return API.v1.success({ templates });
+	},
+);
+
+API.v1.post(
+	'boards.leads.template.upsert',
+	{
+		authRequired: true,
+		body: isBoardsLeadsTemplateUpsertProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { templateId, fields } = this.bodyParams;
+		const { template, created } = await upsertCommTemplate(userId, fields, templateId);
+		return API.v1.success({ template, created });
+	},
+);
+
+API.v1.post(
+	'boards.leads.template.send',
+	{
+		authRequired: true,
+		body: isBoardsLeadsTemplateSendProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { leadId, templateId, vars } = this.bodyParams;
+		const result = await sendTemplate(userId, leadId, templateId, vars);
+		return API.v1.success(result);
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — intake tasks
+// ---------------------------------------------------------------------------
+
+API.v1.post(
+	'boards.leads.createTask',
+	{
+		authRequired: true,
+		body: isBoardsLeadsCreateTaskProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { leadId, title, description, dueAt, assigneeId } = this.bodyParams;
+		const { task } = await createTask(userId, {
+			leadId,
+			title,
+			...(description ? { description } : {}),
+			...(dueAt ? { dueAt: new Date(dueAt) } : {}),
+			...(assigneeId ? { assigneeId } : {}),
+		});
+		return API.v1.success({ task });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — sequences (drip)
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.leads.sequences.list',
+	{
+		authRequired: true,
+		query: isBoardsLeadsSequencesListProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const sequences = await listSequences(userId);
+		return API.v1.success({ sequences });
+	},
+);
+
+API.v1.post(
+	'boards.leads.sequences.enroll',
+	{
+		authRequired: true,
+		body: isBoardsLeadsSequencesEnrollProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { sequenceId, leadId } = this.bodyParams;
+		const { enrollment, alreadyEnrolled } = await enrollLead(userId, sequenceId, leadId);
+		return API.v1.success({ enrollment, alreadyEnrolled });
+	},
+);
+
+API.v1.post(
+	'boards.leads.sequences.advance',
+	{
+		authRequired: true,
+		body: isBoardsLeadsSequencesAdvanceProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		// advancing is a sequence-management action (the engine seam M7 will own).
+		if (!(await hasPermissionAsync(userId, 'boards-leads-sequences-manage'))) {
+			return API.v1.unauthorized();
+		}
+		const result = await advanceEnrollment(userId, this.bodyParams.enrollmentId);
+		return API.v1.success(result);
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — referrals out
+// ---------------------------------------------------------------------------
+
+API.v1.post(
+	'boards.leads.referralOut.upsert',
+	{
+		authRequired: true,
+		body: isBoardsLeadsReferralOutUpsertProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { sentAt, ...rest } = this.bodyParams;
+		const { referralOut, lead } = await createReferralOut(userId, {
+			...rest,
+			...(sentAt ? { sentAt: new Date(sentAt) } : {}),
+		});
+		return API.v1.success({ referralOut, lead });
+	},
+);
+
+API.v1.post(
+	'boards.leads.referralOut.setStatus',
+	{
+		authRequired: true,
+		body: isBoardsLeadsReferralOutSetStatusProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { referralOutId, status, receivedFee, receivedAt, notes } = this.bodyParams;
+		const referralOut = await updateReferralOutStatus(userId, referralOutId, {
+			status,
+			...(receivedFee !== undefined ? { receivedFee } : {}),
+			...(receivedAt ? { receivedAt: new Date(receivedAt) } : {}),
+			...(notes !== undefined ? { notes } : {}),
+		});
+		return API.v1.success({ referralOut });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — marketing ROI
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.leads.marketing.sourceRoi',
+	{
+		authRequired: true,
+		query: isBoardsLeadsMarketingSourceRoiProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { from, to } = this.queryParams;
+		const result = await sourceRoi(userId, { ...(from ? { from } : {}), ...(to ? { to } : {}) });
+		return API.v1.success(result);
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — signup packets
+// ---------------------------------------------------------------------------
+
+API.v1.post(
+	'boards.leads.signupPacket.generate',
+	{
+		authRequired: true,
+		body: isBoardsLeadsSignupPacketGenerateProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { leadId, docTemplateId, esignProvider, generatedDocRef, signerEmail } = this.bodyParams;
+		const { packet } = await generateSignupPacket(userId, leadId, docTemplateId, {
+			...(esignProvider ? { esignProvider } : {}),
+			...(generatedDocRef ? { generatedDocRef } : {}),
+			...(signerEmail ? { signerEmail } : {}),
+		});
+		return API.v1.success({ packet });
+	},
+);
+
+API.v1.post(
+	'boards.leads.signupPacket.setStatus',
+	{
+		authRequired: true,
+		body: isBoardsLeadsSignupPacketSetStatusProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { packetId, status, signedDocRef, at } = this.bodyParams;
+		const { packet, conversionArmed } = await setSignupPacketStatus(userId, packetId, {
+			status,
+			...(signedDocRef ? { signedDocRef } : {}),
+			...(at ? { at: new Date(at) } : {}),
+		});
+		return API.v1.success({ packet, conversionArmed });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// M6 — reports
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.leads.reports.funnel',
+	{
+		authRequired: true,
+		query: isBoardsLeadsReportFunnelProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const result = await funnel(userId, this.queryParams.boardId);
+		return API.v1.success(result);
+	},
+);
+
+API.v1.get(
+	'boards.leads.reports.scoreboard',
+	{
+		authRequired: true,
+		query: isBoardsLeadsReportScoreboardProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const result = await scoreboard(userId, this.queryParams.boardId);
+		return API.v1.success(result);
 	},
 );

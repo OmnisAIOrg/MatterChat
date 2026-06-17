@@ -10,8 +10,10 @@ import {
 	BoardsActivitiesRaw,
 	BoardsBoardsRaw,
 	BoardsCardsRaw,
+	BoardsCommTemplatesRaw,
 	BoardsCommunicationsRaw,
 	BoardsDeadlinesRaw,
+	BoardsIntakeTasksRaw,
 	BoardsLeadsRaw,
 	BoardsListsRaw,
 	BoardsPlaybooksRaw,
@@ -109,6 +111,8 @@ registerModel('IBoardsActivitiesModel', new BoardsActivitiesRaw(db));
 registerModel('IBoardsLeadsModel', new BoardsLeadsRaw(db, trashCollection));
 registerModel('IBoardsReferralSourcesModel', new BoardsReferralSourcesRaw(db, trashCollection));
 registerModel('IBoardsCommunicationsModel', new BoardsCommunicationsRaw(db));
+registerModel('IBoardsCommTemplatesModel', new BoardsCommTemplatesRaw(db, trashCollection));
+registerModel('IBoardsIntakeTasksModel', new BoardsIntakeTasksRaw(db, trashCollection));
 registerModel('IBoardsPlaybooksModel', new BoardsPlaybooksRaw(db, trashCollection));
 registerModel('IBoardsDeadlinesModel', new BoardsDeadlinesRaw(db, trashCollection));
 registerModel('IBoardsSequencesModel', new BoardsSequencesRaw(db, trashCollection));

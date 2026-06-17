@@ -15,6 +15,8 @@ export * from './models/BoardsActivities';
 export * from './models/BoardsLeads';
 export * from './models/BoardsReferralSources';
 export * from './models/BoardsCommunications';
+export * from './models/BoardsCommTemplates';
+export * from './models/BoardsIntakeTasks';
 export * from './models/BoardsPlaybooks';
 export * from './models/BoardsDeadlines';
 export * from './models/BoardsSequences';

@@ -262,4 +262,20 @@ export const permissions = [
 	{ _id: 'boards-manage-marketing', roles: ['admin', 'marketing'] },
 	{ _id: 'boards-manage-signups', roles: ['admin', 'intake-manager'] },
 	{ _id: 'boards-share-external', roles: [] },
+
+	// Boards M5 (matter depth) — playbooks, deadlines/SOL, reporting
+	{ _id: 'boards-matters-playbooks-manage', roles: ['admin', 'attorney', 'case-manager'] },
+	{ _id: 'boards-matters-deadlines-manage', roles: ['admin', 'attorney', 'case-manager'] },
+	{ _id: 'boards-matters-deadlines-acknowledge', roles: ['admin', 'attorney', 'case-manager', 'paralegal'] },
+	{ _id: 'boards-matters-reports-view', roles: ['admin', 'attorney', 'case-manager', 'paralegal'] },
+
+	// Boards M6 (lead/intake depth) — comms, templates, sequences, referrals, marketing, sign-ups, conflict, reporting
+	{ _id: 'boards-leads-comms', roles: ['admin', 'intake-specialist'] },
+	{ _id: 'boards-leads-templates-manage', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-leads-sequences-manage', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-leads-referrals-manage', roles: ['admin', 'intake-manager', 'marketing'] },
+	{ _id: 'boards-leads-marketing-manage', roles: ['admin', 'marketing'] },
+	{ _id: 'boards-leads-signups-manage', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-leads-conflict-check', roles: ['admin', 'intake-specialist', 'intake-manager'] },
+	{ _id: 'boards-leads-reports-view', roles: ['admin', 'intake-specialist', 'attorney'] },
 ];

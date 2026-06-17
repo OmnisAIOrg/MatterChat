@@ -23,6 +23,8 @@ import { ensureMattersBoard, bindMatterCard } from '../matters';
 import { assertBoardRole } from '../permissions';
 import { pushCreate, pushStage, pushQualify } from './caseproSync';
 import { nextLeadRefNo, nextSeq } from './refNo';
+import { createSpeedToLeadTask } from './intakeTasks';
+import { stopSequencesForLead } from './sequences';
 
 /**
  * Leads server service (M3b). The single place lead mutation logic lives so the
@@ -252,6 +254,13 @@ export async function createLead(uid: string, fields: CreateLeadFields): Promise
 		// the board is the working view; a failed upstream create must NOT fail capture.
 	}
 
+	// speed-to-lead SLA: auto-create the first-touch follow-up task (best-effort).
+	try {
+		await createSpeedToLeadTask(uid, lead);
+	} catch {
+		// the SLA tickler is a convenience; never fail capture if it can't be written.
+	}
+
 	return { lead, card, refNo };
 }
 
@@ -403,6 +412,12 @@ export async function updateLead(uid: string, leadId: string, patch: UpdateLeadP
 		} catch {
 			// the upstream write is best-effort; the local move already happened.
 		}
+		// a status advance stops any running drips (intake-lead-management.md §7).
+		try {
+			await stopSequencesForLead(leadId, 'status-advances');
+		} catch {
+			// best-effort drip stop.
+		}
 	}
 
 	if (!statusChanged && current.boardId) {
@@ -460,6 +475,15 @@ export async function qualifyLead(uid: string, leadId: string, qualification: IL
 		await pushQualify(uid, current, qualification);
 	} catch {
 		// best-effort; the local qualification already persisted.
+	}
+
+	// a qualified decision stops any running nurture drips.
+	if (qualification.qualified === true) {
+		try {
+			await stopSequencesForLead(leadId, 'qualified');
+		} catch {
+			// best-effort drip stop.
+		}
 	}
 
 	const lead = await BoardsLeads.findOneById(leadId);
@@ -582,6 +606,15 @@ export async function logCommunication(uid: string, leadId: string, params: LogC
 	// any logged comm counts as contact; recordContact also handles the SLA $min
 	await BoardsLeads.recordContact(leadId, ts);
 
+	// an INBOUND comm means the lead responded -> auto-stop any running drips.
+	if (params.direction === 'in') {
+		try {
+			await stopSequencesForLead(leadId, 'lead-responds');
+		} catch {
+			// drip stop is best-effort; never fail the comm log.
+		}
+	}
+
 	if (current.boardId) {
 		await BoardsActivities.log({
 			boardId: current.boardId,
@@ -686,6 +719,13 @@ export async function markLeadLost(uid: string, leadId: string, reason: LeadLost
 	}
 
 	await BoardsLeads.markLost(leadId, reason, uid);
+
+	// a lost lead stops any running drips.
+	try {
+		await stopSequencesForLead(leadId, 'lost');
+	} catch {
+		// best-effort drip stop.
+	}
 
 	if (current.boardId) {
 		await BoardsActivities.log({
@@ -807,6 +847,13 @@ export async function convertToMatter(uid: string, leadId: string): Promise<Conv
 
 	// 3. mark the lead converted (records matterId + matter card id + actor).
 	await BoardsLeads.markConverted(leadId, { matterId, matterCardId: matterCard._id, byUserId: uid });
+
+	// converting stops any running drips.
+	try {
+		await stopSequencesForLead(leadId, 'converted');
+	} catch {
+		// best-effort drip stop.
+	}
 
 	// 4. activity log on the lead card and on the new matter card.
 	const now = new Date();

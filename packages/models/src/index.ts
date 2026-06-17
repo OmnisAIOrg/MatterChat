@@ -87,6 +87,8 @@ import type {
 	IBoardsLeadsModel,
 	IBoardsReferralSourcesModel,
 	IBoardsCommunicationsModel,
+	IBoardsCommTemplatesModel,
+	IBoardsIntakeTasksModel,
 	IBoardsPlaybooksModel,
 	IBoardsDeadlinesModel,
 	IBoardsSequencesModel,
@@ -218,6 +220,8 @@ export const BoardsActivities = proxify<IBoardsActivitiesModel>('IBoardsActiviti
 export const BoardsLeads = proxify<IBoardsLeadsModel>('IBoardsLeadsModel');
 export const BoardsReferralSources = proxify<IBoardsReferralSourcesModel>('IBoardsReferralSourcesModel');
 export const BoardsCommunications = proxify<IBoardsCommunicationsModel>('IBoardsCommunicationsModel');
+export const BoardsCommTemplates = proxify<IBoardsCommTemplatesModel>('IBoardsCommTemplatesModel');
+export const BoardsIntakeTasks = proxify<IBoardsIntakeTasksModel>('IBoardsIntakeTasksModel');
 export const BoardsPlaybooks = proxify<IBoardsPlaybooksModel>('IBoardsPlaybooksModel');
 export const BoardsDeadlines = proxify<IBoardsDeadlinesModel>('IBoardsDeadlinesModel');
 export const BoardsSequences = proxify<IBoardsSequencesModel>('IBoardsSequencesModel');

@@ -32,6 +32,8 @@ export type * from './ILead';
 export type * from './IReferralSource';
 export type * from './IReferralOut';
 export type * from './ICommunication';
+export type * from './ICommTemplate';
+export type * from './IIntakeTask';
 export type * from './ISignUpPacket';
 export type * from './IPlaybookTemplate';
 export type * from './IBoardDeadline';

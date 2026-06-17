@@ -12,9 +12,37 @@ declare module '@rocket.chat/ui-contexts' {
 			pathname: `/boards/board/${string}${`/${string}` | ''}${`/${string}` | ''}`;
 			pattern: '/boards/board/:id/:view?/:cardId?';
 		};
+		'boards-matters-calendar': {
+			pathname: '/boards/matters/calendar';
+			pattern: '/boards/matters/calendar';
+		};
+		'boards-matters-caseload': {
+			pathname: '/boards/matters/caseload';
+			pattern: '/boards/matters/caseload';
+		};
+		'boards-matters-reports': {
+			pathname: '/boards/matters/reports';
+			pattern: '/boards/matters/reports';
+		};
 		'boards-matters': {
 			pathname: `/boards/matters${`/${string}` | ''}`;
 			pattern: '/boards/matters/:cardId?';
+		};
+		'boards-leads-templates': {
+			pathname: '/boards/leads/templates';
+			pattern: '/boards/leads/templates';
+		};
+		'boards-leads-referrals': {
+			pathname: '/boards/leads/referrals';
+			pattern: '/boards/leads/referrals';
+		};
+		'boards-leads-marketing': {
+			pathname: '/boards/leads/marketing';
+			pattern: '/boards/leads/marketing';
+		};
+		'boards-leads-reports': {
+			pathname: '/boards/leads/reports';
+			pattern: '/boards/leads/reports';
 		};
 		'boards-leads': {
 			pathname: `/boards/leads${`/${string}` | ''}`;
@@ -53,10 +81,50 @@ registerBoardsRoute('/board/:id/:view?/:cardId?', {
 	component: lazy(() => import('./BoardRouter')),
 });
 
+// Matters depth (M5): board-wide deadline/SOL agenda, caseload by assignee, and reports.
+// These literal sub-paths MUST be registered BEFORE the '/matters/:cardId?' catch-all below,
+// otherwise 'calendar'/'caseload'/'reports' would be matched as a :cardId.
+registerBoardsRoute('/matters/calendar', {
+	name: 'boards-matters-calendar',
+	component: lazy(() => import('./matters/calendar/MattersCalendar')),
+});
+
+registerBoardsRoute('/matters/caseload', {
+	name: 'boards-matters-caseload',
+	component: lazy(() => import('./matters/caseload/Caseload')),
+});
+
+registerBoardsRoute('/matters/reports', {
+	name: 'boards-matters-reports',
+	component: lazy(() => import('./matters/reports/MattersReports')),
+});
+
 // Matters pillar (M3a): the matters-pipeline board (13 CasePro stages) + CasePro snapshot panel.
 registerBoardsRoute('/matters/:cardId?', {
 	name: 'boards-matters',
 	component: lazy(() => import('./matters/MattersBoardRoute')),
+});
+
+// Leads depth (M6): comm templates/sequences, referral sources & referrals-out, marketing ROI, intake reports.
+// Literal sub-paths registered BEFORE the '/leads/:cardId?' catch-all for the same reason as above.
+registerBoardsRoute('/leads/templates', {
+	name: 'boards-leads-templates',
+	component: lazy(() => import('./leads/templates/TemplatesView')),
+});
+
+registerBoardsRoute('/leads/referrals', {
+	name: 'boards-leads-referrals',
+	component: lazy(() => import('./leads/referrals/ReferralsView')),
+});
+
+registerBoardsRoute('/leads/marketing', {
+	name: 'boards-leads-marketing',
+	component: lazy(() => import('./leads/marketing/MarketingView')),
+});
+
+registerBoardsRoute('/leads/reports', {
+	name: 'boards-leads-reports',
+	component: lazy(() => import('./leads/reports/LeadsReports')),
 });
 
 // Leads/Intake pillar (M3b): the 8-stage intake board + lead capture + intake panel.

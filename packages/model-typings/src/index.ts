@@ -88,6 +88,8 @@ export type * from './models/IBoardsActivitiesModel';
 export type * from './models/IBoardsLeadsModel';
 export type * from './models/IBoardsReferralSourcesModel';
 export type * from './models/IBoardsCommunicationsModel';
+export type * from './models/IBoardsCommTemplatesModel';
+export type * from './models/IBoardsIntakeTasksModel';
 export type * from './models/IBoardsPlaybooksModel';
 export type * from './models/IBoardsDeadlinesModel';
 export type * from './models/IBoardsSequencesModel';
