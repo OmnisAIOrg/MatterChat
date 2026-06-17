@@ -1,38 +1,13 @@
 import { Box } from '@rocket.chat/fuselage';
-import { useLicense, useLicenseName } from '@rocket.chat/ui-client';
-import { useTranslation } from 'react-i18next';
 
-import { links } from '../../lib/links';
-
+// MatterChat is white-labeled under the OmnisAI house brand: the sidebar footer
+// always shows "Powered by Omnis AI" (no Rocket.Chat link / license watermark).
 export const SidebarFooterWatermark = () => {
-	const { t } = useTranslation();
-
-	const response = useLicense();
-
-	const licenseName = useLicenseName();
-
-	if (response.isLoading || response.isError) {
-		return null;
-	}
-
-	if (licenseName.isError || licenseName.isLoading) {
-		return null;
-	}
-
-	const license = response.data;
-
-	if (license?.activeModules.includes('hide-watermark') && !license.trial) {
-		return null;
-	}
-
 	return (
 		<Box pi={16} pbe={8}>
-			<Box is='a' href={links.rocketChat} target='_blank' rel='noopener noreferrer'>
+			<Box is='a' href='https://omnisai.io' target='_blank' rel='noopener noreferrer'>
 				<Box fontScale='micro' color='hint' pbe={4}>
-					{t('Powered_by_RocketChat')}
-				</Box>
-				<Box fontScale='micro' color='pure-white' pbe={4}>
-					{licenseName.data}
+					Powered by Omnis AI
 				</Box>
 			</Box>
 		</Box>
