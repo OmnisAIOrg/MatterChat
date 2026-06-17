@@ -5,11 +5,16 @@ import { SystemLogger } from '../../lib/logger/system';
 
 /**
  * Prebuilt automation templates (M7 — 05-automation-engine.md §9). Seeded once into
- * `boards_automations` as global `isSystem` templates, idempotent on a stable `seedKey`
- * (a second run never duplicates them and leaves any firm edits untouched). The firm
- * installs/clones one onto a board and rebinds its list/label/stage ids — so the seeds
- * use firm-PORTABLE triggers (events + conditions) rather than hard-coded board ids, with
- * the intended stage/column named in the description.
+ * `boards_automations` as global `isSystem` + `isTemplate` CATALOG entries, idempotent on a
+ * stable `seedKey` (a second run never duplicates them and leaves any firm edits untouched).
+ *
+ * They are a CATALOG, not live rules: `isTemplate:true` makes the dispatcher + cron EXCLUDE
+ * them, so a global template never fires on a board that lacks its referenced list/label/
+ * stage ids. The firm INSTALLS one onto a board (`boards.automations.templates.install`),
+ * which CLONES it into a board-scoped, enabled, non-template automation and rebinds its
+ * list/label references by name. The seeds therefore use firm-PORTABLE triggers (events +
+ * conditions) rather than hard-coded board ids, with the intended stage/column named in the
+ * description.
  *
  * Catalog (from §9, real CasePro stage names): Speed-to-lead, Cold-lead nurture,
  * Demand-response timer, SOL watch, Stage playbook, Stuck-matter, CasePro write-back.
@@ -154,15 +159,21 @@ export const AUTOMATION_TEMPLATE_SEEDS: AutomationSeed[] = [
 	},
 ];
 
-export type SeedAutomationTemplatesResult = { created: number; existing: number; total: number };
+export type SeedAutomationTemplatesResult = { created: number; existing: number; migrated: number; total: number };
 
 /**
  * Upsert the §9 templates, idempotent on `seedKey`. Re-running never duplicates a template
  * (it matches by `seedKey`) and never overwrites a firm-edited copy. Returns counts.
+ *
+ * SELF-HEAL: a template seeded by an EARLIER build (before `isTemplate` existed) is global +
+ * enabled and would still fire on every board. When such a seed is found missing
+ * `isTemplate`, we backfill `isTemplate:true` (only that flag) so it reverts to catalog-only
+ * — closing the global-seed safety hole. Idempotent: a later run sees the flag set and skips.
  */
 export async function seedAutomationTemplates(uid?: string): Promise<SeedAutomationTemplatesResult> {
 	let created = 0;
 	let existing = 0;
+	let migrated = 0;
 	const now = new Date();
 
 	for (const seed of AUTOMATION_TEMPLATE_SEEDS) {
@@ -170,10 +181,18 @@ export async function seedAutomationTemplates(uid?: string): Promise<SeedAutomat
 		const already = await BoardsAutomations.findOneBySeedKey(seed.seedKey);
 		if (already) {
 			existing += 1;
+			// backfill catalog flag on a pre-`isTemplate` seed so it stops firing globally.
+			if (already.isTemplate !== true) {
+				// eslint-disable-next-line no-await-in-loop
+				await BoardsAutomations.updateAutomation(already._id, { isTemplate: true });
+				migrated += 1;
+			}
 			continue;
 		}
 		const doc: Omit<IAutomation, '_id' | '_updatedAt'> = {
 			...seed,
+			isSystem: true,
+			isTemplate: true, // catalog entry — the dispatcher/cron skip these; installed/cloned per board.
 			runCount: 0,
 			rev: 0,
 			...(uid ? { createdBy: uid } : {}),
@@ -185,7 +204,7 @@ export async function seedAutomationTemplates(uid?: string): Promise<SeedAutomat
 		created += 1;
 	}
 
-	return { created, existing, total: AUTOMATION_TEMPLATE_SEEDS.length };
+	return { created, existing, migrated, total: AUTOMATION_TEMPLATE_SEEDS.length };
 }
 
 /** Boot hook: seed the templates once, swallowing errors so a seed failure never blocks boot. */

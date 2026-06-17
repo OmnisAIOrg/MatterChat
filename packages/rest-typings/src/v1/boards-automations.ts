@@ -155,6 +155,52 @@ const BoardsAutomationsDryRunSchema = {
 export const isBoardsAutomationsDryRunProps = ajv.compile<BoardsAutomationsDryRunProps>(BoardsAutomationsDryRunSchema);
 
 // ---------------------------------------------------------------------------
+// GET — templates.list / buttonsForBoard ; POST — templates.install
+// ---------------------------------------------------------------------------
+
+// templates.list — read the prebuilt template catalog (no params).
+type BoardsAutomationsTemplatesListProps = Record<string, never>;
+
+const BoardsAutomationsTemplatesListSchema = {
+	type: 'object',
+	properties: {},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsAutomationsTemplatesListProps = ajvQuery.compile<BoardsAutomationsTemplatesListProps>(BoardsAutomationsTemplatesListSchema);
+
+// templates.install — clone a catalog template onto a board.
+type BoardsAutomationsTemplatesInstallProps = { templateId: string; boardId: string };
+
+const BoardsAutomationsTemplatesInstallSchema = {
+	type: 'object',
+	properties: {
+		templateId: { type: 'string', minLength: 1 },
+		boardId: { type: 'string', minLength: 1 },
+	},
+	required: ['templateId', 'boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsAutomationsTemplatesInstallProps = ajv.compile<BoardsAutomationsTemplatesInstallProps>(BoardsAutomationsTemplatesInstallSchema);
+
+// buttonsForBoard — enabled card/board-button automations for a board (run surfaces).
+type BoardsAutomationsButtonsForBoardProps = { boardId: string; cardType?: string };
+
+const BoardsAutomationsButtonsForBoardSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		cardType: { type: 'string', nullable: true },
+	},
+	required: ['boardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsAutomationsButtonsForBoardProps = ajvQuery.compile<BoardsAutomationsButtonsForBoardProps>(BoardsAutomationsButtonsForBoardSchema);
+
+// ---------------------------------------------------------------------------
 // Endpoint map
 // ---------------------------------------------------------------------------
 
@@ -184,5 +230,14 @@ export type BoardsAutomationsEndpoints = {
 	};
 	'/v1/boards.automations.runs.list': {
 		GET: (params: BoardsAutomationsRunsListProps) => { runs: IAutomationRun[]; count: number; offset: number; total: number };
+	};
+	'/v1/boards.automations.templates.list': {
+		GET: (params: BoardsAutomationsTemplatesListProps) => { templates: IAutomation[]; total: number };
+	};
+	'/v1/boards.automations.templates.install': {
+		POST: (params: BoardsAutomationsTemplatesInstallProps) => { automation: IAutomation; alreadyInstalled: boolean; notes: string[] };
+	};
+	'/v1/boards.automations.buttonsForBoard': {
+		GET: (params: BoardsAutomationsButtonsForBoardProps) => { automations: IAutomation[]; count: number; total: number };
 	};
 };

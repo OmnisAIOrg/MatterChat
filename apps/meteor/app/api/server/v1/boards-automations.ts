@@ -8,10 +8,13 @@ import {
 	isBoardsAutomationsRunProps,
 	isBoardsAutomationsDryRunProps,
 	isBoardsAutomationsRunsListProps,
+	isBoardsAutomationsTemplatesListProps,
+	isBoardsAutomationsTemplatesInstallProps,
+	isBoardsAutomationsButtonsForBoardProps,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
-import type { BoardAutomationKind } from '@rocket.chat/core-typings';
+import type { BoardAutomationKind, BoardsCardType } from '@rocket.chat/core-typings';
 import { BoardsAutomations } from '@rocket.chat/models';
 
 import {
@@ -22,6 +25,7 @@ import {
 	archiveAutomation,
 	listRuns,
 } from '../../../../server/services/automation/manage';
+import { listTemplates, installTemplate } from '../../../../server/services/automation/templates';
 import { runOne } from '../../../../server/services/automation/dispatcher';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
@@ -38,6 +42,9 @@ import { getPaginationItems } from '../helpers/getPaginationItems';
  *   POST boards.automations.run        — run a button now (boards-run-automation)
  *   POST boards.automations.dryRun     — editor preview / plan (boards-run-automation)
  *   GET  boards.automations.runs.list  — the run-log audit view (boards-view-automation-runs)
+ *   GET  boards.automations.templates.list    — the prebuilt template catalog (boards-manage-automations)
+ *   POST boards.automations.templates.install — clone a template onto a board (boards-manage-automations)
+ *   GET  boards.automations.buttonsForBoard   — enabled card/board buttons for a board (boards-run-automation)
  *
  * Mirrors `boards-leads.ts`: a permissive `successSchema` (the docs are large/nested — we
  * validate `success` + pass the payload), `getPaginationItems` for paging, and gating
@@ -130,6 +137,55 @@ API.v1.get(
 		);
 
 		return API.v1.success({ runs, count: runs.length, offset, total });
+	},
+);
+
+API.v1.get(
+	'boards.automations.templates.list',
+	{
+		authRequired: true,
+		query: isBoardsAutomationsTemplatesListProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { templates, total } = await listTemplates(userId);
+		return API.v1.success({ templates, total });
+	},
+);
+
+API.v1.get(
+	'boards.automations.buttonsForBoard',
+	{
+		authRequired: true,
+		query: isBoardsAutomationsButtonsForBoardProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { boardId, cardType } = this.queryParams;
+
+		// read gate: running a button requires run permission (board-scoped).
+		if (!(await hasPermissionAsync(userId, 'boards-run-automation', boardId))) {
+			return API.v1.unauthorized();
+		}
+
+		const all = await BoardsAutomations.findButtonsForBoard(boardId).toArray();
+		// optional cardType filter: card-buttons may scope to a card type via their trigger
+		// filter; board-buttons (no card subject) are always returned.
+		const automations = cardType
+			? all.filter((a) => a.kind === 'board-button' || !a.trigger?.filters?.cardType || a.trigger.filters.cardType === (cardType as BoardsCardType))
+			: all;
+
+		return API.v1.success({ automations, count: automations.length, total: automations.length });
 	},
 );
 
@@ -279,6 +335,29 @@ API.v1.post(
 			...(cardId ? { cardId } : {}),
 			...(leadId ? { leadId } : {}),
 		});
+		return API.v1.success(result);
+	},
+);
+
+// ---------------------------------------------------------------------------
+// Templates — install a catalog template onto a board
+// ---------------------------------------------------------------------------
+
+API.v1.post(
+	'boards.automations.templates.install',
+	{
+		authRequired: true,
+		body: isBoardsAutomationsTemplatesInstallProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { templateId, boardId } = this.bodyParams;
+		const result = await installTemplate(userId, templateId, boardId);
 		return API.v1.success(result);
 	},
 );

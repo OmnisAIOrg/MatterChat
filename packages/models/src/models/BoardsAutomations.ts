@@ -24,16 +24,27 @@ export class BoardsAutomationsRaw extends BaseRaw<IAutomation> implements IBoard
 
 	public findEnabledRulesForEvent(boardId: string, event: BoardAutomationTriggerEvent): FindCursor<IAutomation> {
 		// board-scoped rules OR global rules (boardId unset), both enabled, for this event.
+		// `isTemplate` catalog entries are EXCLUDED — they're installed/cloned onto a board, never fired directly.
 		return this.find({
 			kind: 'rule',
 			enabled: true,
+			isTemplate: { $ne: true },
 			'trigger.event': event,
 			$or: [{ boardId }, { boardId: { $exists: false } }, { scope: 'global' }],
 		});
 	}
 
 	public findEnabledScheduled(options?: FindOptions<IAutomation>): FindCursor<IAutomation> {
-		return this.find({ kind: 'scheduled', enabled: true }, options);
+		// exclude `isTemplate` catalog entries: a global scheduled template must not sweep every board.
+		return this.find({ kind: 'scheduled', enabled: true, isTemplate: { $ne: true } }, options);
+	}
+
+	public findTemplates(options?: FindOptions<IAutomation>): FindCursor<IAutomation> {
+		return this.find({ isTemplate: true }, { sort: { name: 1 }, ...options });
+	}
+
+	public findOneTemplateBySeedKey(seedKey: string): Promise<IAutomation | null> {
+		return this.findOne({ seedKey, isTemplate: true });
 	}
 
 	public findButtonsForBoard(boardId: string, options?: FindOptions<IAutomation>): FindCursor<IAutomation> {

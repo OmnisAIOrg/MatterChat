@@ -16,8 +16,10 @@ import { skipped } from './actions/types';
  * since enqueue) → interpolate + run each action through the registry, charging the
  * loop-guard action budget → write a `boards_automation_runs` row → roll up the
  * automation's runCount/lastRunAt (or lastError) → append a machine `boards_activities`
- * line. NEVER throws: any unexpected engine error is captured as the run's top-level
- * `error` and the run finishes `error` rather than propagating into the caller/queue.
+ * line. The run rolls up to `ok` (all actions ok), `partial` (some ok + some errored),
+ * `error` (all errored), or `skipped` (nothing ran). NEVER throws: any unexpected engine
+ * error is captured as the run's top-level `error` and the run finishes `error` rather
+ * than propagating into the caller/queue.
  *
  * `ctx.dryRun` runs the whole pipeline without mutating (handlers plan only) and writes a
  * `status:'dry-run'` row — that backs the editor preview and `boards.automations.dryRun`.
@@ -40,7 +42,7 @@ function rollupStatus(results: IAutomationActionResult[], dryRun: boolean): Auto
 	const anyError = results.some((r) => r.status === 'error');
 	const anyOk = results.some((r) => r.status === 'ok');
 	if (anyError && anyOk) {
-		return 'ok'; // partial success still records the actions; errors are visible per-action
+		return 'partial'; // some actions succeeded, some errored — surfaced as its own status (M7 LOW)
 	}
 	if (anyError) {
 		return 'error';
@@ -148,7 +150,7 @@ export async function runAutomation(automation: IAutomation, ctx: AutomationCont
 				boardId: ctx.boardId,
 				...(ctx.subject.card ? { cardId: ctx.subject.card._id } : {}),
 				actor: `automation:${automation._id}`,
-				verb: 'field.changed',
+				verb: 'automation.ran',
 				to: { automationRan: automation._id, name: automation.name, status, actions: actionsRun.length, runId },
 				ts: finishedAt,
 			});

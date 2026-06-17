@@ -79,7 +79,7 @@ export async function handleNotify(action: IActionNotify, ctx: AutomationContext
 			boardId: ctx.boardId,
 			...(card ? { listId: card.listId, cardId: card._id } : {}),
 			actor: `automation:${ctx.automation._id}`,
-			verb: 'field.changed',
+			verb: 'automation.notified',
 			to: { automationNotify: true, target: action.target, recipients, message },
 			ts: new Date(),
 		});
@@ -126,7 +126,7 @@ export async function handleNotifyEmail(action: IActionNotifyEmail, ctx: Automat
 			boardId: ctx.boardId,
 			...(lead.cardId ? { cardId: lead.cardId } : {}),
 			actor: `automation:${ctx.automation._id}`,
-			verb: 'field.changed',
+			verb: 'automation.notified',
 			to: { automationEmail: true, leadId: lead._id, inline: true, preview: body.slice(0, 120) },
 			ts: new Date(),
 		});
@@ -172,7 +172,7 @@ export async function handleNotifySms(action: IActionNotifySms, ctx: AutomationC
 			boardId: ctx.boardId,
 			...(lead.cardId ? { cardId: lead.cardId } : {}),
 			actor: `automation:${ctx.automation._id}`,
-			verb: 'field.changed',
+			verb: 'automation.notified',
 			to: { automationSms: true, leadId: lead._id, inline: true, preview: body.slice(0, 120) },
 			ts: new Date(),
 		});

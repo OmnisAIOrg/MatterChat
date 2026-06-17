@@ -96,7 +96,7 @@ export async function handleAiGenerate(action: IActionAiGenerate, ctx: Automatio
 				listId: card.listId,
 				cardId: card._id,
 				actor: `automation:${ctx.automation._id}`,
-				verb: 'field.changed',
+				verb: 'automation.ran',
 				to: {
 					aiGenerate: action.kind,
 					provider: result.provider,
@@ -121,7 +121,7 @@ export async function handleAiGenerate(action: IActionAiGenerate, ctx: Automatio
 			listId: card.listId,
 			cardId: card._id,
 			actor: `automation:${ctx.automation._id}`,
-			verb: 'field.changed',
+			verb: 'automation.ran',
 			to: {
 				aiGenerate: action.kind,
 				provider: result.provider,

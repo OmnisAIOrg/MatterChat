@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import AutomationActivity from './AutomationActivity';
 import AutomationList from './AutomationList';
+import TemplateGallery from './TemplateGallery';
 import AutomationBuilder from './builder/AutomationBuilder';
 import type { AutomationTab } from './lib/catalog';
 import { TAB_KIND } from './lib/catalog';
@@ -44,6 +45,7 @@ const TAB_ORDER: { tab: AutomationTab; labelKey: string }[] = [
 	{ tab: 'board-buttons', labelKey: 'Boards_Automation_Board_Buttons' },
 	{ tab: 'scheduled', labelKey: 'Boards_Automation_Scheduled_Plural' },
 	{ tab: 'sequences', labelKey: 'Boards_Automation_Sequences' },
+	{ tab: 'templates', labelKey: 'Boards_Automation_Templates' },
 	{ tab: 'activity', labelKey: 'Boards_Automation_Activity' },
 ];
 
@@ -58,10 +60,12 @@ const AutomationsContextualBar = ({ boardId, onClose }: AutomationsContextualBar
 	// when set, the builder is open (either a kind for a new automation, or an existing doc)
 	const [editing, setEditing] = useState<{ existing?: Serialized<IAutomation> } | null>(null);
 
-	const kind = tab !== 'activity' ? TAB_KIND[tab] : undefined;
+	const kind = tab !== 'activity' && tab !== 'templates' ? TAB_KIND[tab] : undefined;
 
 	const listQueryKey = useMemo(() => ['boards', 'automations', boardId, kind ?? 'all'] as const, [boardId, kind]);
 	const runsQueryKey = useMemo(() => ['boards', 'automation-runs', boardId] as const, [boardId]);
+	// installing a template clones a kind:'rule' automation; invalidate the Rules tab list key.
+	const rulesQueryKey = useMemo(() => ['boards', 'automations', boardId, 'rule'] as const, [boardId]);
 
 	const tabs = useMemo(() => (canViewRuns ? TAB_ORDER : TAB_ORDER.filter((tabitem) => tabitem.tab !== 'activity')), [canViewRuns]);
 
@@ -98,7 +102,11 @@ const AutomationsContextualBar = ({ boardId, onClose }: AutomationsContextualBar
 					<>
 						{tab === 'activity' && canViewRuns && <AutomationActivity boardId={boardId} queryKey={runsQueryKey} />}
 
-						{tab !== 'activity' && (
+						{tab === 'templates' && (
+							<TemplateGallery boardId={boardId} canManage={canManage} rulesQueryKey={rulesQueryKey} />
+						)}
+
+						{tab !== 'activity' && tab !== 'templates' && (
 							<Box>
 								{canManage && (
 									<Box display='flex' justifyContent='flex-end' mbe={8}>

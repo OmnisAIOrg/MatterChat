@@ -22,10 +22,14 @@ import type {
 
 // --- Kinds -------------------------------------------------------------------
 
-export type AutomationTab = 'rules' | 'card-buttons' | 'board-buttons' | 'scheduled' | 'sequences' | 'activity';
+export type AutomationTab = 'rules' | 'card-buttons' | 'board-buttons' | 'scheduled' | 'sequences' | 'templates' | 'activity';
 
-/** Which automation `kind` each contextualbar tab lists/creates. */
-export const TAB_KIND: Record<Exclude<AutomationTab, 'activity'>, BoardAutomationKind> = {
+/**
+ * Which automation `kind` each contextualbar tab lists/creates. `activity` (run-log)
+ * and `templates` (prebuilt catalog) are non-kind tabs — they render their own
+ * components rather than an AutomationList, so they are excluded here.
+ */
+export const TAB_KIND: Record<Exclude<AutomationTab, 'activity' | 'templates'>, BoardAutomationKind> = {
 	'rules': 'rule',
 	'card-buttons': 'card-button',
 	'board-buttons': 'board-button',

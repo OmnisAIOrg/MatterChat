@@ -27,6 +27,8 @@ export type BoardsActivityVerb =
 	| 'comment.added'
 	| 'attachment.added'
 	| 'field.changed'
+	| 'automation.ran'
+	| 'automation.notified'
 	| 'casepro.snapshot.refreshed'
 	| 'casepro.stage.pushed';
 

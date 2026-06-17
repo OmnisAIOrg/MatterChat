@@ -12,8 +12,11 @@ import { ok, skipped, errored, planned } from './types';
  * write-backs are DOUBLE-gated: the `Boards_Automation_CasePro_Writeback_Enabled` setting
  * AND the `boards-automation-casepro-writeback` permission must both be granted, else the
  * action is `skipped` with `skippedReason:'writeback-disabled'` (per the Foundations
- * decision). The contract is validate → execute: an operation is only executed after its
- * validation passes, and the run records `validated`/`executed`/`caseproRef` for audit.
+ * decision). The permission is checked against the acting user for a real-user (button/REST)
+ * run, and against the automation's author (`createdBy`) for a system/automation actor
+ * (scheduled tick / cascade child) so a non-interactive write-back still runs under a real
+ * human's authority. The contract is validate → execute: an operation is only executed after
+ * its validation passes, and the run records `validated`/`executed`/`caseproRef` for audit.
  *
  * GRACEFUL DEGRADE: the fork's `caseProClient` is read-only today (matterSnapshot /
  * listMatters / listStages — no write transport), so even when fully gated this handler
@@ -37,12 +40,23 @@ function matterIdFor(card: IBoardCard | undefined): string | undefined {
 
 export async function handleCaseproWriteback(action: IActionCaseproWriteback, ctx: AutomationContext, index: number) {
 	try {
-		// Gate 1: master setting. Gate 2: explicit permission (the acting user, or admin for system).
+		// Gate 1: master setting.
 		if (!writebackEnabled()) {
 			return skipped(index, action.type, 'writeback-disabled', 'CasePro write-back disabled (setting)');
 		}
-		const permActor = ctx.actor && ctx.actor !== 'system' && !ctx.actor.startsWith('automation:') ? ctx.actor : undefined;
-		if (permActor && !(await hasPermissionAsync(permActor, 'boards-automation-casepro-writeback'))) {
+		// Gate 2: explicit `boards-automation-casepro-writeback` permission.
+		//  - Real-user actor (button/REST run): the acting user must hold it (direct check).
+		//  - System/automation actor (scheduled tick / cascade child): no live user is present,
+		//    so we require the automation's AUTHOR (`createdBy`) to hold it. This stops a
+		//    scheduled/cascaded write-back from running under no human authority just because
+		//    the master setting is on (M7 LOW). Deny gracefully (skipped) when there's no
+		//    author or the author lacks the permission — never throw.
+		const isSystemActor = !ctx.actor || ctx.actor === 'system' || ctx.actor.startsWith('automation:');
+		const permActor = isSystemActor ? ctx.automation.createdBy : ctx.actor;
+		if (!permActor) {
+			return skipped(index, action.type, 'writeback-disabled', 'no actor authorized for CasePro write-back');
+		}
+		if (!(await hasPermissionAsync(permActor, 'boards-automation-casepro-writeback'))) {
 			return skipped(index, action.type, 'writeback-disabled', 'missing boards-automation-casepro-writeback permission');
 		}
 
@@ -66,7 +80,7 @@ export async function handleCaseproWriteback(action: IActionCaseproWriteback, ct
 			boardId: ctx.boardId,
 			...(ctx.subject.card ? { cardId: ctx.subject.card._id } : {}),
 			actor: `automation:${ctx.automation._id}`,
-			verb: 'field.changed',
+			verb: 'automation.ran',
 			to: { caseproWriteback: action.operation, ...caseproRef, value: rawValue, executed: false },
 			ts: new Date(),
 		});
@@ -112,7 +126,7 @@ export async function handleLitboxRequestFolder(action: IActionLitboxRequestFold
 			boardId: ctx.boardId,
 			...(ctx.subject.card ? { cardId: ctx.subject.card._id } : {}),
 			actor: `automation:${ctx.automation._id}`,
-			verb: 'field.changed',
+			verb: 'automation.ran',
 			to: { litboxRequestFolder: matterId, requested: true },
 			ts: new Date(),
 		});

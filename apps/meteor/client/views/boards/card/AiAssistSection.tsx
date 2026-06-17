@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
  * AiAssistSection — the M8 "AI" controls on a matter card (MatterPanel).
  *
  * Two buttons, gated by `boards-ai-generate`:
- *  - "AI summary"     → POST /v1/boards.ai.summarizeMatter (Claude over the cached snapshot)
+ *  - "AI summary"     → POST /v1/boards.ai.summarizeMatter (Claude over a fresh snapshot, falling back to cached on CasePro failure)
  *  - "AI draft demand"→ POST /v1/boards.ai.draftDemand     (Stowers demand via LitDraft)
  *
  * The provider seam NEVER throws: a 200 carries `{ generated, text, provider, note }`.

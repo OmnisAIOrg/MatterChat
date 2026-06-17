@@ -1,5 +1,5 @@
-import type { ILead, IReferralSource } from '@rocket.chat/core-typings';
-import { BoardsLeads, BoardsReferralSources } from '@rocket.chat/models';
+import type { ILead, IMatterSnapshot, IReferralSource } from '@rocket.chat/core-typings';
+import { BoardsCards, BoardsLeads, BoardsReferralSources } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
@@ -21,9 +21,12 @@ import { aging, financial, caseload, type AgingReport, type FinancialReport, typ
  *                 gate writes both; we accept either so the report still works if
  *                 only one was recorded).
  *   3. REVENUE  — for each signed lead with a `convertedMatterId`, read the matter's
- *                 cached CasePro value through the matters `caseProClient`
- *                 (`settlementAmount ?? lastDemandAmount`). Settlement is the realized
- *                 check; last demand is the best in-flight estimate.
+ *                 CasePro value (`settlementAmount ?? lastDemandAmount`). Prefer the
+ *                 CACHED snapshot already on the converted matter's board card
+ *                 (`card.link.snapshot`, written by M2's read-through) and only fall back
+ *                 to a LIVE `caseProClient.matterSnapshot` when no card snapshot exists —
+ *                 so a firm-wide report doesn't fan out one CasePro round-trip per signed
+ *                 matter. Settlement is the realized check; last demand is the in-flight estimate.
  *
  * Spend comes from the registry: source-level `IReferralSource.monthlySpend[]` and
  * campaign-level `IReferralCampaign.spendByMonth[]`. From spend + leads + signed +
@@ -138,21 +141,52 @@ function inWindow(lead: ILead, from?: string, to?: string): boolean {
 	return (!from || day >= from) && (!to || day <= to);
 }
 
+/** Extract the case value from a snapshot: settlement (realized), else last demand, else 0. */
+function valueFromSnapshot(snap: Pick<IMatterSnapshot, 'settlementAmount' | 'lastDemandAmount'>): number {
+	// CasePro money is numeric-as-string — coerce via Number(...) || 0.
+	const raw = snap.settlementAmount ?? snap.lastDemandAmount ?? 0;
+	return Number(raw) || 0;
+}
+
+/**
+ * The cached snapshot already on the converted matter's board card, if any. A matter may
+ * have more than one linked card (mirror/copy), so we take the first one that carries a
+ * `link.snapshot`. Best-effort — a lookup failure just falls through to the live read.
+ */
+async function cachedMatterSnapshot(matterId: string): Promise<IMatterSnapshot | undefined> {
+	try {
+		const cards = await BoardsCards.findByMatterId(matterId).toArray();
+		for (const card of cards) {
+			if (card.link?.kind === 'matter' && card.link.snapshot) {
+				return card.link.snapshot;
+			}
+		}
+	} catch {
+		// fall back to the live read below.
+	}
+	return undefined;
+}
+
 /**
  * The CasePro case value for one converted matter: settlement (the realized check),
- * else the last demand (best in-flight estimate), else 0. Read THROUGH the matters
- * `caseProClient`; never throws — a failed read returns `resolved:false` so callers
- * can flag the row's revenue as partial.
+ * else the last demand (best in-flight estimate), else 0. Prefers the CACHED snapshot on
+ * the matter's board card (M2 read-through) so the firm-wide report avoids a CasePro
+ * round-trip per matter; only reads LIVE through the matters `caseProClient` when no card
+ * snapshot exists. Never throws — a failed live read returns `resolved:false` so callers
+ * can flag the row's revenue as partial. A cached hit is always `resolved:true`.
  */
 async function matterValue(matterId: string): Promise<{ value: number; resolved: boolean }> {
+	const cached = await cachedMatterSnapshot(matterId);
+	if (cached) {
+		return { value: valueFromSnapshot(cached), resolved: true };
+	}
 	try {
 		const snap = await caseProClient.matterSnapshot(matterId);
 		if (!snap) {
 			// reachable but no such matter — resolved, just zero value.
 			return { value: 0, resolved: true };
 		}
-		const raw = snap.settlementAmount ?? snap.lastDemandAmount ?? 0;
-		return { value: Number(raw) || 0, resolved: true };
+		return { value: valueFromSnapshot(snap), resolved: true };
 	} catch {
 		return { value: 0, resolved: false };
 	}

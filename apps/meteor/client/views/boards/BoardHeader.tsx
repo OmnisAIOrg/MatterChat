@@ -4,7 +4,7 @@ import { PageHeader } from '@rocket.chat/ui-client';
 import { useRouter } from '@rocket.chat/ui-contexts';
 import { useCallback } from 'react';
 
-import { BoardAutomationsButton } from './automation';
+import { BoardAutomationsButton, BoardButtonsMenu } from './automation';
 import { getPipelineTypeIcon } from './lib/icons';
 import ViewSwitcher from './views/ViewSwitcher';
 
@@ -45,6 +45,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 					/>
 				</Box>
 				<ButtonGroup>
+					<BoardButtonsMenu boardId={board._id} />
 					<BoardAutomationsButton boardId={board._id} />
 				</ButtonGroup>
 			</Box>

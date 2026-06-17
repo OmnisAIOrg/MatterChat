@@ -7,8 +7,14 @@ export interface IBoardsAutomationsModel extends IBaseModel<IAutomation> {
 	/** Hot path for rule dispatch: enabled `kind:'rule'` automations for a board (or global) on an event. */
 	findEnabledRulesForEvent(boardId: string, event: BoardAutomationTriggerEvent): FindCursor<IAutomation>;
 
-	/** All enabled `kind:'scheduled'` automations (the cron scans these every tick). */
+	/** All enabled `kind:'scheduled'` automations (the cron scans these every tick). Excludes `isTemplate` catalog entries. */
 	findEnabledScheduled(options?: FindOptions<IAutomation>): FindCursor<IAutomation>;
+
+	/** The prebuilt catalog: `isTemplate` automations the firm installs/clones onto a board. */
+	findTemplates(options?: FindOptions<IAutomation>): FindCursor<IAutomation>;
+
+	/** Look up one catalog template by its stable seed key. */
+	findOneTemplateBySeedKey(seedKey: string): Promise<IAutomation | null>;
 
 	/** Enabled card/board buttons for a board (rendered as click-to-run buttons). */
 	findButtonsForBoard(boardId: string, options?: FindOptions<IAutomation>): FindCursor<IAutomation>;

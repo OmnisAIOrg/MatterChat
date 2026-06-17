@@ -75,10 +75,12 @@ export interface CaseProLitigationDate {
 
 /**
  * The surface this phase consumes. `matterSnapshot` returns the M1 `IMatterSnapshot`
- * (the exact shape `BoardsCards.refreshMatterSnapshot` writes onto a matter-linked card).
+ * (the exact shape `BoardsCards.refreshMatterSnapshot` writes onto a matter-linked card),
+ * or `null` when the matter can't be read/found — matching the concrete client
+ * (`casepro/client.ts`). Consumers (crossPipeline.ts, boards-ai.ts) already null-narrow.
  */
 export interface ICaseProClient {
-	matterSnapshot(matterId: string): Promise<IMatterSnapshot>;
+	matterSnapshot(matterId: string): Promise<IMatterSnapshot | null>;
 	listMatters(opts?: CaseProListMattersOpts): Promise<CaseProListMattersResult>;
 	listStages(): Promise<CaseProStage[]>;
 	/** Litigation scheduling-order docket dates for a matter (M5 mirror). [] if no suit. */

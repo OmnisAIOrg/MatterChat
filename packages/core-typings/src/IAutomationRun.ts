@@ -10,7 +10,7 @@ import type { IRocketChatRecord } from './IRocketChatRecord';
  * (`actor:'automation:<id>'`). See 05-automation-engine.md §4.4 / §11.
  */
 
-export type AutomationRunStatus = 'ok' | 'error' | 'skipped' | 'dry-run';
+export type AutomationRunStatus = 'ok' | 'partial' | 'error' | 'skipped' | 'dry-run';
 
 export type AutomationActionStatus = 'ok' | 'error' | 'skipped';
 

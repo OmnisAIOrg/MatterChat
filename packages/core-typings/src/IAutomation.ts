@@ -375,6 +375,14 @@ export interface IAutomation extends IRocketChatRecord {
 	icon?: string; // Fuselage icon for buttons (e.g. 'kanban','bell','clock')
 	enabled: boolean;
 	isSystem?: boolean; // seeded prebuilt template
+	/**
+	 * Catalog-only seed: a prebuilt template the firm installs/clones onto a board, NOT a
+	 * live rule. The dispatcher EXCLUDES `isTemplate` rows from event matching so a global
+	 * catalog entry never fires on a board that lacks its referenced list/label/stage ids
+	 * (05-automation-engine.md §9). `boards.automations.templates.install` clones it into a
+	 * board-scoped, non-template, enabled automation.
+	 */
+	isTemplate?: boolean;
 	seedKey?: string; // stable idempotent seed key (prebuilt templates)
 
 	// rollups
