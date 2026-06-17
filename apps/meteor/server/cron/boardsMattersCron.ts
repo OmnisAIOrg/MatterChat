@@ -1,7 +1,7 @@
 import { cronJobs } from '@rocket.chat/cron';
 import { Boards, BoardsLists, BoardsCards, BoardsDeadlines, BoardsActivities } from '@rocket.chat/models';
 
-import { runDeadlineTick } from '../lib/boards/matters/deadlines';
+import { ensureSolDeadlineForMatter, runDeadlineTick } from '../lib/boards/matters/deadlines';
 import { SystemLogger } from '../lib/logger/system';
 
 /**
@@ -40,6 +40,13 @@ const STUCK_MATTER_DAYS = 30;
  */
 async function runDailyDeadlines(now: Date = new Date()): Promise<void> {
 	try {
+		const ensured = await ensureMatterSolDeadlines();
+		SystemLogger.debug({ msg: 'boards.matters.cron.ensureSol', ...ensured });
+	} catch (err) {
+		SystemLogger.warn({ msg: 'boards.matters.cron.ensureSol.failed', err });
+	}
+
+	try {
 		const tick = await runDeadlineTick(now);
 		SystemLogger.debug({ msg: 'boards.matters.cron.deadlineTick', ...tick });
 	} catch (err) {
@@ -52,6 +59,42 @@ async function runDailyDeadlines(now: Date = new Date()): Promise<void> {
 	} catch (err) {
 		SystemLogger.warn({ msg: 'boards.matters.cron.solWatch.failed', err });
 	}
+}
+
+/**
+ * SOL backstop: ensure every matter card carries a SOL deadline derived from its
+ * cached MatterSnapshot. `refreshMatterSnapshot()` arms SOL on bind + manual refresh,
+ * but a matter bound before that seam (or never re-refreshed) would otherwise have NO
+ * SOL deadline at all — defeating the no-missed-SOL guardrail. This daily sweep closes
+ * that gap using ONLY the cached snapshot (no CasePro load). `ensureSolDeadlineForMatter`
+ * is idempotent (refreshes in place / returns existing) and never fabricates a date, so
+ * matters with no usable SOL source are simply skipped. Best-effort per card.
+ */
+async function ensureMatterSolDeadlines(): Promise<{ scanned: number; ensured: number }> {
+	let scanned = 0;
+	let ensured = 0;
+	const boards = await Boards.findByPipelineType('matters').toArray();
+	for (const board of boards) {
+		if (board.archived) {
+			continue;
+		}
+		const cards = await BoardsCards.findByBoard(board._id).toArray();
+		for (const card of cards) {
+			if (card.cardType !== 'matter' || card.archived || card.link?.kind !== 'matter' || !card.link.snapshot) {
+				continue;
+			}
+			scanned += 1;
+			try {
+				const deadline = await ensureSolDeadlineForMatter('system', card, card.link.snapshot);
+				if (deadline) {
+					ensured += 1;
+				}
+			} catch {
+				// best-effort per card; refreshMatterSnapshot() is the primary SOL seam.
+			}
+		}
+	}
+	return { scanned, ensured };
 }
 
 /**

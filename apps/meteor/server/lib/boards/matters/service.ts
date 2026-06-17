@@ -6,6 +6,7 @@ import { createBoard, createList } from '../service';
 import { caseProClient } from './caseProClient';
 import type { CaseProStage } from './caseProClient';
 import { getStageId } from './caseProClientTypes';
+import { ensureSolDeadlineForMatter } from './deadlines';
 import { MATTER_STAGE_SEEDS, normalizeStageName } from './stages';
 
 /**
@@ -208,6 +209,18 @@ export async function refreshMatterSnapshot(uid: string, cardId: string): Promis
 	}
 
 	await BoardsCards.refreshMatterSnapshot(cardId, snapshot);
+
+	// Safety-critical (differentiators §4 "no missed SOL"): ensure the matter's SOL
+	// deadline exists/refreshes off the latest snapshot (CasePro solDate, else
+	// incident_date + jurisdiction rules). This is the seam that arms the whole
+	// deadline engine — escalation tiers, mandatory ack, the daily SOL watch — so it
+	// runs on every bind + manual refresh. Idempotent (findOneOpenByCardAndKind guard
+	// inside) and best-effort: a deadline failure must never block the snapshot refresh.
+	try {
+		await ensureSolDeadlineForMatter(uid, card, snapshot);
+	} catch {
+		// never block a snapshot refresh on SOL-deadline upkeep; the daily cron is the backstop.
+	}
 
 	// keep the card title aligned with the matter's display name when available.
 	const title = snapshot.matterName ?? snapshot.clientName;
