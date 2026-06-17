@@ -1,13 +1,15 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { IBoardCard, Serialized } from '@rocket.chat/core-typings';
+import type { IBoardCard, IBoardLabelDef, ICardCover, Serialized } from '@rocket.chat/core-typings';
 import { Box, Icon, Tag } from '@rocket.chat/fuselage';
-import type { KeyboardEvent } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
+import { useMemo } from 'react';
 
 import { getCardTypeIcon } from '../lib/icons';
 
 type CardTileProps = {
 	card: Serialized<IBoardCard>;
+	labelDefs?: IBoardLabelDef[];
 	onOpen: (cardId: string) => void;
 };
 
@@ -23,19 +25,57 @@ const formatDue = (dueDate: Date | string): string => {
 	return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
-const CardTile = ({ card, onOpen }: CardTileProps) => {
+// Resolve a cover image URL from an image-/attachment-kind cover. Color covers are
+// rendered as a strip instead. LitBox attachments need a signed URL we don't have on
+// the tile, so they fall through to no-image (the card still renders cleanly).
+const resolveCoverImage = (cover: ICardCover, attachments: Serialized<IBoardCard>['attachments']): string | undefined => {
+	if (cover.kind === 'image') {
+		return cover.value;
+	}
+	if (cover.kind === 'attachment') {
+		const att = attachments?.find((a) => a.id === cover.value);
+		if (!att) {
+			return undefined;
+		}
+		if (att.source === 'url') {
+			return att.ref;
+		}
+		if (att.source === 'local') {
+			return `/file-upload/${att.ref}`;
+		}
+	}
+	return undefined;
+};
+
+const CardTile = ({ card, labelDefs, onOpen }: CardTileProps) => {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
 		id: card._id,
 		data: { type: 'card', listId: card.listId },
 	});
 
-	const style = {
+	const style: CSSProperties = {
 		transform: CSS.Translate.toString(transform),
 		transition,
 		opacity: isDragging ? 0.4 : 1,
+		overflow: 'hidden',
 	};
 
 	const overdue = isOverdue(card.dueDate, card.dueComplete);
+
+	// Resolve label ids -> defs (name + color) via the board's label dictionary.
+	const labelMap = useMemo(() => new Map((labelDefs ?? []).map((l) => [l.id, l] as const)), [labelDefs]);
+	const cardLabels = useMemo(
+		() => card.labels.map((id) => labelMap.get(id)).filter((l): l is IBoardLabelDef => Boolean(l)),
+		[card.labels, labelMap],
+	);
+
+	const cover = card.cover;
+	const coverImage = cover ? resolveCoverImage(cover, card.attachments) : undefined;
+
+	const doneCount = card.checklists.reduce((sum, cl) => sum + cl.items.filter((i) => i.done).length, 0);
+	const totalCount = card.checklists.reduce((sum, cl) => sum + cl.items.length, 0);
+
+	const hasMeta = Boolean(card.dueDate) || totalCount > 0 || card.assignees.length > 0 || Boolean(card.cardNumber);
 
 	return (
 		<Box
@@ -53,43 +93,63 @@ const CardTile = ({ card, onOpen }: CardTileProps) => {
 				}
 			}}
 			mbe={8}
-			pi={12}
-			pb={8}
 			bg='light'
 			borderRadius='x4'
 			borderWidth='default'
 			borderColor='extra-light'
 			className='rcx-boards-card-tile'
 		>
-			<Box display='flex' alignItems='center' mbe={4}>
-				<Icon name={getCardTypeIcon(card.cardType)} size='x16' mie={4} color='hint' />
-				<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
-					{card.title}
-				</Box>
-			</Box>
-
-			{(card.labels.length > 0 || card.dueDate || card.checklists.length > 0) && (
-				<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '4px' }}>
-					{card.dueDate && (
-						<Tag variant={overdue ? 'danger' : undefined}>
-							<Icon name='clock' size='x12' mie={2} />
-							{formatDue(card.dueDate)}
-						</Tag>
-					)}
-					{card.checklists.length > 0 && (
-						<Tag>
-							<Icon name='circle-check' size='x12' mie={2} />
-							{card.checklists.reduce((sum, cl) => sum + cl.items.filter((i) => i.done).length, 0)}/
-							{card.checklists.reduce((sum, cl) => sum + cl.items.length, 0)}
-						</Tag>
-					)}
-					{card.cardNumber ? (
-						<Box fontScale='micro' color='hint' mis={4}>
-							#{card.cardNumber}
-						</Box>
-					) : null}
-				</Box>
+			{cover?.kind === 'color' && <Box style={{ height: 8, backgroundColor: cover.value }} />}
+			{coverImage && (
+				<Box style={{ height: 40, backgroundImage: `url(${coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
 			)}
+
+			<Box pi={12} pbs={8} pbe={8}>
+				{cardLabels.length > 0 && (
+					<Box display='flex' flexWrap='wrap' mbe={6} style={{ gap: '4px' }}>
+						{cardLabels.map((l) => (
+							<Box key={l.id} fontScale='micro' style={{ backgroundColor: l.color, color: '#ffffff', borderRadius: '4px', padding: '1px 7px' }}>
+								{l.name}
+							</Box>
+						))}
+					</Box>
+				)}
+
+				<Box display='flex' alignItems='center' mbe={hasMeta ? 4 : 0}>
+					<Icon name={getCardTypeIcon(card.cardType)} size='x16' mie={4} color='hint' />
+					<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
+						{card.title}
+					</Box>
+				</Box>
+
+				{hasMeta && (
+					<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '4px' }}>
+						{card.dueDate && (
+							<Tag variant={overdue ? 'danger' : undefined}>
+								<Icon name='clock' size='x12' mie={2} />
+								{formatDue(card.dueDate)}
+							</Tag>
+						)}
+						{totalCount > 0 && (
+							<Tag>
+								<Icon name='circle-check' size='x12' mie={2} />
+								{doneCount}/{totalCount}
+							</Tag>
+						)}
+						{card.assignees.length > 0 && (
+							<Tag>
+								<Icon name='user' size='x12' mie={2} />
+								{card.assignees.length}
+							</Tag>
+						)}
+						{card.cardNumber ? (
+							<Box fontScale='micro' color='hint' mis={4}>
+								#{card.cardNumber}
+							</Box>
+						) : null}
+					</Box>
+				)}
+			</Box>
 		</Box>
 	);
 };

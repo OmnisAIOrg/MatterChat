@@ -171,13 +171,14 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 							key={list._id}
 							list={list}
 							cards={cardsByList[list._id] ?? []}
+							labelDefs={board.labelDefs}
 							isAddingCard={createMutation.isPending}
 							onAddCard={handleAddCard}
 							onOpenCard={openCard}
 						/>
 					))}
 				</Box>
-				<DragOverlay>{activeCard ? <CardTile card={activeCard} onOpen={() => undefined} /> : null}</DragOverlay>
+				<DragOverlay>{activeCard ? <CardTile card={activeCard} labelDefs={board.labelDefs} onOpen={() => undefined} /> : null}</DragOverlay>
 			</DndContext>
 		</PageScrollableContent>
 	);

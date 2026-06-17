@@ -2,20 +2,30 @@ import { Box, SidebarDivider, SidebarFooter as Footer } from '@rocket.chat/fusel
 
 import { SidebarFooterWatermark } from './SidebarFooterWatermark';
 
+const BRAND_RED = '#e1140a';
+
 // White-label footer: the MatterChat wordmark sits above the "Powered by Omnis AI"
-// line (SidebarFooterWatermark). Replaces the RC setting-driven logo.
+// line (SidebarFooterWatermark).
+//
+// The wordmark is rendered as TEXT, not the source PNG, on purpose: the supplied logo's
+// "Chat" half is white (built for a dark background) so it vanished on the light sidebar,
+// and Fuselage <Box is='img'> silently dropped the explicit pixel height (oversized/clipped).
+// Text fixes both — "Matter" in brand red, "Chat" in the theme's default font color so it
+// stays legible on light *and* dark, crisp at any zoom, and perfectly aligned to the
+// sidebar's inline padding.
 const SidebarFooterDefault = () => {
 	return (
 		<Footer>
 			<SidebarDivider />
-			<Box is='footer' pbs={12} pi={16} display='flex' alignItems='center'>
-				<Box
-					is='img'
-					src='/images/matterchat-logo.png'
-					alt='MatterChat'
-					height='x28'
-					style={{ width: 'auto', maxWidth: '100%', objectFit: 'contain' }}
-				/>
+			<Box is='footer' pbs={12} pbe={4} pi={16}>
+				<Box is='span' style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1 }}>
+					<Box is='span' style={{ color: BRAND_RED }}>
+						Matter
+					</Box>
+					<Box is='span' color='default'>
+						Chat
+					</Box>
+				</Box>
 			</Box>
 			<SidebarFooterWatermark />
 		</Footer>

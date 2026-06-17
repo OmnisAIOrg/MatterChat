@@ -1,6 +1,6 @@
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import type { IBoardCard, IBoardList, Serialized } from '@rocket.chat/core-typings';
+import type { IBoardCard, IBoardLabelDef, IBoardList, Serialized } from '@rocket.chat/core-typings';
 import { Box } from '@rocket.chat/fuselage';
 
 import CardTile from './CardTile';
@@ -9,12 +9,13 @@ import QuickAddCard from './QuickAddCard';
 type ColumnProps = {
 	list: Serialized<IBoardList>;
 	cards: Serialized<IBoardCard>[];
+	labelDefs?: IBoardLabelDef[];
 	isAddingCard: boolean;
 	onAddCard: (listId: string, title: string) => Promise<void> | void;
 	onOpenCard: (cardId: string) => void;
 };
 
-const Column = ({ list, cards, isAddingCard, onAddCard, onOpenCard }: ColumnProps) => {
+const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard }: ColumnProps) => {
 	// the column body is a droppable so an empty column (no sortable items) still accepts a drop
 	const { setNodeRef, isOver } = useDroppable({ id: list._id, data: { type: 'list', listId: list._id } });
 
@@ -51,7 +52,7 @@ const Column = ({ list, cards, isAddingCard, onAddCard, onOpenCard }: ColumnProp
 			>
 				<SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
 					{cards.map((card) => (
-						<CardTile key={card._id} card={card} onOpen={onOpenCard} />
+						<CardTile key={card._id} card={card} labelDefs={labelDefs} onOpen={onOpenCard} />
 					))}
 				</SortableContext>
 			</Box>

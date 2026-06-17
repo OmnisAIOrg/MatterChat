@@ -43,6 +43,18 @@ const SidebarRegion = () => {
 			visibility: hidden;
 		}
 
+		/*
+		 * Overlap fix: when a feature (e.g. Boards) overlays its own sidebar into
+		 * this region via SidebarPortal and signals it with sidebar.setOverlayed(true),
+		 * the chat rooms list must be pulled out of the flex column entirely. The
+		 * stock RC rule above only sets visibility:hidden, which keeps the chat
+		 * sidebar occupying its flex slot — so the portalled (absolute) sidebar and
+		 * the in-flow chat sidebar visually stacked. display:none removes it cleanly.
+		 */
+		&.is-overlayed > .rcx-sidebar--main {
+			display: none;
+		}
+
 		&.opened {
 			box-shadow: rgba(0, 0, 0, 0.3) 0px 0px 15px 1px;
 			transform: translate3d(0px, 0px, 0px);
@@ -96,6 +108,7 @@ const SidebarRegion = () => {
 				className={[
 					'rcx-sidebar',
 					!sidebar.isCollapsed && sidebar.shouldToggle && 'opened',
+					sidebar.overlayed && 'is-overlayed',
 					sideBarStyle,
 					sidebar.shouldToggle && sidebarMobileClass,
 				].filter(Boolean)}
