@@ -48,6 +48,10 @@ declare module '@rocket.chat/ui-contexts' {
 			pathname: `/boards/leads${`/${string}` | ''}`;
 			pattern: '/boards/leads/:cardId?';
 		};
+		'boards-reports-source-to-settlement': {
+			pathname: '/boards/reports/source-to-settlement';
+			pattern: '/boards/reports/source-to-settlement';
+		};
 		'boards-inbox': {
 			pathname: '/boards/inbox';
 			pattern: '/boards/inbox';
@@ -131,4 +135,12 @@ registerBoardsRoute('/leads/reports', {
 registerBoardsRoute('/leads/:cardId?', {
 	name: 'boards-leads',
 	component: lazy(() => import('./leads/LeadsBoardRoute')),
+});
+
+// Reporting (M8): the cross-pipeline source-to-settlement attribution dashboard
+// (differentiators §7 closed loop). A literal sub-path with no ':cardId?' sibling,
+// so it never collides with the matters/leads catch-alls above.
+registerBoardsRoute('/reports/source-to-settlement', {
+	name: 'boards-reports-source-to-settlement',
+	component: lazy(() => import('./reports/SourceToSettlement')),
 });

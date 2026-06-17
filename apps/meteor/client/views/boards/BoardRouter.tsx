@@ -1,13 +1,17 @@
+import type { ISavedView, SavedViewType, Serialized } from '@rocket.chat/core-typings';
 import { Box, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber, Button } from '@rocket.chat/fuselage';
 import { Page } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouteParameter, useRouter } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import BoardHeader from './BoardHeader';
 import BoardView from './board/BoardView';
 import CardDetail from './card/CardDetail';
+import DashboardView from './views/DashboardView';
+import TableView from './views/TableView';
+import TimelineView from './views/TimelineView';
 
 const BoardRouter = () => {
 	const { t } = useTranslation();
@@ -17,14 +21,14 @@ const BoardRouter = () => {
 	const view = useRouteParameter('view') ?? 'board';
 	const cardId = useRouteParameter('cardId');
 
+	// The active SAVED view (id) is local UI state — the route carries only the
+	// view *type*. Switching a built-in tab clears it; picking a saved view sets
+	// both the type (via navigate) and this id so the body queries that view.
+	const [activeViewId, setActiveViewId] = useState<string | undefined>(undefined);
+
 	const getBoardInfo = useEndpoint('GET', '/v1/boards.info');
 
-	const {
-		data,
-		isLoading,
-		isError,
-		refetch,
-	} = useQuery({
+	const { data, isLoading, isError, refetch } = useQuery({
 		queryKey: ['boards', 'info', boardId],
 		queryFn: () => getBoardInfo({ boardId: boardId as string }),
 		enabled: Boolean(boardId),
@@ -37,6 +41,29 @@ const BoardRouter = () => {
 		// drop the :cardId segment by navigating back to the board view
 		router.navigate({ name: 'boards-board', params: { id: boardId, view } });
 	}, [boardId, router, view]);
+
+	// Picking a saved view: navigate to its view type and remember its id.
+	const handleSelectSavedView = useCallback(
+		(savedView: Serialized<ISavedView>) => {
+			setActiveViewId(savedView._id);
+			if (boardId && savedView.viewType !== view) {
+				router.navigate({ name: 'boards-board', params: { id: boardId, view: savedView.viewType } });
+			}
+		},
+		[boardId, router, view],
+	);
+
+	// Clicking a built-in view-type tab: clear any active saved view (so the body
+	// runs an ad-hoc empty-config query) and navigate to the new view type.
+	const handleSelectViewType = useCallback(
+		(viewType: SavedViewType) => {
+			setActiveViewId(undefined);
+			if (boardId) {
+				router.navigate({ name: 'boards-board', params: { id: boardId, view: viewType } });
+			}
+		},
+		[boardId, router],
+	);
 
 	if (!boardId) {
 		return (
@@ -77,11 +104,32 @@ const BoardRouter = () => {
 
 	const { board, lists } = data;
 
+	const renderBody = () => {
+		switch (view) {
+			case 'table':
+				return <TableView board={board} viewId={activeViewId} />;
+			case 'timeline':
+				return <TimelineView board={board} viewId={activeViewId} />;
+			case 'dashboard':
+				return <DashboardView board={board} viewId={activeViewId} />;
+			case 'board':
+			default:
+				// kanban (and any unrecognized/calendar value on a non-matters board)
+				return <BoardView board={board} lists={lists} />;
+		}
+	};
+
 	return (
 		<Page flexDirection='row'>
 			<Page>
-				<BoardHeader board={board} view={view} />
-				<BoardView board={board} lists={lists} />
+				<BoardHeader
+					board={board}
+					view={view}
+					activeViewId={activeViewId}
+					onSelectViewType={handleSelectViewType}
+					onSelectSavedView={handleSelectSavedView}
+				/>
+				{renderBody()}
 			</Page>
 			{cardId && <CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />}
 		</Page>

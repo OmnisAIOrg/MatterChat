@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { getCardTypeIcon } from '../lib/icons';
 import LeadPanel from './LeadPanel';
 import MatterPanel from './MatterPanel';
+import WatchToggle from './WatchToggle';
 
 type CardDetailProps = {
 	boardId: string;
@@ -185,6 +186,7 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 			<ContextualbarHeader>
 				{card && <Icon name={getCardTypeIcon(card.cardType)} size='x20' mie={4} />}
 				<ContextualbarTitle>{card?.title ?? t('Loading')}</ContextualbarTitle>
+				{card && <WatchToggle cardId={cardId} />}
 				<ContextualbarClose onClick={onClose} />
 			</ContextualbarHeader>
 

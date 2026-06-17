@@ -62,6 +62,12 @@ export const {
 		permissionGranted: (): boolean => hasPermission('boards-leads-reports-view'),
 	},
 	{
+		href: '/boards/reports/source-to-settlement',
+		i18nLabel: 'Boards_Reports_SourceToSettlement',
+		icon: 'dashboard',
+		permissionGranted: (): boolean => hasPermission('boards-view-reports'),
+	},
+	{
 		divider: true,
 		i18nLabel: 'Boards_General',
 	},

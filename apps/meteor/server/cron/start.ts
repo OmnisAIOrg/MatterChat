@@ -2,6 +2,7 @@ import { cronJobs } from '@rocket.chat/cron';
 import { MongoInternals } from 'meteor/mongo';
 
 import { automationEngineCron } from './automationEngine';
+import { boardsDigestCron } from './boardsDigestCron';
 import { boardsMattersCron } from './boardsMattersCron';
 
 export const startCron = async () => {
@@ -12,5 +13,8 @@ export const startCron = async () => {
 	// Boards Automation engine (M7): per-minute master tick (scheduled automations +
 	// synthesized due/overdue events + drip steps) + daily run-log prune.
 	await automationEngineCron();
+	// Boards Notifications (M8): email digest of unread board notifications — gated by
+	// Boards_Email_Digest_Enabled + SMTP, schedule from Boards_Email_Digest_Schedule.
+	await boardsDigestCron();
 	return started;
 };

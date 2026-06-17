@@ -281,4 +281,19 @@ export const permissions = [
 	{ _id: 'boards-leads-signups-manage', roles: ['admin', 'intake-manager'] },
 	{ _id: 'boards-leads-conflict-check', roles: ['admin', 'intake-specialist', 'intake-manager'] },
 	{ _id: 'boards-leads-reports-view', roles: ['admin', 'intake-specialist', 'attorney'] },
+
+	// Boards M8 (reporting / saved views / AI) — see omnis-boards-build MASTER-PLAN §B M8
+	// boards-view-reports gates the cross-pipeline source-to-settlement report + the dashboard view (broad).
+	// boards-manage-saved-views gates creating/sharing saved Table/Timeline/Dashboard views (broad).
+	// boards-ai-generate gates the ai.generate automation action + the AI demand/summary card buttons.
+	// (Notifications are per-user: the inbox/bell needs no new permission.)
+	{
+		_id: 'boards-view-reports',
+		roles: ['admin', 'attorney', 'case-manager', 'paralegal', 'intake-manager', 'intake-specialist', 'marketing'],
+	},
+	{
+		_id: 'boards-manage-saved-views',
+		roles: ['admin', 'attorney', 'case-manager', 'paralegal', 'intake-manager', 'intake-specialist', 'marketing'],
+	},
+	{ _id: 'boards-ai-generate', roles: ['admin', 'attorney', 'case-manager'] },
 ];

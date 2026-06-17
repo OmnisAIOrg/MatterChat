@@ -98,3 +98,6 @@ export type * from './models/IBoardsReferralsOutModel';
 export type * from './models/IBoardsSignupPacketsModel';
 export type * from './models/IBoardsAutomationsModel';
 export type * from './models/IBoardsAutomationRunsModel';
+export type * from './models/IBoardsSubscriptionsModel';
+export type * from './models/IBoardsNotificationsModel';
+export type * from './models/IBoardsSavedViewsModel';

@@ -18,12 +18,15 @@ import {
 	BoardsIntakeTasksRaw,
 	BoardsLeadsRaw,
 	BoardsListsRaw,
+	BoardsNotificationsRaw,
 	BoardsPlaybooksRaw,
 	BoardsReferralsOutRaw,
 	BoardsReferralSourcesRaw,
+	BoardsSavedViewsRaw,
 	BoardsSequenceEnrollmentsRaw,
 	BoardsSequencesRaw,
 	BoardsSignupPacketsRaw,
+	BoardsSubscriptionsRaw,
 	CalendarEventRaw,
 	CallHistoryRaw,
 	CredentialTokensRaw,
@@ -123,6 +126,9 @@ registerModel('IBoardsReferralsOutModel', new BoardsReferralsOutRaw(db, trashCol
 registerModel('IBoardsSignupPacketsModel', new BoardsSignupPacketsRaw(db, trashCollection));
 registerModel('IBoardsAutomationsModel', new BoardsAutomationsRaw(db, trashCollection));
 registerModel('IBoardsAutomationRunsModel', new BoardsAutomationRunsRaw(db));
+registerModel('IBoardsSubscriptionsModel', new BoardsSubscriptionsRaw(db, trashCollection));
+registerModel('IBoardsNotificationsModel', new BoardsNotificationsRaw(db, trashCollection));
+registerModel('IBoardsSavedViewsModel', new BoardsSavedViewsRaw(db, trashCollection));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));

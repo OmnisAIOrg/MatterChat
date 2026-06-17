@@ -1,52 +1,68 @@
 import type { IActionAiGenerate } from '@rocket.chat/core-typings';
-import { BoardsActivities, BoardsCards } from '@rocket.chat/models';
+import { BoardsActivities, BoardsCards, BoardsLeads } from '@rocket.chat/models';
 
+import { generate, buildMatterContext, buildLeadContext, buildCardContext, type AiTask, type AiContext } from '../../../lib/boards/ai';
 import type { AutomationContext } from '../context';
 import { interpolateString } from '../interpolate';
 import { ok, skipped, errored, planned } from './types';
 
 /**
- * AI action handler (M7 — §5.3 "ai.generate", deferred). `aiGenerate` produces a Stowers
- * demand draft (via LitDraft) or a summary/description (via Claude) and writes it to a
- * target field or attaches it to the card.
+ * AI action handler (M7 §5.3 "ai.generate" — wired to a REAL provider in M8 §B).
  *
- * This phase ships a CLEAN PROVIDER SEAM ({@link IAiProvider}) with a stub default that
- * requires no live API key — it records the request and returns a placeholder so the
- * action chain never blocks. TODO: register a concrete provider (LitDraft demand endpoint /
- * Claude summarizer) via {@link setAiProvider} when the AI subsystem lands.
+ * `aiGenerate` produces a Stowers demand draft (routed to LitDraft) or a matter/lead
+ * summary/description (Claude) and writes it to a target field, or attaches it to the
+ * card description when no `targetFieldId` is set. The provider seam + transport +
+ * graceful-degrade live in server/lib/boards/ai; this handler only:
+ *   1. resolves the subject context (matter snapshot / lead / plain card),
+ *   2. interpolates any prompt override,
+ *   3. calls generate(), and
+ *   4. records the outcome (write field/description on success, audit note on degrade).
+ *
+ * dry-run: describe only — NEVER calls the provider (no API/LitDraft request on a dry run).
+ * On a degraded result (no key / no URL / provider 'none' / transport error) the action is
+ * `skipped` with the provider's note; it never throws and never fabricates content.
  */
 
-export interface AiGenerateRequest {
-	kind: 'demand' | 'summary' | 'description';
-	prompt?: string;
-	cardId?: string;
-	boardId: string;
+/** Map the action's `kind` to the provider task. `description` is a summary into a field. */
+function taskForKind(kind: IActionAiGenerate['kind']): AiTask {
+	switch (kind) {
+		case 'demand':
+			return 'demand';
+		case 'summary':
+		case 'description':
+			return 'summary';
+		default:
+			return 'custom';
+	}
 }
 
-export interface AiGenerateResult {
-	/** the generated text (empty from the stub provider). */
-	text: string;
-	/** whether a real provider produced this (false for the stub). */
-	generated: boolean;
-}
+/**
+ * Build the AI context for the run subject:
+ *  - matter-linked card → its cached matter snapshot (no live CasePro read here),
+ *  - lead subject (direct, or the card's lead link) → the lead,
+ *  - otherwise → the plain card (title + description).
+ * Returns null when there's nothing to summarize.
+ */
+async function resolveContext(ctx: AutomationContext): Promise<AiContext | null> {
+	const card = ctx.subject.card;
 
-/** The pluggable AI backend. Default is a no-op stub; the AI subsystem registers the real one. */
-export interface IAiProvider {
-	generate(req: AiGenerateRequest): Promise<AiGenerateResult>;
-}
+	// Prefer a matter snapshot (the demand/summary domain) when the card is matter-linked.
+	const snapshot = ctx.subject.snapshot ?? (card?.link?.kind === 'matter' ? card.link.snapshot : undefined);
+	if (snapshot) {
+		return buildMatterContext(snapshot);
+	}
 
-/** Stub provider: no external call, no key — records intent and returns empty text. */
-const stubAiProvider: IAiProvider = {
-	async generate(): Promise<AiGenerateResult> {
-		return { text: '', generated: false };
-	},
-};
+	// Lead domain: direct lead subject, or the card's lead link.
+	const lead = ctx.subject.lead ?? (card ? await BoardsLeads.findOneByCardId(card._id) : null);
+	if (lead) {
+		return buildLeadContext(lead);
+	}
 
-let aiProvider: IAiProvider = stubAiProvider;
-
-/** Register a concrete AI provider (called by the AI subsystem at startup). */
-export function setAiProvider(provider: IAiProvider): void {
-	aiProvider = provider;
+	// Fall back to the plain card.
+	if (card) {
+		return buildCardContext(card);
+	}
+	return null;
 }
 
 export async function handleAiGenerate(action: IActionAiGenerate, ctx: AutomationContext, index: number) {
@@ -55,41 +71,68 @@ export async function handleAiGenerate(action: IActionAiGenerate, ctx: Automatio
 		if (!card) {
 			return skipped(index, action.type, 'unsupported', 'aiGenerate requires a subject card');
 		}
-		const prompt = action.prompt ? interpolateString(action.prompt, ctx).value : undefined;
+
+		const task = taskForKind(action.kind);
+
+		// dry-run: describe the planned generation, never hit the provider.
 		if (ctx.dryRun) {
 			return planned(index, action.type, `ai ${action.kind}${action.targetFieldId ? ` -> field ${action.targetFieldId}` : ''}`);
 		}
 
-		const result = await aiProvider.generate({
-			kind: action.kind,
-			...(prompt ? { prompt } : {}),
-			cardId: card._id,
-			boardId: ctx.boardId,
-		});
+		const context = await resolveContext(ctx);
+		if (!context) {
+			return skipped(index, action.type, 'unsupported', 'aiGenerate found no matter/lead/card context');
+		}
+
+		const prompt = action.prompt ? interpolateString(action.prompt, ctx).value : undefined;
+
+		const result = await generate({ task, context, ...(prompt ? { prompt } : {}) });
 
 		if (!result.generated) {
-			// stub provider — record the request as a clean seam, do not fabricate content.
+			// Degraded (no key/url, provider 'none', refusal, or transport error). Record the
+			// pending request as a clean audit seam; do NOT fabricate content, do NOT throw.
 			await BoardsActivities.log({
 				boardId: ctx.boardId,
+				listId: card.listId,
 				cardId: card._id,
 				actor: `automation:${ctx.automation._id}`,
 				verb: 'field.changed',
-				to: { aiGenerate: action.kind, pending: true, targetFieldId: action.targetFieldId },
+				to: {
+					aiGenerate: action.kind,
+					provider: result.provider,
+					generated: false,
+					note: result.note,
+					...(action.targetFieldId ? { targetFieldId: action.targetFieldId } : {}),
+				},
 				ts: new Date(),
 			});
-			return skipped(index, action.type, 'unsupported', `no AI provider registered for "${action.kind}" (TODO: wire LitDraft/Claude)`);
+			return skipped(index, action.type, 'unsupported', result.note ?? `AI not available for "${action.kind}"`);
 		}
 
-		// Real provider produced text — write to the target field, else attach as a comment-like note.
+		// Real text produced — write to the target field, else attach to the card description.
 		if (action.targetFieldId) {
 			await BoardsCards.setFieldValue(card._id, action.targetFieldId, result.text);
 		} else {
-			await BoardsCards.updateOne(
-				{ _id: card._id },
-				{ $set: { description: result.text }, $inc: { rev: 1 } },
-			);
+			await BoardsCards.updateOne({ _id: card._id }, { $set: { description: result.text }, $inc: { rev: 1 } });
 		}
-		return ok(index, action.type, `generated ${action.kind} (${result.text.length} chars)`);
+
+		await BoardsActivities.log({
+			boardId: ctx.boardId,
+			listId: card.listId,
+			cardId: card._id,
+			actor: `automation:${ctx.automation._id}`,
+			verb: 'field.changed',
+			to: {
+				aiGenerate: action.kind,
+				provider: result.provider,
+				generated: true,
+				chars: result.text.length,
+				...(action.targetFieldId ? { targetFieldId: action.targetFieldId } : {}),
+			},
+			ts: new Date(),
+		});
+
+		return ok(index, action.type, `generated ${action.kind} via ${result.provider} (${result.text.length} chars)`);
 	} catch (err) {
 		return errored(index, action.type, err);
 	}
