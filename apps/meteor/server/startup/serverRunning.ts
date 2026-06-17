@@ -43,7 +43,7 @@ Meteor.startup(async () => {
 
 	return setTimeout(async () => {
 		let msg: string | string[] = [
-			`Rocket.Chat Version: ${Info.version}`,
+			`MatterChat Version: ${Info.version}`,
 			`     NodeJS Version: ${process.versions.node} - ${process.arch}`,
 			`    MongoDB Version: ${mongoVersion}`,
 			`     MongoDB Engine: ${mongoStorageEngine}`,

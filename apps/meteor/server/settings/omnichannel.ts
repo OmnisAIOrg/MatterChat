@@ -12,7 +12,7 @@ export const createOmniSettings = () =>
 			public: true,
 		});
 
-		await this.add('Livechat_title', 'Rocket.Chat', {
+		await this.add('Livechat_title', 'MatterChat', {
 			type: 'string',
 			group: 'Omnichannel',
 			section: 'Livechat',
