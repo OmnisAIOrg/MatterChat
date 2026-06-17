@@ -6,6 +6,7 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useCopyAction } from './useCopyAction';
+import { useCreateCardFromMessageAction } from './useCreateCardFromMessageAction';
 import { useDeleteMessageAction } from './useDeleteMessageAction';
 import { useEditMessageAction } from './useEditMessageAction';
 import { useFollowMessageAction } from './useFollowMessageAction';
@@ -44,6 +45,7 @@ type MessageToolbarActionMenuProps = {
 const MessageToolbarActionMenu = ({ message, context, room, subscription, onChangeMenuVisibility }: MessageToolbarActionMenuProps) => {
 	// TODO: move this to another place
 	const menuItems = [
+		useCreateCardFromMessageAction(message),
 		useWebDAVMessageAction(message, { subscription }),
 		useNewDiscussionMessageAction(message, { room, subscription }),
 		useUnpinMessageAction(message, { room, subscription }),
