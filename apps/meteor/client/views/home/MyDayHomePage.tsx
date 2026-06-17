@@ -1,5 +1,6 @@
-import type { IBoardCard, Serialized } from '@rocket.chat/core-typings';
+import type { IBoardCard, IDirectoryUserResult, Serialized } from '@rocket.chat/core-typings';
 import { Box, Button, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
+import { UserAvatar } from '@rocket.chat/ui-avatar';
 import { Page, PageScrollableContent } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouter, useUser } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
@@ -108,6 +109,7 @@ const MyDayHomePage = () => {
 
 	const listBoards = useEndpoint('GET', '/v1/boards.list');
 	const getCards = useEndpoint('GET', '/v1/boards.cards');
+	const directory = useEndpoint('GET', '/v1/directory');
 
 	const { data: boardsData, isLoading: boardsLoading } = useQuery({
 		queryKey: ['my-day', 'boards'],
@@ -124,6 +126,17 @@ const MyDayHomePage = () => {
 		queryFn: () => getCards({ boardId: mattersBoard!._id, count: 500 }),
 		enabled: Boolean(mattersBoard?._id),
 	});
+
+	// Org directory — every MatterChat/CasePro user (auto-provisioned org staff).
+	const { data: usersData, isLoading: usersLoading } = useQuery({
+		queryKey: ['my-day', 'directory-users'],
+		queryFn: () => directory({ type: 'users', count: 200 }),
+	});
+
+	const staff = useMemo(
+		() => (usersData?.result ?? []).filter((r): r is Serialized<IDirectoryUserResult> => 'username' in r && Boolean(r.username)),
+		[usersData],
+	);
 
 	const derived = useMemo(() => {
 		const cards = (cardsData?.cards ?? []).filter((c) => !c.archived);
@@ -314,6 +327,43 @@ const MyDayHomePage = () => {
 						</SectionCard>
 					</>
 				)}
+
+				<SectionCard icon='team' title='Team' count={staff.length}>
+					{usersLoading ? (
+						<Box display='flex' justifyContent='center' p={8}>
+							<Throbber />
+						</Box>
+					) : staff.length === 0 ? (
+						<EmptyLine>No teammates found yet.</EmptyLine>
+					) : (
+						<Box display='flex' flexWrap='wrap' style={{ gap: '6px' }}>
+							{staff.map((u) => (
+								<Box
+									key={u._id}
+									display='flex'
+									alignItems='center'
+									pb={6}
+									pi={8}
+									borderRadius='x8'
+									style={{ gap: '8px', cursor: 'pointer', width: '224px' }}
+									onClick={() => u.username && router.navigate(`/direct/${u.username}`)}
+								>
+									<UserAvatar username={u.username ?? ''} size='x36' />
+									<Box style={{ minWidth: 0 }}>
+										<Box fontScale='p2' color='default' withTruncatedText>
+											{u.name || u.username}
+										</Box>
+										{u.username && (
+											<Box fontScale='micro' color='hint' withTruncatedText>
+												@{u.username}
+											</Box>
+										)}
+									</Box>
+								</Box>
+							))}
+						</Box>
+					)}
+				</SectionCard>
 			</PageScrollableContent>
 		</Page>
 	);
