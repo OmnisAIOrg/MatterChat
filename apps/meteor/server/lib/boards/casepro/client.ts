@@ -4,9 +4,11 @@ import {
 	mapMatterSnapshot,
 	mapMatterListItem,
 	mapStage,
+	mapLitigationDates,
 	type MatterListItem,
 	type MatterRowBundle,
 	type StageDescriptor,
+	type LitigationDocketDate,
 } from './mapping';
 import {
 	mapIntakeLead,
@@ -152,6 +154,26 @@ export class CaseProClient {
 	async providerCount(matterId: string): Promise<number> {
 		const { total } = await this.tx.query('medical_providers', { filter: { matter_id: matterId }, limit: 1 });
 		return total;
+	}
+
+	/**
+	 * Read the matter's litigation scheduling-order docket dates (M5 — mirror into board
+	 * deadlines on entering a litigation stage). A matter has at most a handful of
+	 * `litigations` rows (typically one, created when the case enters suit); we read all
+	 * of them and flatten the non-null scheduling-order dates. The `status` soft-delete
+	 * column is filtered to active (the discovery-doc rule: every entity carries an
+	 * active|inactive `status`). Returns [] when the matter has no litigation row.
+	 */
+	async listLitigationDates(matterId: string): Promise<LitigationDocketDate[]> {
+		const rows = await this.queryAll('litigations', { matter_id: matterId });
+		const out: LitigationDocketDate[] = [];
+		for (const row of rows) {
+			if (row.status === 'inactive' || row.deleted_at) {
+				continue;
+			}
+			out.push(...mapLitigationDates(row));
+		}
+		return out;
 	}
 
 	// -------------------------------------------------------------------------

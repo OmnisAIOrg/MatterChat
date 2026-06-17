@@ -10,8 +10,10 @@ import { BoardsCards, BoardsLists, BoardsPlaybooks, BoardsDeadlines, BoardsActiv
 import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
+import { caseProClient } from './caseProClient';
+import type { CaseProLitigationDate } from './caseProClientTypes';
 import { createDeadline } from './deadlines';
-import { normalizeStageName } from './stages';
+import { LITIGATION_ORDER_INDEX_RANGE, MATTER_STAGE_SEEDS, normalizeStageName } from './stages';
 
 /**
  * Stage playbooks for the matters pipeline (M5 — see matters-case-management.md §4
@@ -267,23 +269,99 @@ const STAGE_ENTRY_DEADLINES: Record<string, { kind: IPlaybookItem['createsDeadli
 	'litigation filed': [{ kind: 'filing', offsetDays: 0, label: 'Suit filed' }],
 };
 
+/**
+ * The litigation-class stage NAMES (normalized), derived from the seed table's
+ * litigation swimlane (order_index 6..12: Litigation Filed … Lit Settled). A matter
+ * entering any of these stages triggers the CasePro litigation docket-date mirror.
+ * Name-based (firm-portable) so it matches whether or not the list carries a stage id.
+ */
+const LITIGATION_STAGE_NAMES = new Set(
+	MATTER_STAGE_SEEDS.filter(
+		(s) => s.orderIndex >= LITIGATION_ORDER_INDEX_RANGE.from && s.orderIndex <= LITIGATION_ORDER_INDEX_RANGE.to,
+	).map((s) => normalizeStageName(s.name)),
+);
+
 export type MatterStageEntryResult = {
 	playbook: ApplyPlaybookResult;
 	stageDeadlinesCreated: number;
+	litigationDeadlinesCreated: number;
 };
 
 /**
+ * Mirror the matter's CasePro `litigations` scheduling-order docket dates into board
+ * deadlines on entering a litigation-class stage (master plan M5: "Litigation stage →
+ * mirror litigations docket dates"). Reads the docket via the single `caseProClient`
+ * (the ONLY CasePro read path); for each deadline kind present (filing | discovery |
+ * mediation) it creates ONE deadline at the EARLIEST (most urgent) date of that kind,
+ * guarded idempotently by `findOneOpenByCardAndKind` so re-entering never stacks
+ * duplicates. Best-effort + degrades gracefully: if CasePro is unreachable (or the
+ * matter has no litigation row) NO deadline is created and we return 0 — never throws,
+ * never blocks the stage change. Returns the count created.
+ */
+async function mirrorLitigationDockets(uid: string, card: IBoardCard): Promise<number> {
+	if (card.link?.kind !== 'matter') {
+		return 0;
+	}
+
+	let dockets: CaseProLitigationDate[];
+	try {
+		dockets = await caseProClient.listLitigationDates(card.link.matterId);
+	} catch {
+		// CasePro unreachable — skip the mirror entirely (the daily SOL/reconcile crons
+		// and a manual refresh are the backstops). Never block the stage change.
+		return 0;
+	}
+	if (!dockets.length) {
+		return 0;
+	}
+
+	// collapse to the earliest date per kind (the most urgent, and the one the single
+	// per-kind open-deadline guard can represent idempotently).
+	const earliestByKind = new Map<CaseProLitigationDate['kind'], CaseProLitigationDate>();
+	for (const d of dockets) {
+		const cur = earliestByKind.get(d.kind);
+		if (!cur || d.date.getTime() < cur.date.getTime()) {
+			earliestByKind.set(d.kind, d);
+		}
+	}
+
+	let created = 0;
+	for (const docket of earliestByKind.values()) {
+		try {
+			const existing = await BoardsDeadlines.findOneOpenByCardAndKind(card._id, docket.kind);
+			if (existing) {
+				continue; // idempotent: a deadline of this kind is already open on the card.
+			}
+			await createDeadline(uid, {
+				cardId: card._id,
+				kind: docket.kind,
+				dueDate: docket.date,
+				label: docket.label,
+				computedFrom: 'casepro',
+			});
+			created += 1;
+		} catch {
+			// best-effort per docket date; never block the stage change.
+		}
+	}
+	return created;
+}
+
+/**
  * The `boards.cardMove` matter seam. After a matter card moves into a new list, this:
- *   (a) applies the new stage's playbook(s) (idempotent per card+playbook), and
- *   (b) creates any stage-specific deadlines (e.g. Demand-Sent → +30d response).
+ *   (a) applies the new stage's playbook(s) (idempotent per card+playbook),
+ *   (b) creates any stage-specific deadlines (e.g. Demand-Sent → +30d response), and
+ *   (c) on entering a litigation-class stage, mirrors the matter's CasePro `litigations`
+ *       scheduling-order docket dates into real board deadlines (M5 master plan).
  *
- * No-op for non-matter cards / unknown lists. Best-effort throughout: a failure in
- * either step is swallowed so a stage change is never blocked. Called by cardMove.ts.
+ * No-op for non-matter cards / unknown lists. Best-effort throughout: a failure in any
+ * step is swallowed so a stage change is never blocked. Called by cardMove.ts.
  */
 export async function applyMatterStageEntry(uid: string, cardId: string, toListId: string): Promise<MatterStageEntryResult> {
 	const empty: MatterStageEntryResult = {
 		playbook: { applied: [], checklistItemsAdded: 0, deadlinesCreated: 0 },
 		stageDeadlinesCreated: 0,
+		litigationDeadlinesCreated: 0,
 	};
 
 	const card = await BoardsCards.findOneById(cardId);
@@ -302,15 +380,29 @@ export async function applyMatterStageEntry(uid: string, cardId: string, toListI
 		// never block a stage change on a playbook failure.
 	}
 
+	const now = new Date();
+
+	// On entering a litigation-class stage, mirror the CasePro litigation docket dates
+	// (filing/discovery/mediation) into board deadlines FIRST, so a real `filing` docket
+	// date (pleadings/dispositive/trial) claims the per-kind slot ahead of the bare 0-day
+	// 'Suit filed' marker below. Best-effort + graceful (see mirrorLitigationDockets): if
+	// CasePro is unreachable the real dates are skipped and the 0-day marker stays as the
+	// fallback — so we never end up with NO litigation-filed signal.
+	let litigationDeadlinesCreated = 0;
+	if (LITIGATION_STAGE_NAMES.has(normalizeStageName(list.title))) {
+		litigationDeadlinesCreated = await mirrorLitigationDockets(uid, card);
+	}
+
 	let stageDeadlinesCreated = 0;
 	const stageDeadlines = STAGE_ENTRY_DEADLINES[normalizeStageName(list.title)] ?? [];
-	const now = new Date();
 	for (const spec of stageDeadlines) {
 		if (!spec.kind) {
 			continue;
 		}
 		try {
 			// idempotency: don't stack a second open deadline of the same kind on the card.
+			// (After the litigation mirror above, a real `filing` docket date already holds
+			// the 'filing' slot, so the bare 0-day marker is skipped when CasePro had data.)
 			const existing = await BoardsDeadlines.findOneOpenByCardAndKind(card._id, spec.kind);
 			if (existing) {
 				continue;
@@ -328,7 +420,7 @@ export async function applyMatterStageEntry(uid: string, cardId: string, toListI
 		}
 	}
 
-	return { playbook, stageDeadlinesCreated };
+	return { playbook, stageDeadlinesCreated, litigationDeadlinesCreated };
 }
 
 // ---------------------------------------------------------------------------

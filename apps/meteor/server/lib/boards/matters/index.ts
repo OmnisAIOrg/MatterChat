@@ -10,4 +10,5 @@ export type {
 	CaseProMatterListItem,
 	CaseProListMattersOpts,
 	CaseProListMattersResult,
+	CaseProLitigationDate,
 } from './caseProClientTypes';

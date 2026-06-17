@@ -184,6 +184,27 @@ const STUB_EXPENSES: CaseProRow[] = [
 	{ id: 'stub-exp-2', matter_id: STUB_MATTER_ID, amount: '850.25', status: 'active' },
 ];
 
+// litigations: one scheduling-order row per matter once in suit (39 cols in real
+// CasePro). Only the docket date columns the board mirrors are seeded here; the rest
+// are null. `discovery`/`mediation_date` and the filing-class dates feed board deadlines.
+const STUB_LITIGATIONS: CaseProRow[] = [
+	{
+		id: 'stub-litigation-1',
+		matter_id: STUB_MATTER_ID,
+		litigation_name: 'Doe v. Roe — Cause 2025-27753',
+		cause_number: '2025-27753',
+		status: 'active',
+		deleted_at: null,
+		discovery: '2026-09-15',
+		mediation_date: '2026-10-01',
+		pleadings: '2026-08-15',
+		dispositive_motion: '2026-11-01',
+		no_evidence_msj: null,
+		docket_call: '2026-12-10',
+		trial_date: '2027-01-15',
+	},
+];
+
 // ---------------------------------------------------------------------------
 // Intake (Leads/Intake pillar — M3) stub data.
 // The lead/intake entity is `intake_questionnaires`; the 8 pipeline stages are
@@ -299,6 +320,7 @@ const STUB_TABLES: Record<string, CaseProRow[]> = {
 	liens: STUB_LIENS,
 	reductions: STUB_REDUCTIONS,
 	expenses: STUB_EXPENSES,
+	litigations: STUB_LITIGATIONS,
 	intake_stages: STUB_INTAKE_STAGES,
 	intake_questionnaires: STUB_INTAKE_QUESTIONNAIRES,
 };

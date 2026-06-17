@@ -63,6 +63,26 @@ export const INTAKE_STAGE_NAMES = [
 
 export type IntakeStageName = (typeof INTAKE_STAGE_NAMES)[number];
 
+/**
+ * Lead-Docket-style sub-status refinements per intake column (M6 — the per-column
+ * "where exactly is this lead" picker, intake-lead-management.md §4). Stored on the
+ * list's `subStatuses[]` (IBoardList) and surfaced as the LeadPanel sub-status
+ * dropdown; persisted on the lead via the existing `boards.leads.update` patch.
+ *
+ * Keyed by the canonical intake-stage title so seeding is firm-portable. Only the
+ * columns that genuinely benefit from a refinement carry entries (the working
+ * columns where a lead lingers awaiting contact / forms / a signature); terminal
+ * and gate columns intentionally seed nothing. The "No Answer 1/2/3" + voicemail
+ * ladder mirrors Lead Docket's call-attempt cadence.
+ */
+const INTAKE_STAGE_SUBSTATUSES: Partial<Record<IntakeStageName, string[]>> = {
+	'New Lead / Initial Contact': ['No Answer 1', 'No Answer 2', 'No Answer 3', 'Left Voicemail', 'Callback Scheduled'],
+	'Pending Intake Completion': ['Forms Sent', 'Forms Partially Complete', 'Awaiting Documents', 'No Answer 1', 'No Answer 2'],
+	'Further Evaluation': ['Attorney Review', 'Awaiting Records', 'Investigating Liability', 'Pending Decision'],
+	'POA Sent': ['Sent', 'Viewed', 'Partially Signed', 'No Answer 1', 'Left Voicemail'],
+	'No Response': ['No Answer 1', 'No Answer 2', 'No Answer 3', 'Left Voicemail', 'Final Attempt'],
+};
+
 const LEADS_BOARD_TITLE = 'Leads';
 
 export type EnsureLeadsBoardResult = { board: IBoard; lists: IBoardList[]; created: boolean };
@@ -103,7 +123,30 @@ async function seedMissingStages(uid: string, boardId: string): Promise<IBoardLi
 		await createList(uid, { boardId, title: name, position });
 	}
 
+	const lists = await BoardsLists.findByBoard(boardId).toArray();
+	await seedSubStatuses(lists);
 	return BoardsLists.findByBoard(boardId).toArray();
+}
+
+/**
+ * Seed the Lead-Docket-style sub-status options onto each intake column that has a
+ * refinement defined but no `subStatuses` yet, so the LeadPanel picker has options.
+ * Idempotent: a column that already carries any sub-statuses (firm-customized or
+ * previously seeded) is left untouched, so this never clobbers a firm's edits.
+ * Best-effort per list — a single write failure never aborts the rest.
+ */
+async function seedSubStatuses(lists: IBoardList[]): Promise<void> {
+	for (const list of lists) {
+		const seed = INTAKE_STAGE_SUBSTATUSES[list.title as IntakeStageName];
+		if (!seed?.length || (list.subStatuses?.length ?? 0) > 0) {
+			continue;
+		}
+		try {
+			await BoardsLists.updateOne({ _id: list._id }, { $set: { subStatuses: seed }, $inc: { rev: 1 } });
+		} catch {
+			// best-effort: a sub-status seed failure must never block board ensure.
+		}
+	}
 }
 
 /** The entry column ("New Lead / Initial Contact") for a leads board. */

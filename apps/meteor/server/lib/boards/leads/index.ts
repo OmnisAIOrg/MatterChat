@@ -6,6 +6,7 @@ export * from './sol';
 export * from './scoring';
 export * from './conflict';
 export * from './dedupe';
+export * from './mattersSnapshotMemo';
 export * from './comms';
 export * from './referrals';
 export * from './marketing';

@@ -1,8 +1,8 @@
 import type { ILead } from '@rocket.chat/core-typings';
 import { BoardsLeads } from '@rocket.chat/models';
 
-import { caseProClient } from '../matters/caseProClient';
 import { normalizeName, nameSimilarity } from './conflict';
+import { getMattersSnapshots } from './mattersSnapshotMemo';
 
 /**
  * Duplicate detection (M6 — intake-lead-management.md §5). On capture (or on
@@ -45,7 +45,6 @@ export type CheckDuplicatesResult = {
 };
 
 const NAME_THRESHOLD = 0.85;
-const MAX_MATTERS_SCANNED = 200;
 
 /** Digits-only phone normalization (last 10 significant digits). */
 function normPhone(phone?: string): string | undefined {
@@ -152,17 +151,9 @@ export async function checkDuplicates(lead: Pick<ILead, 'contact'> & Partial<ILe
 	const matterCandidates: DupMatterCandidate[] = [];
 	if (name && normalizeName(name)) {
 		try {
-			const { matters } = await caseProClient.listMatters({ limit: MAX_MATTERS_SCANNED });
-			const slice = matters.slice(0, MAX_MATTERS_SCANNED);
-			const snapshots = await Promise.all(
-				slice.map(async (m) => {
-					try {
-						return await caseProClient.matterSnapshot(m.matterId);
-					} catch {
-						return null;
-					}
-				}),
-			);
+			// shared, short-TTL memo: reuses the conflict check's fan-out on the same card
+			// open instead of issuing a second ~200-read sweep against CasePro.
+			const snapshots = await getMattersSnapshots();
 			for (const snap of snapshots) {
 				if (!snap?.clientName) {
 					continue;

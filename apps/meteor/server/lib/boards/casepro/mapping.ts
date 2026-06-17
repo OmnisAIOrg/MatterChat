@@ -318,6 +318,56 @@ export function mapMatterListItem(matter: CaseProRow, matterStages: CaseProRow[]
 	};
 }
 
+// ---------------------------------------------------------------------------
+// Litigation scheduling-order docket dates (M5 — mirror into board deadlines).
+// ---------------------------------------------------------------------------
+
+/**
+ * One litigation scheduling-order date, normalized for the board's deadline engine.
+ * `kind` maps onto `BoardDeadlineKind` (filing | discovery | mediation); `column` is
+ * the source CasePro `litigations` column for auditability; `label` is the UI label.
+ */
+export type LitigationDocketDate = {
+	kind: 'filing' | 'discovery' | 'mediation';
+	column: string;
+	label: string;
+	date: Date;
+};
+
+/**
+ * The `litigations` scheduling-order date columns we mirror into board deadlines, with
+ * their target deadline kind + label. Real schema (CasePro `litigations`, 39 cols — see
+ * omnis-boards-build/casepro/04-litigation-workflow-custom.md): all are `date` nullable.
+ * We mirror the load-bearing docket deadlines; `trial_date` is the anchor but has no
+ * dedicated BoardDeadlineKind, so it maps to 'filing' (a hard court date) like the
+ * pleadings/dispositive-motion deadlines.
+ */
+const LITIGATION_DATE_COLUMNS: { column: string; kind: LitigationDocketDate['kind']; label: string }[] = [
+	{ column: 'discovery', kind: 'discovery', label: 'Discovery deadline' },
+	{ column: 'mediation_date', kind: 'mediation', label: 'Mediation' },
+	{ column: 'pleadings', kind: 'filing', label: 'Pleadings deadline' },
+	{ column: 'dispositive_motion', kind: 'filing', label: 'Dispositive motion deadline' },
+	{ column: 'no_evidence_msj', kind: 'filing', label: 'No-evidence MSJ deadline' },
+	{ column: 'docket_call', kind: 'filing', label: 'Docket call' },
+	{ column: 'trial_date', kind: 'filing', label: 'Trial date' },
+];
+
+/**
+ * Map a `litigations` row to its non-null scheduling-order docket dates. Pure: the
+ * client fetches the rows, this normalizes them. Skips null/blank/invalid dates so a
+ * sparsely-filled scheduling order yields only the deadlines that are actually set.
+ */
+export function mapLitigationDates(litigation: CaseProRow): LitigationDocketDate[] {
+	const out: LitigationDocketDate[] = [];
+	for (const { column, kind, label } of LITIGATION_DATE_COLUMNS) {
+		const date = toDate(litigation[column]);
+		if (date) {
+			out.push({ kind, column, label, date });
+		}
+	}
+	return out;
+}
+
 /** A board column descriptor from a matter_stages row. */
 export type StageDescriptor = { stageId: string; name: string; orderIndex: number };
 

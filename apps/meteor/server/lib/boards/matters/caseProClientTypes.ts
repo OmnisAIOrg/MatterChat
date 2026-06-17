@@ -61,6 +61,19 @@ export interface CaseProListMattersResult {
 }
 
 /**
+ * One litigation scheduling-order docket date, normalized for the board deadline engine
+ * (M5 — litigation docket-date mirror). Shape mirrors subsystem 04's
+ * `LitigationDocketDate`; `kind` is a `BoardDeadlineKind` subset (filing|discovery|
+ * mediation), `column` is the source CasePro `litigations` column for auditability.
+ */
+export interface CaseProLitigationDate {
+	kind: 'filing' | 'discovery' | 'mediation';
+	column: string;
+	label: string;
+	date: Date;
+}
+
+/**
  * The surface this phase consumes. `matterSnapshot` returns the M1 `IMatterSnapshot`
  * (the exact shape `BoardsCards.refreshMatterSnapshot` writes onto a matter-linked card).
  */
@@ -68,4 +81,6 @@ export interface ICaseProClient {
 	matterSnapshot(matterId: string): Promise<IMatterSnapshot>;
 	listMatters(opts?: CaseProListMattersOpts): Promise<CaseProListMattersResult>;
 	listStages(): Promise<CaseProStage[]>;
+	/** Litigation scheduling-order docket dates for a matter (M5 mirror). [] if no suit. */
+	listLitigationDates(matterId: string): Promise<CaseProLitigationDate[]>;
 }

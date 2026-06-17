@@ -1,6 +1,6 @@
 import type { ILead } from '@rocket.chat/core-typings';
 
-import { caseProClient } from '../matters/caseProClient';
+import { getMattersSnapshots } from './mattersSnapshotMemo';
 
 /**
  * Conflict-of-interest check (M6 — intake-lead-management.md §5). On (or before)
@@ -43,9 +43,6 @@ export type ConflictCheckResult = {
 	/** set when CasePro could not be read (verdict 'unknown'). */
 	reason?: string;
 };
-
-/** Cap the snapshot fan-out so a huge org never makes the check pathological. */
-const MAX_MATTERS_SCANNED = 200;
 
 /** Treat names >= this similarity as a hit. */
 const MATCH_THRESHOLD = 0.82;
@@ -120,24 +117,13 @@ export async function runConflictCheck(lead: ILead): Promise<ConflictCheckResult
 		return { verdict: 'clear', banner: 'No party names to check', matches: [], scanned: 0 };
 	}
 
-	let existing: { name: string; matterId?: string; matterName?: string }[] = [];
+	const existing: { name: string; matterId?: string; matterName?: string }[] = [];
 	let scanned = 0;
 	try {
-		const { matters } = await caseProClient.listMatters({ limit: MAX_MATTERS_SCANNED });
-		const slice = matters.slice(0, MAX_MATTERS_SCANNED);
-		const snapshots = await Promise.all(
-			slice.map(async (m) => {
-				try {
-					return await caseProClient.matterSnapshot(m.matterId);
-				} catch {
-					return null;
-				}
-			}),
-		);
+		// shared, short-TTL memo: ONE capped fan-out reused by the dedupe check on the
+		// same card open (and by back-to-back opens) instead of a second ~200-read sweep.
+		const snapshots = await getMattersSnapshots();
 		for (const snap of snapshots) {
-			if (!snap) {
-				continue;
-			}
 			scanned += 1;
 			if (snap.clientName) {
 				existing.push({ name: snap.clientName, matterId: snap.matterId, matterName: snap.matterName });

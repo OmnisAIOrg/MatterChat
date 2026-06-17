@@ -69,10 +69,27 @@ const ESCALATION_TIERS_DAYS = [90, 60, 30, 14, 7, 3, 1, 0] as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Add whole calendar years to a date (SOL math), preserving month/day. */
+/**
+ * Add whole calendar years to a date (SOL math), preserving month/day.
+ *
+ * Feb-29 edge case (safety-critical): a Feb-29 incident + N years that lands on a
+ * NON-leap year has no Feb 29. JS's native `setFullYear` overflows it FORWARD to
+ * Mar 1 — one day LATER than a strict same-calendar-day rule, which is the wrong
+ * direction for a statute of limitations (it would make the firm believe it has one
+ * extra day to file). We instead roll BACK to Feb 28 so the computed SOL is never
+ * later than the strict rule — conservative by design (differentiators §4
+ * "no missed SOL"). A lawyer can always override; we just refuse to over-promise time.
+ */
 function addYears(base: Date, years: number): Date {
 	const d = new Date(base.getTime());
+	const targetMonth = d.getMonth();
 	d.setFullYear(d.getFullYear() + years);
+	// If the month rolled over (e.g. Feb 29 -> Mar 1), the day overflowed into the next
+	// month; snap back to the last day of the intended month (Feb 28) — the conservative,
+	// never-later choice for an SOL.
+	if (d.getMonth() !== targetMonth) {
+		d.setDate(0);
+	}
 	return d;
 }
 

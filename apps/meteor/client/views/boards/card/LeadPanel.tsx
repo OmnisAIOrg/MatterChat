@@ -731,6 +731,55 @@ const SignupPacketSection = ({
 	);
 };
 
+// ---------------------------------------------------------------------------
+// Disqualify modal (boards.leadQualify with { qualified:false, disqualifyReason })
+// ---------------------------------------------------------------------------
+
+/**
+ * Disqualify a lead with a reason (intake-lead-management.md §4). The server's
+ * `qualifyLead` already persists `ILeadQualification.disqualifyReason` and pushes it
+ * to CasePro form_data; the panel previously only sent `{ qualified:true }` and had no
+ * disqualify path. This modal captures the reason and drives the same qualify mutation
+ * with `{ qualified:false, disqualifyReason }` — no new endpoint needed (the wire
+ * already carries `disqualifyReason`).
+ */
+const DisqualifyModal = ({
+	onClose,
+	onConfirm,
+	pending,
+}: {
+	onClose: () => void;
+	onConfirm: (reason: string) => void;
+	pending: boolean;
+}): ReactElement => {
+	const { t } = useTranslation();
+	const [reason, setReason] = useState('');
+
+	return (
+		<GenericModal
+			variant='danger'
+			title={t('Boards_Lead_Disqualify', { defaultValue: 'Disqualify lead' })}
+			confirmText={t('Boards_Lead_Disqualify', { defaultValue: 'Disqualify' })}
+			onCancel={onClose}
+			onClose={onClose}
+			onConfirm={() => onConfirm(reason.trim())}
+			confirmDisabled={!reason.trim() || pending}
+		>
+			<Field>
+				<FieldLabel>{t('Boards_Lead_DisqualifyReason', { defaultValue: 'Reason for disqualifying' })}</FieldLabel>
+				<FieldRow>
+					<TextAreaInput
+						rows={3}
+						value={reason}
+						onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+						placeholder={t('Boards_Lead_DisqualifyReasonPlaceholder', { defaultValue: 'e.g. Outside SOL, no injuries, conflict of interest' })}
+					/>
+				</FieldRow>
+			</Field>
+		</GenericModal>
+	);
+};
+
 const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement => {
 	const { t } = useTranslation();
 	const router = useRouter();
@@ -740,6 +789,8 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 
 	const getLead = useEndpoint('GET', '/v1/boards.leads.get');
 	const getTimeline = useEndpoint('GET', '/v1/boards.leads.timeline');
+	const getLists = useEndpoint('GET', '/v1/boards.lists');
+	const updateLead = useEndpoint('POST', '/v1/boards.leads.update');
 	const createTask = useEndpoint('POST', '/v1/boards.leads.createTask');
 	const qualifyLead = useMethod('boards.leadQualify');
 	const assignLead = useMethod('boards.leadAssign');
@@ -780,7 +831,25 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 	};
 
 	const qualifyMutation = useMutation({
-		mutationFn: (qualified: boolean) => qualifyLead({ leadId, qualification: { qualified } }),
+		// accepts the full qualification so the disqualify path can carry a disqualifyReason
+		// (server persists it + pushes it to CasePro). Qualify sends just { qualified:true }.
+		mutationFn: (qualification: { qualified: boolean; disqualifyReason?: string }) => qualifyLead({ leadId, qualification }),
+		onSuccess: () => {
+			dispatchToastMessage({ type: 'success', message: t('Saved') });
+			invalidate();
+		},
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	// the lead's current intake column's sub-statuses populate the picker (item 2). We
+	// read the board's lists and locate the one the lead sits in (lead.statusId == list._id).
+	const { data: listsData } = useQuery({
+		queryKey: ['boards', 'lists', boardId],
+		queryFn: () => getLists({ boardId }),
+	});
+
+	const subStatusMutation = useMutation({
+		mutationFn: (subStatus: string) => updateLead({ leadId, patch: { subStatus } }),
 		onSuccess: () => {
 			dispatchToastMessage({ type: 'success', message: t('Saved') });
 			invalidate();
@@ -834,6 +903,19 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 		setModal(<EnrollSequenceModal leadId={leadId} onClose={close} onSaved={invalidate} />);
 	};
 
+	const openDisqualify = (): void => {
+		const close = (): void => setModal(null);
+		setModal(
+			<DisqualifyModal
+				pending={qualifyMutation.isPending}
+				onClose={close}
+				onConfirm={(reason) => {
+					qualifyMutation.mutate({ qualified: false, ...(reason ? { disqualifyReason: reason } : {}) }, { onSuccess: close });
+				}}
+			/>,
+		);
+	};
+
 	const openDuplicate = (): void => {
 		// linking/merging is a server-owned action not yet exposed via REST; surface a hint.
 		dispatchToastMessage({
@@ -866,6 +948,12 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 	const fullName = contact.fullName || [contact.firstName, contact.lastName].filter(Boolean).join(' ') || t('Unnamed');
 	const qualified = lead.qualification?.qualified;
 	const converted = Boolean(lead.convertedMatterId);
+
+	// sub-status options for the lead's current intake column (item 2). lead.statusId
+	// is the boards_lists._id the lead's card sits in; its subStatuses[] are the picker
+	// options (seeded Lead-Docket-style on ensureLeadsBoard when absent).
+	const currentList = (listsData?.lists ?? []).find((l) => l._id === lead.statusId);
+	const subStatusOptions: SelectOption[] = (currentList?.subStatuses ?? []).map((s) => [s, s]);
 	// Convert needs a synced CasePro intake; a local-only lead (no caseproIntakeId)
 	// cannot become a CasePro matter until it is synced. The POA-Received column gate
 	// is enforced server-side and reported via the onError toast.
@@ -888,6 +976,15 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 				#{lead.refNo} · {lead.practiceArea ?? t('Boards_PracticeArea', { defaultValue: 'Practice area' })}
 			</Box>
 
+			{/* Disqualify reason (item 1): show why a disqualified lead was declined. */}
+			{qualified === false && lead.qualification?.disqualifyReason && (
+				<Box mbe={8}>
+					<Callout type='warning' icon='ban' title={t('Boards_Lead_DisqualifyReason', { defaultValue: 'Reason for disqualifying' })}>
+						{lead.qualification.disqualifyReason}
+					</Callout>
+				</Box>
+			)}
+
 			{/* Depth chips: recomputed score + SOL */}
 			<Box display='flex' flexWrap='wrap' alignItems='center' mbe={8} style={{ gap: '6px' }}>
 				<ScoreChip leadId={leadId} />
@@ -906,8 +1003,23 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 			{lead.preferredContact && <Row label={t('Boards_PreferredContact', { defaultValue: 'Preferred' })}>{lead.preferredContact}</Row>}
 
 			<SectionTitle>{t('Status')}</SectionTitle>
-			<Row label={t('Status')}>{lead.statusId}</Row>
-			{lead.subStatus && <Row label={t('Boards_SubStatus', { defaultValue: 'Sub-status' })}>{lead.subStatus}</Row>}
+			<Row label={t('Status')}>{currentList?.title ?? lead.statusId}</Row>
+			{subStatusOptions.length > 0 ? (
+				<Field mbe={6}>
+					<FieldLabel>{t('Boards_SubStatus', { defaultValue: 'Sub-status' })}</FieldLabel>
+					<FieldRow>
+						<Select
+							value={lead.subStatus ?? ''}
+							onChange={(next) => subStatusMutation.mutate(next as string)}
+							options={subStatusOptions}
+							placeholder={t('Boards_SubStatus_Select', { defaultValue: 'Set sub-status' })}
+							disabled={subStatusMutation.isPending || converted}
+						/>
+					</FieldRow>
+				</Field>
+			) : (
+				lead.subStatus && <Row label={t('Boards_SubStatus', { defaultValue: 'Sub-status' })}>{lead.subStatus}</Row>
+			)}
 
 			<SectionTitle>{t('Boards_Incident', { defaultValue: 'Incident' })}</SectionTitle>
 			<Row label={t('Boards_IncidentType', { defaultValue: 'Type' })}>{lead.incident?.incidentType || '—'}</Row>
@@ -1021,9 +1133,12 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 					small
 					success={qualified !== true}
 					disabled={qualifyMutation.isPending || converted}
-					onClick={() => qualifyMutation.mutate(true)}
+					onClick={() => qualifyMutation.mutate({ qualified: true })}
 				>
 					{t('Boards_Lead_Qualify', { defaultValue: 'Qualify' })}
+				</Button>
+				<Button small danger={qualified !== false} disabled={qualifyMutation.isPending || converted} onClick={openDisqualify}>
+					{t('Boards_Lead_Disqualify', { defaultValue: 'Disqualify' })}
 				</Button>
 				<Button small disabled={assignMutation.isPending || converted} onClick={() => assignMutation.mutate()}>
 					{t('Boards_Lead_Assign', { defaultValue: 'Assign' })}

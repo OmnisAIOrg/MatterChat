@@ -86,17 +86,63 @@ export type CaseloadRow = {
 	avgDaysInStage: number;
 };
 
+/** The three matter-team role classes the per-role caseload rolls up to (matters §8). */
+export type CaseloadRoleClass = 'attorney' | 'paralegal' | 'case-manager' | 'other';
+
+export type CaseloadRoleRow = {
+	role: CaseloadRoleClass;
+	/** the snapshot team member (users.id string or resolved name) holding this role. */
+	memberId: string;
+	openMatters: number;
+	solAtRisk: number;
+};
+
 export type CaseloadReport = {
 	boardId: string;
 	totalOpen: number;
 	unassigned: number;
 	rows: CaseloadRow[];
+	/**
+	 * Per-role breakdown from the cached snapshot team data (matters §8 attorney /
+	 * paralegal / case-manager). Empty when no matter snapshot carries team roles —
+	 * in which case callers use the flat `rows` view (documented degradation).
+	 */
+	byRole: CaseloadRoleRow[];
+	/** false when no snapshot team data was available, so the UI hides the role view. */
+	roleDataAvailable: boolean;
 };
 
 /**
+ * Classify a CasePro matter-team role LABEL (e.g. "Principal Attorney", "Senior Case
+ * Manager", "Paralegal") into one of the three caseload role classes. The labels come
+ * from `MATTER_TEAM_ROLE_COLUMNS` in the snapshot assembler. Unmatched roles
+ * (e.g. "Auditor", "BRA Coordinator") fall into 'other'.
+ */
+function classifyRole(label: string): CaseloadRoleClass {
+	const l = label.toLowerCase();
+	if (l.includes('case manager')) {
+		return 'case-manager';
+	}
+	if (l.includes('attorney')) {
+		return 'attorney';
+	}
+	if (l.includes('paralegal') || l.includes('legal assistant')) {
+		return 'paralegal';
+	}
+	return 'other';
+}
+
+/**
  * Caseload: open matters grouped by assignee with stage mix, SOL-at-risk count, and
- * average aging. A matter with multiple assignees counts toward each; a matter with
- * none rolls into `unassigned`.
+ * average aging (the flat view). A matter with multiple assignees counts toward each;
+ * a matter with none rolls into `unassigned`.
+ *
+ * matters §8 additionally wants a per-ROLE breakdown (attorney / paralegal /
+ * case-manager). The flat `card.assignees` array has no role information, so the role
+ * view is derived from the cached `IMatterSnapshot.team` (CasePro matter team-role
+ * columns). When NO snapshot carries team roles we degrade to the flat view only
+ * (`byRole` empty, `roleDataAvailable:false`) — never throwing, mirroring the snapshot
+ * graceful-degradation rule.
  */
 export async function caseload(uid: string): Promise<CaseloadReport> {
 	const now = new Date();
@@ -108,23 +154,47 @@ export async function caseload(uid: string): Promise<CaseloadReport> {
 	const byAssignee = new Map<string, { open: number; stageMix: Record<string, number>; solAtRisk: number; ageSum: number }>();
 	let unassigned = 0;
 
+	// per-role tally keyed by `${roleClass}::${memberId}` from snapshot team data.
+	const byRole = new Map<string, { role: CaseloadRoleClass; memberId: string; open: number; solAtRisk: number }>();
+	let sawTeamData = false;
+
 	for (const card of cards) {
 		const stageName = listsById.get(card.listId)?.title ?? card.listId;
 		const age = await daysInStage(card, now);
+		const cardAtRisk = atRisk.has(card._id);
+
+		// ----- flat view (by assignee) -----
 		const assignees = card.assignees?.length ? card.assignees : [];
 		if (!assignees.length) {
 			unassigned += 1;
-			continue;
-		}
-		for (const a of assignees) {
-			const row = byAssignee.get(a) ?? { open: 0, stageMix: {}, solAtRisk: 0, ageSum: 0 };
-			row.open += 1;
-			row.stageMix[stageName] = (row.stageMix[stageName] ?? 0) + 1;
-			row.ageSum += age;
-			if (atRisk.has(card._id)) {
-				row.solAtRisk += 1;
+		} else {
+			for (const a of assignees) {
+				const row = byAssignee.get(a) ?? { open: 0, stageMix: {}, solAtRisk: 0, ageSum: 0 };
+				row.open += 1;
+				row.stageMix[stageName] = (row.stageMix[stageName] ?? 0) + 1;
+				row.ageSum += age;
+				if (cardAtRisk) {
+					row.solAtRisk += 1;
+				}
+				byAssignee.set(a, row);
 			}
-			byAssignee.set(a, row);
+		}
+
+		// ----- per-role view (from the cached snapshot team) -----
+		const team = snapshotOf(card)?.team ?? [];
+		for (const member of team) {
+			if (!member?.name) {
+				continue;
+			}
+			sawTeamData = true;
+			const role = classifyRole(member.role ?? '');
+			const key = `${role}::${member.name}`;
+			const r = byRole.get(key) ?? { role, memberId: member.name, open: 0, solAtRisk: 0 };
+			r.open += 1;
+			if (cardAtRisk) {
+				r.solAtRisk += 1;
+			}
+			byRole.set(key, r);
 		}
 	}
 
@@ -137,7 +207,17 @@ export async function caseload(uid: string): Promise<CaseloadReport> {
 	}));
 	rows.sort((a, b) => b.openMatters - a.openMatters);
 
-	return { boardId, totalOpen: cards.length, unassigned, rows };
+	const roleRows: CaseloadRoleRow[] = [...byRole.values()].map((r) => ({
+		role: r.role,
+		memberId: r.memberId,
+		openMatters: r.open,
+		solAtRisk: r.solAtRisk,
+	}));
+	// sort by role class then by load desc, so attorneys group first.
+	const ROLE_ORDER: CaseloadRoleClass[] = ['attorney', 'paralegal', 'case-manager', 'other'];
+	roleRows.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || b.openMatters - a.openMatters);
+
+	return { boardId, totalOpen: cards.length, unassigned, rows, byRole: roleRows, roleDataAvailable: sawTeamData };
 }
 
 /** Card ids carrying an open SOL deadline due within the at-risk window. */
