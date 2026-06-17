@@ -603,8 +603,10 @@ export async function logCommunication(uid: string, leadId: string, params: LogC
 
 	const commId = await BoardsCommunications.log(entry);
 
-	// any logged comm counts as contact; recordContact also handles the SLA $min
-	await BoardsLeads.recordContact(leadId, ts);
+	// any logged comm counts as contact (drives cold-lead aging + the SLA $min);
+	// passing the direction lets recordContact stamp lastInboundAt for inbound ONLY,
+	// so an outbound drip send never registers as the lead "responding".
+	await BoardsLeads.recordContact(leadId, ts, params.direction);
 
 	// an INBOUND comm means the lead responded -> auto-stop any running drips.
 	if (params.direction === 'in') {
@@ -750,14 +752,46 @@ export async function markLeadLost(uid: string, leadId: string, reason: LeadLost
 // ---------------------------------------------------------------------------
 
 /**
+ * The terminal "lost"-class exit columns (intake-lead-management.md §4 exits),
+ * keyed by their seeded `INTAKE_STAGE_NAMES` title -> the `LeadLostReason` stamped
+ * when a lead card lands there. These three are the last entries of
+ * `INTAKE_STAGE_NAMES` (the conversion gate "POA Received" is index 4, NOT lost).
+ *
+ * We key off the COLUMN TITLE because the leads board models intake status AS the
+ * `boards_lists` column (per 00-MASTER-PLAN — no separate stage/status collection),
+ * and the columns are seeded from these exact real CasePro stage names. The
+ * `referred-out` reason is stamped by the explicit referral flow (`createReferralOut`),
+ * not a drag, so it is intentionally not column-mapped here.
+ */
+const LOST_STATUS_REASON_BY_TITLE: Record<string, LeadLostReason> = {
+	[INTAKE_STAGE_NAMES[5]]: 'declined-unqualified', // 'Declined-Unqualified'
+	[INTAKE_STAGE_NAMES[6]]: 'declined-lost', // 'Declined-Lost Lead'
+	[INTAKE_STAGE_NAMES[7]]: 'no-response', // 'No Response'
+};
+
+/** The lost-class reason for a destination column, or undefined if not a lost exit. */
+async function lostReasonForList(listId: string): Promise<LeadLostReason | undefined> {
+	const list = await BoardsLists.findOneById(listId);
+	if (!list) {
+		return undefined;
+	}
+	return LOST_STATUS_REASON_BY_TITLE[list.title];
+}
+
+/**
  * Kanban → lead sync hook. When a `cardType:'lead'` card is moved on the leads
  * board (the M1 `boards.cardMove` path), the linked lead's `statusId` must follow
  * the column AND the change must write through to CasePro. This is the least-
  * invasive seam: `cardMove` calls this AFTER the card has already moved, so we
  * only reconcile the lead doc + push the stage (we do NOT move the card again).
  *
- * No-op for non-lead cards / cards with no linked lead. Best-effort: a CasePro
- * write failure never rolls back the (already-committed) card move.
+ * When the destination column is a terminal lost-class exit (§4 — Not a Fit /
+ * Lost / No Response), we ALSO run `markLeadLost` so `lostAt`/`lostReason` get
+ * stamped and the drips stop — `setStatus` alone never did that, so a dragged lead
+ * was silently left "open". Best-effort: a lost-stamp/CasePro failure never rolls
+ * back the already-committed card move, and a normal stage move is untouched.
+ *
+ * No-op for non-lead cards / cards with no linked lead.
  */
 export async function syncLeadStageFromCard(uid: string, cardId: string, toListId: string): Promise<void> {
 	const lead = await BoardsLeads.findOneByCardId(cardId);
@@ -767,6 +801,20 @@ export async function syncLeadStageFromCard(uid: string, cardId: string, toListI
 	if (lead.statusId !== toListId) {
 		await BoardsLeads.setStatus(lead._id, toListId);
 	}
+
+	// terminal lost-class exit → stamp lostAt/lostReason + stop drips (best-effort).
+	// Skip if the lead is already converted/lost so we don't re-stamp or clobber.
+	if (!lead.convertedAt && !lead.lostAt) {
+		try {
+			const reason = await lostReasonForList(toListId);
+			if (reason) {
+				await markLeadLost(uid, lead._id, reason);
+			}
+		} catch {
+			// the lost-stamp is best-effort; the card + lead status already moved.
+		}
+	}
+
 	try {
 		await pushStage(uid, lead, toListId);
 	} catch {

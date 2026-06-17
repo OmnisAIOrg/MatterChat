@@ -1,10 +1,11 @@
-import type { ICommunication, ICommTemplate, ILead, ISequence, Serialized } from '@rocket.chat/core-typings';
+import type { ICommunication, ICommTemplate, IIntakeTask, ILead, ISequence, ISignUpPacket, Serialized } from '@rocket.chat/core-typings';
 import type { SelectOption } from '@rocket.chat/fuselage';
 import {
 	Box,
 	Button,
 	ButtonGroup,
 	Callout,
+	CheckBox,
 	Chip,
 	Divider,
 	Field,
@@ -491,6 +492,245 @@ const SolChip = ({ leadId }: { leadId: string }): ReactElement | null => {
 	);
 };
 
+// ---------------------------------------------------------------------------
+// Tasks section (GET /v1/boards.leads.tasks.list + POST .tasks.complete)
+// ---------------------------------------------------------------------------
+
+const TASK_ORIGINS = ['sla', 'cold', 'sequence'] as const;
+const isAutoOrigin = (v?: string): v is (typeof TASK_ORIGINS)[number] => !!v && (TASK_ORIGINS as readonly string[]).includes(v);
+
+/**
+ * The lead's intake tasks (speed-to-lead + cold-lead ticklers + sequence steps +
+ * manual follow-ups), each with a complete toggle — so the auto-created ticklers
+ * are no longer write-only. Auto-created tasks carry an origin badge.
+ */
+const TasksSection = ({ leadId }: { leadId: string }): ReactElement => {
+	const { t } = useTranslation();
+	const dispatchToastMessage = useToastMessageDispatch();
+	const queryClient = useQueryClient();
+	const listTasks = useEndpoint('GET', '/v1/boards.leads.tasks.list');
+	const completeTask = useEndpoint('POST', '/v1/boards.leads.tasks.complete');
+
+	const tasksQueryKey = ['boards', 'leads', 'tasks', leadId];
+	const { data, isLoading } = useQuery({
+		queryKey: tasksQueryKey,
+		queryFn: () => listTasks({ leadId }),
+	});
+
+	const completeMutation = useMutation({
+		mutationFn: (taskId: string) => completeTask({ taskId }),
+		onSuccess: () => {
+			dispatchToastMessage({ type: 'success', message: t('Saved') });
+			void queryClient.invalidateQueries({ queryKey: tasksQueryKey });
+		},
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	const tasks: Serialized<IIntakeTask>[] = data?.tasks ?? [];
+	const open = tasks.filter((task) => !task.done);
+	const done = tasks.filter((task) => task.done);
+
+	return (
+		<>
+			<SectionTitle>{t('Boards_Leads_Tasks', { defaultValue: 'Tasks' })}</SectionTitle>
+			{isLoading && (
+				<Box display='flex' justifyContent='center' p={8}>
+					<Throbber />
+				</Box>
+			)}
+			{!isLoading && tasks.length === 0 && (
+				<Box fontScale='c1' color='hint'>
+					{t('No_results_found')}
+				</Box>
+			)}
+			{[...open, ...done].map((task) => (
+				<Box key={task._id} display='flex' alignItems='flex-start' mbe={8}>
+					<Box mie={8} mbs={2}>
+						<CheckBox
+							checked={task.done}
+							disabled={task.done || completeMutation.isPending}
+							onChange={() => !task.done && completeMutation.mutate(task._id)}
+							aria-label={t('Boards_Leads_Task_Complete', { defaultValue: 'Complete task' })}
+						/>
+					</Box>
+					<Box minWidth={0} flexGrow={1}>
+						<Box display='flex' alignItems='center'>
+							<Box fontScale='p2' color={task.done ? 'hint' : 'default'} mie={4} withTruncatedText style={task.done ? { textDecoration: 'line-through' } : undefined}>
+								{task.title}
+							</Box>
+							{isAutoOrigin(task.autoCreatedBy) && (
+								<Tag medium>{t(`Boards_Leads_Task_Origin_${task.autoCreatedBy}` as Parameters<typeof t>[0], { defaultValue: task.autoCreatedBy })}</Tag>
+							)}
+						</Box>
+						<Box fontScale='micro' color='hint'>
+							{task.dueAt ? `${t('Boards_Leads_Task_Due', { defaultValue: 'Due' })}: ${fmtDateTime(task.dueAt)}` : t('Boards_Leads_Task_NoDue', { defaultValue: 'No due date' })}
+							{task.done && task.doneAt ? ` · ${t('Boards_Leads_Task_DoneAt', { defaultValue: 'Done' })} ${fmtDateTime(task.doneAt)}` : ''}
+						</Box>
+					</Box>
+				</Box>
+			))}
+		</>
+	);
+};
+
+// ---------------------------------------------------------------------------
+// Sign-up packet section (GET /v1/boards.leads.signupPacket.get +
+// POST .signupPacket.send + POST .signupPacket.setStatus + .generate)
+// ---------------------------------------------------------------------------
+
+const PACKET_FLOW: ISignUpPacket['status'][] = ['draft', 'generated', 'sent', 'viewed', 'signed'];
+
+const packetStatusVariant = (status: ISignUpPacket['status']): 'primary' | 'danger' | 'secondary' => {
+	if (status === 'signed') {
+		return 'primary';
+	}
+	if (status === 'declined' || status === 'voided') {
+		return 'danger';
+	}
+	return 'secondary';
+};
+
+/**
+ * Sign-up / retainer packet (intake-lead-management.md §10). Shows the latest
+ * packet's e-sign state-machine state (draft→generated→sent→viewed→signed/declined)
+ * with Generate / Send / Mark-signed actions over the existing manual e-sign seam
+ * (no live creds). On `signed` the packet arms conversion; we lift that up via
+ * `onArmedChange` so the panel highlights Convert-to-matter.
+ */
+const SignupPacketSection = ({
+	leadId,
+	onArmedChange,
+	onInvalidateLead,
+}: {
+	leadId: string;
+	onArmedChange: (armed: boolean) => void;
+	onInvalidateLead: () => void;
+}): ReactElement => {
+	const { t } = useTranslation();
+	const dispatchToastMessage = useToastMessageDispatch();
+	const queryClient = useQueryClient();
+
+	const getPacket = useEndpoint('GET', '/v1/boards.leads.signupPacket.get');
+	const generatePacket = useEndpoint('POST', '/v1/boards.leads.signupPacket.generate');
+	const sendPacket = useEndpoint('POST', '/v1/boards.leads.signupPacket.send');
+	const setPacketStatus = useEndpoint('POST', '/v1/boards.leads.signupPacket.setStatus');
+
+	const packetQueryKey = ['boards', 'leads', 'signupPacket', leadId];
+	const { data, isLoading } = useQuery({
+		queryKey: packetQueryKey,
+		queryFn: () => getPacket({ leadId }),
+	});
+
+	const packet = data?.packet ?? null;
+
+	// surface conversion-armed (a signed packet) up to the panel.
+	const armed = packet?.status === 'signed';
+	useMemo(() => onArmedChange(Boolean(armed)), [armed, onArmedChange]);
+
+	const refresh = (): void => {
+		void queryClient.invalidateQueries({ queryKey: packetQueryKey });
+		onInvalidateLead();
+	};
+
+	// the doc render is a LitBox/OnlyOffice concern; here Generate seeds a packet
+	// with a placeholder generated ref so the manual e-sign flow can proceed.
+	const generateMutation = useMutation({
+		mutationFn: () =>
+			generatePacket({ leadId, docTemplateId: 'default-retainer', generatedDocRef: `pending:${leadId}:${Date.now()}` }),
+		onSuccess: () => {
+			dispatchToastMessage({ type: 'success', message: t('Boards_Leads_Signup_Generate', { defaultValue: 'Packet generated' }) });
+			refresh();
+		},
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	const sendMutation = useMutation({
+		mutationFn: () => {
+			if (!packet) {
+				throw new Error('No packet');
+			}
+			return sendPacket({ packetId: packet._id });
+		},
+		onSuccess: () => {
+			dispatchToastMessage({ type: 'success', message: t('Boards_Leads_Signup_Send', { defaultValue: 'Packet sent for signature' }) });
+			refresh();
+		},
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	const markSignedMutation = useMutation({
+		mutationFn: () => {
+			if (!packet) {
+				throw new Error('No packet');
+			}
+			// manual provider: record the executed-doc ref by hand (no live webhook).
+			return setPacketStatus({ packetId: packet._id, status: 'signed', signedDocRef: `signed:${packet._id}` });
+		},
+		onSuccess: (result) => {
+			dispatchToastMessage({ type: 'success', message: t('Boards_Leads_Signup_Signed', { defaultValue: 'Marked signed' }) });
+			onArmedChange(Boolean(result?.conversionArmed));
+			refresh();
+		},
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	const canSend = packet ? packet.status === 'generated' || packet.status === 'draft' : false;
+	const canMarkSigned = packet ? packet.status === 'sent' || packet.status === 'viewed' : false;
+	const terminal = packet ? packet.status === 'declined' || packet.status === 'voided' : false;
+
+	return (
+		<>
+			<SectionTitle>{t('Boards_Leads_Signup_Packet', { defaultValue: 'Sign-up packet' })}</SectionTitle>
+			{isLoading && (
+				<Box display='flex' justifyContent='center' p={8}>
+					<Throbber />
+				</Box>
+			)}
+			{!isLoading && !packet && (
+				<>
+					<Box fontScale='c1' color='hint' mbe={8}>
+						{t('Boards_Leads_Signup_None', { defaultValue: 'No sign-up packet yet. Generate a retainer packet to start the e-sign flow.' })}
+					</Box>
+					<Button small onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
+						<Icon name='file-document' size='x14' mie={4} />
+						{t('Boards_Leads_Signup_Generate', { defaultValue: 'Generate packet' })}
+					</Button>
+				</>
+			)}
+			{packet && (
+				<Box>
+					{/* status pill + state-machine breadcrumb */}
+					<Box display='flex' alignItems='center' flexWrap='wrap' mbe={8} style={{ gap: '6px' }}>
+						<Tag variant={packetStatusVariant(packet.status)} medium>
+							{t(`Boards_Leads_Signup_Status_${packet.status}` as Parameters<typeof t>[0], { defaultValue: packet.status })}
+						</Tag>
+						{!terminal && (
+							<Box fontScale='micro' color='hint'>
+								{PACKET_FLOW.map((s, i) => `${i > 0 ? ' → ' : ''}${s === packet.status ? `[${s}]` : s}`).join('')}
+							</Box>
+						)}
+					</Box>
+					{armed && (
+						<Callout type='success' icon='check' mbe={8} title={t('Boards_Leads_Signup_Armed', { defaultValue: 'Signed — conversion is armed' })}>
+							{t('Boards_Leads_Signup_ArmedHint', { defaultValue: 'The retainer is signed; convert this lead to a matter below.' })}
+						</Callout>
+					)}
+					<ButtonGroup>
+						<Button tiny onClick={() => sendMutation.mutate()} disabled={!canSend || sendMutation.isPending}>
+							<Icon name='send' size='x12' mie={4} />
+							{t('Boards_Leads_Signup_Send', { defaultValue: 'Send for signature' })}
+						</Button>
+						<Button tiny success onClick={() => markSignedMutation.mutate()} disabled={!canMarkSigned || markSignedMutation.isPending}>
+							<Icon name='check' size='x12' mie={4} />
+							{t('Boards_Leads_Signup_MarkSigned', { defaultValue: 'Mark signed' })}
+						</Button>
+					</ButtonGroup>
+				</Box>
+			)}
+		</>
+	);
+};
+
 const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement => {
 	const { t } = useTranslation();
 	const router = useRouter();
@@ -508,6 +748,10 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 	// the conversion gate (requires caseproIntakeId, POA-Received column, not-already-
 	// converted) and throws a descriptive error otherwise, which we surface on failure.
 	const convertToMatter = useMethod('boards.leadConvertToMatter');
+
+	// lifted from the sign-up packet section: a signed packet arms conversion, which
+	// we use to highlight the Convert-to-matter action below (intake §10/§11).
+	const [packetArmed, setPacketArmed] = useState(false);
 
 	const leadQueryKey = ['boards', 'leads', 'get', leadId];
 	const timelineQueryKey = ['boards', 'leads', 'timeline', leadId];
@@ -701,6 +945,12 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 				</>
 			)}
 
+			{/* Intake tasks (speed-to-lead + cold-lead ticklers + manual follow-ups) */}
+			<TasksSection leadId={leadId} />
+
+			{/* Sign-up / retainer packet (e-sign state machine; signing arms conversion) */}
+			<SignupPacketSection leadId={leadId} onArmedChange={setPacketArmed} onInvalidateLead={invalidate} />
+
 			{/* Communications timeline + depth actions */}
 			<Box display='flex' alignItems='center' justifyContent='space-between' mbs={16} mbe={8}>
 				<Box fontScale='p2b' color='default'>
@@ -801,6 +1051,13 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 						{t('Boards_Lead_ConvertNeedsSync', {
 							defaultValue: 'Sync this lead to CasePro before converting to a matter.',
 						})}
+					</Box>
+				)}
+				{/* signed retainer arms conversion (intake §10/§11) — nudge the user to convert. */}
+				{!converted && canConvert && packetArmed && (
+					<Box fontScale='micro' color='status-font-on-success' mbs={4} textAlign='center'>
+						<Icon name='check' size='x12' mie={2} />
+						{t('Boards_Lead_ConvertArmed', { defaultValue: 'Retainer signed — ready to convert to a matter.' })}
 					</Box>
 				)}
 			</Box>

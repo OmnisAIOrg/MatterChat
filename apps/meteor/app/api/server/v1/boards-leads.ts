@@ -11,6 +11,7 @@ import {
 	isBoardsLeadsReferralSourceUpsertProps,
 	isBoardsLeadsSyncFromCaseProProps,
 	isBoardsLeadsConvertToMatterProps,
+	isBoardsLeadsMarkLostProps,
 	isBoardsLeadsRunConflictCheckProps,
 	isBoardsLeadsCheckDuplicatesProps,
 	isBoardsLeadsComputeScoreProps,
@@ -20,14 +21,19 @@ import {
 	isBoardsLeadsTemplateUpsertProps,
 	isBoardsLeadsTemplateSendProps,
 	isBoardsLeadsCreateTaskProps,
+	isBoardsLeadsTasksListProps,
+	isBoardsLeadsTaskCompleteProps,
 	isBoardsLeadsSequencesListProps,
 	isBoardsLeadsSequencesEnrollProps,
 	isBoardsLeadsSequencesAdvanceProps,
 	isBoardsLeadsReferralOutUpsertProps,
 	isBoardsLeadsReferralOutSetStatusProps,
+	isBoardsLeadsReferralsOutListProps,
 	isBoardsLeadsMarketingSourceRoiProps,
 	isBoardsLeadsSignupPacketGenerateProps,
 	isBoardsLeadsSignupPacketSetStatusProps,
+	isBoardsLeadsSignupPacketGetProps,
+	isBoardsLeadsSignupPacketSendProps,
 	isBoardsLeadsReportFunnelProps,
 	isBoardsLeadsReportScoreboardProps,
 	validateBadRequestErrorResponse,
@@ -46,6 +52,7 @@ import {
 	listLeads,
 	getLeadInfo,
 	convertToMatter,
+	markLeadLost,
 	pullFromCasePro,
 	isCaseProEnabled,
 	runConflictCheck,
@@ -62,9 +69,14 @@ import {
 	advanceEnrollment,
 	createReferralOut,
 	updateReferralOutStatus,
+	listReferralsOut,
 	sourceRoi,
 	generateSignupPacket,
 	setSignupPacketStatus,
+	getLatestPacket,
+	sendSignupPacket,
+	listTasks,
+	completeTask,
 	funnel,
 	scoreboard,
 } from '../../../../server/lib/boards/leads';
@@ -369,6 +381,30 @@ API.v1.post(
 	},
 );
 
+API.v1.post(
+	'boards.leads.markLost',
+	{
+		authRequired: true,
+		body: isBoardsLeadsMarkLostProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-leads-edit'))) {
+			return API.v1.unauthorized();
+		}
+		const { leadId, reason } = this.bodyParams;
+
+		const lead = await markLeadLost(userId, leadId, reason);
+
+		return API.v1.success({ lead });
+	},
+);
+
 // ---------------------------------------------------------------------------
 // M6 — conflict / dedupe / scoring / SOL (GET reads over a lead)
 // ---------------------------------------------------------------------------
@@ -573,6 +609,46 @@ API.v1.post(
 	},
 );
 
+API.v1.get(
+	'boards.leads.tasks.list',
+	{
+		authRequired: true,
+		query: isBoardsLeadsTasksListProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		// permission enforced inside listTasks (boards-leads-view), mirroring createTask
+		// which delegates its gating to the service layer.
+		const tasks = await listTasks(userId, this.queryParams.leadId);
+		return API.v1.success({ tasks });
+	},
+);
+
+API.v1.post(
+	'boards.leads.tasks.complete',
+	{
+		authRequired: true,
+		body: isBoardsLeadsTaskCompleteProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		// permission enforced inside completeTask (boards-leads-comms — the same
+		// intake-worklist capability createTask uses).
+		const task = await completeTask(userId, this.bodyParams.taskId);
+		return API.v1.success({ task });
+	},
+);
+
 // ---------------------------------------------------------------------------
 // M6 — sequences (drip)
 // ---------------------------------------------------------------------------
@@ -654,11 +730,11 @@ API.v1.post(
 	async function action() {
 		const { userId } = this;
 		const { sentAt, ...rest } = this.bodyParams;
-		const { referralOut, lead } = await createReferralOut(userId, {
+		const { referralOut, lead, created } = await createReferralOut(userId, {
 			...rest,
 			...(sentAt ? { sentAt: new Date(sentAt) } : {}),
 		});
-		return API.v1.success({ referralOut, lead });
+		return API.v1.success({ referralOut, lead, created });
 	},
 );
 
@@ -683,6 +759,26 @@ API.v1.post(
 			...(notes !== undefined ? { notes } : {}),
 		});
 		return API.v1.success({ referralOut });
+	},
+);
+
+API.v1.get(
+	'boards.leads.referralsOut.list',
+	{
+		authRequired: true,
+		query: isBoardsLeadsReferralsOutListProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		// permission is enforced inside listReferralsOut (boards-leads-view), mirroring
+		// the sibling referralOut.* routes which delegate gating to the service layer.
+		const referralsOut = await listReferralsOut(userId, this.queryParams.leadId);
+		return API.v1.success({ referralsOut });
 	},
 );
 
@@ -756,6 +852,48 @@ API.v1.post(
 			...(at ? { at: new Date(at) } : {}),
 		});
 		return API.v1.success({ packet, conversionArmed });
+	},
+);
+
+API.v1.get(
+	'boards.leads.signupPacket.get',
+	{
+		authRequired: true,
+		query: isBoardsLeadsSignupPacketGetProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		// permission enforced inside getLatestPacket (boards-leads-view).
+		const packet = await getLatestPacket(userId, this.queryParams.leadId);
+		return API.v1.success({ packet });
+	},
+);
+
+API.v1.post(
+	'boards.leads.signupPacket.send',
+	{
+		authRequired: true,
+		body: isBoardsLeadsSignupPacketSendProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		// permission enforced inside sendSignupPacket (boards-leads-signups-manage).
+		const { packetId, provider, subject } = this.bodyParams;
+		const { packet, envelopeId, signUrl } = await sendSignupPacket(userId, packetId, {
+			...(provider ? { provider } : {}),
+			...(subject ? { subject } : {}),
+		});
+		return API.v1.success({ packet, envelopeId, ...(signUrl ? { signUrl } : {}) });
 	},
 );
 

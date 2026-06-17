@@ -127,9 +127,15 @@ export type SendSignupPacketResult = { packet: ISignUpPacket; envelopeId: string
 
 /**
  * Send a generated packet for signature through the e-sign provider seam. Moves
- * the packet draft/generated -> sent and records the provider envelope id.
+ * the packet draft/generated -> sent and records the provider envelope id. An
+ * optional `provider` override switches the packet's e-sign provider before send
+ * (the wire surface exposes it; it still falls back to manual when unregistered).
  */
-export async function sendSignupPacket(uid: string, packetId: string, opts: { subject?: string } = {}): Promise<SendSignupPacketResult> {
+export async function sendSignupPacket(
+	uid: string,
+	packetId: string,
+	opts: { subject?: string; provider?: EsignProvider } = {},
+): Promise<SendSignupPacketResult> {
 	if (!(await hasPermissionAsync(uid, 'boards-leads-signups-manage'))) {
 		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'boards.leads.signupPacket.send' });
 	}
@@ -143,7 +149,7 @@ export async function sendSignupPacket(uid: string, packetId: string, opts: { su
 		});
 	}
 
-	const provider = resolveProvider(packet.esignProvider);
+	const provider = resolveProvider(opts.provider ?? packet.esignProvider);
 	const { envelopeId, signUrl } = await provider.send({
 		provider: provider.name,
 		docRef: packet.generatedDocRef,

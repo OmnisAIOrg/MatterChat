@@ -484,6 +484,27 @@ export const isBoardsLeadsConvertToMatterProps = ajv.compile<BoardsLeadsConvertT
 );
 
 // ---------------------------------------------------------------------------
+// M6 — mark lost (terminal exit: Not a Fit / Lost / Referred Out — §4)
+// ---------------------------------------------------------------------------
+
+type BoardsLeadsMarkLostProps = { leadId: string; reason: LeadLostReason };
+
+const BoardsLeadsMarkLostSchema = {
+	type: 'object',
+	properties: {
+		leadId: { type: 'string', minLength: 1 },
+		reason: {
+			type: 'string',
+			enum: ['declined-unqualified', 'declined-lost', 'no-response', 'referred-out', 'duplicate', 'other'],
+		},
+	},
+	required: ['leadId', 'reason'],
+	additionalProperties: false,
+};
+
+export const isBoardsLeadsMarkLostProps = ajv.compile<BoardsLeadsMarkLostProps>(BoardsLeadsMarkLostSchema);
+
+// ---------------------------------------------------------------------------
 // M6 — conflict / dedupe / scoring / SOL (GET-by-leadId reads)
 // ---------------------------------------------------------------------------
 
@@ -600,6 +621,20 @@ const BoardsLeadsCreateTaskSchema = {
 
 export const isBoardsLeadsCreateTaskProps = ajv.compile<BoardsLeadsCreateTaskProps>(BoardsLeadsCreateTaskSchema);
 
+type BoardsLeadsTasksListProps = { leadId: string };
+export const isBoardsLeadsTasksListProps = ajvQuery.compile<BoardsLeadsTasksListProps>(leadIdSchema());
+
+type BoardsLeadsTaskCompleteProps = { taskId: string };
+
+const BoardsLeadsTaskCompleteSchema = {
+	type: 'object',
+	properties: { taskId: { type: 'string', minLength: 1 } },
+	required: ['taskId'],
+	additionalProperties: false,
+};
+
+export const isBoardsLeadsTaskCompleteProps = ajv.compile<BoardsLeadsTaskCompleteProps>(BoardsLeadsTaskCompleteSchema);
+
 // ---------------------------------------------------------------------------
 // M6 — sequences (drip)
 // ---------------------------------------------------------------------------
@@ -640,6 +675,8 @@ export const isBoardsLeadsSequencesAdvanceProps = ajv.compile<BoardsLeadsSequenc
 // ---------------------------------------------------------------------------
 
 type BoardsLeadsReferralOutUpsertProps = {
+	/** when set, updates that outbound referral in place instead of inserting a new one. */
+	referralOutId?: string;
 	leadId: string;
 	toFirmName: string;
 	toReferralSourceId?: string;
@@ -667,6 +704,7 @@ const ReferralOutContactSchema = {
 const BoardsLeadsReferralOutUpsertSchema = {
 	type: 'object',
 	properties: {
+		referralOutId: { type: 'string', nullable: true },
 		leadId: { type: 'string', minLength: 1 },
 		toFirmName: { type: 'string', minLength: 1 },
 		toReferralSourceId: { type: 'string', nullable: true },
@@ -708,6 +746,9 @@ const BoardsLeadsReferralOutSetStatusSchema = {
 export const isBoardsLeadsReferralOutSetStatusProps = ajv.compile<BoardsLeadsReferralOutSetStatusProps>(
 	BoardsLeadsReferralOutSetStatusSchema,
 );
+
+type BoardsLeadsReferralsOutListProps = { leadId: string };
+export const isBoardsLeadsReferralsOutListProps = ajvQuery.compile<BoardsLeadsReferralsOutListProps>(leadIdSchema());
 
 // ---------------------------------------------------------------------------
 // M6 — marketing ROI
@@ -781,6 +822,26 @@ export const isBoardsLeadsSignupPacketSetStatusProps = ajv.compile<BoardsLeadsSi
 	BoardsLeadsSignupPacketSetStatusSchema,
 );
 
+type BoardsLeadsSignupPacketGetProps = { leadId: string };
+export const isBoardsLeadsSignupPacketGetProps = ajvQuery.compile<BoardsLeadsSignupPacketGetProps>(leadIdSchema());
+
+type BoardsLeadsSignupPacketSendProps = { packetId: string; provider?: EsignProvider; subject?: string };
+
+const BoardsLeadsSignupPacketSendSchema = {
+	type: 'object',
+	properties: {
+		packetId: { type: 'string', minLength: 1 },
+		provider: { type: 'string', enum: ['manual', 'docusign', 'dropbox-sign', 'omnisproof'], nullable: true },
+		subject: { type: 'string', nullable: true },
+	},
+	required: ['packetId'],
+	additionalProperties: false,
+};
+
+export const isBoardsLeadsSignupPacketSendProps = ajv.compile<BoardsLeadsSignupPacketSendProps>(
+	BoardsLeadsSignupPacketSendSchema,
+);
+
 // ---------------------------------------------------------------------------
 // M6 — reports
 // ---------------------------------------------------------------------------
@@ -846,6 +907,9 @@ export type BoardsLeadsEndpoints = {
 			matterCard: IBoardCard;
 			mattersBoardId: string;
 		};
+	};
+	'/v1/boards.leads.markLost': {
+		POST: (params: BoardsLeadsMarkLostProps) => { lead: ILead };
 	};
 
 	// ----- M6: conflict / dedupe / scoring / SOL -----
@@ -929,6 +993,12 @@ export type BoardsLeadsEndpoints = {
 	'/v1/boards.leads.createTask': {
 		POST: (params: BoardsLeadsCreateTaskProps) => { task: IIntakeTask };
 	};
+	'/v1/boards.leads.tasks.list': {
+		GET: (params: BoardsLeadsTasksListProps) => { tasks: IIntakeTask[] };
+	};
+	'/v1/boards.leads.tasks.complete': {
+		POST: (params: BoardsLeadsTaskCompleteProps) => { task: IIntakeTask };
+	};
 
 	// ----- M6: sequences (drip) -----
 	'/v1/boards.leads.sequences.list': {
@@ -948,10 +1018,13 @@ export type BoardsLeadsEndpoints = {
 
 	// ----- M6: referrals out -----
 	'/v1/boards.leads.referralOut.upsert': {
-		POST: (params: BoardsLeadsReferralOutUpsertProps) => { referralOut: IReferralOut; lead: ILead };
+		POST: (params: BoardsLeadsReferralOutUpsertProps) => { referralOut: IReferralOut; lead: ILead; created: boolean };
 	};
 	'/v1/boards.leads.referralOut.setStatus': {
 		POST: (params: BoardsLeadsReferralOutSetStatusProps) => { referralOut: IReferralOut };
+	};
+	'/v1/boards.leads.referralsOut.list': {
+		GET: (params: BoardsLeadsReferralsOutListProps) => { referralsOut: IReferralOut[] };
 	};
 
 	// ----- M6: marketing ROI -----
@@ -970,6 +1043,12 @@ export type BoardsLeadsEndpoints = {
 	};
 	'/v1/boards.leads.signupPacket.setStatus': {
 		POST: (params: BoardsLeadsSignupPacketSetStatusProps) => { packet: ISignUpPacket; conversionArmed: boolean };
+	};
+	'/v1/boards.leads.signupPacket.get': {
+		GET: (params: BoardsLeadsSignupPacketGetProps) => { packet: ISignUpPacket | null };
+	};
+	'/v1/boards.leads.signupPacket.send': {
+		POST: (params: BoardsLeadsSignupPacketSendProps) => { packet: ISignUpPacket; envelopeId: string; signUrl?: string };
 	};
 
 	// ----- M6: reports -----

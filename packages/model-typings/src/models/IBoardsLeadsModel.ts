@@ -1,4 +1,4 @@
-import type { ILead, ILeadQualification, LeadLostReason } from '@rocket.chat/core-typings';
+import type { ICommunication, ILead, ILeadQualification, LeadLostReason } from '@rocket.chat/core-typings';
 import type { FindCursor, FindOptions, UpdateResult } from 'mongodb';
 
 import type { IBaseModel } from './IBaseModel';
@@ -30,8 +30,12 @@ export interface IBoardsLeadsModel extends IBaseModel<ILead> {
 	): Promise<UpdateResult>;
 	markLost(leadId: string, reason: LeadLostReason, byUserId?: string): Promise<UpdateResult>;
 
-	/** $set lastContactedAt/lastActivityAt (+ slaFirstContactAt once), clear coldSince. */
-	recordContact(leadId: string, at: Date): Promise<UpdateResult>;
+	/**
+	 * $set lastContactedAt/lastActivityAt (+ slaFirstContactAt once), clear coldSince.
+	 * When `direction === 'in'` also stamps `lastInboundAt` — the genuine "lead
+	 * responded" signal the drip self-stop keys off (an outbound send must NOT set it).
+	 */
+	recordContact(leadId: string, at: Date, direction?: ICommunication['direction']): Promise<UpdateResult>;
 
 	archive(leadId: string): Promise<UpdateResult>;
 }

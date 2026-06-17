@@ -133,7 +133,8 @@ export interface ILead extends IRocketChatRecord {
 	capturedAt: Date;
 	capturedChannel: LeadCapturedChannel;
 	capturedByUserId?: IUser['_id']; // null for public web-form
-	lastContactedAt?: Date;
+	lastContactedAt?: Date; // any logged comm (in OR out) — drives cold-lead aging
+	lastInboundAt?: Date; // last INBOUND comm only — the genuine "lead responded" signal
 	lastActivityAt?: Date;
 
 	// conversion / exit

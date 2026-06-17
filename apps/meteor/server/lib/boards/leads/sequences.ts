@@ -153,7 +153,7 @@ export async function advanceEnrollment(uid: string, enrollmentId: string): Prom
 	}
 
 	// 1. auto-stop check against the live lead.
-	const stopReason = evaluateStop(sequence, lead);
+	const stopReason = evaluateStop(sequence, lead, enrollment);
 	if (!sequence.enabled || stopReason) {
 		const reason: SequenceStoppedReason = sequence.enabled ? (stopReason as SequenceStoppedReason) : 'sequence-disabled';
 		await BoardsSequenceEnrollments.stop(enrollmentId, reason, new Date());
@@ -209,8 +209,14 @@ async function runStep(uid: string, lead: ILead, step: ISequenceStep, enrollment
 /**
  * Evaluate the sequence's stop conditions against the lead's current state.
  * Returns the matched stop condition, or undefined to keep running.
+ *
+ * `lead-responds` keys off `lastInboundAt` (an INBOUND comm) — NOT `lastContactedAt`,
+ * which `recordContact` also bumps on the drip's own outbound sends (that bug self-
+ * stopped a sequence right after its first message). We additionally require the
+ * inbound to land AFTER the enrollment's most recent activity (`lastRunAt`, else
+ * `enrolledAt`) so a stale pre-enrollment reply doesn't stop a freshly-started drip.
  */
-function evaluateStop(sequence: ISequence, lead: ILead): SequenceStopCondition | undefined {
+function evaluateStop(sequence: ISequence, lead: ILead, enrollment: ISequenceEnrollment): SequenceStopCondition | undefined {
 	for (const cond of sequence.stopOn ?? []) {
 		if (cond === 'converted' && (lead.convertedAt || lead.convertedMatterId)) {
 			return 'converted';
@@ -221,7 +227,7 @@ function evaluateStop(sequence: ISequence, lead: ILead): SequenceStopCondition |
 		if (cond === 'qualified' && lead.qualification?.qualified === true) {
 			return 'qualified';
 		}
-		if (cond === 'lead-responds' && lead.lastContactedAt) {
+		if (cond === 'lead-responds' && respondedAfterEnrollment(lead, enrollment)) {
 			return 'lead-responds';
 		}
 		// 'status-advances' is detected at the status-change seam (stopForLeadEvent);
@@ -231,6 +237,21 @@ function evaluateStop(sequence: ISequence, lead: ILead): SequenceStopCondition |
 		}
 	}
 	return undefined;
+}
+
+/**
+ * True when the lead has an INBOUND comm (`lastInboundAt`) recorded at/after the
+ * enrollment's last activity — the genuine "lead responded" signal. The service-
+ * level stop (`stopSequencesForLead('lead-responds')`, fired from `logCommunication`
+ * only on `direction:'in'`) already handles the live case; this is the defensive
+ * re-check the per-step worker runs against the live lead.
+ */
+function respondedAfterEnrollment(lead: ILead, enrollment: ISequenceEnrollment): boolean {
+	if (!lead.lastInboundAt) {
+		return false;
+	}
+	const since = enrollment.lastRunAt ?? enrollment.enrolledAt;
+	return new Date(lead.lastInboundAt).getTime() >= new Date(since).getTime();
 }
 
 // ---------------------------------------------------------------------------

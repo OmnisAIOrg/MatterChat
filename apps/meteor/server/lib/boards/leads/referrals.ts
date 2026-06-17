@@ -17,6 +17,12 @@ import { hasPermissionAsync } from '../../../../app/authorization/server/functio
  */
 
 export type CreateReferralOutFields = {
+	/**
+	 * When set, UPDATE the existing outbound referral instead of inserting a new
+	 * one — so re-saving an edited referral from the UI doesn't silently create a
+	 * duplicate row (the upsert was previously create-only). When omitted we insert.
+	 */
+	referralOutId?: string;
 	leadId: string;
 	toFirmName: string;
 	toReferralSourceId?: string;
@@ -29,23 +35,68 @@ export type CreateReferralOutFields = {
 	sentAt?: Date;
 };
 
-export type CreateReferralOutResult = { referralOut: IReferralOut; lead: ILead };
+export type CreateReferralOutResult = { referralOut: IReferralOut; lead: ILead; created: boolean };
 
 /**
- * Record an outbound referral for a lead. Creates the `boards_referrals_out` row
- * (status 'sent'), audit-logs `card.linked` on the lead card, and (optionally)
- * marks the lead lost with reason 'referred-out' so the pipeline reflects it.
+ * Upsert an outbound referral for a lead. With no `referralOutId` we INSERT the
+ * `boards_referrals_out` row (status 'sent') and audit-log `card.linked`; with a
+ * `referralOutId` we UPDATE that existing row's editable fields in place (no dup)
+ * and audit-log `field.changed`. The `status` is owned by `updateReferralOutStatus`
+ * — an update here never resets it.
  */
 export async function createReferralOut(uid: string, fields: CreateReferralOutFields): Promise<CreateReferralOutResult> {
 	if (!(await hasPermissionAsync(uid, 'boards-leads-referrals-manage'))) {
-		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'boards.leads.referralOut.create' });
+		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'boards.leads.referralOut.upsert' });
 	}
 	const lead = await BoardsLeads.findOneById(fields.leadId);
 	if (!lead) {
-		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'boards.leads.referralOut.create' });
+		throw new Meteor.Error('error-lead-not-found', 'Lead not found', { method: 'boards.leads.referralOut.upsert' });
 	}
 
 	const now = new Date();
+
+	// UPDATE path: patch the existing referral's editable fields (status untouched).
+	if (fields.referralOutId) {
+		const existing = await BoardsReferralsOut.findOneById(fields.referralOutId);
+		if (!existing || existing.leadId !== fields.leadId) {
+			throw new Meteor.Error('error-referral-out-not-found', 'Referral not found', {
+				method: 'boards.leads.referralOut.upsert',
+			});
+		}
+		await BoardsReferralsOut.updateReferralOut(fields.referralOutId, {
+			toFirmName: fields.toFirmName,
+			arrangement: fields.arrangement,
+			...(fields.toReferralSourceId !== undefined ? { toReferralSourceId: fields.toReferralSourceId } : {}),
+			...(fields.contact !== undefined ? { contact: fields.contact } : {}),
+			...(fields.agreedFeePct !== undefined ? { agreedFeePct: fields.agreedFeePct } : {}),
+			...(fields.expectedFee !== undefined ? { expectedFee: fields.expectedFee } : {}),
+			...(fields.agreementDocRef !== undefined ? { agreementDocRef: fields.agreementDocRef } : {}),
+			...(fields.notes !== undefined ? { notes: fields.notes } : {}),
+			...(fields.sentAt !== undefined ? { sentAt: fields.sentAt } : {}),
+		});
+
+		if (lead.boardId) {
+			await BoardsActivities.log({
+				boardId: lead.boardId,
+				...(lead.cardId ? { cardId: lead.cardId } : {}),
+				actor: uid,
+				verb: 'field.changed',
+				to: { referralOutId: fields.referralOutId, toFirmName: fields.toFirmName, arrangement: fields.arrangement },
+				ts: now,
+			});
+		}
+
+		const updated = await BoardsReferralsOut.findOneById(fields.referralOutId);
+		if (!updated) {
+			throw new Meteor.Error('error-referral-out-not-found', 'Referral not found after update', {
+				method: 'boards.leads.referralOut.upsert',
+			});
+		}
+		const freshLead = (await BoardsLeads.findOneById(fields.leadId)) ?? lead;
+		return { referralOut: updated, lead: freshLead, created: false };
+	}
+
+	// INSERT path.
 	const doc: Omit<IReferralOut, '_id' | '_updatedAt'> = {
 		leadId: fields.leadId,
 		toFirmName: fields.toFirmName,
@@ -66,7 +117,7 @@ export async function createReferralOut(uid: string, fields: CreateReferralOutFi
 	const referralOut = await BoardsReferralsOut.findOneById(insertedId);
 	if (!referralOut) {
 		throw new Meteor.Error('error-referral-out-not-found', 'Referral not found after create', {
-			method: 'boards.leads.referralOut.create',
+			method: 'boards.leads.referralOut.upsert',
 		});
 	}
 
@@ -82,7 +133,7 @@ export async function createReferralOut(uid: string, fields: CreateReferralOutFi
 	}
 
 	const fresh = (await BoardsLeads.findOneById(fields.leadId)) ?? lead;
-	return { referralOut, lead: fresh };
+	return { referralOut, lead: fresh, created: true };
 }
 
 export type UpdateReferralOutStatusParams = {

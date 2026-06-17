@@ -259,11 +259,14 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 	const dispatchToastMessage = useToastMessageDispatch();
 	const upsertReferralOut = useEndpoint('POST', '/v1/boards.leads.referralOut.upsert');
 	const setStatus = useEndpoint('POST', '/v1/boards.leads.referralOut.setStatus');
+	const listReferralsOut = useEndpoint('GET', '/v1/boards.leads.referralsOut.list');
+	const queryClient = useQueryClient();
 
 	const arrangementId = useId();
 	const statusId = useId();
 
-	// once created, we keep the id so the status updater can act on it
+	// once created (or selected for edit), we keep the id so the upsert UPDATES that
+	// referral in place (no dup) and the status updater can act on it.
 	const [created, setCreated] = useState<Serialized<IReferralOut> | null>(null);
 	const [status, setStatusValue] = useState<ReferralOutStatus>('sent');
 
@@ -271,10 +274,27 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 		register,
 		control,
 		handleSubmit,
+		watch,
+		reset,
 		formState: { errors, isSubmitting },
 	} = useForm<ReferOutFormValues>({
 		defaultValues: { leadId: '', toFirmName: '', arrangement: 'referral-fee', agreedFeePct: '', expectedFee: '', contactName: '', notes: '' },
 	});
+
+	// the lead the form is scoped to — drives the "existing outbound referrals" read.
+	const leadId = watch('leadId').trim();
+
+	const existingQueryKey = ['boards', 'leads', 'referralsOut', leadId];
+	const { data: existingData, isLoading: existingLoading } = useQuery({
+		queryKey: existingQueryKey,
+		queryFn: () => listReferralsOut({ leadId }),
+		enabled: leadId.length > 0,
+	});
+	const existing: Serialized<IReferralOut>[] = existingData?.referralsOut ?? [];
+
+	const refetchExisting = (): void => {
+		void queryClient.invalidateQueries({ queryKey: existingQueryKey });
+	};
 
 	const arrangementOptions = useMemo<SelectOption[]>(
 		() => ARRANGEMENTS.map((a) => [a, t(`Boards_Leads_Arrangement_${a}` as Parameters<typeof t>[0], { defaultValue: a })]),
@@ -285,11 +305,28 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 		[t],
 	);
 
+	// Load an existing referral back into the form to EDIT it (re-save updates in place).
+	const editExisting = (referral: Serialized<IReferralOut>): void => {
+		setCreated(referral);
+		setStatusValue(referral.status);
+		reset({
+			leadId: referral.leadId,
+			toFirmName: referral.toFirmName,
+			arrangement: referral.arrangement,
+			agreedFeePct: referral.agreedFeePct !== undefined ? String(referral.agreedFeePct) : '',
+			expectedFee: referral.expectedFee !== undefined ? String(referral.expectedFee) : '',
+			contactName: referral.contact?.name ?? '',
+			notes: referral.notes ?? '',
+		});
+	};
+
 	const upsertMutation = useMutation({
 		mutationFn: (values: ReferOutFormValues) => {
 			const agreedFeePct = values.agreedFeePct.trim() ? Number(values.agreedFeePct) : undefined;
 			const expectedFee = values.expectedFee.trim() ? Number(values.expectedFee) : undefined;
 			return upsertReferralOut({
+				// when editing an existing referral, target it so we UPDATE (no duplicate).
+				...(created ? { referralOutId: created._id } : {}),
 				leadId: values.leadId.trim(),
 				toFirmName: values.toFirmName.trim(),
 				arrangement: values.arrangement,
@@ -303,6 +340,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 			dispatchToastMessage({ type: 'success', message: t('Saved') });
 			setCreated(result.referralOut);
 			setStatusValue(result.referralOut.status);
+			refetchExisting();
 			onSaved();
 		},
 		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
@@ -318,6 +356,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 		onSuccess: (result) => {
 			dispatchToastMessage({ type: 'success', message: t('Saved') });
 			setCreated(result.referralOut);
+			refetchExisting();
 			onSaved();
 		},
 		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
@@ -338,15 +377,86 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 			<Field>
 				<FieldLabel>{t('Boards_Lead', { defaultValue: 'Lead' })} ID</FieldLabel>
 				<FieldRow>
+					{/* lead is locked once editing an existing referral so the row isn't re-homed */}
 					<TextInput {...register('leadId', { required: t('Required_field', { field: 'Lead ID' }) })} disabled={Boolean(created)} />
 				</FieldRow>
 				{errors.leadId && <FieldError>{errors.leadId.message}</FieldError>}
 			</Field>
 
+			{/* Existing outbound referrals for this lead (load on reopen — no silent dup on edit) */}
+			{leadId.length > 0 && (
+				<Box mbs={12}>
+					<Box fontScale='c1' color='hint' mbe={4}>
+						{t('Boards_Leads_Referrals_Out_Existing', { defaultValue: 'Existing outbound referrals' })}
+					</Box>
+					{existingLoading && (
+						<Box display='flex' justifyContent='center' p={8}>
+							<Throbber />
+						</Box>
+					)}
+					{!existingLoading && existing.length === 0 && (
+						<Box fontScale='c1' color='hint'>
+							{t('No_results_found')}
+						</Box>
+					)}
+					{existing.length > 0 && (
+						<Table fixed>
+							<TableHead>
+								<TableRow>
+									<TableCell>{t('Boards_Leads_Referral_Out_Firm', { defaultValue: 'Firm' })}</TableCell>
+									<TableCell>{t('Boards_Leads_Referral_Out_Status', { defaultValue: 'Arrangement' })}</TableCell>
+									<TableCell align='end'>{t('Boards_Leads_Referral_Out_Fee', { defaultValue: 'Fee' })}</TableCell>
+									<TableCell>{t('Status')}</TableCell>
+									<TableCell align='end' />
+								</TableRow>
+							</TableHead>
+							<TableBody>
+								{existing.map((r) => (
+									<TableRow key={r._id} action onClick={() => editExisting(r)}>
+										<TableCell>
+											<Box withTruncatedText>{r.toFirmName}</Box>
+										</TableCell>
+										<TableCell>
+											{t(`Boards_Leads_Arrangement_${r.arrangement}` as Parameters<typeof t>[0], { defaultValue: r.arrangement })}
+										</TableCell>
+										<TableCell align='end'>
+											{r.agreedFeePct !== undefined ? `${r.agreedFeePct}%` : fmtCurrency(r.expectedFee)}
+											{r.receivedFee !== undefined ? ` · ${fmtCurrency(r.receivedFee)}` : ''}
+										</TableCell>
+										<TableCell>
+											<Tag variant={r.status === 'fee-received' ? 'primary' : r.status === 'declined' ? 'danger' : 'secondary'}>
+												{t(`Boards_Leads_ReferralOut_Status_${r.status}` as Parameters<typeof t>[0], { defaultValue: r.status })}
+											</Tag>
+										</TableCell>
+										<TableCell align='end'>
+											<Button tiny onClick={() => editExisting(r)}>
+												{t('Edit', { defaultValue: 'Edit' })}
+											</Button>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					)}
+					{created && (
+						<Button
+							tiny
+							mbs={8}
+							onClick={() => {
+								setCreated(null);
+								reset({ leadId, toFirmName: '', arrangement: 'referral-fee', agreedFeePct: '', expectedFee: '', contactName: '', notes: '' });
+							}}
+						>
+							{t('Boards_Leads_Referral_Out_New', { defaultValue: 'Refer out' })}
+						</Button>
+					)}
+				</Box>
+			)}
+
 			<Field mbs={12}>
-				<FieldLabel>{t('Boards_Leads_Referral_Out_New', { defaultValue: 'Refer to firm' })}</FieldLabel>
+				<FieldLabel>{t('Boards_Leads_Referral_Out_Firm', { defaultValue: 'Refer to firm' })}</FieldLabel>
 				<FieldRow>
-					<TextInput {...register('toFirmName', { required: t('Required_field', { field: t('Name') }) })} disabled={Boolean(created)} />
+					<TextInput {...register('toFirmName', { required: t('Required_field', { field: t('Name') }) })} />
 				</FieldRow>
 				{errors.toFirmName && <FieldError>{errors.toFirmName.message}</FieldError>}
 			</Field>
@@ -358,7 +468,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 						control={control}
 						name='arrangement'
 						render={({ field: { onChange, value } }) => (
-							<Select id={arrangementId} value={value} onChange={(next) => onChange(next as ReferralArrangement)} options={arrangementOptions} disabled={Boolean(created)} />
+							<Select id={arrangementId} value={value} onChange={(next) => onChange(next as ReferralArrangement)} options={arrangementOptions} />
 						)}
 					/>
 				</FieldRow>
@@ -368,13 +478,13 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 				<Field mi={4}>
 					<FieldLabel>{t('Boards_Leads_Referral_Out_Fee', { defaultValue: 'Referral fee' })} (%)</FieldLabel>
 					<FieldRow>
-						<TextInput {...register('agreedFeePct')} placeholder='33.3' disabled={Boolean(created)} />
+						<TextInput {...register('agreedFeePct')} placeholder='33.3' />
 					</FieldRow>
 				</Field>
 				<Field mi={4}>
-					<FieldLabel>{t('Boards_Leads_Referral_Out_Fee', { defaultValue: 'Expected fee' })} ($)</FieldLabel>
+					<FieldLabel>{t('Boards_Leads_Referral_Out_Expected_Fee', { defaultValue: 'Expected fee' })} ($)</FieldLabel>
 					<FieldRow>
-						<TextInput {...register('expectedFee')} placeholder='0' disabled={Boolean(created)} />
+						<TextInput {...register('expectedFee')} placeholder='0' />
 					</FieldRow>
 				</Field>
 			</Box>
@@ -382,14 +492,14 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 			<Field mbs={12}>
 				<FieldLabel>{t('Contact')}</FieldLabel>
 				<FieldRow>
-					<TextInput {...register('contactName')} disabled={Boolean(created)} />
+					<TextInput {...register('contactName')} />
 				</FieldRow>
 			</Field>
 
 			<Field mbs={12}>
 				<FieldLabel>{t('Notes', { defaultValue: 'Notes' })}</FieldLabel>
 				<FieldRow>
-					<TextAreaInput rows={2} {...register('notes')} disabled={Boolean(created)} />
+					<TextAreaInput rows={2} {...register('notes')} />
 				</FieldRow>
 			</Field>
 

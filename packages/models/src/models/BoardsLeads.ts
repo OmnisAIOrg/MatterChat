@@ -1,4 +1,4 @@
-import type { ILead, ILeadQualification, LeadLostReason, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
+import type { ICommunication, ILead, ILeadQualification, LeadLostReason, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
 import type { IBoardsLeadsModel } from '@rocket.chat/model-typings';
 import type { Collection, Db, Filter, FindCursor, FindOptions, IndexDescription, UpdateResult } from 'mongodb';
 
@@ -146,11 +146,17 @@ export class BoardsLeadsRaw extends BaseRaw<ILead> implements IBoardsLeadsModel 
 		);
 	}
 
-	public recordContact(leadId: string, at: Date): Promise<UpdateResult> {
+	public recordContact(leadId: string, at: Date, direction?: ICommunication['direction']): Promise<UpdateResult> {
 		return this.updateOne(
 			{ _id: leadId },
 			{
-				$set: { lastContactedAt: at, lastActivityAt: at },
+				$set: {
+					lastContactedAt: at,
+					lastActivityAt: at,
+					// only an INBOUND comm marks the lead as having genuinely responded;
+					// outbound drip sends must NOT stamp this (else a sequence self-stops).
+					...(direction === 'in' ? { lastInboundAt: at } : {}),
+				},
 				$min: { 'ownership.slaFirstContactAt': at },
 				$unset: { coldSince: '' },
 				$inc: { rev: 1 },
