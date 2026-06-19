@@ -6,6 +6,7 @@ import { createBoardsAutomationSettings } from './automation';
 import { createBoardsCaseProSettings } from './boards-casepro';
 import { createBoardsReportingSettings } from './boardsReporting';
 import { createBotsSettings } from './bots';
+import { createOmnisAIOAuthSettings } from './omnisai';
 import { createCasSettings } from './cas';
 import { createCrowdSettings } from './crowd';
 import { createEmojiSettings } from './custom-emoji';
@@ -48,6 +49,7 @@ await Promise.all([
 	createBoardsSettings(),
 	createBoardsAutomationSettings(),
 	createBoardsCaseProSettings(),
+	createOmnisAIOAuthSettings(),
 	createBoardsReportingSettings(),
 	createBotsSettings(),
 	createCasSettings(),

@@ -154,6 +154,9 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 		return <EmailConfirmationForm onBackToLogin={() => clearErrors('usernameOrEmail')} email={getValues('usernameOrEmail')} />;
 	}
 
+	const omnisaiOidcEnabled = useSetting('OmnisAI_OIDC_Enabled', false);
+	const omnisaiButtonLabel = useSetting('OmnisAI_OIDC_Button_Label', 'Sign in with OmnisAI');
+
 	const hasAuthError = errors.password?.type === 'user-not-found';
 
 	return (
@@ -244,6 +247,18 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 						</p>
 					</Form.Footer>
 				</>
+			)}
+			{omnisaiOidcEnabled && (
+				<ButtonGroup>
+					<Button
+						disabled={loginMutation.isPending}
+						onClick={(): void => {
+							window.location.href = '/_omnisai/authorize';
+						}}
+					>
+						{omnisaiButtonLabel}
+					</Button>
+				</ButtonGroup>
 			)}
 			<LoginServices disabled={loginMutation.isPending} setError={setErrorOnSubmit} />
 		</Form>
