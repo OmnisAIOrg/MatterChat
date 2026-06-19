@@ -39,7 +39,7 @@ export const createIRCSettings = () =>
 			i18nDescription: 'IRC_Name',
 		});
 
-		await this.add('IRC_Description', 'Rocket.Chat IRC Bridge', {
+		await this.add('IRC_Description', 'MatterChat IRC Bridge', {
 			type: 'string',
 			i18nLabel: 'Description',
 			i18nDescription: 'IRC_Description',

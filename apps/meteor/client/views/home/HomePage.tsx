@@ -1,7 +1,7 @@
 import { useSetting } from '@rocket.chat/ui-contexts';
 
 import CustomHomePage from './CustomHomePage';
-import DefaultHomePage from './DefaultHomePage';
+import MyDayHomePage from './MyDayHomePage';
 
 const HomePage = () => {
 	const customOnly = useSetting('Layout_Custom_Body_Only');
@@ -10,7 +10,8 @@ const HomePage = () => {
 		return <CustomHomePage />;
 	}
 
-	return <DefaultHomePage />;
+	// MatterChat's home is the "My Day" command center (replaces RC's getting-started cards).
+	return <MyDayHomePage />;
 };
 
 export default HomePage;

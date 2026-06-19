@@ -1,6 +1,10 @@
 import { createAccountSettings } from './accounts';
 import { createAnalyticsSettings } from './analytics';
 import { createAssetsSettings } from './assets';
+import { createBoardsSettings } from './boards';
+import { createBoardsAutomationSettings } from './automation';
+import { createBoardsCaseProSettings } from './boards-casepro';
+import { createBoardsReportingSettings } from './boardsReporting';
 import { createBotsSettings } from './bots';
 import { createCasSettings } from './cas';
 import { createCrowdSettings } from './crowd';
@@ -41,6 +45,10 @@ await Promise.all([
 	createAccountSettings(),
 	createAnalyticsSettings(),
 	createAssetsSettings(),
+	createBoardsSettings(),
+	createBoardsAutomationSettings(),
+	createBoardsCaseProSettings(),
+	createBoardsReportingSettings(),
 	createBotsSettings(),
 	createCasSettings(),
 	createCrowdSettings(),

@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 
 import AccessibilityShortcut from './AccessibilityShortcut';
+import AppLeftRail from './AppLeftRail';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
 import NavBar from '../../../navbar';
@@ -61,6 +62,7 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav'].filter(Boolean).join(' ')}
 			>
 				<MainLayoutStyleTags />
+				{!removeSidenav && <AppLeftRail />}
 				{!removeSidenav && (
 					<FeaturePreview feature='secondarySidebar'>
 						<FeaturePreviewOn>

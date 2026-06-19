@@ -239,4 +239,61 @@ export const permissions = [
 	{ _id: 'manage-moderation-actions', roles: ['admin'] },
 	{ _id: 'bypass-time-limit-edit-and-delete', roles: ['bot', 'app'] },
 	{ _id: 'export-messages-as-pdf', roles: ['admin', 'user'] },
+
+	// Boards (kanban / matters / leads) — see omnis-boards-build MASTER-PLAN §A.4
+	{ _id: 'boards-view', roles: ['admin', 'user'] },
+	{ _id: 'boards-create', roles: ['admin', 'user', 'attorney', 'case-manager'] },
+	{ _id: 'boards-admin', roles: ['admin'] },
+	{ _id: 'boards-matters-view', roles: ['admin', 'attorney', 'case-manager', 'paralegal'] },
+	{ _id: 'boards-matters-edit', roles: ['admin', 'attorney', 'case-manager'] },
+	{ _id: 'boards-matters-writeback', roles: ['admin'] },
+	{ _id: 'boards-leads-view', roles: ['admin', 'intake-specialist', 'attorney'] },
+	{ _id: 'boards-leads-edit', roles: ['admin', 'intake-specialist'] },
+	{ _id: 'boards-convert-lead', roles: ['admin', 'attorney', 'intake-specialist'] },
+	{ _id: 'boards-casepro-view', roles: ['admin', 'attorney', 'case-manager'] },
+	{ _id: 'boards-casepro-sync', roles: ['admin'] },
+	{ _id: 'boards-manage-casepro-settings', roles: ['admin'] },
+	{ _id: 'boards-casepro-write', roles: ['admin'] },
+	// Boards M7 (automation engine) — manage rules/buttons/scheduled/sequences, run buttons,
+	// gate CasePro write-back actions, and the broad read on the run-log/audit view.
+	{ _id: 'boards-manage-automations', roles: ['admin', 'attorney', 'case-manager', 'intake-manager'] },
+	{ _id: 'boards-run-automation', roles: ['admin', 'attorney', 'case-manager', 'intake-manager', 'paralegal', 'intake-specialist'] },
+	{ _id: 'boards-automation-casepro-writeback', roles: ['admin'] },
+	{ _id: 'boards-view-automation-runs', roles: ['admin', 'attorney', 'case-manager', 'paralegal', 'intake-manager', 'intake-specialist'] },
+	{ _id: 'boards-manage-intake-config', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-manage-referrals', roles: ['admin', 'intake-manager', 'marketing'] },
+	{ _id: 'boards-manage-marketing', roles: ['admin', 'marketing'] },
+	{ _id: 'boards-manage-signups', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-share-external', roles: [] },
+
+	// Boards M5 (matter depth) — playbooks, deadlines/SOL, reporting
+	{ _id: 'boards-matters-playbooks-manage', roles: ['admin', 'attorney', 'case-manager'] },
+	{ _id: 'boards-matters-deadlines-manage', roles: ['admin', 'attorney', 'case-manager'] },
+	{ _id: 'boards-matters-deadlines-acknowledge', roles: ['admin', 'attorney', 'case-manager', 'paralegal'] },
+	{ _id: 'boards-matters-reports-view', roles: ['admin', 'attorney', 'case-manager', 'paralegal'] },
+
+	// Boards M6 (lead/intake depth) — comms, templates, sequences, referrals, marketing, sign-ups, conflict, reporting
+	{ _id: 'boards-leads-comms', roles: ['admin', 'intake-specialist'] },
+	{ _id: 'boards-leads-templates-manage', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-leads-sequences-manage', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-leads-referrals-manage', roles: ['admin', 'intake-manager', 'marketing'] },
+	{ _id: 'boards-leads-marketing-manage', roles: ['admin', 'marketing'] },
+	{ _id: 'boards-leads-signups-manage', roles: ['admin', 'intake-manager'] },
+	{ _id: 'boards-leads-conflict-check', roles: ['admin', 'intake-specialist', 'intake-manager'] },
+	{ _id: 'boards-leads-reports-view', roles: ['admin', 'intake-specialist', 'attorney'] },
+
+	// Boards M8 (reporting / saved views / AI) — see omnis-boards-build MASTER-PLAN §B M8
+	// boards-view-reports gates the cross-pipeline source-to-settlement report + the dashboard view (broad).
+	// boards-manage-saved-views gates creating/sharing saved Table/Timeline/Dashboard views (broad).
+	// boards-ai-generate gates the ai.generate automation action + the AI demand/summary card buttons.
+	// (Notifications are per-user: the inbox/bell needs no new permission.)
+	{
+		_id: 'boards-view-reports',
+		roles: ['admin', 'attorney', 'case-manager', 'paralegal', 'intake-manager', 'intake-specialist', 'marketing'],
+	},
+	{
+		_id: 'boards-manage-saved-views',
+		roles: ['admin', 'attorney', 'case-manager', 'paralegal', 'intake-manager', 'intake-specialist', 'marketing'],
+	},
+	{ _id: 'boards-ai-generate', roles: ['admin', 'attorney', 'case-manager'] },
 ];

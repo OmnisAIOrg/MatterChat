@@ -7,6 +7,26 @@ import {
 	AvatarsRaw,
 	BannersDismissRaw,
 	BannersRaw,
+	BoardsActivitiesRaw,
+	BoardsAutomationRunsRaw,
+	BoardsAutomationsRaw,
+	BoardsBoardsRaw,
+	BoardsCardsRaw,
+	BoardsCommTemplatesRaw,
+	BoardsCommunicationsRaw,
+	BoardsDeadlinesRaw,
+	BoardsIntakeTasksRaw,
+	BoardsLeadsRaw,
+	BoardsListsRaw,
+	BoardsNotificationsRaw,
+	BoardsPlaybooksRaw,
+	BoardsReferralsOutRaw,
+	BoardsReferralSourcesRaw,
+	BoardsSavedViewsRaw,
+	BoardsSequenceEnrollmentsRaw,
+	BoardsSequencesRaw,
+	BoardsSignupPacketsRaw,
+	BoardsSubscriptionsRaw,
 	CalendarEventRaw,
 	CallHistoryRaw,
 	CredentialTokensRaw,
@@ -89,6 +109,26 @@ registerModel('IAvatarsModel', new AvatarsRaw(db));
 registerModel('IBannersDismissModel', new BannersDismissRaw(db));
 registerModel('IBannersModel', new BannersRaw(db));
 registerModel('ICalendarEventModel', new CalendarEventRaw(db));
+registerModel('IBoardsBoardsModel', new BoardsBoardsRaw(db, trashCollection));
+registerModel('IBoardsListsModel', new BoardsListsRaw(db, trashCollection));
+registerModel('IBoardsCardsModel', new BoardsCardsRaw(db, trashCollection));
+registerModel('IBoardsActivitiesModel', new BoardsActivitiesRaw(db));
+registerModel('IBoardsLeadsModel', new BoardsLeadsRaw(db, trashCollection));
+registerModel('IBoardsReferralSourcesModel', new BoardsReferralSourcesRaw(db, trashCollection));
+registerModel('IBoardsCommunicationsModel', new BoardsCommunicationsRaw(db));
+registerModel('IBoardsCommTemplatesModel', new BoardsCommTemplatesRaw(db, trashCollection));
+registerModel('IBoardsIntakeTasksModel', new BoardsIntakeTasksRaw(db, trashCollection));
+registerModel('IBoardsPlaybooksModel', new BoardsPlaybooksRaw(db, trashCollection));
+registerModel('IBoardsDeadlinesModel', new BoardsDeadlinesRaw(db, trashCollection));
+registerModel('IBoardsSequencesModel', new BoardsSequencesRaw(db, trashCollection));
+registerModel('IBoardsSequenceEnrollmentsModel', new BoardsSequenceEnrollmentsRaw(db, trashCollection));
+registerModel('IBoardsReferralsOutModel', new BoardsReferralsOutRaw(db, trashCollection));
+registerModel('IBoardsSignupPacketsModel', new BoardsSignupPacketsRaw(db, trashCollection));
+registerModel('IBoardsAutomationsModel', new BoardsAutomationsRaw(db, trashCollection));
+registerModel('IBoardsAutomationRunsModel', new BoardsAutomationRunsRaw(db));
+registerModel('IBoardsSubscriptionsModel', new BoardsSubscriptionsRaw(db, trashCollection));
+registerModel('IBoardsNotificationsModel', new BoardsNotificationsRaw(db, trashCollection));
+registerModel('IBoardsSavedViewsModel', new BoardsSavedViewsRaw(db, trashCollection));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));

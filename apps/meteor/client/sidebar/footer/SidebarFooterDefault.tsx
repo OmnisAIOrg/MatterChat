@@ -1,40 +1,32 @@
-import { css } from '@rocket.chat/css-in-js';
-import { Box, SidebarDivider, Palette, SidebarFooter as Footer } from '@rocket.chat/fuselage';
-import { useThemeMode } from '@rocket.chat/ui-client';
-import { useSetting } from '@rocket.chat/ui-contexts';
-import DOMPurify from 'dompurify';
+import { Box, SidebarDivider, SidebarFooter as Footer } from '@rocket.chat/fuselage';
 
 import { SidebarFooterWatermark } from './SidebarFooterWatermark';
 
+const BRAND_RED = '#e1140a';
+
+// White-label footer: the MatterChat wordmark sits above the "Powered by Omnis AI"
+// line (SidebarFooterWatermark).
+//
+// The wordmark is rendered as TEXT, not the source PNG, on purpose: the supplied logo's
+// "Chat" half is white (built for a dark background) so it vanished on the light sidebar,
+// and Fuselage <Box is='img'> silently dropped the explicit pixel height (oversized/clipped).
+// Text fixes both — "Matter" in brand red, "Chat" in the theme's default font color so it
+// stays legible on light *and* dark, crisp at any zoom, and perfectly aligned to the
+// sidebar's inline padding.
 const SidebarFooterDefault = () => {
-	const [, , theme] = useThemeMode();
-	const logo = useSetting(theme === 'dark' ? 'Layout_Sidenav_Footer_Dark' : 'Layout_Sidenav_Footer', '').trim();
-
-	const sidebarFooterStyle = css`
-		& img {
-			max-width: 100%;
-			height: 100%;
-		}
-
-		& a:any-link {
-			color: ${Palette.text['font-info']};
-		}
-	`;
-
 	return (
 		<Footer>
 			<SidebarDivider />
-			<Box
-				is='footer'
-				pb={12}
-				pi={16}
-				height='x48'
-				width='auto'
-				className={sidebarFooterStyle}
-				dangerouslySetInnerHTML={{
-					__html: DOMPurify.sanitize(logo),
-				}}
-			/>
+			<Box is='footer' pbs={12} pbe={4} pi={16}>
+				<Box is='span' style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1 }}>
+					<Box is='span' style={{ color: BRAND_RED }}>
+						Matter
+					</Box>
+					<Box is='span' color='default'>
+						Chat
+					</Box>
+				</Box>
+			</Box>
 			<SidebarFooterWatermark />
 		</Footer>
 	);

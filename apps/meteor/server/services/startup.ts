@@ -6,6 +6,7 @@ import { MongoInternals } from 'meteor/mongo';
 import { AuthorizationLivechat } from '../../app/livechat/server/roomAccessValidator.internalService';
 import { isRunningMs } from '../lib/isRunningMs';
 import { AnalyticsService } from './analytics/service';
+import { Automation } from './automation/service';
 import { AppsEngineService } from './apps-engine/service';
 import { BannerService } from './banner/service';
 import { CalendarService } from './calendar/service';
@@ -61,6 +62,9 @@ export const registerServices = async (): Promise<void> => {
 	api.registerService(new UserService());
 	api.registerService(new MediaCallService());
 	api.registerService(new CallHistoryService());
+	// Boards Automation engine (M7) — register the same singleton the event seam / cron /
+	// REST call directly, so the core-services lifecycle and the direct-call surface agree.
+	api.registerService(Automation);
 
 	// if the process is running in micro services mode we don't need to register services that will run separately
 	if (!isRunningMs()) {

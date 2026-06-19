@@ -80,6 +80,26 @@ import type {
 	IMediaCallNegotiationsModel,
 	ICallHistoryModel,
 	IAbacAttributesModel,
+	IBoardsBoardsModel,
+	IBoardsListsModel,
+	IBoardsCardsModel,
+	IBoardsActivitiesModel,
+	IBoardsLeadsModel,
+	IBoardsReferralSourcesModel,
+	IBoardsCommunicationsModel,
+	IBoardsCommTemplatesModel,
+	IBoardsIntakeTasksModel,
+	IBoardsPlaybooksModel,
+	IBoardsDeadlinesModel,
+	IBoardsSequencesModel,
+	IBoardsSequenceEnrollmentsModel,
+	IBoardsReferralsOutModel,
+	IBoardsSignupPacketsModel,
+	IBoardsAutomationsModel,
+	IBoardsAutomationRunsModel,
+	IBoardsSubscriptionsModel,
+	IBoardsNotificationsModel,
+	IBoardsSavedViewsModel,
 } from '@rocket.chat/model-typings';
 import type { Collection, Db } from 'mongodb';
 
@@ -198,6 +218,26 @@ export const UsersSessions = proxify<IUsersSessionsModel>('IUsersSessionsModel')
 export const VideoConference = proxify<IVideoConferenceModel>('IVideoConferenceModel');
 export const WebdavAccounts = proxify<IWebdavAccountsModel>('IWebdavAccountsModel');
 export const CalendarEvent = proxify<ICalendarEventModel>('ICalendarEventModel');
+export const Boards = proxify<IBoardsBoardsModel>('IBoardsBoardsModel');
+export const BoardsLists = proxify<IBoardsListsModel>('IBoardsListsModel');
+export const BoardsCards = proxify<IBoardsCardsModel>('IBoardsCardsModel');
+export const BoardsActivities = proxify<IBoardsActivitiesModel>('IBoardsActivitiesModel');
+export const BoardsLeads = proxify<IBoardsLeadsModel>('IBoardsLeadsModel');
+export const BoardsReferralSources = proxify<IBoardsReferralSourcesModel>('IBoardsReferralSourcesModel');
+export const BoardsCommunications = proxify<IBoardsCommunicationsModel>('IBoardsCommunicationsModel');
+export const BoardsCommTemplates = proxify<IBoardsCommTemplatesModel>('IBoardsCommTemplatesModel');
+export const BoardsIntakeTasks = proxify<IBoardsIntakeTasksModel>('IBoardsIntakeTasksModel');
+export const BoardsPlaybooks = proxify<IBoardsPlaybooksModel>('IBoardsPlaybooksModel');
+export const BoardsDeadlines = proxify<IBoardsDeadlinesModel>('IBoardsDeadlinesModel');
+export const BoardsSequences = proxify<IBoardsSequencesModel>('IBoardsSequencesModel');
+export const BoardsSequenceEnrollments = proxify<IBoardsSequenceEnrollmentsModel>('IBoardsSequenceEnrollmentsModel');
+export const BoardsReferralsOut = proxify<IBoardsReferralsOutModel>('IBoardsReferralsOutModel');
+export const BoardsSignupPackets = proxify<IBoardsSignupPacketsModel>('IBoardsSignupPacketsModel');
+export const BoardsAutomations = proxify<IBoardsAutomationsModel>('IBoardsAutomationsModel');
+export const BoardsAutomationRuns = proxify<IBoardsAutomationRunsModel>('IBoardsAutomationRunsModel');
+export const BoardsSubscriptions = proxify<IBoardsSubscriptionsModel>('IBoardsSubscriptionsModel');
+export const BoardsNotifications = proxify<IBoardsNotificationsModel>('IBoardsNotificationsModel');
+export const BoardsSavedViews = proxify<IBoardsSavedViewsModel>('IBoardsSavedViewsModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
 	'IOmnichannelServiceLevelAgreementsModel',
 );

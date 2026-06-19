@@ -36,6 +36,7 @@
 	},
 	"resolutions": {
 		"external-editor/tmp": "0.2.7",
+		"@rocket.chat/logo": "patch:@rocket.chat/logo@npm%3A0.32.5#~/.yarn/patches/@rocket.chat-logo-npm-0.32.5-c79bfd8935.patch",
 		"@sematext/gc-stats@npm:^1.5.9": "patch:@sematext/gc-stats@npm%3A1.5.9#~/.yarn/patches/@sematext-gc-stats-npm-1.5.9-01e77be4d0.patch",
 		"adm-zip": "0.5.9",
 		"axios@npm:^1.6.1": "1.16.0",

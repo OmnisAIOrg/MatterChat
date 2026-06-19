@@ -1,0 +1,81 @@
+import type { IRocketChatRecord } from './IRocketChatRecord';
+import type { IUser } from './IUser';
+
+export type BoardsPipelineType = 'leads' | 'matters' | 'general';
+
+export type BoardsFieldType =
+	| 'text'
+	| 'number'
+	| 'date'
+	| 'checkbox'
+	| 'dropdown'
+	| 'member'
+	| 'currency'
+	| 'phone'
+	| 'email'
+	| 'url';
+
+export interface IBoardMember {
+	userId: IUser['_id'];
+	role: 'admin' | 'member' | 'observer';
+}
+
+export interface IBoardLabelDef {
+	id: string; // board-local id (nanoid)
+	name: string;
+	color: string;
+}
+
+export interface IBoardFieldDef {
+	id: string; // board-local id (nanoid)
+	name: string;
+	type: BoardsFieldType;
+	options?: { id: string; label: string; color?: string }[]; // dropdown only
+	showOnFront: boolean;
+	position: number;
+}
+
+export interface IBoardBackground {
+	kind: 'color' | 'image';
+	value: string;
+}
+
+/**
+ * CasePro pipeline binding. When set, lists were generated from a CasePro
+ * pipeline and each carries a `caseproStageId`. Owned/populated by the CasePro
+ * integration subsystem (M2); declared here so the board doc is fully typed now.
+ */
+export interface IBoardCaseProSync {
+	matterStageMap?: Record<string, string>; // listId -> matter_stages.id
+	intakeStageMap?: Record<string, string>; // listId -> intake_stages.id
+}
+
+export interface IBoard extends IRocketChatRecord {
+	title: string;
+	pipelineType: BoardsPipelineType;
+	description?: string;
+
+	teamId?: string; // Rocket.Chat Team _id (workspace)
+	rid?: string; // bound Rocket.Chat channel _id
+
+	background?: IBoardBackground;
+	icon?: string; // fuselage icon name e.g. 'kanban' | 'briefcase'
+
+	members: IBoardMember[];
+	labelDefs: IBoardLabelDef[];
+	fieldDefs: IBoardFieldDef[];
+
+	starredBy?: IUser['_id'][];
+	visibility: 'private' | 'team' | 'shared';
+
+	caseproSync?: IBoardCaseProSync;
+
+	// monotonic per-board counter backing card shortlink numbers (see nextCardNumber)
+	cardCounter: number;
+
+	schemaVersion: number;
+	archived: boolean;
+	rev: number;
+	createdBy: IUser['_id'];
+	createdAt: Date;
+}

@@ -7,6 +7,14 @@ import type { AssetsEndpoints } from './v1/assets';
 import type { AuthEndpoints } from './v1/auth';
 import type { AutoTranslateEndpoints } from './v1/autoTranslate';
 import type { BannersEndpoints } from './v1/banners';
+import type { BoardsEndpoints } from './v1/boards';
+import type { BoardsAutomationsEndpoints } from './v1/boards-automations';
+import type { BoardsLeadsEndpoints } from './v1/boards-leads';
+import type { BoardsMattersEndpoints } from './v1/boards-matters';
+import type { BoardsReportsEndpoints } from './v1/boards-reports';
+import type { BoardsViewsEndpoints } from './v1/boards-views';
+import type { BoardsNotificationsEndpoints } from './v1/boards-notifications';
+import type { BoardsAiEndpoints } from './v1/boards-ai';
 import type { CalendarEndpoints } from './v1/calendar';
 import type { ChannelsEndpoints } from './v1/channels';
 import type { ChatEndpoints } from './v1/chat';
@@ -87,6 +95,14 @@ export interface Endpoints
 		ImportEndpoints,
 		FederationEndpoints,
 		CalendarEndpoints,
+		BoardsEndpoints,
+		BoardsLeadsEndpoints,
+		BoardsMattersEndpoints,
+		BoardsAutomationsEndpoints,
+		BoardsReportsEndpoints,
+		BoardsViewsEndpoints,
+		BoardsNotificationsEndpoints,
+		BoardsAiEndpoints,
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
@@ -256,6 +272,14 @@ export * from './v1/e2e';
 export * from './v1/import';
 export * from './v1/email-inbox';
 export * from './v1/calendar';
+export * from './v1/boards';
+export * from './v1/boards-automations';
+export * from './v1/boards-leads';
+export * from './v1/boards-matters';
+export * from './v1/boards-reports';
+export * from './v1/boards-views';
+export * from './v1/boards-notifications';
+export * from './v1/boards-ai';
 export * from './v1/federation';
 export * from './v1/rooms';
 export * from './v1/groups';
