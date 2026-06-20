@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import AiAssistSection from './AiAssistSection';
+import CrossFirmSection from './CrossFirmSection';
 
 /**
  * MatterPanel — the "Linked Matter" section of a board card detail (M3a client).
@@ -577,6 +578,8 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 					<DeadlinesSection cardId={card._id} />
 					{/* M8 — AI assist (summary / Stowers demand draft); hidden without boards-ai-generate */}
 					<AiAssistSection cardId={card._id} />
+					{/* M9 — Cross-firm / opposing-counsel conversation, scoped to THIS matter */}
+					<CrossFirmSection matterId={matterId} />
 				</>
 			)}
 		</Box>

@@ -25,7 +25,6 @@ const OAuthAuthorizationPage = lazy(() => import('../views/oauth/OAuthAuthorizat
 const OAuthErrorPage = lazy(() => import('../views/oauth/OAuthErrorPage'));
 const NotFoundPage = lazy(() => import('../views/notFound/NotFoundPage'));
 const CallHistoryPage = lazy(() => import('../views/mediaCallHistory/CallHistoryPage'));
-const CrossFirmPage = lazy(() => import('../views/cross-firm/CrossFirmPage'));
 
 declare module '@rocket.chat/ui-contexts' {
 	interface IRouterPaths {
@@ -116,10 +115,6 @@ declare module '@rocket.chat/ui-contexts' {
 		'call-history': {
 			pathname: `/call-history${`/details/${string}` | ''}`;
 			pattern: '/call-history/:tab?/:historyId?';
-		};
-		'cross-firm': {
-			pathname: '/cross-firm';
-			pattern: '/cross-firm';
 		};
 	}
 }
@@ -253,15 +248,6 @@ router.defineRoutes([
 		element: appLayout.wrap(
 			<MainLayout>
 				<CallHistoryPage />
-			</MainLayout>,
-		),
-	},
-	{
-		path: '/cross-firm',
-		id: 'cross-firm',
-		element: appLayout.wrap(
-			<MainLayout>
-				<CrossFirmPage />
 			</MainLayout>,
 		),
 	},
