@@ -87,7 +87,7 @@ const CrossFirmPage = () => {
 		onError: onErr,
 	});
 	const exportRoom = useMutation({
-		mutationFn: () => request(`/matter-rooms/${selectedId}/export`, { method: 'POST', body: { requestingFirmId: firmId } }),
+		mutationFn: () => request(`/matter-rooms/${selectedId}/export`, { method: 'POST', body: { requestingFirmId: firmId, requestingAttorneyId: attorneyId } }),
 		onSuccess: (d) => {
 			const bundle = d.export;
 			const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
@@ -97,6 +97,17 @@ const CrossFirmPage = () => {
 			URL.revokeObjectURL(url);
 			dispatchToast({ type: 'success', message: `Defensible export: ${bundle?.messages?.length} msgs, integrity ${bundle?.integrity?.auditChainVerified ? 'OK' : 'FAILED'}` });
 		},
+		onError: onErr,
+	});
+	const screen = useMutation({
+		mutationFn: ({ screenAttorneyId, unscreen }: { screenAttorneyId: string; unscreen?: boolean }) =>
+			request(`/matter-rooms/${selectedId}/${unscreen ? 'unscreen' : 'screen'}`, { method: 'POST', body: { byAttorneyId: attorneyId, screenAttorneyId } }),
+		onSuccess: (_d: any, v: any) => { refreshRooms(); dispatchToast({ type: 'success', message: v.unscreen ? 'Attorney unscreened' : 'Attorney screened off this matter (ethical wall)' }); },
+		onError: onErr,
+	});
+	const setRetention = useMutation({
+		mutationFn: (days: number) => request(`/matter-rooms/${selectedId}/retention`, { method: 'POST', body: { byAttorneyId: attorneyId, days } }),
+		onSuccess: () => { refreshRooms(); dispatchToast({ type: 'success', message: 'Retention policy set' }); },
 		onError: onErr,
 	});
 
@@ -153,13 +164,25 @@ const CrossFirmPage = () => {
 							<Box display='flex' alignItems='center' justifyContent='space-between'>
 								<Box>
 									<Box fontScale='h4'>{selected.title}</Box>
-									<Box fontScale='c1' color='hint'>
-										{selected.members?.map((m: any) => `${m.name} (${m.firm}${m.represents ? ` — ${m.represents}` : ''})`).join('  ·  ')}
+									<Box fontScale='c1' color='hint' display='flex' flexDirection='column'>
+										{selected.members?.map((m: any) => (
+											<Box key={m.attorneyId} display='flex' alignItems='center' mbs={2}>
+												<Box>{m.name} ({m.firm}{m.represents ? ` — ${m.represents}` : ''})</Box>
+												{m.state === 'screened' && <Badge variant='warning' mis={4}>screened</Badge>}
+												{m.firm === firmName && m.attorneyId !== attorneyId && m.state !== 'invited' && (
+													<Button mis={8} small onClick={() => screen.mutate({ screenAttorneyId: m.attorneyId, unscreen: m.state === 'screened' })}>
+														{m.state === 'screened' ? 'Unscreen' : 'Screen (ethical wall)'}
+													</Button>
+												)}
+											</Box>
+										))}
 									</Box>
 								</Box>
 								<Box display='flex' alignItems='center'>
 									{selected.holdActive && <Badge variant='danger' mie={8}>HOLD</Badge>}
+									{selected.retention && <Badge mie={8}>{selected.retention.days}d retention</Badge>}
 									<Button small mie={8} onClick={() => toggleHold.mutate()}>{selected.holdActive ? 'Release hold' : 'Legal hold'}</Button>
+									<Button small mie={8} onClick={() => setRetention.mutate(2555)}>Set 7y retention</Button>
 									<Button small onClick={() => exportRoom.mutate()}><Icon name='download' size='x16' mie={4} />Export</Button>
 								</Box>
 							</Box>
