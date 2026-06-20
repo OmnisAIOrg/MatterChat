@@ -3,6 +3,7 @@ import { useLayout, usePermission } from '@rocket.chat/ui-contexts';
 import { useTranslation } from 'react-i18next';
 
 import NavBarItemBoards from './NavBarItemBoards';
+import NavBarItemCrossFirm from './NavBarItemCrossFirm';
 import NavBarItemBoardsNotifications from './NavBarItemBoardsNotifications';
 import NavBarItemCreateNew from './NavBarItemCreateNew';
 import NavBarItemDirectoryPage from './NavBarItemDirectoryPage';
@@ -27,6 +28,7 @@ const NavBarPagesGroup = () => {
 					<NavBarItemHomePage title={t('Home')} />
 					<NavBarItemDirectoryPage title={t('Directory')} />
 					<NavBarItemBoards title={t('Boards')} />
+					<NavBarItemCrossFirm title='Cross-firm' />
 					<NavBarItemBoardsNotifications />
 				</>
 			)}
