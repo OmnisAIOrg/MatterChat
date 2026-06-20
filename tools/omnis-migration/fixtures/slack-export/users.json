@@ -1,0 +1,32 @@
+[
+  {
+    "id": "U1PARA",
+    "name": "pat.paralegal",
+    "profile": {
+      "real_name": "Pat Paralegal",
+      "email": "paralegal@omnisai.io",
+      "image_512": "",
+      "image_original": "",
+      "status_text": "",
+      "title": "Paralegal"
+    },
+    "tz_offset": 0,
+    "deleted": false,
+    "is_bot": false
+  },
+  {
+    "id": "U2ALICE",
+    "name": "alice.associate",
+    "profile": {
+      "real_name": "Alice Associate",
+      "email": "alice@omnisai.io",
+      "image_512": "",
+      "image_original": "",
+      "status_text": "",
+      "title": "Associate Attorney"
+    },
+    "tz_offset": 0,
+    "deleted": false,
+    "is_bot": false
+  }
+]

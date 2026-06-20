@@ -1,0 +1,4 @@
+[
+  { "type": "message", "user": "U1PARA", "text": "Demand letter goes out today on Smith v. Jones.", "ts": "1609459200.000100", "subtype": null },
+  { "type": "message", "user": "U2ALICE", "text": "Got it — SOL is well clear, proceeding.", "ts": "1609459260.000200", "subtype": null }
+]

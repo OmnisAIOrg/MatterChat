@@ -1,0 +1,2 @@
+# ephemeral build/run logs — never commit (regenerable)
+*.log

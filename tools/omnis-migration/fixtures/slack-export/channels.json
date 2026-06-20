@@ -1,0 +1,13 @@
+[
+  {
+    "id": "C1GEN",
+    "name": "case-smith-v-jones",
+    "creator": "U1PARA",
+    "members": ["U1PARA", "U2ALICE"],
+    "topic": { "value": "Smith v. Jones coordination", "creator": "U1PARA", "last_set": 1609459200 },
+    "purpose": { "value": "Case team channel", "creator": "U1PARA", "last_set": 1609459200 },
+    "created": 1609459200,
+    "is_general": false,
+    "is_archived": false
+  }
+]
