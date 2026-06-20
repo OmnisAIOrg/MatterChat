@@ -32,6 +32,18 @@ import './loginHandler';
 
 const base64url = (buf: Buffer): string => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+// Decode a JWT's claims payload (no signature verification — the token comes straight from the
+// trusted token endpoint over TLS, not relayed by the user).
+function decodeJwtClaims(jwt: string): Record<string, any> {
+	try {
+		const payload = jwt.split('.')[1];
+		const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+		return JSON.parse(json) as Record<string, any>;
+	} catch {
+		return {};
+	}
+}
+
 type OmnisAIConfig = {
 	enabled: boolean;
 	issuer: string;
@@ -50,7 +62,7 @@ function getConfig(): OmnisAIConfig {
 
 const authorizeEndpoint = (c: OmnisAIConfig): string => `${c.issuer}/api/auth/mcp/authorize`;
 const tokenEndpoint = (c: OmnisAIConfig): string => `${c.issuer}/api/auth/mcp/token`;
-const userinfoEndpoint = (c: OmnisAIConfig): string => `${c.issuer}/api/auth/mcp/get-session`;
+const userinfoEndpoint = (c: OmnisAIConfig): string => `${c.issuer}/api/auth/mcp/userinfo`;
 const redirectUri = (): string => Meteor.absoluteUrl('_omnisai/callback');
 const stateKey = (state: string): string => `omnisai:state:${state}`;
 
@@ -127,17 +139,25 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			return fail(res, 'no_access_token');
 		}
 
-		// 2. Fetch identity from the userinfo (get-session) endpoint.
-		const infoRes = await fetch(userinfoEndpoint(config), {
-			ignoreSsrfValidation: true, // issuer is an admin-configured trusted host, not user input
-			headers: { Authorization: `Bearer ${tokens.access_token}` },
-		});
-		if (!infoRes.ok) {
-			return fail(res, `userinfo_${infoRes.status}`);
+		// 2. Resolve identity. Prefer the id_token claims (standard OIDC, present with the `openid`
+		// scope) — the live server's userinfo endpoint shape/path varies. Fall back to userinfo
+		// (flat `{ sub }` or the mock's `{ user: { id } }`) only when there's no id_token.
+		let u: Record<string, any> = {};
+		if (typeof tokens.id_token === 'string' && tokens.id_token.includes('.')) {
+			u = decodeJwtClaims(tokens.id_token);
+		} else {
+			const infoRes = await fetch(userinfoEndpoint(config), {
+				ignoreSsrfValidation: true, // issuer is an admin-configured trusted host, not user input
+				headers: { Authorization: `Bearer ${tokens.access_token}` },
+			});
+			if (!infoRes.ok) {
+				return fail(res, `userinfo_${infoRes.status}`);
+			}
+			const info = await infoRes.json();
+			u = (info?.user ?? info ?? {}) as Record<string, any>;
 		}
-		const session = await infoRes.json();
-		const u = session?.user;
-		if (!u?.id) {
+		const sub = u.sub ?? u.id;
+		if (!sub) {
 			return fail(res, 'no_subject');
 		}
 
@@ -145,7 +165,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		const credentialToken = Random.id();
 		await CredentialTokens.create(credentialToken, {
 			profile: {
-				sub: u.id,
+				sub,
 				email: u.email,
 				name: u.name,
 				username: u.preferred_username,
