@@ -46,6 +46,7 @@ import {
 	addRelation,
 	removeRelation,
 	searchCards,
+	copyBoard,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -480,6 +481,28 @@ API.v1.post(
 		const { cardId, type, targetCardId } = this.bodyParams as { cardId: string; type: any; targetCardId: string };
 		const card = await removeRelation(this.userId, cardId, type, targetCardId);
 		return API.v1.success({ card });
+	},
+);
+
+// Duplicate a board (structure + lists, not cards).
+const isBoardCopyProps = ajv.compile({
+	type: 'object',
+	properties: { boardId: { type: 'string', minLength: 1 } },
+	required: ['boardId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.copy',
+	{
+		authRequired: true,
+		body: isBoardCopyProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { boardId } = this.bodyParams as { boardId: string };
+		const board = await copyBoard(this.userId, boardId);
+		return API.v1.success({ board });
 	},
 );
 

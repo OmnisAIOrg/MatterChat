@@ -680,6 +680,62 @@ export async function removeRelation(uid: string, cardId: string, type: Relation
 	return (await BoardsCards.findOneById(cardId)) as IBoardCard;
 }
 
+// ---------------------------------------------------------------------------
+// Board copy / duplicate
+// ---------------------------------------------------------------------------
+
+/** Duplicate a board's structure — its lists, field/label defs, and settings — into a new board
+ * owned by the caller. Cards are NOT copied (a fresh project from the same template). */
+export async function copyBoard(uid: string, boardId: string): Promise<IBoard> {
+	const src = await Boards.findOneById(boardId);
+	if (!src) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.copy' });
+	}
+	await assertBoardRole(boardId, uid, 'member', 'boards.boardInfo');
+
+	const now = new Date();
+	const doc: Omit<IBoard, '_id' | '_updatedAt'> = {
+		title: `Copy of ${src.title}`,
+		pipelineType: src.pipelineType,
+		...(src.description ? { description: src.description } : {}),
+		...(src.icon ? { icon: src.icon } : {}),
+		...(src.background ? { background: src.background } : {}),
+		members: [{ userId: uid, role: 'admin' }],
+		labelDefs: (src.labelDefs || []).map((d) => ({ ...d })),
+		fieldDefs: (src.fieldDefs || []).map((d) => ({ ...d })),
+		visibility: src.visibility,
+		cardCounter: 0,
+		schemaVersion: src.schemaVersion ?? 1,
+		archived: false,
+		rev: 0,
+		createdBy: uid,
+		createdAt: now,
+	};
+	const { insertedId } = await Boards.insertOne(doc);
+	const board = await Boards.findOneById(insertedId);
+	if (!board) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.copy' });
+	}
+
+	const srcLists = await BoardsLists.findByBoard(boardId).toArray();
+	for (const list of srcLists.filter((l) => !l.archived).sort((a, b) => a.position - b.position)) {
+		await BoardsLists.insertOne({
+			boardId: board._id,
+			title: list.title,
+			position: list.position,
+			...(typeof list.wipLimit === 'number' ? { wipLimit: list.wipLimit } : {}),
+			...(list.subStatuses ? { subStatuses: [...list.subStatuses] } : {}),
+			...(list.collapsed ? { collapsed: list.collapsed } : {}),
+			archived: false,
+			rev: 0,
+		} as Omit<IBoardList, '_id' | '_updatedAt'>);
+	}
+
+	await BoardsActivities.log({ boardId: board._id, actor: uid, verb: 'board.created', to: { title: board.title, copiedFrom: src._id }, ts: now });
+	emitBoardEvent('board.created', { boardId: board._id, actor: uid });
+	return board;
+}
+
 /**
  * The drag hot path. Single model `move` (one $set listId/position/subStatus +
  * $inc rev), then audit + automation seam. `card.moved` carries from/to so the
