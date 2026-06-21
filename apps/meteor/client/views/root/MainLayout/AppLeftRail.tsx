@@ -176,7 +176,7 @@ const AppLeftRail = () => {
 			</Box>
 			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px' }}>
 				{renderItem('balloons', t('Chats'), handleChat, chatActive)}
-				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, boardsActive)}
+				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, Boolean(boardsActive))}
 				{canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
 				{renderItem('magnifier', t('Search'), handleSearch, false)}
 			</Box>

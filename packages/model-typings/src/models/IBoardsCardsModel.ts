@@ -1,10 +1,4 @@
-import type {
-	IBoardCard,
-	IBoardCardLink,
-	IMatterSnapshot,
-	BoardsFieldValue,
-	OmnisCardQuery,
-} from '@rocket.chat/core-typings';
+import type { IBoardCard, IBoardCardLink, IMatterSnapshot, BoardsFieldValue, OmnisCardQuery } from '@rocket.chat/core-typings';
 import type { FindCursor, FindOptions, UpdateResult } from 'mongodb';
 
 import type { IBaseModel } from './IBaseModel';
