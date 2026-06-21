@@ -3,6 +3,12 @@
 
 **Last updated:** 2026-06-21 · **Branch:** `feature/matterchat-cross-firm`
 
+## The product spans three repos (all on GitHub · OmnisAIOrg · private)
+- **`~/MatterChat`** ← you are here. The product (Boards, cross-firm UI, OmnisAI OIDC) + these resume docs.
+- **`~/matterchat-mcp-v2`** — the CHI tool server (MCP; 23 deterministic tools over `boards.*`).
+- **`~/omnis-counsel`** — the cross-firm **CFCS** service + customer KB (`docs/`) + demo scripts (`start-demo.sh`, `run-apex.sh`, `mc-mock-oidc.js`).
+> **Resuming needs only THIS repo's docs** — they point at the other two by path; persistent memory also knows the layout. Touch the other repos only when the task is in them.
+
 ## Running services (local dev)
 | Port | What | Notes |
 |---|---|---|
