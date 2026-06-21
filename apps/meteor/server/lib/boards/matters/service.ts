@@ -218,13 +218,22 @@ export async function linkMatterChannel(uid: string, cardId: string): Promise<IB
 			.replace(/(^-+|-+$)/g, '')
 			.slice(0, 64) || `matter-${card._id}`;
 
-	// find-or-reuse: unlink keeps the channel (preserves history), so a re-link must rebind the
-	// existing room rather than collide on its name.
-	const existing = await Rooms.findOneByNonValidatedName(name);
+	// find-or-reuse: a matter has one channel, even when the same matter appears as cards on
+	// multiple boards. Prefer the matter's existing room by its stable matterId; fall back to the
+	// channel name (covers a re-link after an unlink, which clears the markers but keeps the
+	// channel and its history).
+	const existing = (await Rooms.findOne({ matterId: card.link.matterId })) ?? (await Rooms.findOneByNonValidatedName(name));
 	let roomId: string;
 	if (existing) {
 		roomId = existing._id;
-		await Rooms.updateOne({ _id: roomId }, { $set: { matterCardId: card._id, matterId: card.link.matterId } });
+		// Don't clobber a back-pointer that still belongs to a different live card (same matter on
+		// two boards): only (re)claim matterCardId when it is unset or points to a card that's gone.
+		const ownerCardId = existing.matterCardId;
+		const claimedByOtherLiveCard = Boolean(ownerCardId && ownerCardId !== card._id && (await BoardsCards.findOneById(ownerCardId)));
+		await Rooms.updateOne(
+			{ _id: roomId },
+			{ $set: { matterId: card.link.matterId, ...(claimedByOtherLiveCard ? {} : { matterCardId: card._id }) } },
+		);
 	} else {
 		const room = await createRoom('p', name, owner, [], false, false, {
 			matterCardId: card._id,
