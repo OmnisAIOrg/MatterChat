@@ -42,6 +42,7 @@ import './saveUserProfile';
 import './sendConfirmationEmail';
 import './sendForgotPasswordEmail';
 import './setAvatarFromService';
+import './setRoomFolder';
 import './setUserActiveStatus';
 import './toggleFavorite';
 import './unmuteUserInRoom';

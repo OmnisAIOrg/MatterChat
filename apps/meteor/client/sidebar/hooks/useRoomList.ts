@@ -77,6 +77,8 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 			const conversation = new Set();
 			const onHold = new Set();
 			const matters = new Set();
+			// Omnis channel folders: one dynamic group per user-assigned folder label (key `folder:<name>`).
+			const folders = new Map<string, Set<any>>();
 
 			rooms.forEach((room) => {
 				if (room.archived) {
@@ -115,6 +117,14 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 				if (sidebarGroupByType && room.matterCardId) {
 					return matters.add(room);
+				}
+
+				if (sidebarGroupByType && room.folder) {
+					const key = `folder:${room.folder}`;
+					const bucket = folders.get(key) ?? new Set();
+					bucket.add(room);
+					folders.set(key, bucket);
+					return;
 				}
 
 				if (room.t === 'c' || room.t === 'p') {
@@ -161,7 +171,21 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 			!sidebarGroupByType && groups.set('Conversations', conversation);
 
-			const { groupsCount, groupsList, roomList, groupedUnreadInfo } = sidebarOrder.reduce(
+			// Add a group per folder, then weave the folder keys into the ordered key list just above
+			// "Channels" so folders sit with the channel groups (alpha-sorted for stability).
+			const folderKeys = sidebarGroupByType ? [...folders.keys()].sort() : [];
+			folderKeys.forEach((key) => {
+				const bucket = folders.get(key);
+				bucket && bucket.size && groups.set(key, bucket);
+			});
+
+			const channelsIndex = sidebarOrder.indexOf('Channels');
+			const orderedKeys: string[] =
+				folderKeys.length && channelsIndex >= 0
+					? [...sidebarOrder.slice(0, channelsIndex), ...folderKeys, ...sidebarOrder.slice(channelsIndex)]
+					: [...sidebarOrder, ...folderKeys];
+
+			const { groupsCount, groupsList, roomList, groupedUnreadInfo } = orderedKeys.reduce(
 				(acc, key) => {
 					const value = groups.get(key);
 
