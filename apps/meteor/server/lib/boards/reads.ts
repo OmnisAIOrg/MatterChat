@@ -96,3 +96,26 @@ export async function getMyDayCards(uid: string): Promise<{ cards: IBoardCard[] 
 	} as any).toArray();
 	return { cards };
 }
+
+/**
+ * Global search across the user's cards (title + description) over every board they belong to.
+ * Case-insensitive substring match (regex-escaped). Powers a cross-board search + CHI's search_cards.
+ */
+export async function searchCards(uid: string, text: string, limit = 50): Promise<{ cards: IBoardCard[] }> {
+	const q = (text || '').trim();
+	if (!q) {
+		return { cards: [] };
+	}
+	const boards = await Boards.findByMember(uid).toArray();
+	const boardIds = boards.filter((b) => !b.archived).map((b) => b._id);
+	if (!boardIds.length) {
+		return { cards: [] };
+	}
+	const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+	const cards = await BoardsCards.find({
+		boardId: { $in: boardIds },
+		archived: { $ne: true },
+		$or: [{ title: rx }, { description: rx }],
+	} as any).toArray();
+	return { cards: cards.slice(0, limit) };
+}

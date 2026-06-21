@@ -41,6 +41,11 @@ import {
 	getActivities,
 	getMyDayCards,
 	setRecurrence,
+	completeCard,
+	copyCard,
+	addRelation,
+	removeRelation,
+	searchCards,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -337,6 +342,23 @@ API.v1.get(
 	},
 );
 
+// Global cross-board card search (title + description).
+API.v1.get(
+	'boards.cards.search',
+	{
+		authRequired: true,
+		response: {
+			200: successSchema,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const text = typeof this.queryParams.text === 'string' ? this.queryParams.text : '';
+		const { cards } = await searchCards(this.userId, text);
+		return API.v1.success({ cards, count: cards.length });
+	},
+);
+
 // Recurring "routine" tasks: set or clear a card's repeat rule.
 const isCardRecurrenceProps = ajv.compile({
 	type: 'object',
@@ -373,6 +395,90 @@ API.v1.post(
 	async function action() {
 		const { cardId, recurrence } = this.bodyParams as { cardId: string; recurrence?: any };
 		const card = await setRecurrence(this.userId, cardId, recurrence ?? null);
+		return API.v1.success({ card });
+	},
+);
+
+// Card-level completion (Asana-style "done", distinct from dueComplete + archive).
+const isCardCompleteProps = ajv.compile({
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 }, completed: { type: 'boolean', nullable: true } },
+	required: ['cardId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.complete',
+	{
+		authRequired: true,
+		body: isCardCompleteProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, completed } = this.bodyParams as { cardId: string; completed?: boolean };
+		const card = await completeCard(this.userId, cardId, completed !== false);
+		return API.v1.success({ card });
+	},
+);
+
+// Duplicate a card.
+const isCardCopyProps = ajv.compile({
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 } },
+	required: ['cardId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.copy',
+	{
+		authRequired: true,
+		body: isCardCopyProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId } = this.bodyParams as { cardId: string };
+		const card = await copyCard(this.userId, cardId);
+		return API.v1.success({ card });
+	},
+);
+
+// Card relations / dependencies (blocks / blocked-by / relates / parent / child).
+const isCardRelationProps = ajv.compile({
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		type: { type: 'string', enum: ['relates', 'blocks', 'blocked-by', 'duplicate', 'parent', 'child'] },
+		targetCardId: { type: 'string', minLength: 1 },
+	},
+	required: ['cardId', 'type', 'targetCardId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.relations.add',
+	{
+		authRequired: true,
+		body: isCardRelationProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, type, targetCardId } = this.bodyParams as { cardId: string; type: any; targetCardId: string };
+		const card = await addRelation(this.userId, cardId, type, targetCardId);
+		return API.v1.success({ card });
+	},
+);
+
+API.v1.post(
+	'boards.card.relations.remove',
+	{
+		authRequired: true,
+		body: isCardRelationProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, type, targetCardId } = this.bodyParams as { cardId: string; type: any; targetCardId: string };
+		const card = await removeRelation(this.userId, cardId, type, targetCardId);
 		return API.v1.success({ card });
 	},
 );

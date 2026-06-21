@@ -110,6 +110,10 @@ export interface IBoardCard extends IRocketChatRecord {
 	startDate?: Date;
 	dueDate?: Date;
 	dueComplete?: boolean;
+	completed?: boolean; // Asana-style task-level "done" (independent of dueComplete and of archive)
+	completedAt?: Date;
+	completedBy?: IUser['_id'];
+	priority?: 'low' | 'medium' | 'high' | 'urgent';
 	cover?: ICardCover;
 
 	fieldValues: Record<string, BoardsFieldValue>; // fieldDef.id -> value

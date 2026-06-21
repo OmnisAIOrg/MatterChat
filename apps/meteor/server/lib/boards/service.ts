@@ -310,7 +310,7 @@ export async function createCard(uid: string, params: CreateCardParams): Promise
 export type UpdateCardPatch = Partial<
 	Pick<
 		IBoardCard,
-		'title' | 'description' | 'startDate' | 'dueDate' | 'dueComplete' | 'cover' | 'subStatus' | 'assignees' | 'watchers'
+		'title' | 'description' | 'startDate' | 'dueDate' | 'dueComplete' | 'cover' | 'subStatus' | 'assignees' | 'watchers' | 'priority'
 	>
 >;
 
@@ -348,6 +348,9 @@ export async function updateCard(uid: string, cardId: string, patch: UpdateCardP
 	}
 	if (Array.isArray(patch.watchers)) {
 		set.watchers = patch.watchers;
+	}
+	if (patch.priority !== undefined) {
+		set.priority = patch.priority;
 	}
 
 	await BoardsCards.updateOne({ _id: cardId }, { $set: set, $inc: { rev: 1 } });
@@ -504,6 +507,177 @@ export async function materializeRecurrence(uid: string, card: IBoardCard): Prom
 	});
 	emitBoardEvent('card.created', { boardId: card.boardId, listId: card.listId, cardId: next._id, actor: uid });
 	return next;
+}
+
+// ---------------------------------------------------------------------------
+// Card completion (Asana-style task-level "done", distinct from dueComplete + archive)
+// ---------------------------------------------------------------------------
+
+/** Mark a card complete/incomplete. Completing a recurring card also spawns the next occurrence. */
+export async function completeCard(uid: string, cardId: string, value = true): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardComplete' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	const update: Record<string, unknown> = value
+		? { $set: { completed: true, completedAt: new Date(), completedBy: uid }, $inc: { rev: 1 } }
+		: { $set: { completed: false }, $unset: { completedAt: 1, completedBy: 1 }, $inc: { rev: 1 } };
+	await BoardsCards.updateOne({ _id: cardId }, update);
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardComplete' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { completed: value },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+
+	if (value && !current.completed && current.recurrence) {
+		try {
+			await materializeRecurrence(uid, current);
+		} catch {
+			/* never fail completion because the next occurrence couldn't be created */
+		}
+	}
+	return card;
+}
+
+// ---------------------------------------------------------------------------
+// Card copy / duplicate
+// ---------------------------------------------------------------------------
+
+/** Duplicate a card into the same list: copies content (labels, assignees, checklists, fields,
+ * dates) but not comments/attachments/completion. */
+export async function copyCard(uid: string, cardId: string): Promise<IBoardCard> {
+	const src = await BoardsCards.findOneById(cardId);
+	if (!src) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardCopy' });
+	}
+	await assertBoardRole(src.boardId, uid, 'member', 'boards.cardCreate');
+
+	const now = new Date();
+	const position = (await BoardsCards.maxPosition(src.listId)) + POSITION_STEP;
+	const cardNumber = await Boards.nextCardNumber(src.boardId);
+	const doc: Omit<IBoardCard, '_id' | '_updatedAt'> = {
+		boardId: src.boardId,
+		listId: src.listId,
+		title: `Copy of ${src.title}`,
+		...(src.description ? { description: src.description } : {}),
+		position,
+		cardType: src.cardType,
+		...(src.link ? { link: src.link } : {}),
+		...(src.subStatus ? { subStatus: src.subStatus } : {}),
+		labels: [...(src.labels || [])],
+		assignees: [...(src.assignees || [])],
+		watchers: [...(src.watchers || [])],
+		...(src.startDate ? { startDate: src.startDate } : {}),
+		...(src.dueDate ? { dueDate: src.dueDate } : {}),
+		dueComplete: false,
+		...(src.cover ? { cover: src.cover } : {}),
+		fieldValues: { ...(src.fieldValues || {}) },
+		checklists: (src.checklists || []).map((cl) => ({ ...cl, items: cl.items.map((it) => ({ ...it, done: false })) })),
+		attachments: [],
+		comments: [],
+		cardNumber,
+		archived: false,
+		rev: 0,
+		createdBy: uid,
+		createdAt: now,
+	};
+	const { insertedId } = await BoardsCards.insertOne(doc);
+	const card = await BoardsCards.findOneById(insertedId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardCopy' });
+	}
+	await BoardsActivities.log({
+		boardId: src.boardId,
+		listId: src.listId,
+		cardId: card._id,
+		actor: uid,
+		verb: 'card.created',
+		to: { title: card.title, copiedFrom: src._id },
+		ts: now,
+	});
+	emitBoardEvent('card.created', { boardId: src.boardId, listId: src.listId, cardId: card._id, actor: uid });
+	return card;
+}
+
+// ---------------------------------------------------------------------------
+// Card relations / dependencies (blocks / blocked-by / relates / parent / child)
+// ---------------------------------------------------------------------------
+
+type RelationType = 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child';
+
+function inverseRelation(type: RelationType): RelationType {
+	switch (type) {
+		case 'blocks':
+			return 'blocked-by';
+		case 'blocked-by':
+			return 'blocks';
+		case 'parent':
+			return 'child';
+		case 'child':
+			return 'parent';
+		default:
+			return type; // relates / duplicate are symmetric
+	}
+}
+
+/** Link two cards with a typed relation, maintaining the inverse edge on the target. */
+export async function addRelation(uid: string, cardId: string, type: RelationType, targetCardId: string): Promise<IBoardCard> {
+	if (cardId === targetCardId) {
+		throw new Meteor.Error('error-invalid-relation', 'A card cannot relate to itself', { method: 'boards.cardRelations' });
+	}
+	const card = await BoardsCards.findOneById(cardId);
+	const target = await BoardsCards.findOneById(targetCardId);
+	if (!card || !target) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardRelations' });
+	}
+	await assertBoardRole(card.boardId, uid, 'member', 'boards.cardUpdate');
+	await assertBoardRole(target.boardId, uid, 'member', 'boards.cardUpdate');
+
+	await BoardsCards.updateOne({ _id: cardId }, { $addToSet: { relations: { type, cardId: targetCardId } }, $inc: { rev: 1 } });
+	await BoardsCards.updateOne(
+		{ _id: targetCardId },
+		{ $addToSet: { relations: { type: inverseRelation(type), cardId } }, $inc: { rev: 1 } },
+	);
+	await BoardsActivities.log({
+		boardId: card.boardId,
+		listId: card.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { relation: type, target: targetCardId },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: card.boardId, listId: card.listId, cardId, actor: uid });
+	return (await BoardsCards.findOneById(cardId)) as IBoardCard;
+}
+
+/** Remove a typed relation (and its inverse on the target). */
+export async function removeRelation(uid: string, cardId: string, type: RelationType, targetCardId: string): Promise<IBoardCard> {
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardRelations' });
+	}
+	await assertBoardRole(card.boardId, uid, 'member', 'boards.cardUpdate');
+
+	await BoardsCards.updateOne({ _id: cardId }, { $pull: { relations: { type, cardId: targetCardId } }, $inc: { rev: 1 } });
+	await BoardsCards.updateOne(
+		{ _id: targetCardId },
+		{ $pull: { relations: { type: inverseRelation(type), cardId } }, $inc: { rev: 1 } },
+	);
+	emitBoardEvent('card.updated', { boardId: card.boardId, listId: card.listId, cardId, actor: uid });
+	return (await BoardsCards.findOneById(cardId)) as IBoardCard;
 }
 
 /**

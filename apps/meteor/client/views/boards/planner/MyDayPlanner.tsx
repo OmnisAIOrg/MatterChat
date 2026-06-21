@@ -35,7 +35,7 @@ const MyDayPlanner = () => {
 		const today = startOfDay(new Date());
 		const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 		const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
-		const open = cards.filter((c) => !c.dueComplete && c.dueDate);
+		const open = cards.filter((c) => !c.dueComplete && !c.completed && c.dueDate);
 		const at = (c: any) => new Date(c.dueDate);
 		return [
 			{ label: 'Overdue', danger: true, list: open.filter((c) => at(c) < today) },
@@ -46,7 +46,7 @@ const MyDayPlanner = () => {
 	}, [cards]);
 
 	const openCard = (c: any) => router.navigate({ name: 'boards-board', params: { id: c.boardId, view: 'board', cardId: c._id } } as any);
-	const openCount = cards.filter((c) => !c.dueComplete && c.dueDate).length;
+	const openCount = cards.filter((c) => !c.dueComplete && !c.completed && c.dueDate).length;
 
 	return (
 		<Box p={24} style={{ overflowY: 'auto', height: '100%' }}>
@@ -62,7 +62,7 @@ const MyDayPlanner = () => {
 							<Button mini mie={8} title='Mark done' onClick={() => markDone.mutate(c._id)}><Icon name='check' size='x16' /></Button>
 							<Box flexGrow={1} style={{ cursor: 'pointer' }} onClick={() => openCard(c)}>
 								<Box fontScale='p2'>{c.title}{c.recurrence ? ' ↻' : ''}</Box>
-								<Box fontScale='c1' color={b.danger ? 'danger' : 'hint'}>Due {new Date(c.dueDate).toLocaleDateString()}{c.recurrence ? ` · repeats ${c.recurrence.freq}` : ''}{c.cardType && c.cardType !== 'task' ? ` · ${c.cardType}` : ''}</Box>
+								<Box fontScale='c1' color={c.priority === 'urgent' || c.priority === 'high' ? 'danger' : b.danger ? 'danger' : 'hint'}>Due {new Date(c.dueDate).toLocaleDateString()}{c.priority ? ` · ${c.priority} priority` : ''}{c.recurrence ? ` · repeats ${c.recurrence.freq}` : ''}{c.cardType && c.cardType !== 'task' ? ` · ${c.cardType}` : ''}</Box>
 							</Box>
 							<select
 								title='Repeat'

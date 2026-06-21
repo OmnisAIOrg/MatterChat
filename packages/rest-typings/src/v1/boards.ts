@@ -284,6 +284,7 @@ type BoardsCardUpdateProps = {
 		subStatus?: string;
 		assignees?: string[];
 		watchers?: string[];
+		priority?: 'low' | 'medium' | 'high' | 'urgent';
 		cover?: { kind: 'color' | 'image' | 'attachment'; value: string };
 	};
 };
@@ -303,6 +304,7 @@ const BoardsCardUpdateSchema = {
 				subStatus: { type: 'string', nullable: true },
 				assignees: { type: 'array', items: { type: 'string' }, nullable: true },
 				watchers: { type: 'array', items: { type: 'string' }, nullable: true },
+				priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], nullable: true },
 				cover: {
 					type: 'object',
 					nullable: true,
