@@ -48,6 +48,7 @@ import {
 	searchCards,
 	copyBoard,
 	createCardFromTemplate,
+	setMilestone,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -528,6 +529,28 @@ API.v1.post(
 	async function action() {
 		const { templateCardId, listId } = this.bodyParams as { templateCardId: string; listId: string };
 		const card = await createCardFromTemplate(this.userId, templateCardId, listId);
+		return API.v1.success({ card });
+	},
+);
+
+// Flag a card as a milestone.
+const isCardMilestoneProps = ajv.compile({
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 }, isMilestone: { type: 'boolean' } },
+	required: ['cardId', 'isMilestone'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.milestone.set',
+	{
+		authRequired: true,
+		body: isCardMilestoneProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, isMilestone } = this.bodyParams as { cardId: string; isMilestone: boolean };
+		const card = await setMilestone(this.userId, cardId, isMilestone);
 		return API.v1.success({ card });
 	},
 );

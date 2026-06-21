@@ -784,6 +784,22 @@ export async function createCardFromTemplate(uid: string, templateCardId: string
 	return card;
 }
 
+/** Flag/unflag a card as a milestone (a key dated checkpoint). */
+export async function setMilestone(uid: string, cardId: string, value: boolean): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardMilestone' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+	await BoardsCards.updateOne({ _id: cardId }, { $set: { isMilestone: value }, $inc: { rev: 1 } });
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardMilestone' });
+	}
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
 /**
  * The drag hot path. Single model `move` (one $set listId/position/subStatus +
  * $inc rev), then audit + automation seam. `card.moved` carries from/to so the

@@ -60,6 +60,10 @@ declare module '@rocket.chat/ui-contexts' {
 			pathname: '/boards/planner';
 			pattern: '/boards/planner';
 		};
+		'boards-calendar': {
+			pathname: '/boards/calendar';
+			pattern: '/boards/calendar';
+		};
 	}
 }
 
@@ -149,4 +153,10 @@ registerBoardsRoute('/reports/source-to-settlement', {
 registerBoardsRoute('/planner', {
 	name: 'boards-planner',
 	component: lazy(() => import('./planner/MyDayPlanner')),
+});
+
+// Generic personal Calendar — my tasks on a month grid by due date (standalone, CasePro-free).
+registerBoardsRoute('/calendar', {
+	name: 'boards-calendar',
+	component: lazy(() => import('./calendar/BoardsCalendar')),
 });
