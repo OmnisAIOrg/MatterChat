@@ -79,6 +79,9 @@ const BoardsCalendar = () => {
 								flexBasis={0}
 								style={{
 									minHeight: 94,
+									minWidth: 0,
+									width: 'calc(100% / 7)',
+									boxSizing: 'border-box',
 									border: '1px solid var(--rcx-color-stroke-extra-light, #eee)',
 									padding: 4,
 									background: k === todayKey ? 'var(--rcx-color-surface-tint, #f2f3f5)' : 'transparent',
