@@ -49,6 +49,8 @@ import {
 	copyBoard,
 	createCardFromTemplate,
 	setMilestone,
+	requestApproval,
+	decideApproval,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -551,6 +553,41 @@ API.v1.post(
 	async function action() {
 		const { cardId, isMilestone } = this.bodyParams as { cardId: string; isMilestone: boolean };
 		const card = await setMilestone(this.userId, cardId, isMilestone);
+		return API.v1.success({ card });
+	},
+);
+
+// Card approvals (request -> approved | changes | rejected).
+const isApprovalRequestProps = ajv.compile({
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 }, approvers: { type: 'array', items: { type: 'string' }, nullable: true } },
+	required: ['cardId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.approval.request',
+	{ authRequired: true, body: isApprovalRequestProps, response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse } },
+	async function action() {
+		const { cardId, approvers } = this.bodyParams as { cardId: string; approvers?: string[] };
+		const card = await requestApproval(this.userId, cardId, approvers || []);
+		return API.v1.success({ card });
+	},
+);
+
+const isApprovalDecideProps = ajv.compile({
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 }, decision: { type: 'string', enum: ['approved', 'changes', 'rejected'] } },
+	required: ['cardId', 'decision'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.approval.decide',
+	{ authRequired: true, body: isApprovalDecideProps, response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse } },
+	async function action() {
+		const { cardId, decision } = this.bodyParams as { cardId: string; decision: 'approved' | 'changes' | 'rejected' };
+		const card = await decideApproval(this.userId, cardId, decision);
 		return API.v1.success({ card });
 	},
 );

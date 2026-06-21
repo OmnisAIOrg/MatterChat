@@ -800,6 +800,50 @@ export async function setMilestone(uid: string, cardId: string, value: boolean):
 	return card;
 }
 
+// ---------------------------------------------------------------------------
+// Card approvals (request -> approved | changes | rejected)
+// ---------------------------------------------------------------------------
+
+/** Request approval on a card — sets it pending with the chosen approvers. */
+export async function requestApproval(uid: string, cardId: string, approvers: string[]): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardApproval' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+	await BoardsCards.updateOne(
+		{ _id: cardId },
+		{ $set: { approval: { status: 'pending', approvers: approvers || [], requestedBy: uid } }, $inc: { rev: 1 } },
+	);
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardApproval' });
+	}
+	await BoardsActivities.log({ boardId: current.boardId, listId: current.listId, cardId, actor: uid, verb: 'card.updated', to: { approval: 'requested' }, ts: new Date() });
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
+/** Decide a card's approval: approved | changes | rejected. */
+export async function decideApproval(uid: string, cardId: string, decision: 'approved' | 'changes' | 'rejected'): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardApproval' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+	await BoardsCards.updateOne(
+		{ _id: cardId },
+		{ $set: { 'approval.status': decision, 'approval.decidedBy': uid, 'approval.decidedAt': new Date() }, $inc: { rev: 1 } },
+	);
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardApproval' });
+	}
+	await BoardsActivities.log({ boardId: current.boardId, listId: current.listId, cardId, actor: uid, verb: 'card.updated', to: { approval: decision }, ts: new Date() });
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
 /**
  * The drag hot path. Single model `move` (one $set listId/position/subStatus +
  * $inc rev), then audit + automation seam. `card.moved` carries from/to so the

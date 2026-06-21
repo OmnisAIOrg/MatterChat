@@ -115,6 +115,13 @@ export interface IBoardCard extends IRocketChatRecord {
 	completedBy?: IUser['_id'];
 	priority?: 'low' | 'medium' | 'high' | 'urgent';
 	isMilestone?: boolean; // Asana-style milestone marker (a key dated checkpoint; rendered as a diamond)
+	approval?: {
+		status: 'pending' | 'approved' | 'changes' | 'rejected';
+		approvers?: IUser['_id'][];
+		requestedBy?: IUser['_id'];
+		decidedBy?: IUser['_id'];
+		decidedAt?: Date;
+	};
 	cover?: ICardCover;
 
 	fieldValues: Record<string, BoardsFieldValue>; // fieldDef.id -> value
