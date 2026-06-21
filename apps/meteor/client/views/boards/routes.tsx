@@ -144,3 +144,9 @@ registerBoardsRoute('/reports/source-to-settlement', {
 	name: 'boards-reports-source-to-settlement',
 	component: lazy(() => import('./reports/SourceToSettlement')),
 });
+
+// Personal PM (standalone / CasePro-free): "My Day" — my cards by due date across all my boards.
+registerBoardsRoute('/planner', {
+	name: 'boards-planner',
+	component: lazy(() => import('./planner/MyDayPlanner')),
+});

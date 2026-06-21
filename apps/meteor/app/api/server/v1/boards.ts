@@ -39,6 +39,7 @@ import {
 	getCardsForBoard,
 	getCardForUser,
 	getActivities,
+	getMyDayCards,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -316,6 +317,22 @@ API.v1.get(
 		const card = await getCardForUser(userId, cardId);
 
 		return API.v1.success({ card });
+	},
+);
+
+// "My Day": every card assigned to me with a due date, across all my boards (CasePro-free).
+API.v1.get(
+	'boards.cards.myDay',
+	{
+		authRequired: true,
+		response: {
+			200: successSchema,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { cards } = await getMyDayCards(this.userId);
+		return API.v1.success({ cards, count: cards.length });
 	},
 );
 
