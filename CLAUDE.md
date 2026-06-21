@@ -13,7 +13,7 @@ team‑comms + **cross‑firm** + **project‑management ("Omnis Boards")** prod
 
 ## Fast build/verify loop (use this — NOT a 15‑min prod rebuild per change)
 - **Dev server (hot reload):** `bash /tmp/mc-dev.sh` → `cd apps/meteor && yarn dev` on :3100 (or `/tmp/mc-dev-4100.sh` for :4100) against Mongo `matterchat_apex` (rs0 @ :27018). First compile ~1–5 min (warm cache), then edits are live in **seconds**.
-- **API test harness:** `MC_BASE=http://localhost:<port>/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node "$HOME/Claude Workspace/boards-api-test.mjs"` — verifies the whole `boards.*` surface in ~2s. Get a token from the browser `localStorage` (`Meteor.userId` / `Meteor.loginToken`) or the DB.
+- **API test harness:** `MC_BASE=http://localhost:<port>/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node "scripts/boards-api-test.mjs"` — verifies the whole `boards.*` surface in ~2s. Get a token from the browser `localStorage` (`Meteor.userId` / `Meteor.loginToken`) or the DB.
 - **CHI MCP server:** `~/matterchat-mcp-v2` — `npm run build`, `npm run start:http`, `npm run smoke`.
 - **Prod bundle (for browser/SSO/screenshots):** `preview` "matterchat" runs `~/omnis-counsel/run-apex.sh` (full OmnisAI OIDC env on :3100). Mock OIDC must be up on :9100.
 

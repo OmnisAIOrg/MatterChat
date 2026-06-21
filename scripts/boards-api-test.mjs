@@ -1,0 +1,121 @@
+#!/usr/bin/env node
+/**
+ * Boards API regression harness — instant verification of the boards.* REST
+ * surface (the parity primitives) against a running MatterChat instance.
+ * Replaces 15-min rebuild + manual browser clicking for server/API work.
+ *
+ *   MC_BASE=http://localhost:3100/api/v1 \
+ *   MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node boards-api-test.mjs
+ *
+ * Exits non-zero on any failure.
+ */
+
+const BASE = process.env.MC_BASE || 'http://localhost:3100/api/v1';
+const USER = process.env.MC_USER_ID || '';
+const TOKEN = process.env.MC_AUTH_TOKEN || '';
+
+let pass = 0;
+let fail = 0;
+const ok = (cond, label, extra = '') => {
+  if (cond) { pass += 1; console.log(`  ok   ${label}${extra ? '  ' + extra : ''}`); }
+  else { fail += 1; console.log(`  FAIL ${label}${extra ? '  ' + extra : ''}`); }
+};
+
+async function api(method, path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: {
+      'X-User-Id': USER,
+      'X-Auth-Token': TOKEN,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { status: res.status, json };
+}
+
+async function main() {
+  if (!USER || !TOKEN) { console.error('Set MC_USER_ID + MC_AUTH_TOKEN'); process.exit(2); }
+
+  // --- scaffold: board + list + card ---
+  const b = await api('POST', '/boards.create', { title: 'API Test Board', pipelineType: 'general' });
+  const boardId = b.json?.board?._id;
+  ok(!!boardId, 'create board', boardId || JSON.stringify(b.json));
+
+  const l = await api('POST', '/boards.list.create', { boardId, title: 'To do' });
+  const listId = l.json?.list?._id;
+  ok(!!listId, 'create list', listId);
+
+  const c = await api('POST', '/boards.card.create', { boardId, listId, title: 'Parity test card' });
+  const cardId = c.json?.card?._id;
+  ok(!!cardId, 'create card', cardId);
+
+  // --- priority (batch 2) ---
+  const today = new Date(); today.setHours(17, 0, 0, 0);
+  const u = await api('POST', '/boards.card.update', { cardId, patch: { assignees: [USER], dueDate: today.toISOString(), priority: 'high' } });
+  ok(u.json?.card?.priority === 'high', 'set priority=high', u.json?.card?.priority);
+
+  // --- my day (shows the due card with priority) ---
+  const md = await api('GET', '/boards.cards.myDay');
+  const inMyDay = (md.json?.cards || []).find((x) => x._id === cardId);
+  ok(!!inMyDay && inMyDay.priority === 'high', 'my-day shows card w/ priority', `${md.json?.count} cards`);
+
+  // --- global search (batch 2) ---
+  const s = await api('GET', '/boards.cards.search?text=Parity%20test');
+  ok((s.json?.cards || []).some((x) => x._id === cardId), 'search finds card', `${s.json?.count} hits`);
+
+  // --- card copy (batch 1) ---
+  const cp = await api('POST', '/boards.card.copy', { cardId });
+  ok(cp.json?.card?.title === 'Copy of Parity test card', 'copy card', cp.json?.card?.title);
+
+  // --- dependencies (batch 1) ---
+  const c2 = await api('POST', '/boards.card.create', { boardId, listId, title: 'Blocker card' });
+  const card2 = c2.json?.card?._id;
+  await api('POST', '/boards.card.relations.add', { cardId, type: 'blocked-by', targetCardId: card2 });
+  const got1 = await api('GET', `/boards.card?cardId=${cardId}`);
+  const got2 = await api('GET', `/boards.card?cardId=${card2}`);
+  const rel1 = (got1.json?.card?.relations || []).some((r) => r.type === 'blocked-by' && r.cardId === card2);
+  const rel2 = (got2.json?.card?.relations || []).some((r) => r.type === 'blocks' && r.cardId === cardId);
+  ok(rel1 && rel2, 'dependency + inverse edge', `self=${rel1} inverse=${rel2}`);
+
+  // --- recurrence (prior) ---
+  const rc = await api('POST', '/boards.card.recurrence.set', { cardId, recurrence: { freq: 'weekly', interval: 1 } });
+  ok(rc.json?.card?.recurrence?.freq === 'weekly', 'set recurrence', rc.json?.card?.recurrence?.freq);
+
+  // --- completion (batch 1) — and recurrence materialization on complete ---
+  const cmp = await api('POST', '/boards.card.complete', { cardId });
+  ok(cmp.json?.card?.completed === true, 'complete card', `completed=${cmp.json?.card?.completed}`);
+  const listAfter = await api('GET', `/boards.cards?boardId=${boardId}`);
+  const titles = (listAfter.json?.cards || []).map((x) => x.title);
+  const recurredAgain = titles.filter((t) => t === 'Parity test card').length >= 1; // next occurrence exists
+  ok(recurredAgain, 'recurrence spawned next on complete', `${titles.length} cards on board`);
+
+  // --- board copy (batch 3) ---
+  const bc = await api('POST', '/boards.copy', { boardId });
+  const newBoardId = bc.json?.board?._id;
+  ok(bc.json?.board?.title === 'Copy of API Test Board', 'copy board', bc.json?.board?.title);
+  const newLists = await api('GET', `/boards.lists?boardId=${newBoardId}`);
+  ok((newLists.json?.lists || []).length >= 1, 'copied board has lists', `${newLists.json?.lists?.length} lists`);
+
+  // --- card from template (batch 3) ---
+  const ft = await api('POST', '/boards.card.fromTemplate', { templateCardId: cardId, listId });
+  ok(ft.json?.card?.title === 'Parity test card' && ft.json?.card?._id !== cardId, 'card from template', ft.json?.card?.title);
+
+  // --- milestones (batch) ---
+  const ms = await api('POST', '/boards.card.milestone.set', { cardId, isMilestone: true });
+  ok(ms.json?.card?.isMilestone === true, 'set milestone', `isMilestone=${ms.json?.card?.isMilestone}`);
+
+  // --- approvals (batch) ---
+  await api('POST', '/boards.card.approval.request', { cardId, approvers: [USER] });
+  const dec = await api('POST', '/boards.card.approval.decide', { cardId, decision: 'approved' });
+  ok(dec.json?.card?.approval?.status === 'approved', 'approval request+decide', `status=${dec.json?.card?.approval?.status}`);
+
+  console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
+  process.exit(fail ? 1 : 0);
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

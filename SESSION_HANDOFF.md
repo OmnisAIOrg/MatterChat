@@ -12,7 +12,7 @@
 | 9100 | Mock OmnisAI OIDC | `~/mc-mock-oidc.js`; returns id_token + `/userinfo` |
 | 9200 | CFCS (cross-firm) | `~/omnis-counsel/server.js` |
 
-Start the dev loop: `bash /tmp/mc-dev.sh` (or `/tmp/mc-dev-4100.sh`). Verify: `node "$HOME/Claude Workspace/boards-api-test.mjs"` (see CLAUDE.md for the token).
+Start the dev loop: `bash /tmp/mc-dev.sh` (or `/tmp/mc-dev-4100.sh`). Verify: `node "scripts/boards-api-test.mjs"` (see CLAUDE.md for the token).
 
 ## Built + verified this session (all committed)
 **Omnis Boards — personal PM + Trello/Asana parity:** My Day, Calendar, recurring tasks/routines, card completion, card copy, board copy, card‑from‑template, task dependencies (+ inverse edge), priority, milestones, approvals, global search. **CHI:** `matterchat-mcp-v2` — 23 deterministic MCP tools over `boards.*`, verified end‑to‑end. **Cross‑firm:** CFCS trust core (channel‑hosted, CasePro‑free). **Harness + design docs.** (See `git log` + `docs/current-status.md`.)
