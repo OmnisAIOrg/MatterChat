@@ -47,6 +47,7 @@ import {
 	removeRelation,
 	searchCards,
 	copyBoard,
+	createCardFromTemplate,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -503,6 +504,31 @@ API.v1.post(
 		const { boardId } = this.bodyParams as { boardId: string };
 		const board = await copyBoard(this.userId, boardId);
 		return API.v1.success({ board });
+	},
+);
+
+// Create a card from a template card (clone its content into a target list).
+const isCardFromTemplateProps = ajv.compile({
+	type: 'object',
+	properties: {
+		templateCardId: { type: 'string', minLength: 1 },
+		listId: { type: 'string', minLength: 1 },
+	},
+	required: ['templateCardId', 'listId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.fromTemplate',
+	{
+		authRequired: true,
+		body: isCardFromTemplateProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { templateCardId, listId } = this.bodyParams as { templateCardId: string; listId: string };
+		const card = await createCardFromTemplate(this.userId, templateCardId, listId);
+		return API.v1.success({ card });
 	},
 );
 

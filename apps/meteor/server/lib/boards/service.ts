@@ -736,6 +736,54 @@ export async function copyBoard(uid: string, boardId: string): Promise<IBoard> {
 	return board;
 }
 
+/** Create a new card from a "template" card: clone its content (title, description, checklists,
+ * labels, assignees, fields, priority) into a target list. Any card can serve as a template. */
+export async function createCardFromTemplate(uid: string, templateCardId: string, listId: string): Promise<IBoardCard> {
+	const src = await BoardsCards.findOneById(templateCardId);
+	if (!src) {
+		throw new Meteor.Error('error-card-not-found', 'Template card not found', { method: 'boards.cardFromTemplate' });
+	}
+	const list = await BoardsLists.findOneById(listId);
+	if (!list || list.archived) {
+		throw new Meteor.Error('error-list-not-found', 'List not found', { method: 'boards.cardFromTemplate' });
+	}
+	await assertBoardRole(list.boardId, uid, 'member', 'boards.cardCreate');
+
+	const now = new Date();
+	const position = (await BoardsCards.maxPosition(listId)) + POSITION_STEP;
+	const cardNumber = await Boards.nextCardNumber(list.boardId);
+	const doc: Omit<IBoardCard, '_id' | '_updatedAt'> = {
+		boardId: list.boardId,
+		listId,
+		title: src.title,
+		...(src.description ? { description: src.description } : {}),
+		position,
+		cardType: src.cardType,
+		...(src.subStatus ? { subStatus: src.subStatus } : {}),
+		labels: [...(src.labels || [])],
+		assignees: [...(src.assignees || [])],
+		watchers: [],
+		fieldValues: { ...(src.fieldValues || {}) },
+		checklists: (src.checklists || []).map((cl) => ({ ...cl, items: cl.items.map((it) => ({ ...it, done: false })) })),
+		attachments: [],
+		comments: [],
+		cardNumber,
+		...(src.priority ? { priority: src.priority } : {}),
+		archived: false,
+		rev: 0,
+		createdBy: uid,
+		createdAt: now,
+	};
+	const { insertedId } = await BoardsCards.insertOne(doc);
+	const card = await BoardsCards.findOneById(insertedId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardFromTemplate' });
+	}
+	await BoardsActivities.log({ boardId: list.boardId, listId, cardId: card._id, actor: uid, verb: 'card.created', to: { title: card.title, fromTemplate: src._id }, ts: now });
+	emitBoardEvent('card.created', { boardId: list.boardId, listId, cardId: card._id, actor: uid });
+	return card;
+}
+
 /**
  * The drag hot path. Single model `move` (one $set listId/position/subStatus +
  * $inc rev), then audit + automation seam. `card.moved` carries from/to so the
