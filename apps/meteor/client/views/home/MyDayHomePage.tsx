@@ -346,7 +346,7 @@ const MyDayHomePage = () => {
 									pi={8}
 									borderRadius='x8'
 									style={{ gap: '8px', cursor: 'pointer', width: '224px' }}
-									onClick={() => void (u.username && router.navigate(`/direct/${u.username}`))}
+									onClick={() => u.username && router.navigate({ name: 'direct', params: { rid: u.username } })}
 								>
 									<UserAvatar username={u.username ?? ''} size='x36' />
 									<Box style={{ minWidth: 0 }}>
