@@ -25,6 +25,7 @@ import { Meteor } from 'meteor/meteor';
 import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
+import { verifyOmnisaiIdToken } from './verifyIdToken';
 import { SystemLogger } from '../../../server/lib/logger/system';
 import { settings } from '../../settings/server';
 
@@ -32,16 +33,20 @@ import './loginHandler';
 
 const base64url = (buf: Buffer): string => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-// Decode a JWT's claims payload (no signature verification — the token comes straight from the
-// trusted token endpoint over TLS, not relayed by the user).
-function decodeJwtClaims(jwt: string): Record<string, any> {
-	try {
-		const payload = jwt.split('.')[1];
-		const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-		return JSON.parse(json) as Record<string, any>;
-	} catch {
-		return {};
+const STATE_COOKIE = 'omnisai_oidc_state';
+
+function readCookie(req: any, name: string): string | undefined {
+	const raw = req.headers?.cookie;
+	if (typeof raw !== 'string') {
+		return undefined;
 	}
+	for (const part of raw.split(';')) {
+		const [key, ...rest] = part.trim().split('=');
+		if (key === name) {
+			return decodeURIComponent(rest.join('='));
+		}
+	}
+	return undefined;
 }
 
 type OmnisAIConfig = {
@@ -66,15 +71,17 @@ const userinfoEndpoint = (c: OmnisAIConfig): string => `${c.issuer}/api/auth/mcp
 const redirectUri = (): string => Meteor.absoluteUrl('_omnisai/callback');
 const stateKey = (state: string): string => `omnisai:state:${state}`;
 
-function redirect(res: any, location: string): void {
-	res.writeHead(302, { Location: location });
+function redirect(res: any, location: string, extraHeaders: Record<string, string> = {}): void {
+	res.writeHead(302, { Location: location, ...extraHeaders });
 	res.end();
 }
 
-function fail(res: any, reason: string): void {
+function fail(res: any, reason: string, extraHeaders: Record<string, string> = {}): void {
 	SystemLogger.warn({ msg: 'OmnisAI OIDC login failed', reason });
-	redirect(res, Meteor.absoluteUrl(`home?omnisai_error=${encodeURIComponent(reason)}`));
+	redirect(res, Meteor.absoluteUrl(`home?omnisai_error=${encodeURIComponent(reason)}`), extraHeaders);
 }
+
+const clearStateCookie = (): string => `${STATE_COOKIE}=; HttpOnly; Path=/_omnisai; Max-Age=0; SameSite=Lax`;
 
 async function handleAuthorize(res: any): Promise<void> {
 	const config = getConfig();
@@ -83,11 +90,12 @@ async function handleAuthorize(res: any): Promise<void> {
 	}
 
 	const state = Random.id();
+	const nonce = Random.id();
 	const codeVerifier = base64url(crypto.randomBytes(32));
 	const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-	// Park the verifier server-side, keyed by state, for the callback (60s TTL via CredentialTokens).
-	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier } });
+	// Park the verifier + nonce server-side, keyed by state, for the callback (TTL via CredentialTokens).
+	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, nonce } });
 
 	const url = new URL(authorizeEndpoint(config));
 	url.searchParams.set('response_type', 'code');
@@ -95,10 +103,16 @@ async function handleAuthorize(res: any): Promise<void> {
 	url.searchParams.set('redirect_uri', redirectUri());
 	url.searchParams.set('scope', config.scope);
 	url.searchParams.set('state', state);
+	url.searchParams.set('nonce', nonce);
 	url.searchParams.set('code_challenge', codeChallenge);
 	url.searchParams.set('code_challenge_method', 'S256');
 
-	redirect(res, url.toString());
+	// Bind the flow to THIS browser: the callback must echo the same `state` in a cookie only the
+	// initiator was given (defeats login-CSRF — an attacker can't set this cookie in a victim's browser).
+	const secure = redirectUri().startsWith('https') ? '; Secure' : '';
+	redirect(res, url.toString(), {
+		'Set-Cookie': `${STATE_COOKIE}=${state}; HttpOnly; Path=/_omnisai; Max-Age=600; SameSite=Lax${secure}`,
+	});
 }
 
 async function handleCallback(req: any, res: any): Promise<void> {
@@ -111,11 +125,18 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			return fail(res, 'missing_code_or_state');
 		}
 
+		// Login-CSRF guard: the state must match the cookie this browser was issued on /authorize.
+		const cookieState = readCookie(req, STATE_COOKIE);
+		if (!cookieState || cookieState !== state) {
+			return fail(res, 'state_mismatch', { 'Set-Cookie': clearStateCookie() });
+		}
+
 		const stateDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
 		await CredentialTokens.removeById(stateKey(state));
 		const codeVerifier = stateDoc?.userInfo?.profile?.codeVerifier;
+		const nonce = stateDoc?.userInfo?.profile?.nonce;
 		if (!codeVerifier) {
-			return fail(res, 'invalid_state');
+			return fail(res, 'invalid_state', { 'Set-Cookie': clearStateCookie() });
 		}
 
 		// 1. Exchange the code (+ PKCE verifier) for tokens.
@@ -144,7 +165,13 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// (flat `{ sub }` or the mock's `{ user: { id } }`) only when there's no id_token.
 		let u: Record<string, any> = {};
 		if (typeof tokens.id_token === 'string' && tokens.id_token.includes('.')) {
-			u = decodeJwtClaims(tokens.id_token);
+			// Cryptographically verify the id_token: signature via the issuer JWKS, plus iss / aud /
+			// exp and the nonce we issued. Fail the login closed on any mismatch.
+			try {
+				u = await verifyOmnisaiIdToken(tokens.id_token, { issuer: config.issuer, clientId: config.clientId, nonce });
+			} catch (err: any) {
+				return fail(res, err?.message || 'id_token_invalid', { 'Set-Cookie': clearStateCookie() });
+			}
 		} else {
 			const infoRes = await fetch(userinfoEndpoint(config), {
 				ignoreSsrfValidation: true, // issuer is an admin-configured trusted host, not user input
@@ -174,7 +201,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			},
 		});
 
-		redirect(res, Meteor.absoluteUrl(`omnisai/${credentialToken}`));
+		redirect(res, Meteor.absoluteUrl(`omnisai/${credentialToken}`), { 'Set-Cookie': clearStateCookie() });
 	} catch (err) {
 		SystemLogger.error({ msg: 'OmnisAI OIDC callback error', err });
 		fail(res, 'callback_exception');
