@@ -63,6 +63,9 @@ export const roomFields = {
 	// usernames: 1,
 	teamId: 1,
 	teamMain: 1,
+	// Boards: matter↔channel link (so the sidebar can group channels under "Matters")
+	matterCardId: 1,
+	matterId: 1,
 	topic: 1,
 	announcement: 1,
 	announcementDetails: 1,

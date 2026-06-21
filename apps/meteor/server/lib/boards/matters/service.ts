@@ -1,7 +1,8 @@
 import type { IBoard, IBoardCard, IBoardList } from '@rocket.chat/core-typings';
-import { Boards, BoardsLists, BoardsCards, BoardsActivities } from '@rocket.chat/models';
+import { Boards, BoardsLists, BoardsCards, BoardsActivities, Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { createRoom } from '../../../../app/lib/server/functions/createRoom';
 import { createBoard, createList } from '../service';
 import { caseProClient } from './caseProClient';
 import type { CaseProStage } from './caseProClient';
@@ -178,6 +179,117 @@ export async function bindMatterCard(uid: string, boardId: string, listId: strin
 	await refreshMatterSnapshot(uid, card._id);
 	const refreshed = await BoardsCards.findOneById(card._id);
 	return refreshed ?? card;
+}
+
+// ---------------------------------------------------------------------------
+// linkMatterChannel / unlinkMatterChannel  (channel↔matter link)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bind a Rocket.Chat channel to a matter card. Creates a private channel for the matter
+ * (idempotent — reuses an existing live link), stores the room id on the card's `link.roomId`,
+ * and stamps `matterCardId`/`matterId` on the room so it groups under the sidebar "Matters"
+ * folder and can be traced back to the card.
+ */
+export async function linkMatterChannel(uid: string, cardId: string): Promise<IBoardCard> {
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.matters.linkChannel' });
+	}
+	if (card.link?.kind !== 'matter') {
+		throw new Meteor.Error('error-not-a-matter-card', 'Card is not linked to a matter', { method: 'boards.matters.linkChannel' });
+	}
+
+	// idempotent: an existing, still-present linked room → reuse it.
+	if (card.link.roomId && (await Rooms.findOneById(card.link.roomId))) {
+		return card;
+	}
+
+	const owner = await Users.findOneById(uid);
+	if (!owner) {
+		throw new Meteor.Error('error-invalid-user', 'Invalid user', { method: 'boards.matters.linkChannel' });
+	}
+
+	const base = String(card.link.snapshot?.matterNumber ?? card.link.matterId);
+	const name =
+		`matter-${base}`
+			.toLowerCase()
+			.replace(/[^a-z0-9-]+/g, '-')
+			.replace(/(^-+|-+$)/g, '')
+			.slice(0, 64) || `matter-${card._id}`;
+
+	// find-or-reuse: a matter has one channel, even when the same matter appears as cards on
+	// multiple boards. Prefer the matter's existing room by its stable matterId; fall back to the
+	// channel name (covers a re-link after an unlink, which clears the markers but keeps the
+	// channel and its history).
+	const existing = (await Rooms.findOne({ matterId: card.link.matterId })) ?? (await Rooms.findOneByNonValidatedName(name));
+	let roomId: string;
+	if (existing) {
+		roomId = existing._id;
+		// Don't clobber a back-pointer that still belongs to a different live card (same matter on
+		// two boards): only (re)claim matterCardId when it is unset or points to a card that's gone.
+		const ownerCardId = existing.matterCardId;
+		const claimedByOtherLiveCard = Boolean(ownerCardId && ownerCardId !== card._id && (await BoardsCards.findOneById(ownerCardId)));
+		await Rooms.updateOne(
+			{ _id: roomId },
+			{ $set: { matterId: card.link.matterId, ...(claimedByOtherLiveCard ? {} : { matterCardId: card._id }) } },
+		);
+	} else {
+		const room = await createRoom('p', name, owner, [], false, false, {
+			matterCardId: card._id,
+			matterId: card.link.matterId,
+			...(card.link.snapshot?.matterName ? { topic: card.link.snapshot.matterName } : {}),
+		});
+		roomId = room.rid;
+	}
+
+	await BoardsCards.updateOne({ _id: card._id }, { $set: { 'link.roomId': roomId }, $inc: { rev: 1 } });
+
+	await BoardsActivities.log({
+		boardId: card.boardId,
+		listId: card.listId,
+		cardId: card._id,
+		actor: uid,
+		verb: 'channel.linked',
+		to: { roomId, channelName: name },
+		ts: new Date(),
+	});
+
+	const fresh = await BoardsCards.findOneById(card._id);
+	return fresh ?? card;
+}
+
+/**
+ * Detach the channel from a matter card: clears `link.roomId` and removes the
+ * `matterCardId`/`matterId` markers from the room (the channel itself is kept).
+ */
+export async function unlinkMatterChannel(uid: string, cardId: string): Promise<IBoardCard> {
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.matters.unlinkChannel' });
+	}
+	if (card.link?.kind !== 'matter') {
+		throw new Meteor.Error('error-not-a-matter-card', 'Card is not linked to a matter', { method: 'boards.matters.unlinkChannel' });
+	}
+
+	const { roomId } = card.link;
+	await BoardsCards.updateOne({ _id: card._id }, { $unset: { 'link.roomId': '' }, $inc: { rev: 1 } });
+	if (roomId) {
+		await Rooms.updateOne({ _id: roomId }, { $unset: { matterCardId: '', matterId: '' } });
+	}
+
+	await BoardsActivities.log({
+		boardId: card.boardId,
+		listId: card.listId,
+		cardId: card._id,
+		actor: uid,
+		verb: 'channel.unlinked',
+		to: { roomId: roomId ?? null },
+		ts: new Date(),
+	});
+
+	const fresh = await BoardsCards.findOneById(card._id);
+	return fresh ?? card;
 }
 
 // ---------------------------------------------------------------------------

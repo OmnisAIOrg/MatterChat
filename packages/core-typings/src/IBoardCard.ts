@@ -90,7 +90,7 @@ export interface IMatterSnapshot {
  */
 export type IBoardCardLink =
 	| { kind: 'lead'; leadId: string } // -> boards_leads._id
-	| { kind: 'matter'; matterId: string; snapshot?: IMatterSnapshot; snapshotAt?: Date } // CasePro matters.id
+	| { kind: 'matter'; matterId: string; roomId?: string; snapshot?: IMatterSnapshot; snapshotAt?: Date } // CasePro matters.id; roomId = bound RC channel
 	| { kind: 'document'; litboxRef: string } // LitBox path/id
 	| { kind: 'evidence'; evidenceId: string };
 

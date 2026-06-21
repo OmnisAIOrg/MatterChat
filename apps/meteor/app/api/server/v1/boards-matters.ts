@@ -3,6 +3,8 @@ import {
 	isBoardsMattersEnsureBoardProps,
 	isBoardsMattersBindProps,
 	isBoardsMattersRefreshSnapshotProps,
+	isBoardsMattersLinkChannelProps,
+	isBoardsMattersUnlinkChannelProps,
 	isBoardsMattersSeedFromCaseProProps,
 	isBoardsCaseProMatterSnapshotProps,
 	isBoardsCaseProListMattersProps,
@@ -24,6 +26,8 @@ import {
 	ensureMattersBoard,
 	bindMatterCard,
 	refreshMatterSnapshot,
+	linkMatterChannel,
+	unlinkMatterChannel,
 	seedFromCasePro,
 	listPlaybooks,
 	seedDefaultPlaybooks,
@@ -110,6 +114,50 @@ API.v1.post(
 	async function action() {
 		const { cardId } = this.bodyParams;
 		const card = await refreshMatterSnapshot(this.userId, cardId);
+		return API.v1.success({ card });
+	},
+);
+
+API.v1.post(
+	'boards.matters.linkChannel',
+	{
+		authRequired: true,
+		body: isBoardsMattersLinkChannelProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-matters-edit'))) {
+			return API.v1.unauthorized();
+		}
+		const { cardId } = this.bodyParams;
+		const card = await linkMatterChannel(userId, cardId);
+		return API.v1.success({ card });
+	},
+);
+
+API.v1.post(
+	'boards.matters.unlinkChannel',
+	{
+		authRequired: true,
+		body: isBoardsMattersUnlinkChannelProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-matters-edit'))) {
+			return API.v1.unauthorized();
+		}
+		const { cardId } = this.bodyParams;
+		const card = await unlinkMatterChannel(userId, cardId);
 		return API.v1.success({ card });
 	},
 );
