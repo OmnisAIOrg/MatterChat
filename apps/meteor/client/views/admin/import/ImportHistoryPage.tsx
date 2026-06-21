@@ -1,4 +1,4 @@
-import { Button, ButtonGroup, Table, TableHead, TableCell, TableRow, TableBody } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Callout, Table, TableHead, TableCell, TableRow, TableBody } from '@rocket.chat/fuselage';
 import { useMediaQuery } from '@rocket.chat/fuselage-hooks';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
 import { useToastMessageDispatch, useEndpoint, useTranslation, useRouter } from '@rocket.chat/ui-contexts';
@@ -55,6 +55,11 @@ function ImportHistoryPage() {
 		router.navigate('/admin/import/new');
 	};
 
+	// One-click branded entry: jump straight into the Slack importer (pre-selected).
+	const handleImportFromSlackClick = () => {
+		router.navigate({ pattern: '/admin/import/new/:importerKey?', params: { importerKey: 'slack' } });
+	};
+
 	const downloadPendingFilesResult = useMutation({
 		mutationFn: async () => downloadPendingFiles(),
 		onError: (error) => {
@@ -107,7 +112,10 @@ function ImportHistoryPage() {
 		<Page>
 			<PageHeader title={t('Import')}>
 				<ButtonGroup>
-					<Button primary disabled={isLoading} onClick={handleNewImportClick}>
+					<Button primary disabled={isLoading} onClick={handleImportFromSlackClick}>
+						Import from Slack
+					</Button>
+					<Button disabled={isLoading} onClick={handleNewImportClick}>
 						{t('Import_New_File')}
 					</Button>
 					{hasAnySuccessfulImport && (
@@ -131,6 +139,15 @@ function ImportHistoryPage() {
 				</ButtonGroup>
 			</PageHeader>
 			<PageScrollableContentWithShadow>
+				<Callout type='info' title='Bring your team from Slack' marginBlockEnd='x16'>
+					<Box mbe='x8'>
+						Move your Slack workspace into MatterChat — channels, members, and message history come across in one step. Everyone keeps the
+						same account when they sign in with OmnisAI.
+					</Box>
+					<Button small primary onClick={handleImportFromSlackClick}>
+						Import from Slack
+					</Button>
+				</Callout>
 				<Table fixed data-qa-id='ImportTable'>
 					<TableHead>
 						<TableRow>

@@ -1,8 +1,8 @@
 import { createAccountSettings } from './accounts';
 import { createAnalyticsSettings } from './analytics';
 import { createAssetsSettings } from './assets';
-import { createBoardsSettings } from './boards';
 import { createBoardsAutomationSettings } from './automation';
+import { createBoardsSettings } from './boards';
 import { createBoardsCaseProSettings } from './boards-casepro';
 import { createBoardsReportingSettings } from './boardsReporting';
 import { createBotsSettings } from './bots';
@@ -27,6 +27,7 @@ import { createMiscSettings } from './misc';
 import { createMobileSettings } from './mobile';
 import { createOauthSettings } from './oauth';
 import { createOmniSettings } from './omnichannel';
+import { createOmnisAIOAuthSettings } from './omnisai';
 import { createPushSettings } from './push';
 import { createRateLimitSettings } from './rate';
 import { createRetentionSettings } from './retention-policy';
@@ -48,6 +49,7 @@ await Promise.all([
 	createBoardsSettings(),
 	createBoardsAutomationSettings(),
 	createBoardsCaseProSettings(),
+	createOmnisAIOAuthSettings(),
 	createBoardsReportingSettings(),
 	createBotsSettings(),
 	createCasSettings(),
