@@ -21,12 +21,12 @@ import crypto from 'crypto';
 import { CredentialTokens } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
-import { WebApp } from 'meteor/webapp';
 import { Meteor } from 'meteor/meteor';
 import { RoutePolicy } from 'meteor/routepolicy';
+import { WebApp } from 'meteor/webapp';
 
-import { settings } from '../../settings/server';
 import { SystemLogger } from '../../../server/lib/logger/system';
+import { settings } from '../../settings/server';
 
 import './loginHandler';
 
