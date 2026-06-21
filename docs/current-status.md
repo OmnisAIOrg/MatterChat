@@ -1,6 +1,6 @@
 # Omnis Boards / MatterChat — current status
 
-Updated 2026-06-21 · branch `feature/matterchat-cross-firm`. (Resume workflow: `CLAUDE.md`; live handoff: `SESSION_HANDOFF.md`.)
+Updated 2026-06-21 · branch `feature/matterchat-cross-firm`. (Resume workflow: `CLAUDE.md`; live handoff: `HANDOFF.md`; decisions: `DECISIONS.md`.)
 
 ## Done + verified (committed)
 | Area | Feature | Surface | Verified |
