@@ -16,6 +16,8 @@ export type BoardsActivityVerb =
 	| 'card.mirrored'
 	| 'card.linked'
 	| 'card.converted'
+	| 'channel.linked'
+	| 'channel.unlinked'
 	| 'label.added'
 	| 'label.removed'
 	| 'member.added'
