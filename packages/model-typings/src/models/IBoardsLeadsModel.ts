@@ -24,10 +24,7 @@ export interface IBoardsLeadsModel extends IBaseModel<ILead> {
 	setQualification(leadId: string, qualification: ILeadQualification): Promise<UpdateResult>;
 	setOwner(leadId: string, ownerId: string, slaDueAt?: Date, assignedBy?: string): Promise<UpdateResult>;
 
-	markConverted(
-		leadId: string,
-		conversion: { matterId?: string; matterCardId?: string; byUserId?: string },
-	): Promise<UpdateResult>;
+	markConverted(leadId: string, conversion: { matterId?: string; matterCardId?: string; byUserId?: string }): Promise<UpdateResult>;
 	markLost(leadId: string, reason: LeadLostReason, byUserId?: string): Promise<UpdateResult>;
 
 	/**
