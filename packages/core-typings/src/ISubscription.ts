@@ -67,6 +67,9 @@ export interface ISubscription extends IRocketChatRecord {
 
 	draft?: string;
 
+	/** User-assigned sidebar folder label for organizing rooms (Omnis channel folders). */
+	folder?: string;
+
 	desktopPrefOrigin?: 'subscription' | 'user';
 	mobilePrefOrigin?: 'subscription' | 'user';
 	emailPrefOrigin?: 'subscription' | 'user';

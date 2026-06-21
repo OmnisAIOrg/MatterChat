@@ -250,6 +250,7 @@ export interface ISubscriptionsModel extends IBaseModel<ISubscription> {
 	findByRoomIdWhenUsernameExists(rid: string, options?: FindOptions<ISubscription>): FindCursor<ISubscription>;
 	setCustomFieldsDirectMessagesByUserId(userId: string, fields: Record<string, any>): Promise<UpdateResult | Document>;
 	setFavoriteByRoomIdAndUserId(roomId: string, userId: string, favorite?: boolean): Promise<UpdateResult>;
+	setFolderByRoomIdAndUserId(roomId: string, userId: string, folder?: string): Promise<UpdateResult>;
 	hideByRoomIdAndUserId(roomId: string, userId: string): Promise<UpdateResult>;
 	findByRoomIdWhenUserIdExists(rid: string, options?: FindOptions<ISubscription>): FindCursor<ISubscription>;
 	updateNameAndFnameById(_id: string, name: string, fname: string, options?: { session?: ClientSession }): Promise<UpdateResult | Document>;

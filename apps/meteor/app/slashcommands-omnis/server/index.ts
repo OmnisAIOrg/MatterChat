@@ -4,6 +4,7 @@ import type { SlashCommandCallbackParams } from '@rocket.chat/core-typings';
 import { createLead } from '../../../server/lib/boards/leads/service';
 import { ensureMattersBoard, bindMatterCard } from '../../../server/lib/boards/matters/service';
 import { createCard } from '../../../server/lib/boards/service';
+import { setRoomFolderMethod } from '../../../server/methods/setRoomFolder';
 import { slashCommands } from '../../utils/server/slashCommand';
 
 /**
@@ -87,5 +88,26 @@ slashCommands.add({
 	options: {
 		description: 'Add a CasePro matter to your Matters board',
 		params: 'matter id',
+	},
+});
+
+slashCommands.add({
+	command: 'folder',
+	callback: async ({ params, message, userId }: SlashCommandCallbackParams<'folder'>): Promise<void> => {
+		const folder = params.trim();
+		try {
+			await setRoomFolderMethod(userId, message.rid, folder || undefined);
+			notify(
+				userId,
+				message.rid,
+				folder ? `📁 Filed this channel under "${folder}".` : '🗂️ Removed this channel from its sidebar folder.',
+			);
+		} catch (err: any) {
+			notify(userId, message.rid, `Could not set the folder: ${err?.message || 'unknown error'}`);
+		}
+	},
+	options: {
+		description: 'File this channel under a sidebar folder (no name removes it)',
+		params: 'folder name',
 	},
 });

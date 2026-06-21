@@ -17,9 +17,12 @@ const RoomListCollapser = ({ groupTitle, unreadCount: unreadGroupCount, collapse
 
 	const { unreadTitle, unreadVariant, showUnread, unreadCount } = useUnreadDisplay(unreadGroupCount);
 
+	// Omnis channel folders use a dynamic `folder:<name>` group key — show the bare folder name.
+	const groupLabel = groupTitle.startsWith('folder:') ? groupTitle.slice('folder:'.length) : t(groupTitle);
+
 	return (
 		<SidebarV2CollapseGroup
-			title={t(groupTitle)}
+			title={groupLabel}
 			expanded={!collapsedGroups.includes(groupTitle)}
 			badge={
 				showUnread ? (
@@ -29,7 +32,7 @@ const RoomListCollapser = ({ groupTitle, unreadCount: unreadGroupCount, collapse
 				) : undefined
 			}
 			aria-label={
-				!collapsedGroups.includes(groupTitle) ? t('Collapse_group', { group: t(groupTitle) }) : t('Expand_group', { group: t(groupTitle) })
+				!collapsedGroups.includes(groupTitle) ? t('Collapse_group', { group: groupLabel }) : t('Expand_group', { group: groupLabel })
 			}
 			{...props}
 		/>

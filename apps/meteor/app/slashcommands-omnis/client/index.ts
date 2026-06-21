@@ -21,3 +21,9 @@ slashCommands.add({
 	options: { description: 'Add a CasePro matter to your Matters board', params: 'matter id' },
 	providesPreview: false,
 });
+
+slashCommands.add({
+	command: 'folder',
+	options: { description: 'File this channel under a sidebar folder (no name removes it)', params: 'folder name' },
+	providesPreview: false,
+});

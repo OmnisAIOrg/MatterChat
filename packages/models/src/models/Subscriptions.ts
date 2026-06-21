@@ -1429,6 +1429,18 @@ export class SubscriptionsRaw extends BaseRaw<ISubscription> implements ISubscri
 		return this.updateOne(query, update);
 	}
 
+	setFolderByRoomIdAndUserId(roomId: string, userId: string, folder?: string): Promise<UpdateResult> {
+		const query = {
+			'rid': roomId,
+			'u._id': userId,
+		};
+
+		const trimmed = folder?.trim();
+		const update: UpdateFilter<ISubscription> = trimmed ? { $set: { folder: trimmed } } : { $unset: { folder: 1 } };
+
+		return this.updateOne(query, update);
+	}
+
 	updateNameAndAlertByRoomId(roomId: string, name: string, fname: string): Promise<UpdateResult | Document> {
 		const query = { rid: roomId };
 
