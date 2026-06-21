@@ -367,7 +367,143 @@ export async function updateCard(uid: string, cardId: string, patch: UpdateCardP
 	});
 	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
 
+	// Recurring "routine" tasks: completing a card that carries a recurrence rule spawns the next
+	// occurrence. Never let a failure here block the completion itself.
+	if (patch.dueComplete === true && current.dueComplete !== true && current.recurrence) {
+		try {
+			await materializeRecurrence(uid, current);
+		} catch {
+			/* the card is still completed even if the next occurrence couldn't be created */
+		}
+	}
+
 	return card;
+}
+
+// ---------------------------------------------------------------------------
+// Recurring "routine" tasks
+// ---------------------------------------------------------------------------
+
+function advanceDate(from: Date, freq: 'daily' | 'weekly' | 'monthly', interval: number): Date {
+	const d = new Date(from);
+	const n = Math.max(1, interval || 1);
+	if (freq === 'daily') {
+		d.setDate(d.getDate() + n);
+	} else if (freq === 'weekly') {
+		d.setDate(d.getDate() + 7 * n);
+	} else {
+		d.setMonth(d.getMonth() + n);
+	}
+	return d;
+}
+
+/** Set or clear a card's recurrence rule. */
+export async function setRecurrence(uid: string, cardId: string, rule: IBoardCard['recurrence'] | null): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardRecurrence' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	if (rule && (rule.freq === 'daily' || rule.freq === 'weekly' || rule.freq === 'monthly')) {
+		const clean: IBoardCard['recurrence'] = {
+			freq: rule.freq,
+			interval: Math.max(1, Number(rule.interval) || 1),
+			basis: rule.basis === 'dueDate' ? 'dueDate' : 'completion',
+			...(typeof rule.count === 'number' && rule.count > 0 ? { count: rule.count } : {}),
+			occurrencesDone: current.recurrence?.occurrencesDone ?? 0,
+		};
+		await BoardsCards.updateOne({ _id: cardId }, { $set: { recurrence: clean }, $inc: { rev: 1 } });
+	} else {
+		await BoardsCards.updateOne({ _id: cardId }, { $unset: { recurrence: 1 }, $inc: { rev: 1 } });
+	}
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardRecurrence' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { recurrence: rule ? rule.freq : 'none' },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
+/**
+ * Clone a recurring card into its next occurrence: a fresh due date (advanced from the completion
+ * date or the prior due date), checklists reset, comments/attachments not carried over. The rule
+ * moves onto the new card; the source keeps no recurrence so it cannot re-spawn on toggle.
+ */
+export async function materializeRecurrence(uid: string, card: IBoardCard): Promise<IBoardCard | undefined> {
+	const rec = card.recurrence;
+	if (!rec) {
+		return undefined;
+	}
+	const done = (rec.occurrencesDone ?? 0) + 1;
+	if (typeof rec.count === 'number' && done >= rec.count) {
+		// series complete — drop the rule from the source and stop.
+		await BoardsCards.updateOne({ _id: card._id }, { $unset: { recurrence: 1 } });
+		return undefined;
+	}
+
+	const basisDate = rec.basis === 'dueDate' && card.dueDate ? new Date(card.dueDate) : new Date();
+	const nextDue = advanceDate(basisDate, rec.freq, rec.interval);
+	const now = new Date();
+	const position = (await BoardsCards.maxPosition(card.listId)) + POSITION_STEP;
+	const cardNumber = await Boards.nextCardNumber(card.boardId);
+
+	const doc: Omit<IBoardCard, '_id' | '_updatedAt'> = {
+		boardId: card.boardId,
+		listId: card.listId,
+		title: card.title,
+		...(card.description ? { description: card.description } : {}),
+		position,
+		cardType: card.cardType,
+		...(card.link ? { link: card.link } : {}),
+		...(card.subStatus ? { subStatus: card.subStatus } : {}),
+		labels: [...(card.labels || [])],
+		assignees: [...(card.assignees || [])],
+		watchers: [...(card.watchers || [])],
+		...(card.startDate ? { startDate: advanceDate(card.startDate, rec.freq, rec.interval) } : {}),
+		dueDate: nextDue,
+		dueComplete: false,
+		...(card.cover ? { cover: card.cover } : {}),
+		fieldValues: { ...(card.fieldValues || {}) },
+		checklists: (card.checklists || []).map((cl) => ({ ...cl, items: cl.items.map((it) => ({ ...it, done: false })) })),
+		attachments: [],
+		comments: [],
+		cardNumber,
+		recurrence: { ...rec, occurrencesDone: done },
+		archived: false,
+		rev: 0,
+		createdBy: uid,
+		createdAt: now,
+	};
+
+	const { insertedId } = await BoardsCards.insertOne(doc);
+	const next = await BoardsCards.findOneById(insertedId);
+	if (!next) {
+		return undefined;
+	}
+	// The rule now lives on the new occurrence; the completed source becomes a plain record.
+	await BoardsCards.updateOne({ _id: card._id }, { $unset: { recurrence: 1 } });
+	await BoardsActivities.log({
+		boardId: card.boardId,
+		listId: card.listId,
+		cardId: next._id,
+		actor: uid,
+		verb: 'card.created',
+		to: { title: card.title, cardNumber, recurredFrom: card._id },
+		ts: now,
+	});
+	emitBoardEvent('card.created', { boardId: card.boardId, listId: card.listId, cardId: next._id, actor: uid });
+	return next;
 }
 
 /**

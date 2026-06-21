@@ -15,12 +15,19 @@ const MyDayPlanner = () => {
 	const qc = useQueryClient();
 	const getMyDay = useEndpoint('GET', '/v1/boards.cards.myDay' as any);
 	const updateCard = useEndpoint('POST', '/v1/boards.card.update' as any);
+	const setRecEndpoint = useEndpoint('POST', '/v1/boards.card.recurrence.set' as any);
 
 	const { data, isLoading } = useQuery({ queryKey: ['boards', 'myDay'], queryFn: () => getMyDay({}), refetchInterval: 30000 });
 	const cards: any[] = (data as any)?.cards || [];
 
 	const markDone = useMutation({
 		mutationFn: (cardId: string) => updateCard({ cardId, patch: { dueComplete: true } } as any),
+		onSuccess: () => qc.invalidateQueries({ queryKey: ['boards', 'myDay'] }),
+	});
+
+	const setRec = useMutation({
+		mutationFn: ({ cardId, freq }: { cardId: string; freq: string }) =>
+			setRecEndpoint((freq ? { cardId, recurrence: { freq, interval: 1 } } : { cardId, recurrence: null }) as any),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ['boards', 'myDay'] }),
 	});
 
@@ -54,9 +61,20 @@ const MyDayPlanner = () => {
 						<Box key={c._id} display='flex' alignItems='center' p={10} mbe={6} style={{ background: 'var(--rcx-color-surface-tint, #f2f3f5)', borderRadius: '4px' }}>
 							<Button mini mie={8} title='Mark done' onClick={() => markDone.mutate(c._id)}><Icon name='check' size='x16' /></Button>
 							<Box flexGrow={1} style={{ cursor: 'pointer' }} onClick={() => openCard(c)}>
-								<Box fontScale='p2'>{c.title}</Box>
-								<Box fontScale='c1' color={b.danger ? 'danger' : 'hint'}>Due {new Date(c.dueDate).toLocaleDateString()}{c.cardType && c.cardType !== 'task' ? ` · ${c.cardType}` : ''}</Box>
+								<Box fontScale='p2'>{c.title}{c.recurrence ? ' ↻' : ''}</Box>
+								<Box fontScale='c1' color={b.danger ? 'danger' : 'hint'}>Due {new Date(c.dueDate).toLocaleDateString()}{c.recurrence ? ` · repeats ${c.recurrence.freq}` : ''}{c.cardType && c.cardType !== 'task' ? ` · ${c.cardType}` : ''}</Box>
 							</Box>
+							<select
+								title='Repeat'
+								value={c.recurrence?.freq || ''}
+								onChange={(e) => setRec.mutate({ cardId: c._id, freq: e.currentTarget.value })}
+								style={{ marginInlineStart: 8, border: '1px solid var(--rcx-color-stroke-light, #cbced1)', borderRadius: 4, padding: '2px 4px', background: 'transparent', fontSize: 12, cursor: 'pointer' }}
+							>
+								<option value=''>No repeat</option>
+								<option value='daily'>Daily</option>
+								<option value='weekly'>Weekly</option>
+								<option value='monthly'>Monthly</option>
+							</select>
 						</Box>
 					))}
 				</Box>

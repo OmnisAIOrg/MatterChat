@@ -123,6 +123,18 @@ export interface IBoardCard extends IRocketChatRecord {
 	relations?: { type: 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child'; cardId: string }[];
 	mirrorOf?: string; // source card _id if this is a mirror
 
+	// Recurring "routine" tasks. When a card carrying a recurrence rule is completed (dueComplete
+	// flips true), the service materializes the next occurrence — a clone with the due date advanced
+	// and checklists reset — and moves the rule onto that new card. The completed card becomes a plain
+	// record. (A daily/weekly/monthly cadence is the personal-PM "routine" pillar.)
+	recurrence?: {
+		freq: 'daily' | 'weekly' | 'monthly';
+		interval: number; // every N periods (>= 1)
+		basis?: 'completion' | 'dueDate'; // anchor for the next due date (default 'completion')
+		count?: number; // stop after N total occurrences (omitted = indefinitely)
+		occurrencesDone?: number; // how many occurrences have been completed so far
+	};
+
 	archived: boolean;
 	rev: number;
 	createdBy: IUser['_id'];

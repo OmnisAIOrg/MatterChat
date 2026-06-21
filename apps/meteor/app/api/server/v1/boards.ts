@@ -40,6 +40,7 @@ import {
 	getCardForUser,
 	getActivities,
 	getMyDayCards,
+	setRecurrence,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -333,6 +334,46 @@ API.v1.get(
 	async function action() {
 		const { cards } = await getMyDayCards(this.userId);
 		return API.v1.success({ cards, count: cards.length });
+	},
+);
+
+// Recurring "routine" tasks: set or clear a card's repeat rule.
+const isCardRecurrenceProps = ajv.compile({
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		recurrence: {
+			type: 'object',
+			nullable: true,
+			properties: {
+				freq: { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
+				interval: { type: 'number' },
+				basis: { type: 'string', enum: ['completion', 'dueDate'], nullable: true },
+				count: { type: 'number', nullable: true },
+			},
+			required: ['freq', 'interval'],
+			additionalProperties: true,
+		},
+	},
+	required: ['cardId'],
+	additionalProperties: false,
+});
+
+API.v1.post(
+	'boards.card.recurrence.set',
+	{
+		authRequired: true,
+		body: isCardRecurrenceProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { cardId, recurrence } = this.bodyParams as { cardId: string; recurrence?: any };
+		const card = await setRecurrence(this.userId, cardId, recurrence ?? null);
+		return API.v1.success({ card });
 	},
 );
 
