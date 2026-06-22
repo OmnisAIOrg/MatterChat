@@ -1,8 +1,9 @@
-import type { IBoard, IBoardList, IBoardCard, BoardsPipelineType, BoardsCardType, IBoardCardLink } from '@rocket.chat/core-typings';
+import type { IBoard, IBoardList, IBoardCard, BoardsPipelineType, BoardsStatus, BoardsCardType, IBoardCardLink } from '@rocket.chat/core-typings';
 import { Boards, BoardsLists, BoardsCards, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import { assertBoardRole, getBoardForUser } from './permissions';
+import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
 import { emitBoardEvent } from './events';
 
 /**
@@ -110,6 +111,48 @@ export async function archiveBoard(uid: string, boardId: string): Promise<{ ok: 
 	emitBoardEvent('board.archived', { boardId, actor: uid });
 
 	return { ok: true };
+}
+
+/**
+ * Set a board's lifecycle status ('active' | 'on_hold' | 'completed' | 'archived').
+ * Keeps the legacy boolean `archived` flag coherent: status 'archived' archives the
+ * board (and cascades to its lists/cards, matching archiveBoard); any other status
+ * un-archives it. Requires the same 'admin' role as updateBoard/archiveBoard.
+ */
+export async function setBoardStatus(uid: string, boardId: string, status: BoardsStatus): Promise<IBoard> {
+	// Archived-tolerant admin check: unlike assertBoardRole (which hides archived
+	// boards), setStatus must be able to RE-activate an archived board, so we
+	// load the raw doc and assert admin here.
+	const current = await Boards.findOneById(boardId);
+	if (!current) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.setStatus' });
+	}
+	const isBoardsAdmin = await hasPermissionAsync(uid, 'boards-admin');
+	if (!isBoardsAdmin) {
+		const member = current.members.find((m) => m.userId === uid);
+		if (!member || member.role !== 'admin') {
+			throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'boards.setStatus' });
+		}
+	}
+
+	const archived = status === 'archived';
+	await Boards.updateOne({ _id: boardId }, { $set: { status, archived }, $inc: { rev: 1 } });
+
+	// keep lists/cards in step with the board's archived state, like archiveBoard's cascade
+	if (archived) {
+		await BoardsLists.archiveByBoard(boardId);
+		await BoardsCards.archiveByBoard(boardId);
+	}
+
+	const board = await Boards.findOneById(boardId);
+	if (!board) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.setStatus' });
+	}
+
+	await BoardsActivities.log({ boardId, actor: uid, verb: 'board.updated', to: { status }, ts: new Date() });
+	emitBoardEvent('board.updated', { boardId, actor: uid });
+
+	return board;
 }
 
 /** Board + its (non-archived) lists in one shot — feeds the board-open path. */

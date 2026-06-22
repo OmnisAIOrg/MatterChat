@@ -114,6 +114,19 @@ async function main() {
   const dec = await api('POST', '/boards.card.approval.decide', { cardId, decision: 'approved' });
   ok(dec.json?.card?.approval?.status === 'approved', 'approval request+decide', `status=${dec.json?.card?.approval?.status}`);
 
+  // --- board status (batch) ---
+  const st1 = await api('POST', '/boards.setStatus', { boardId, status: 'on_hold' });
+  ok(st1.json?.board?.status === 'on_hold' && st1.json?.board?.archived === false, 'set status=on_hold', `status=${st1.json?.board?.status} archived=${st1.json?.board?.archived}`);
+
+  const st2 = await api('POST', '/boards.setStatus', { boardId, status: 'archived' });
+  ok(st2.json?.board?.status === 'archived' && st2.json?.board?.archived === true, 'set status=archived keeps archived flag', `status=${st2.json?.board?.status} archived=${st2.json?.board?.archived}`);
+
+  const st3 = await api('POST', '/boards.setStatus', { boardId, status: 'active' });
+  ok(st3.json?.board?.status === 'active' && st3.json?.board?.archived === false, 're-activate archived board', `status=${st3.json?.board?.status} archived=${st3.json?.board?.archived}`);
+
+  const stBad = await api('POST', '/boards.setStatus', { boardId, status: 'bogus' });
+  ok(stBad.status === 400, 'reject invalid status value', `http=${stBad.status}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }
