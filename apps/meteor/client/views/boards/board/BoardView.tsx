@@ -100,6 +100,12 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 		[createMutation],
 	);
 
+	// A list mutation (e.g. color change) lives on the board-info query, which owns `lists`.
+	// Invalidate it so the freshly-updated list re-renders with its new accent.
+	const handleListUpdated = useCallback(() => {
+		void queryClient.invalidateQueries({ queryKey: ['boards', 'info', board._id] });
+	}, [queryClient, board._id]);
+
 	const handleDragStart = useCallback(
 		(event: DragStartEvent) => {
 			const card = cards.find((c) => c._id === event.active.id);
@@ -175,6 +181,7 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 							isAddingCard={createMutation.isPending}
 							onAddCard={handleAddCard}
 							onOpenCard={openCard}
+							onListUpdated={handleListUpdated}
 						/>
 					))}
 				</Box>
