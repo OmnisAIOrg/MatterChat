@@ -275,6 +275,82 @@ export async function moveList(uid: string, listId: string, position: number): P
 	return list;
 }
 
+/**
+ * Reorder the (non-archived) lists/columns of a board. Two shapes:
+ *  - `{ boardId, listIds }`: an explicit full ordering — each given list is assigned a sequential
+ *    position (POSITION_STEP, 2·STEP, …) in the order supplied, persisting the new sequence so
+ *    `boards.lists` (which sorts by `position`) returns them in that order. listIds must all belong
+ *    to the board; any board list omitted from the array keeps its current position (and would sort
+ *    after the reordered ones).
+ *  - `{ listId, position }`: a single-list move to an absolute fractional rank — mirrors `moveList`
+ *    / the `boards.card.move` position handling.
+ * Same 'member' board gate as the other list mutations.
+ */
+export async function reorderLists(
+	uid: string,
+	params: { boardId?: string; listIds?: string[]; listId?: string; position?: number },
+): Promise<IBoardList[]> {
+	// Single-list move form: { listId, position }
+	if (params.listId && typeof params.position === 'number') {
+		const current = await BoardsLists.findOneById(params.listId);
+		if (!current) {
+			throw new Meteor.Error('error-list-not-found', 'List not found', { method: 'boards.listReorder' });
+		}
+		await assertBoardRole(current.boardId, uid, 'member', 'boards.listReorder');
+
+		await BoardsLists.updatePosition(params.listId, params.position);
+
+		await BoardsActivities.log({
+			boardId: current.boardId,
+			listId: params.listId,
+			actor: uid,
+			verb: 'list.moved',
+			from: { position: current.position },
+			to: { position: params.position },
+			ts: new Date(),
+		});
+		emitBoardEvent('list.moved', { boardId: current.boardId, listId: params.listId, actor: uid });
+
+		return BoardsLists.findByBoard(current.boardId).toArray();
+	}
+
+	// Full-ordering form: { boardId, listIds }
+	const { boardId, listIds } = params;
+	if (!boardId || !Array.isArray(listIds) || listIds.length === 0) {
+		throw new Meteor.Error('error-invalid-params', 'Provide either { listId, position } or { boardId, listIds }', {
+			method: 'boards.listReorder',
+		});
+	}
+	await assertBoardRole(boardId, uid, 'member', 'boards.listReorder');
+
+	// every id must be a (non-archived) list of this board — guard cross-board/bogus ids
+	const boardLists = await BoardsLists.findByBoard(boardId).toArray();
+	const byId = new Map(boardLists.map((l) => [l._id, l]));
+	for (const id of listIds) {
+		if (!byId.has(id)) {
+			throw new Meteor.Error('error-list-not-found', 'List not found on board', { method: 'boards.listReorder' });
+		}
+	}
+
+	// assign sequential positions in the supplied order (STEP, 2·STEP, …)
+	let position = POSITION_STEP;
+	for (const id of listIds) {
+		await BoardsLists.updatePosition(id, position);
+		position += POSITION_STEP;
+	}
+
+	await BoardsActivities.log({
+		boardId,
+		actor: uid,
+		verb: 'list.moved',
+		to: { listIds },
+		ts: new Date(),
+	});
+	emitBoardEvent('list.moved', { boardId, actor: uid });
+
+	return BoardsLists.findByBoard(boardId).toArray();
+}
+
 export async function archiveList(uid: string, listId: string): Promise<{ ok: true }> {
 	const current = await BoardsLists.findOneById(listId);
 	if (!current) {

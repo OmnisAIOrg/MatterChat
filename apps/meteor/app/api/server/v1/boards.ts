@@ -10,6 +10,7 @@ import {
 	isBoardsListCreateProps,
 	isBoardsListUpdateProps,
 	isBoardsListMoveProps,
+	isBoardsListReorderProps,
 	isBoardsListArchiveProps,
 	isBoardsCardsProps,
 	isBoardsCardProps,
@@ -32,6 +33,7 @@ import {
 	createList,
 	updateList,
 	moveList,
+	reorderLists,
 	archiveList,
 	createCard,
 	updateCard,
@@ -287,6 +289,28 @@ API.v1.post(
 		const list = await moveList(userId, listId, position);
 
 		return API.v1.success({ list });
+	},
+);
+
+// Reorder a board's columns. Accepts either { boardId, listIds } (full ordering, positions
+// reassigned in array order) or { listId, position } (single-list move). Returns the board's
+// lists in their new persisted order (same 'member' gate as the other list mutations).
+API.v1.post(
+	'boards.list.reorder',
+	{
+		authRequired: true,
+		body: isBoardsListReorderProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const lists = await reorderLists(userId, this.bodyParams);
+
+		return API.v1.success({ lists });
 	},
 );
 

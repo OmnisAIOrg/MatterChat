@@ -252,6 +252,26 @@ const BoardsListMoveSchema = {
 
 export const isBoardsListMoveProps = ajv.compile<BoardsListMoveProps>(BoardsListMoveSchema);
 
+// Reorder a board's columns. Two accepted shapes (validated as a combination in the service):
+//  - { boardId, listIds }   full ordering: positions are reassigned in array order
+//  - { listId, position }   single-list move to an absolute fractional rank (mirrors list.move)
+// All four keys live here or ajv `additionalProperties:false` silently strips them from the body.
+type BoardsListReorderProps = { boardId?: string; listIds?: string[]; listId?: string; position?: number };
+
+const BoardsListReorderSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1, nullable: true },
+		listIds: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, nullable: true },
+		listId: { type: 'string', minLength: 1, nullable: true },
+		position: { type: 'number', nullable: true },
+	},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsListReorderProps = ajv.compile<BoardsListReorderProps>(BoardsListReorderSchema);
+
 type BoardsListArchiveProps = { listId: string };
 
 const BoardsListArchiveSchema = {
@@ -435,6 +455,9 @@ export type BoardsEndpoints = {
 	};
 	'/v1/boards.list.move': {
 		POST: (params: BoardsListMoveProps) => { list: IBoardList };
+	};
+	'/v1/boards.list.reorder': {
+		POST: (params: BoardsListReorderProps) => { lists: IBoardList[] };
 	};
 	'/v1/boards.list.archive': {
 		POST: (params: BoardsListArchiveProps) => { success: true };
