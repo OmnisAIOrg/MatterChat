@@ -140,6 +140,16 @@ async function main() {
   const stBad = await api('POST', '/boards.setStatus', { boardId, status: 'bogus' });
   ok(stBad.status === 400, 'reject invalid status value', `http=${stBad.status}`);
 
+  // --- list colors (batch) ---
+  const lc = await api('POST', '/boards.list.create', { boardId, title: 'Colored column' });
+  const colorListId = lc.json?.list?._id;
+  ok(!!colorListId, 'create list for color', colorListId);
+  const setColor = await api('POST', '/boards.list.update', { listId: colorListId, patch: { color: '#1d74f5' } });
+  ok(setColor.json?.list?.color === '#1d74f5', 'set list color', setColor.json?.list?.color);
+  const listsRead = await api('GET', `/boards.lists?boardId=${boardId}`);
+  const readBack = (listsRead.json?.lists || []).find((x) => x._id === colorListId);
+  ok(readBack?.color === '#1d74f5', 'list color persisted on read-back', readBack?.color);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }

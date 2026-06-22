@@ -199,7 +199,7 @@ export async function createList(uid: string, params: CreateListParams): Promise
 	return list;
 }
 
-export type UpdateListPatch = Partial<Pick<IBoardList, 'title' | 'wipLimit' | 'subStatuses' | 'collapsed'>>;
+export type UpdateListPatch = Partial<Pick<IBoardList, 'title' | 'wipLimit' | 'subStatuses' | 'collapsed' | 'color'>>;
 
 export async function updateList(uid: string, listId: string, patch: UpdateListPatch): Promise<IBoardList> {
 	const current = await BoardsLists.findOneById(listId);
@@ -209,6 +209,7 @@ export async function updateList(uid: string, listId: string, patch: UpdateListP
 	await assertBoardRole(current.boardId, uid, 'member', 'boards.listUpdate');
 
 	const set: UpdateListPatch = {};
+	const unset: Record<string, 1> = {};
 	if (typeof patch.title === 'string' && patch.title.trim()) {
 		set.title = patch.title.trim();
 	}
@@ -221,8 +222,21 @@ export async function updateList(uid: string, listId: string, patch: UpdateListP
 	if (typeof patch.collapsed === 'boolean') {
 		set.collapsed = patch.collapsed;
 	}
+	if (typeof patch.color === 'string') {
+		// a raw CSS color string sets the accent; an empty string clears it
+		const color = patch.color.trim();
+		if (color) {
+			set.color = color;
+		} else {
+			unset.color = 1;
+		}
+	}
 
-	await BoardsLists.updateOne({ _id: listId }, { $set: set, $inc: { rev: 1 } });
+	const update: Record<string, unknown> = { $set: set, $inc: { rev: 1 } };
+	if (Object.keys(unset).length) {
+		update.$unset = unset;
+	}
+	await BoardsLists.updateOne({ _id: listId }, update);
 	const list = await BoardsLists.findOneById(listId);
 	if (!list) {
 		throw new Meteor.Error('error-list-not-found', 'List not found', { method: 'boards.listUpdate' });
@@ -769,6 +783,7 @@ export async function copyBoard(uid: string, boardId: string): Promise<IBoard> {
 			...(typeof list.wipLimit === 'number' ? { wipLimit: list.wipLimit } : {}),
 			...(list.subStatuses ? { subStatuses: [...list.subStatuses] } : {}),
 			...(list.collapsed ? { collapsed: list.collapsed } : {}),
+			...(list.color ? { color: list.color } : {}),
 			archived: false,
 			rev: 0,
 		} as Omit<IBoardList, '_id' | '_updatedAt'>);
