@@ -71,7 +71,9 @@ import {
 	addChecklistItem,
 	toggleChecklistItem,
 	removeChecklistItem,
+	buildICalForUser,
 } from '../../../../server/lib/boards';
+import { settings } from '../../../settings/server';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
 
@@ -425,6 +427,41 @@ API.v1.get(
 		const text = typeof this.queryParams.text === 'string' ? this.queryParams.text : '';
 		const { cards } = await searchCards(this.userId, text);
 		return API.v1.success({ cards, count: cards.length });
+	},
+);
+
+// iCal (.ics) calendar feed of the user's due cards — one VEVENT per assigned card with a due
+// date (same set as boards.cards.myDay). Returns a raw RFC-5545 `text/calendar` body (NOT the
+// usual JSON envelope) so Google / Apple / Outlook Calendar can subscribe to it.
+//
+// AUTH (intentionally narrow): this endpoint is authenticated (X-Auth-Token / X-User-Id), so it
+// returns the *current* user's feed. Calendar apps can't send login headers, so a fully
+// subscribable public URL needs a per-user feed token (e.g. `GET boards.cards.ical?token=...`
+// resolving the user from a stored `icalToken`). That requires touching the shared Users model +
+// IUser typings + a token-generate endpoint — out of scope for this narrow change. FOLLOW-UP:
+// add `icalToken` storage + an `authRequired:false` token-resolving variant of this route.
+const icalSuccessSchema = ajv.compile<string>({ type: 'string' });
+
+API.v1.get(
+	'boards.cards.ical',
+	{
+		authRequired: true,
+		response: {
+			200: icalSuccessSchema,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const siteUrl = settings.get<string>('Site_Url') || undefined;
+		const ics = await buildICalForUser(this.userId, siteUrl);
+		return {
+			statusCode: 200,
+			body: ics,
+			headers: {
+				'Content-Type': 'text/calendar; charset=utf-8',
+				'Content-Disposition': 'attachment; filename="matterchat-deadlines.ics"',
+			},
+		};
 	},
 );
 
