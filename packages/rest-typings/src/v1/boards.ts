@@ -442,6 +442,11 @@ export type BoardsEndpoints = {
 	'/v1/boards.cards': {
 		GET: (params: BoardsCardsProps) => PaginatedResult<{ cards: IBoardCard[] }>;
 	};
+	// iCal (.ics) feed of the current user's due cards. Returns a raw RFC-5545
+	// `text/calendar` document (a string), NOT the usual JSON envelope.
+	'/v1/boards.cards.ical': {
+		GET: () => string;
+	};
 	'/v1/boards.card': {
 		GET: (params: BoardsCardProps) => { card: IBoardCard };
 	};

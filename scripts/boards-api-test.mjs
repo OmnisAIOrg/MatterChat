@@ -150,6 +150,28 @@ async function main() {
   const readBack = (listsRead.json?.lists || []).find((x) => x._id === colorListId);
   ok(readBack?.color === '#1d74f5', 'list color persisted on read-back', readBack?.color);
 
+  // --- iCal (.ics) feed of due cards (batch: calendar subscription) ---
+  // Create a fresh card with a due date assigned to me, then pull the authenticated ical feed and
+  // assert it is a valid VCALENDAR containing a VEVENT/SUMMARY for that card.
+  const icalTitle = `iCal feed card ${Date.now()}`;
+  const ic = await api('POST', '/boards.card.create', { boardId, listId, title: icalTitle });
+  const icalCardId = ic.json?.card?._id;
+  ok(!!icalCardId, 'create card for ical feed', icalCardId);
+  const dueIcal = new Date(); dueIcal.setHours(14, 30, 0, 0);
+  await api('POST', '/boards.card.update', { cardId: icalCardId, patch: { assignees: [USER], dueDate: dueIcal.toISOString() } });
+
+  const icalRes = await fetch(`${BASE}/boards.cards.ical`, {
+    method: 'GET',
+    headers: { 'X-User-Id': USER, 'X-Auth-Token': TOKEN, Accept: 'text/calendar' },
+  });
+  const icalCt = icalRes.headers.get('content-type') || '';
+  const icalBody = await icalRes.text();
+  ok(icalCt.includes('text/calendar'), 'ical Content-Type is text/calendar', icalCt);
+  ok(icalBody.includes('BEGIN:VCALENDAR') && icalBody.includes('END:VCALENDAR'), 'ical wraps VCALENDAR', `${icalBody.length} bytes`);
+  ok(icalBody.includes('VERSION:2.0') && icalBody.includes('PRODID:'), 'ical has VERSION + PRODID');
+  ok(icalBody.includes('BEGIN:VEVENT') && icalBody.includes(`SUMMARY:${icalTitle}`), 'ical has VEVENT/SUMMARY for due card', icalTitle);
+  ok(icalBody.includes(`UID:boards-card-${icalCardId}@matterchat`), 'ical event has stable per-card UID');
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }
