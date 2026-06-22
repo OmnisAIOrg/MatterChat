@@ -3,6 +3,21 @@
 
 ---
 
+### 2026-06-22 — Built 3 boards‑parity features in parallel via isolated git worktrees
+**Chose:** build board‑status / bulk‑card‑ops / list‑colors **concurrently** — three parallel sub‑agents, each in its own `git worktree` + branch off `feature/matterchat-cross-firm` — then integrate sequentially and verify once with the API harness (26/26).
+**Rejected:** building the three one at a time on the live dev server.
+**Why:** independent, additive server features parallelize cleanly, and worktrees stop the agents stomping each other's edits to the shared files (`rest-typings/boards.ts`, `server/lib/boards/service.ts`, the harness). The only integration conflicts were additive test‑block overlaps (kept all). Caveat learned: a fresh worktree has **no `node_modules`**, so agents can write code but cannot build/verify — verification is a single harness pass after integration, not per‑agent.
+
+### 2026-06-22 — After a typings edit, rebuild `dist/` AND bounce the dev server
+**Chose:** after editing `packages/rest-typings` / `packages/core-typings`, run `yarn turbo run build --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings` (~38s) **then bounce the meteor dev process** (the self‑heal wrapper warm‑restarts it).
+**Rejected:** trusting the dev watcher to hot‑reload the rebuilt `dist/` (CLAUDE.md implies it does).
+**Why:** the dev server imports each workspace package's built `dist/`, and its watcher did **not** pick up a one‑off `turbo` dist rebuild — 3 harness tests failed (new `color` field stripped by `additionalProperties:false`, status enum bypassed) until the process was bounced, which reloads `dist/` fresh on boot. Symptom to recognize: `must NOT have additional properties` in the server log + validation that should reject silently passing.
+
+### 2026-06-22 — Dev server on :3100 under a self‑heal wrapper (don't patch the toolchain)
+**Chose:** run the **dev** server (not the prod bundle) on the founder's familiar **:3100** via `/tmp/mc-dev.sh`, wrapped in `while true; do bash /tmp/mc-dev.sh; done` so a crash auto‑recovers in ~30s.
+**Rejected:** (a) a ~15‑min prod build per change; (b) patching Meteor's `run-proxy.js` to swallow the error.
+**Why:** Meteor's dev proxy crashes on aborted connections (`ERR_STREAM_WRITE_AFTER_END`) — triggered by curl health‑checks with short `--max-time` or a browser dropping mid‑load. The wrapper keeps the fast HMR loop AND auto‑heals without editing the global toolchain (patching `~/.meteor/.../run-proxy.js` is outside the repo and was deliberately left alone). Lesson: verify the dev server via its **log file + the API harness**, never by polling it with aborting curls.
+
 ### 2026-06-20 — Session resume = repo + skill, not personal memory
 **Chose:** in‑repo `CLAUDE.md` (rules + the two commands) + `HANDOFF.md` (state) + `DECISIONS.md` (this file) + an `omnis-os:matterchat` skill, driven by two plain‑English commands ("resume matterchat" / "checkpoint matterchat").
 **Rejected:** relying on Claude's personal memory for continuity.
