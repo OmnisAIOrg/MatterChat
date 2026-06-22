@@ -12,6 +12,7 @@ export type BoardsActivityVerb =
 	| 'card.updated'
 	| 'card.moved'
 	| 'card.archived'
+	| 'card.deleted'
 	| 'card.copied'
 	| 'card.mirrored'
 	| 'card.linked'

@@ -959,3 +959,100 @@ export async function archiveCard(uid: string, cardId: string): Promise<{ ok: tr
 
 	return { ok: true };
 }
+
+/** Permanently delete a card (hard delete, distinct from archive). Same member gate as archive. */
+export async function deleteCard(uid: string, cardId: string): Promise<{ ok: true }> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardDelete' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardDelete');
+
+	await BoardsCards.removeById(cardId);
+
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.deleted',
+		ts: new Date(),
+	});
+	emitBoardEvent('card.deleted', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+
+	return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk card operations
+// ---------------------------------------------------------------------------
+
+export type BulkCardAction = 'move' | 'complete' | 'archive' | 'setPriority' | 'delete';
+
+export type BulkCardParams = {
+	// move
+	toListId?: string;
+	position?: number;
+	subStatus?: string;
+	// complete
+	completed?: boolean;
+	// setPriority
+	priority?: IBoardCard['priority'];
+};
+
+export type BulkCardResult = { cardId: string; ok: boolean; error?: string };
+
+export type BulkCardResponse = { results: BulkCardResult[]; updated: number; failed: number };
+
+/**
+ * Apply one action to many cards by REUSING the single-card service functions in a loop. Each
+ * card is processed independently with its own try/catch so one bad card (missing, permission,
+ * validation) never aborts the batch — the per-card permission gate is exactly the one the
+ * single-card endpoint enforces, because we call the same function. The `position` for `move`
+ * is subdivided per card so a bulk move keeps a stable relative order in the target list.
+ */
+export async function bulkCardOperation(
+	uid: string,
+	cardIds: string[],
+	action: BulkCardAction,
+	params: BulkCardParams = {},
+): Promise<BulkCardResponse> {
+	const results: BulkCardResult[] = [];
+
+	for (let i = 0; i < cardIds.length; i++) {
+		const cardId = cardIds[i];
+		try {
+			switch (action) {
+				case 'move': {
+					if (!params.toListId) {
+						throw new Meteor.Error('error-invalid-params', 'toListId is required for move', { method: 'boards.cardsBulk' });
+					}
+					// keep a stable order: offset each card's position so they don't collide
+					const basePosition = typeof params.position === 'number' ? params.position : 0;
+					await moveCard(uid, cardId, params.toListId, basePosition + i * POSITION_STEP, params.subStatus);
+					break;
+				}
+				case 'complete':
+					await completeCard(uid, cardId, params.completed !== false);
+					break;
+				case 'archive':
+					await archiveCard(uid, cardId);
+					break;
+				case 'setPriority':
+					await updateCard(uid, cardId, { priority: params.priority });
+					break;
+				case 'delete':
+					await deleteCard(uid, cardId);
+					break;
+				default:
+					throw new Meteor.Error('error-invalid-action', `Unknown bulk action: ${action as string}`, { method: 'boards.cardsBulk' });
+			}
+			results.push({ cardId, ok: true });
+		} catch (err) {
+			results.push({ cardId, ok: false, error: err instanceof Error ? err.message : String(err) });
+		}
+	}
+
+	const updated = results.filter((r) => r.ok).length;
+	return { results, updated, failed: results.length - updated };
+}

@@ -43,6 +43,7 @@ export type BoardEventName =
 	| 'card.updated'
 	| 'card.moved'
 	| 'card.archived'
+	| 'card.deleted'
 	// --- card-detail mutations (Emit-wiring phase) ---
 	| 'card.subStatusChanged'
 	| 'card.converted'
@@ -103,6 +104,7 @@ const NON_TRIGGER_EVENTS = new Set<BoardEventName>([
 	'list.updated',
 	'list.moved',
 	'list.archived',
+	'card.deleted',
 	'matter.snapshotRefreshed',
 	'deadline.satisfied',
 ]);

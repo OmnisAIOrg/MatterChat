@@ -368,6 +368,36 @@ const BoardsCardArchiveSchema = {
 
 export const isBoardsCardArchiveProps = ajv.compile<BoardsCardArchiveProps>(BoardsCardArchiveSchema);
 
+// Bulk card operations: apply one action to many cards in a single request. The optional action
+// params (toListId/position/subStatus for move, completed for complete, priority for setPriority)
+// ride alongside; the server validates the combination per-action.
+type BoardsCardsBulkProps = {
+	cardIds: string[];
+	action: 'move' | 'complete' | 'archive' | 'setPriority' | 'delete';
+	toListId?: string;
+	position?: number;
+	subStatus?: string;
+	completed?: boolean;
+	priority?: 'low' | 'medium' | 'high' | 'urgent';
+};
+
+const BoardsCardsBulkSchema = {
+	type: 'object',
+	properties: {
+		cardIds: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1 },
+		action: { type: 'string', enum: ['move', 'complete', 'archive', 'setPriority', 'delete'] },
+		toListId: { type: 'string', nullable: true },
+		position: { type: 'number', nullable: true },
+		subStatus: { type: 'string', nullable: true },
+		completed: { type: 'boolean', nullable: true },
+		priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], nullable: true },
+	},
+	required: ['cardIds', 'action'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardsBulkProps = ajv.compile<BoardsCardsBulkProps>(BoardsCardsBulkSchema);
+
 // ---------------------------------------------------------------------------
 // Endpoint type map
 // ---------------------------------------------------------------------------
@@ -423,6 +453,13 @@ export type BoardsEndpoints = {
 	};
 	'/v1/boards.card.archive': {
 		POST: (params: BoardsCardArchiveProps) => { success: true };
+	};
+	'/v1/boards.cards.bulk': {
+		POST: (params: BoardsCardsBulkProps) => {
+			results: { cardId: string; ok: boolean; error?: string }[];
+			updated: number;
+			failed: number;
+		};
 	};
 	'/v1/boards.activities': {
 		GET: (params: BoardsActivitiesProps) => PaginatedResult<{ activities: IBoardActivity[] }>;
