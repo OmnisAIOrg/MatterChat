@@ -19,6 +19,9 @@ import {
 	isBoardsCardMoveProps,
 	isBoardsCardArchiveProps,
 	isBoardsCardsBulkProps,
+	isBoardsCardChecklistAddProps,
+	isBoardsCardChecklistToggleProps,
+	isBoardsCardChecklistRemoveProps,
 	isBoardsActivitiesProps,
 	isBoardsLabelCreateProps,
 	isBoardsLabelUpdateProps,
@@ -65,6 +68,9 @@ import {
 	updateBoardLabel,
 	deleteBoardLabel,
 	setCardLabels,
+	addChecklistItem,
+	toggleChecklistItem,
+	removeChecklistItem,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -646,6 +652,49 @@ API.v1.post(
 	async function action() {
 		const { cardId, decision } = this.bodyParams as { cardId: string; decision: 'approved' | 'changes' | 'rejected' };
 		const card = await decideApproval(this.userId, cardId, decision);
+		return API.v1.success({ card });
+	},
+);
+
+// Card checklists / sub-tasks: granular item-level mutations on a card's default checklist.
+API.v1.post(
+	'boards.card.checklist.add',
+	{
+		authRequired: true,
+		body: isBoardsCardChecklistAddProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, text } = this.bodyParams;
+		const card = await addChecklistItem(this.userId, cardId, text);
+		return API.v1.success({ card });
+	},
+);
+
+API.v1.post(
+	'boards.card.checklist.toggle',
+	{
+		authRequired: true,
+		body: isBoardsCardChecklistToggleProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, itemId, done } = this.bodyParams;
+		const card = await toggleChecklistItem(this.userId, cardId, itemId, done);
+		return API.v1.success({ card });
+	},
+);
+
+API.v1.post(
+	'boards.card.checklist.remove',
+	{
+		authRequired: true,
+		body: isBoardsCardChecklistRemoveProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, itemId } = this.bodyParams;
+		const card = await removeChecklistItem(this.userId, cardId, itemId);
 		return API.v1.success({ card });
 	},
 );

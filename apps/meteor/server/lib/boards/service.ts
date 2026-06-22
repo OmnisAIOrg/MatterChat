@@ -1,4 +1,15 @@
-import type { IBoard, IBoardList, IBoardCard, IBoardLabelDef, BoardsPipelineType, BoardsStatus, BoardsCardType, IBoardCardLink } from '@rocket.chat/core-typings';
+import type {
+	IBoard,
+	IBoardList,
+	IBoardCard,
+	IBoardLabelDef,
+	IChecklist,
+	IChecklistItem,
+	BoardsPipelineType,
+	BoardsStatus,
+	BoardsCardType,
+	IBoardCardLink,
+} from '@rocket.chat/core-typings';
 import { Boards, BoardsLists, BoardsCards, BoardsActivities } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
@@ -682,6 +693,150 @@ export async function completeCard(uid: string, cardId: string, value = true): P
 			/* never fail completion because the next occurrence couldn't be created */
 		}
 	}
+	return card;
+}
+
+// ---------------------------------------------------------------------------
+// Card checklists / sub-tasks
+// ---------------------------------------------------------------------------
+
+// Title of the implicit default checklist created on the first item add. Cards carry a
+// `checklists: IChecklist[]` array (a checklist groups items); the granular endpoints operate on a
+// single default checklist so callers can think purely in terms of items.
+const DEFAULT_CHECKLIST_TITLE = 'Checklist';
+
+/** Locate the item with `itemId` across every checklist on a card. */
+function findChecklistItem(card: IBoardCard, itemId: string): { checklist: IChecklist; item: IChecklistItem } | undefined {
+	for (const checklist of card.checklists || []) {
+		const item = checklist.items.find((it) => it.id === itemId);
+		if (item) {
+			return { checklist, item };
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Add a sub-task to a card. Items live in the card's default checklist, which is created on the
+ * first add. Returns the fresh card so the caller sees the new item (with its generated id).
+ */
+export async function addChecklistItem(uid: string, cardId: string, text: string): Promise<IBoardCard> {
+	const clean = text?.trim();
+	if (!clean) {
+		throw new Meteor.Error('error-invalid-checklist-text', 'Invalid checklist item text', { method: 'boards.cardChecklistAdd' });
+	}
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardChecklistAdd' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	const checklists = current.checklists || [];
+	const item: IChecklistItem = {
+		id: Random.id(),
+		text: clean,
+		done: false,
+		position: 0,
+	};
+
+	let defaultChecklist = checklists[0];
+	if (!defaultChecklist) {
+		// no checklist yet — seed the default one carrying this first item
+		defaultChecklist = { id: Random.id(), title: DEFAULT_CHECKLIST_TITLE, position: 0, items: [item] };
+		await BoardsCards.updateOne({ _id: cardId }, { $set: { checklists: [defaultChecklist] }, $inc: { rev: 1 } });
+	} else {
+		// append to the first checklist; position is monotonically after the current max
+		item.position = defaultChecklist.items.reduce((max, it) => Math.max(max, it.position), -1) + 1;
+		await BoardsCards.updateOne({ _id: cardId, 'checklists.id': defaultChecklist.id }, { $push: { 'checklists.$.items': item }, $inc: { rev: 1 } });
+	}
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardChecklistAdd' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { checklistItemAdded: clean },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
+/** Toggle a checklist item's done state (or set it explicitly when `done` is provided). */
+export async function toggleChecklistItem(uid: string, cardId: string, itemId: string, done?: boolean): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardChecklistToggle' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	const found = findChecklistItem(current, itemId);
+	if (!found) {
+		throw new Meteor.Error('error-checklist-item-not-found', 'Checklist item not found', { method: 'boards.cardChecklistToggle' });
+	}
+	const nextDone = typeof done === 'boolean' ? done : !found.item.done;
+
+	// positional filter targets the matching item inside the matching checklist
+	await BoardsCards.updateOne(
+		{ _id: cardId, 'checklists.id': found.checklist.id },
+		{ $set: { 'checklists.$[cl].items.$[it].done': nextDone }, $inc: { rev: 1 } },
+		{ arrayFilters: [{ 'cl.id': found.checklist.id }, { 'it.id': itemId }] },
+	);
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardChecklistToggle' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { checklistItemDone: nextDone, itemId },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
+/** Remove a checklist item from whichever checklist holds it. */
+export async function removeChecklistItem(uid: string, cardId: string, itemId: string): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardChecklistRemove' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	const found = findChecklistItem(current, itemId);
+	if (!found) {
+		throw new Meteor.Error('error-checklist-item-not-found', 'Checklist item not found', { method: 'boards.cardChecklistRemove' });
+	}
+
+	await BoardsCards.updateOne(
+		{ _id: cardId, 'checklists.id': found.checklist.id },
+		{ $pull: { 'checklists.$.items': { id: itemId } }, $inc: { rev: 1 } },
+	);
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardChecklistRemove' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { checklistItemRemoved: itemId },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
 	return card;
 }
 
