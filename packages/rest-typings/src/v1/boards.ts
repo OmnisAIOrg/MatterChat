@@ -401,6 +401,53 @@ const BoardsCardsBulkSchema = {
 
 export const isBoardsCardsBulkProps = ajv.compile<BoardsCardsBulkProps>(BoardsCardsBulkSchema);
 
+// Card checklists / sub-tasks. Granular item-level mutations on a card's default checklist
+// (the service auto-creates one on the first add). Each new field MUST be declared here or
+// ajv `additionalProperties:false` silently strips it from the request body.
+type BoardsCardChecklistAddProps = { cardId: string; text: string };
+
+const BoardsCardChecklistAddSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		text: { type: 'string', minLength: 1 },
+	},
+	required: ['cardId', 'text'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardChecklistAddProps = ajv.compile<BoardsCardChecklistAddProps>(BoardsCardChecklistAddSchema);
+
+// Toggle (or explicitly set) a checklist item's done state. With `done` omitted the item flips.
+type BoardsCardChecklistToggleProps = { cardId: string; itemId: string; done?: boolean };
+
+const BoardsCardChecklistToggleSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		itemId: { type: 'string', minLength: 1 },
+		done: { type: 'boolean', nullable: true },
+	},
+	required: ['cardId', 'itemId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardChecklistToggleProps = ajv.compile<BoardsCardChecklistToggleProps>(BoardsCardChecklistToggleSchema);
+
+type BoardsCardChecklistRemoveProps = { cardId: string; itemId: string };
+
+const BoardsCardChecklistRemoveSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		itemId: { type: 'string', minLength: 1 },
+	},
+	required: ['cardId', 'itemId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardChecklistRemoveProps = ajv.compile<BoardsCardChecklistRemoveProps>(BoardsCardChecklistRemoveSchema);
+
 // ---------------------------------------------------------------------------
 // Endpoint type map
 // ---------------------------------------------------------------------------
@@ -463,6 +510,15 @@ export type BoardsEndpoints = {
 			updated: number;
 			failed: number;
 		};
+	};
+	'/v1/boards.card.checklist.add': {
+		POST: (params: BoardsCardChecklistAddProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.checklist.toggle': {
+		POST: (params: BoardsCardChecklistToggleProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.checklist.remove': {
+		POST: (params: BoardsCardChecklistRemoveProps) => { card: IBoardCard };
 	};
 	'/v1/boards.activities': {
 		GET: (params: BoardsActivitiesProps) => PaginatedResult<{ activities: IBoardActivity[] }>;

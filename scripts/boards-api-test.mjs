@@ -150,6 +150,27 @@ async function main() {
   const readBack = (listsRead.json?.lists || []).find((x) => x._id === colorListId);
   ok(readBack?.color === '#1d74f5', 'list color persisted on read-back', readBack?.color);
 
+  // --- checklists / sub-tasks (batch) ---
+  const clCard = await api('POST', '/boards.card.create', { boardId, listId, title: 'Checklist card' });
+  const clCardId = clCard.json?.card?._id;
+  ok(!!clCardId, 'create card for checklist', clCardId);
+  // add two checklist items
+  const add1 = await api('POST', '/boards.card.checklist.add', { cardId: clCardId, text: 'Draft motion' });
+  const add2 = await api('POST', '/boards.card.checklist.add', { cardId: clCardId, text: 'File with court' });
+  const itemsAfterAdd = (add2.json?.card?.checklists || []).flatMap((cl) => cl.items || []);
+  ok(itemsAfterAdd.length === 2, 'add 2 checklist items', `${itemsAfterAdd.length} items`);
+  const firstItemId = (add1.json?.card?.checklists || []).flatMap((cl) => cl.items || [])[0]?.id;
+  ok(!!firstItemId, 'first item has generated id', firstItemId);
+  // toggle the first item done
+  const tog = await api('POST', '/boards.card.checklist.toggle', { cardId: clCardId, itemId: firstItemId, done: true });
+  const toggledItem = (tog.json?.card?.checklists || []).flatMap((cl) => cl.items || []).find((it) => it.id === firstItemId);
+  ok(toggledItem?.done === true, 'toggle checklist item done', `done=${toggledItem?.done}`);
+  // read the card back and assert persisted state: 2 items, exactly 1 done
+  const clRead = await api('GET', `/boards.card?cardId=${clCardId}`);
+  const readItems = (clRead.json?.card?.checklists || []).flatMap((cl) => cl.items || []);
+  const doneCount = readItems.filter((it) => it.done).length;
+  ok(readItems.length === 2 && doneCount === 1, 'read-back: 2 items, 1 done', `items=${readItems.length} done=${doneCount}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }
