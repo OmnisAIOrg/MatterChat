@@ -16,6 +16,7 @@ import {
 	isBoardsCardUpdateProps,
 	isBoardsCardMoveProps,
 	isBoardsCardArchiveProps,
+	isBoardsCardsBulkProps,
 	isBoardsActivitiesProps,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
@@ -34,6 +35,7 @@ import {
 	updateCard,
 	moveCard,
 	archiveCard,
+	bulkCardOperation,
 	listBoardsForUser,
 	getListsForBoard,
 	getCardsForBoard,
@@ -676,6 +678,29 @@ API.v1.post(
 		await archiveCard(userId, cardId);
 
 		return API.v1.success();
+	},
+);
+
+// Bulk card operations: apply one action (move | complete | archive | setPriority | delete) to a
+// set of cards. Each card is processed independently (its own per-card permission check) so one
+// bad card doesn't abort the batch; per-card outcomes come back in `results`.
+API.v1.post(
+	'boards.cards.bulk',
+	{
+		authRequired: true,
+		body: isBoardsCardsBulkProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { cardIds, action, ...actionParams } = this.bodyParams;
+		const { results, updated, failed } = await bulkCardOperation(userId, cardIds, action, actionParams);
+
+		return API.v1.success({ results, updated, failed });
 	},
 );
 

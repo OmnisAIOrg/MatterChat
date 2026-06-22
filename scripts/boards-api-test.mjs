@@ -114,6 +114,19 @@ async function main() {
   const dec = await api('POST', '/boards.card.approval.decide', { cardId, decision: 'approved' });
   ok(dec.json?.card?.approval?.status === 'approved', 'approval request+decide', `status=${dec.json?.card?.approval?.status}`);
 
+  // --- bulk card operations (batch) ---
+  const bk1 = await api('POST', '/boards.card.create', { boardId, listId, title: 'Bulk card 1' });
+  const bk2 = await api('POST', '/boards.card.create', { boardId, listId, title: 'Bulk card 2' });
+  const bk3 = await api('POST', '/boards.card.create', { boardId, listId, title: 'Bulk card 3' });
+  const bulkIds = [bk1.json?.card?._id, bk2.json?.card?._id, bk3.json?.card?._id];
+  const bulk = await api('POST', '/boards.cards.bulk', { cardIds: bulkIds, action: 'complete' });
+  ok(bulk.json?.updated === 3 && bulk.json?.failed === 0, 'bulk complete 3 cards', `updated=${bulk.json?.updated} failed=${bulk.json?.failed}`);
+  const bulkVerify = await api('GET', `/boards.card?cardId=${bulkIds[0]}`);
+  ok(bulkVerify.json?.card?.completed === true, 'bulk-completed card is completed', `completed=${bulkVerify.json?.card?.completed}`);
+  // one bad card id must not abort the batch (partial success)
+  const bulkPartial = await api('POST', '/boards.cards.bulk', { cardIds: [bulkIds[1], 'nonexistent-card-id'], action: 'setPriority', priority: 'urgent' });
+  ok(bulkPartial.json?.updated === 1 && bulkPartial.json?.failed === 1, 'bulk partial (1 ok, 1 fail)', `updated=${bulkPartial.json?.updated} failed=${bulkPartial.json?.failed}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }
