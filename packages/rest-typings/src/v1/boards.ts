@@ -422,6 +422,81 @@ const BoardsCardsBulkSchema = {
 export const isBoardsCardsBulkProps = ajv.compile<BoardsCardsBulkProps>(BoardsCardsBulkSchema);
 
 // ---------------------------------------------------------------------------
+// Labels / tags
+//
+// Board-level palette (create/update/delete a label def) + per-card assignment
+// (replace a card's label-id set). NOTE: every property below MUST be declared
+// or ajv `additionalProperties:false` silently strips it from the request body.
+// ---------------------------------------------------------------------------
+
+type BoardsLabelCreateProps = { boardId: string; name: string; color: string };
+
+const BoardsLabelCreateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		name: { type: 'string', minLength: 1 },
+		color: { type: 'string', minLength: 1 },
+	},
+	required: ['boardId', 'name', 'color'],
+	additionalProperties: false,
+};
+
+export const isBoardsLabelCreateProps = ajv.compile<BoardsLabelCreateProps>(BoardsLabelCreateSchema);
+
+type BoardsLabelUpdateProps = { boardId: string; labelId: string; patch: { name?: string; color?: string } };
+
+const BoardsLabelUpdateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		labelId: { type: 'string', minLength: 1 },
+		patch: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', nullable: true },
+				color: { type: 'string', nullable: true },
+			},
+			required: [],
+			additionalProperties: false,
+		},
+	},
+	required: ['boardId', 'labelId', 'patch'],
+	additionalProperties: false,
+};
+
+export const isBoardsLabelUpdateProps = ajv.compile<BoardsLabelUpdateProps>(BoardsLabelUpdateSchema);
+
+type BoardsLabelDeleteProps = { boardId: string; labelId: string };
+
+const BoardsLabelDeleteSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		labelId: { type: 'string', minLength: 1 },
+	},
+	required: ['boardId', 'labelId'],
+	additionalProperties: false,
+};
+
+export const isBoardsLabelDeleteProps = ajv.compile<BoardsLabelDeleteProps>(BoardsLabelDeleteSchema);
+
+// Replace a card's label-id set wholesale (server validates each id against the board palette).
+type BoardsCardLabelsSetProps = { cardId: string; labelIds: string[] };
+
+const BoardsCardLabelsSetSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		labelIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+	},
+	required: ['cardId', 'labelIds'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardLabelsSetProps = ajv.compile<BoardsCardLabelsSetProps>(BoardsCardLabelsSetSchema);
+
+// ---------------------------------------------------------------------------
 // Endpoint type map
 // ---------------------------------------------------------------------------
 
@@ -489,5 +564,17 @@ export type BoardsEndpoints = {
 	};
 	'/v1/boards.activities': {
 		GET: (params: BoardsActivitiesProps) => PaginatedResult<{ activities: IBoardActivity[] }>;
+	};
+	'/v1/boards.label.create': {
+		POST: (params: BoardsLabelCreateProps) => { board: IBoard };
+	};
+	'/v1/boards.label.update': {
+		POST: (params: BoardsLabelUpdateProps) => { board: IBoard };
+	};
+	'/v1/boards.label.delete': {
+		POST: (params: BoardsLabelDeleteProps) => { board: IBoard };
+	};
+	'/v1/boards.card.labels.set': {
+		POST: (params: BoardsCardLabelsSetProps) => { card: IBoardCard };
 	};
 };

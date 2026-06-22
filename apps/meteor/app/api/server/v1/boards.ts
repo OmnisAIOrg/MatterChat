@@ -20,6 +20,10 @@ import {
 	isBoardsCardArchiveProps,
 	isBoardsCardsBulkProps,
 	isBoardsActivitiesProps,
+	isBoardsLabelCreateProps,
+	isBoardsLabelUpdateProps,
+	isBoardsLabelDeleteProps,
+	isBoardsCardLabelsSetProps,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
@@ -57,6 +61,10 @@ import {
 	setMilestone,
 	requestApproval,
 	decideApproval,
+	createBoardLabel,
+	updateBoardLabel,
+	deleteBoardLabel,
+	setCardLabels,
 } from '../../../../server/lib/boards';
 import { API } from '../api';
 import { getPaginationItems } from '../helpers/getPaginationItems';
@@ -749,6 +757,94 @@ API.v1.post(
 		const { results, updated, failed } = await bulkCardOperation(userId, cardIds, action, actionParams);
 
 		return API.v1.success({ results, updated, failed });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// Labels / tags
+// ---------------------------------------------------------------------------
+
+// Add a label to a board's palette (admin). Returns the fresh board (incl. labelDefs).
+API.v1.post(
+	'boards.label.create',
+	{
+		authRequired: true,
+		body: isBoardsLabelCreateProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { boardId, name, color } = this.bodyParams;
+		const board = await createBoardLabel(userId, boardId, { name, color });
+
+		return API.v1.success({ board });
+	},
+);
+
+// Rename / recolor a palette label (admin).
+API.v1.post(
+	'boards.label.update',
+	{
+		authRequired: true,
+		body: isBoardsLabelUpdateProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { boardId, labelId, patch } = this.bodyParams;
+		const board = await updateBoardLabel(userId, boardId, labelId, patch);
+
+		return API.v1.success({ board });
+	},
+);
+
+// Delete a palette label (admin) — also scrubs the reference off every card.
+API.v1.post(
+	'boards.label.delete',
+	{
+		authRequired: true,
+		body: isBoardsLabelDeleteProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { boardId, labelId } = this.bodyParams;
+		const board = await deleteBoardLabel(userId, boardId, labelId);
+
+		return API.v1.success({ board });
+	},
+);
+
+// Replace a card's label-id set (member). Each id is validated against the board palette.
+API.v1.post(
+	'boards.card.labels.set',
+	{
+		authRequired: true,
+		body: isBoardsCardLabelsSetProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { cardId, labelIds } = this.bodyParams;
+		const card = await setCardLabels(userId, cardId, labelIds);
+
+		return API.v1.success({ card });
 	},
 );
 

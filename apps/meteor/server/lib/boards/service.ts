@@ -1,5 +1,6 @@
-import type { IBoard, IBoardList, IBoardCard, BoardsPipelineType, BoardsStatus, BoardsCardType, IBoardCardLink } from '@rocket.chat/core-typings';
+import type { IBoard, IBoardList, IBoardCard, IBoardLabelDef, BoardsPipelineType, BoardsStatus, BoardsCardType, IBoardCardLink } from '@rocket.chat/core-typings';
 import { Boards, BoardsLists, BoardsCards, BoardsActivities } from '@rocket.chat/models';
+import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
 import { assertBoardRole, getBoardForUser } from './permissions';
@@ -1146,4 +1147,132 @@ export async function bulkCardOperation(
 
 	const updated = results.filter((r) => r.ok).length;
 	return { results, updated, failed: results.length - updated };
+}
+
+// ---------------------------------------------------------------------------
+// Labels / tags
+//
+// Two-level model (mirrors fieldDefs): a board owns a *palette* of label
+// definitions (`board.labelDefs: { id, name, color }[]`) and each card holds a
+// list of label-id *references* (`card.labels: string[]`). Managing the palette
+// (create/update/delete) is an `admin` action like updateBoard; assigning labels
+// to a card is a `member` action like updateCard. Deleting a palette label also
+// scrubs the now-dangling reference from every card on the board.
+// ---------------------------------------------------------------------------
+
+export type CreateLabelParams = { name: string; color: string };
+
+/** Add a label definition to a board's palette. Returns the fresh board. */
+export async function createBoardLabel(uid: string, boardId: string, params: CreateLabelParams): Promise<IBoard> {
+	await assertBoardRole(boardId, uid, 'admin', 'boards.labelCreate');
+
+	const name = params.name?.trim();
+	if (!name) {
+		throw new Meteor.Error('error-invalid-label-name', 'Invalid label name', { method: 'boards.labelCreate' });
+	}
+	const color = params.color?.trim();
+	if (!color) {
+		throw new Meteor.Error('error-invalid-label-color', 'Invalid label color', { method: 'boards.labelCreate' });
+	}
+
+	const label: IBoardLabelDef = { id: Random.id(), name, color };
+	await Boards.addLabelDef(boardId, label);
+
+	const board = await Boards.findOneById(boardId);
+	if (!board) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.labelCreate' });
+	}
+
+	await BoardsActivities.log({ boardId, actor: uid, verb: 'board.updated', to: { label: 'created', labelId: label.id, name }, ts: new Date() });
+	emitBoardEvent('board.updated', { boardId, actor: uid });
+
+	return board;
+}
+
+export type UpdateLabelPatch = Partial<Pick<IBoardLabelDef, 'name' | 'color'>>;
+
+/** Rename / recolor an existing palette label. Returns the fresh board. */
+export async function updateBoardLabel(uid: string, boardId: string, labelId: string, patch: UpdateLabelPatch): Promise<IBoard> {
+	await assertBoardRole(boardId, uid, 'admin', 'boards.labelUpdate');
+
+	const set: UpdateLabelPatch = {};
+	if (typeof patch.name === 'string' && patch.name.trim()) {
+		set.name = patch.name.trim();
+	}
+	if (typeof patch.color === 'string' && patch.color.trim()) {
+		set.color = patch.color.trim();
+	}
+	if (Object.keys(set).length) {
+		await Boards.updateLabelDef(boardId, labelId, set);
+	}
+
+	const board = await Boards.findOneById(boardId);
+	if (!board) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.labelUpdate' });
+	}
+
+	await BoardsActivities.log({ boardId, actor: uid, verb: 'board.updated', to: { label: 'updated', labelId, ...set }, ts: new Date() });
+	emitBoardEvent('board.updated', { boardId, actor: uid });
+
+	return board;
+}
+
+/** Delete a palette label and scrub its now-dangling reference off every card on the board. */
+export async function deleteBoardLabel(uid: string, boardId: string, labelId: string): Promise<IBoard> {
+	await assertBoardRole(boardId, uid, 'admin', 'boards.labelDelete');
+
+	await Boards.removeLabelDef(boardId, labelId);
+	// scrub the dangling reference from every card so cards never point at a missing def
+	await BoardsCards.updateMany({ boardId, labels: labelId }, { $pull: { labels: labelId }, $inc: { rev: 1 } });
+
+	const board = await Boards.findOneById(boardId);
+	if (!board) {
+		throw new Meteor.Error('error-board-not-found', 'Board not found', { method: 'boards.labelDelete' });
+	}
+
+	await BoardsActivities.log({ boardId, actor: uid, verb: 'board.updated', to: { label: 'deleted', labelId }, ts: new Date() });
+	emitBoardEvent('board.updated', { boardId, actor: uid });
+
+	return board;
+}
+
+/**
+ * Replace a card's label set wholesale. `labelIds` must reference labels that
+ * exist in the card's board palette; unknown ids are rejected so a card can
+ * never reference a missing def. Member-level action, like updateCard.
+ */
+export async function setCardLabels(uid: string, cardId: string, labelIds: string[]): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardLabelsSet' });
+	}
+	const board = await assertBoardRole(current.boardId, uid, 'member', 'boards.cardLabelsSet');
+
+	// de-dupe, then validate every id against the board palette
+	const requested = Array.from(new Set(labelIds));
+	const known = new Set((board.labelDefs || []).map((d) => d.id));
+	for (const id of requested) {
+		if (!known.has(id)) {
+			throw new Meteor.Error('error-invalid-label', `Unknown label id: ${id}`, { method: 'boards.cardLabelsSet' });
+		}
+	}
+
+	await BoardsCards.updateOne({ _id: cardId }, { $set: { labels: requested }, $inc: { rev: 1 } });
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardLabelsSet' });
+	}
+
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { labels: requested },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+
+	return card;
 }
