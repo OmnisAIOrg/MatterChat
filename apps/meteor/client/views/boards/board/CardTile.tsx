@@ -1,8 +1,8 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { IBoardCard, IBoardLabelDef, ICardCover, Serialized } from '@rocket.chat/core-typings';
-import { Box, Icon, Tag } from '@rocket.chat/fuselage';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import { Box, CheckBox, Icon, Tag } from '@rocket.chat/fuselage';
+import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
 import { useMemo } from 'react';
 
 import { getCardTypeIcon } from '../lib/icons';
@@ -11,6 +11,11 @@ type CardTileProps = {
 	card: Serialized<IBoardCard>;
 	labelDefs?: IBoardLabelDef[];
 	onOpen: (cardId: string) => void;
+	// Multi-select: when `onToggleSelect` is provided the tile shows a selection checkbox.
+	// `selected` reflects the current state; `event` is forwarded so the board can honour
+	// shift-click range selection.
+	selected?: boolean;
+	onToggleSelect?: (cardId: string, event: MouseEvent) => void;
 };
 
 const isOverdue = (dueDate: Date | string | undefined, dueComplete: boolean | undefined): boolean => {
@@ -47,17 +52,27 @@ const resolveCoverImage = (cover: ICardCover, attachments: Serialized<IBoardCard
 	return undefined;
 };
 
-const CardTile = ({ card, labelDefs, onOpen }: CardTileProps) => {
+const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTileProps) => {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
 		id: card._id,
 		data: { type: 'card', listId: card.listId },
 	});
+
+	const selectable = Boolean(onToggleSelect);
 
 	const style: CSSProperties = {
 		transform: CSS.Translate.toString(transform),
 		transition,
 		opacity: isDragging ? 0.4 : 1,
 		overflow: 'hidden',
+		...(selected ? { boxShadow: '0 0 0 2px var(--rcx-color-stroke-highlight, #1d74f5)' } : {}),
+	};
+
+	// The checkbox lives outside the drag listeners: it must not start a drag and must not
+	// open the card. We stop propagation and forward the native event (for shift-click range).
+	const handleToggle = (e: MouseEvent) => {
+		e.stopPropagation();
+		onToggleSelect?.(card._id, e);
 	};
 
 	const overdue = isOverdue(card.dueDate, card.dueComplete);
@@ -116,6 +131,19 @@ const CardTile = ({ card, labelDefs, onOpen }: CardTileProps) => {
 				)}
 
 				<Box display='flex' alignItems='center' mbe={hasMeta ? 4 : 0}>
+					{selectable && (
+						<CheckBox
+							checked={Boolean(selected)}
+							mie={6}
+							aria-label={card.title}
+							// CheckBox sits inside the draggable tile; keep pointer/keyboard events from
+							// reaching the drag listeners or the tile's open-on-click handler.
+							onPointerDown={(e: MouseEvent) => e.stopPropagation()}
+							onKeyDown={(e: KeyboardEvent) => e.stopPropagation()}
+							onClick={handleToggle}
+							onChange={() => undefined}
+						/>
+					)}
 					<Icon name={getCardTypeIcon(card.cardType)} size='x16' mie={4} color='hint' />
 					<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
 						{card.title}

@@ -2,6 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { IBoardCard, IBoardLabelDef, IBoardList, Serialized } from '@rocket.chat/core-typings';
 import { Box } from '@rocket.chat/fuselage';
+import type { MouseEvent } from 'react';
 
 import CardTile from './CardTile';
 import ListColorMenu from './ListColorMenu';
@@ -15,9 +16,12 @@ type ColumnProps = {
 	onAddCard: (listId: string, title: string) => Promise<void> | void;
 	onOpenCard: (cardId: string) => void;
 	onListUpdated: () => void;
+	// Multi-select (optional): when wired, each tile renders a selection checkbox.
+	selectedIds?: Set<string>;
+	onToggleSelect?: (cardId: string, event: MouseEvent) => void;
 };
 
-const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, onListUpdated }: ColumnProps) => {
+const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, onListUpdated, selectedIds, onToggleSelect }: ColumnProps) => {
 	// the column body is a droppable so an empty column (no sortable items) still accepts a drop
 	const { setNodeRef, isOver } = useDroppable({ id: list._id, data: { type: 'list', listId: list._id } });
 
@@ -66,7 +70,14 @@ const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, o
 			>
 				<SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
 					{cards.map((card) => (
-						<CardTile key={card._id} card={card} labelDefs={labelDefs} onOpen={onOpenCard} />
+						<CardTile
+							key={card._id}
+							card={card}
+							labelDefs={labelDefs}
+							onOpen={onOpenCard}
+							selected={selectedIds?.has(card._id)}
+							onToggleSelect={onToggleSelect}
+						/>
 					))}
 				</SortableContext>
 			</Box>
