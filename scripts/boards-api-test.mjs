@@ -150,6 +150,30 @@ async function main() {
   const readBack = (listsRead.json?.lists || []).find((x) => x._id === colorListId);
   ok(readBack?.color === '#1d74f5', 'list color persisted on read-back', readBack?.color);
 
+  // --- labels / tags (batch) ---
+  // create a board-level palette label
+  const lbl = await api('POST', '/boards.label.create', { boardId, name: 'Urgent', color: '#f5455c' });
+  const labelId = (lbl.json?.board?.labelDefs || []).find((d) => d.name === 'Urgent')?.id;
+  ok(!!labelId, 'create board label', labelId || JSON.stringify(lbl.json));
+
+  // assign it to a card, then read the card back and assert the label is present
+  const assign = await api('POST', '/boards.card.labels.set', { cardId, labelIds: [labelId] });
+  ok((assign.json?.card?.labels || []).includes(labelId), 'assign label to card', `labels=${JSON.stringify(assign.json?.card?.labels)}`);
+  const cardWithLabel = await api('GET', `/boards.card?cardId=${cardId}`);
+  ok((cardWithLabel.json?.card?.labels || []).includes(labelId), 'card read-back has label', `labels=${JSON.stringify(cardWithLabel.json?.card?.labels)}`);
+
+  // rename the label, then unassign it (empty set), and reject an unknown id
+  const ren = await api('POST', '/boards.label.update', { boardId, labelId, patch: { name: 'Critical' } });
+  ok((ren.json?.board?.labelDefs || []).some((d) => d.id === labelId && d.name === 'Critical'), 'rename board label', 'Critical');
+  const unassign = await api('POST', '/boards.card.labels.set', { cardId, labelIds: [] });
+  ok((unassign.json?.card?.labels || []).length === 0, 'unassign labels from card', `labels=${JSON.stringify(unassign.json?.card?.labels)}`);
+  const badAssign = await api('POST', '/boards.card.labels.set', { cardId, labelIds: ['nope-not-a-real-label'] });
+  ok(badAssign.status === 400, 'reject unknown label id', `http=${badAssign.status}`);
+
+  // delete the label and confirm it is gone from the palette
+  const del = await api('POST', '/boards.label.delete', { boardId, labelId });
+  ok(!(del.json?.board?.labelDefs || []).some((d) => d.id === labelId), 'delete board label', `${del.json?.board?.labelDefs?.length} labels left`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }
