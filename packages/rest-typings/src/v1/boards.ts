@@ -4,6 +4,7 @@ import type {
 	IBoardCard,
 	IBoardActivity,
 	BoardsPipelineType,
+	BoardsStatus,
 	BoardsCardType,
 	IBoardCardLink,
 } from '@rocket.chat/core-typings';
@@ -176,6 +177,20 @@ const BoardsArchiveSchema = {
 };
 
 export const isBoardsArchiveProps = ajv.compile<BoardsArchiveProps>(BoardsArchiveSchema);
+
+type BoardsSetStatusProps = { boardId: string; status: BoardsStatus };
+
+const BoardsSetStatusSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		status: { type: 'string', enum: ['active', 'on_hold', 'completed', 'archived'] },
+	},
+	required: ['boardId', 'status'],
+	additionalProperties: false,
+};
+
+export const isBoardsSetStatusProps = ajv.compile<BoardsSetStatusProps>(BoardsSetStatusSchema);
 
 type BoardsListCreateProps = { boardId: string; title: string; position?: number; caseproStageId?: string };
 
@@ -372,6 +387,9 @@ export type BoardsEndpoints = {
 	};
 	'/v1/boards.archive': {
 		POST: (params: BoardsArchiveProps) => { success: true };
+	};
+	'/v1/boards.setStatus': {
+		POST: (params: BoardsSetStatusProps) => { board: IBoard };
 	};
 	'/v1/boards.lists': {
 		GET: (params: BoardsListsProps) => { lists: IBoardList[] };

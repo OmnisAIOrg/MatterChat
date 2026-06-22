@@ -5,6 +5,7 @@ import {
 	isBoardsCreateProps,
 	isBoardsUpdateProps,
 	isBoardsArchiveProps,
+	isBoardsSetStatusProps,
 	isBoardsListsProps,
 	isBoardsListCreateProps,
 	isBoardsListUpdateProps,
@@ -25,6 +26,7 @@ import {
 	createBoard,
 	updateBoard,
 	archiveBoard,
+	setBoardStatus,
 	getBoardInfo,
 	createList,
 	updateList,
@@ -177,6 +179,28 @@ API.v1.post(
 		await archiveBoard(userId, boardId);
 
 		return API.v1.success();
+	},
+);
+
+// Set a board's lifecycle status ('active' | 'on_hold' | 'completed' | 'archived').
+// 'archived' keeps the legacy boolean `archived` flag (and cascade) in step.
+API.v1.post(
+	'boards.setStatus',
+	{
+		authRequired: true,
+		body: isBoardsSetStatusProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { boardId, status } = this.bodyParams;
+		const board = await setBoardStatus(userId, boardId, status);
+
+		return API.v1.success({ board });
 	},
 );
 
