@@ -195,7 +195,7 @@ export const isBoardsListCreateProps = ajv.compile<BoardsListCreateProps>(Boards
 
 type BoardsListUpdateProps = {
 	listId: string;
-	patch: { title?: string; wipLimit?: number; subStatuses?: string[]; collapsed?: boolean };
+	patch: { title?: string; wipLimit?: number; subStatuses?: string[]; collapsed?: boolean; color?: string };
 };
 
 const BoardsListUpdateSchema = {
@@ -209,6 +209,9 @@ const BoardsListUpdateSchema = {
 				wipLimit: { type: 'number', nullable: true },
 				subStatuses: { type: 'array', items: { type: 'string' }, nullable: true },
 				collapsed: { type: 'boolean', nullable: true },
+				// list/column accent color — raw CSS color string (hex). MUST be listed here
+				// or ajv `additionalProperties:false` silently strips it from the request body.
+				color: { type: 'string', nullable: true },
 			},
 			required: [],
 			additionalProperties: false,
