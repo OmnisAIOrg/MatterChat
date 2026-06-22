@@ -150,6 +150,32 @@ async function main() {
   const readBack = (listsRead.json?.lists || []).find((x) => x._id === colorListId);
   ok(readBack?.color === '#1d74f5', 'list color persisted on read-back', readBack?.color);
 
+  // --- list reorder (batch) ---
+  const rb = await api('POST', '/boards.create', { title: 'Reorder Board', pipelineType: 'general' });
+  const reorderBoardId = rb.json?.board?._id;
+  const rl1 = await api('POST', '/boards.list.create', { boardId: reorderBoardId, title: 'Reorder A' });
+  const rl2 = await api('POST', '/boards.list.create', { boardId: reorderBoardId, title: 'Reorder B' });
+  const rl3 = await api('POST', '/boards.list.create', { boardId: reorderBoardId, title: 'Reorder C' });
+  const rA = rl1.json?.list?._id;
+  const rB = rl2.json?.list?._id;
+  const rC = rl3.json?.list?._id;
+  ok(!!rA && !!rB && !!rC, 'create 3 lists for reorder', `${rA},${rB},${rC}`);
+  // created in A,B,C order -> sanity check the initial sequence
+  const before = await api('GET', `/boards.lists?boardId=${reorderBoardId}`);
+  const beforeOrder = (before.json?.lists || []).map((x) => x._id);
+  ok(JSON.stringify(beforeOrder) === JSON.stringify([rA, rB, rC]), 'initial list order is A,B,C', beforeOrder.join(','));
+  // reorder to C,A,B via the full-ordering form { boardId, listIds }
+  const ro = await api('POST', '/boards.list.reorder', { boardId: reorderBoardId, listIds: [rC, rA, rB] });
+  ok((ro.json?.lists || []).map((x) => x._id).join(',') === [rC, rA, rB].join(','), 'reorder response in new order', (ro.json?.lists || []).map((x) => x._id).join(','));
+  // GET boards.lists and assert the new persisted sequence
+  const after = await api('GET', `/boards.lists?boardId=${reorderBoardId}`);
+  const afterOrder = (after.json?.lists || []).map((x) => x._id);
+  ok(JSON.stringify(afterOrder) === JSON.stringify([rC, rA, rB]), 'boards.lists reflects new order C,A,B', afterOrder.join(','));
+  // single-list move form { listId, position }: bump B to the front via an absolute position
+  const roSingle = await api('POST', '/boards.list.reorder', { listId: rB, position: 1 });
+  const afterSingle = (roSingle.json?.lists || []).map((x) => x._id);
+  ok(afterSingle[0] === rB, 'single-list move puts B first', afterSingle.join(','));
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }
