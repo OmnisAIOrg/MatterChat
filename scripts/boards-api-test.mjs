@@ -243,6 +243,40 @@ async function main() {
   ok(icalBody.includes('BEGIN:VEVENT') && icalBody.includes(`SUMMARY:${icalTitle}`), 'ical has VEVENT/SUMMARY for due card', icalTitle);
   ok(icalBody.includes(`UID:boards-card-${icalCardId}@matterchat`), 'ical event has stable per-card UID');
 
+  // --- public iCal subscription token (batch: calendar subscription) ---
+  // Mint the per-user feed token, then fetch the PUBLIC feed with ?token= and NO auth headers and
+  // assert it returns the same text/calendar VCALENDAR. Idempotency + bad-token rejection too.
+  const tk1 = await api('POST', '/boards.cards.ical.token', {});
+  const icalToken = tk1.json?.token;
+  ok(!!icalToken && typeof icalToken === 'string', 'mint ical feed token', icalToken ? `${icalToken.slice(0, 6)}…` : JSON.stringify(tk1.json));
+  const tk2 = await api('POST', '/boards.cards.ical.token', {});
+  ok(tk2.json?.token === icalToken, 'ical token is idempotent (same token on re-call)');
+
+  // Fetch the public feed with ONLY ?token= — no X-User-Id / X-Auth-Token headers.
+  const pubRes = await fetch(`${BASE}/boards.cards.ical.public?token=${encodeURIComponent(icalToken)}`, {
+    method: 'GET',
+    headers: { Accept: 'text/calendar' },
+  });
+  const pubCt = pubRes.headers.get('content-type') || '';
+  const pubBody = await pubRes.text();
+  ok(pubRes.status === 200, 'public ical feed returns 200 with token + no auth headers', `http=${pubRes.status}`);
+  ok(pubCt.includes('text/calendar'), 'public ical Content-Type is text/calendar', pubCt);
+  ok(pubBody.includes('BEGIN:VCALENDAR') && pubBody.includes('END:VCALENDAR'), 'public ical wraps VCALENDAR', `${pubBody.length} bytes`);
+  ok(pubBody.includes(`SUMMARY:${icalTitle}`), 'public ical contains the due card', icalTitle);
+
+  // A bad/unknown token must be rejected (401) and leak no calendar body.
+  const badRes = await fetch(`${BASE}/boards.cards.ical.public?token=not-a-real-token`, {
+    method: 'GET',
+    headers: { Accept: 'text/calendar' },
+  });
+  const badBody = await badRes.text();
+  ok(badRes.status === 401, 'public ical rejects unknown token with 401', `http=${badRes.status}`);
+  ok(!badBody.includes('BEGIN:VCALENDAR'), 'public ical leaks no feed body for bad token');
+
+  // A missing token must be rejected by schema validation (400) — token is required.
+  const noTokRes = await fetch(`${BASE}/boards.cards.ical.public`, { method: 'GET', headers: { Accept: 'text/calendar' } });
+  ok(noTokRes.status === 400 || noTokRes.status === 401, 'public ical rejects missing token', `http=${noTokRes.status}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }

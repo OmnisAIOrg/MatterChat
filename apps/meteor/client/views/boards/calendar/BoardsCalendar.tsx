@@ -1,7 +1,10 @@
 import { Box, Button, Icon, Throbber } from '@rocket.chat/fuselage';
-import { useEndpoint, useRouter } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useRouter, useSetModal } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import SubscribeCalendarModal from './SubscribeCalendarModal';
 
 /**
  * Generic personal Calendar — your tasks plotted on a month grid by due date, across ALL your
@@ -14,8 +17,14 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const ymd = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const BoardsCalendar = () => {
+	const { t } = useTranslation();
 	const router = useRouter();
+	const setModal = useSetModal();
 	const getMyDay = useEndpoint('GET', '/v1/boards.cards.myDay' as any);
+
+	const openSubscribe = useCallback(() => {
+		setModal(<SubscribeCalendarModal onClose={() => setModal(null)} />);
+	}, [setModal]);
 	const { data, isLoading } = useQuery({ queryKey: ['boards', 'myDay'], queryFn: () => getMyDay({}) });
 	const cards: any[] = (data as any)?.cards || [];
 
@@ -55,6 +64,7 @@ const BoardsCalendar = () => {
 		<Box p={24} style={{ overflowY: 'auto', height: '100%' }}>
 			<Box display='flex' alignItems='center' mbe={12}>
 				<Box fontScale='h2' flexGrow={1}>{MONTHS[ym.m]} {ym.y}</Box>
+				<Button small mie={4} icon='calendar' onClick={openSubscribe} title={t('Boards_Subscribe_Calendar')}>{t('Boards_Subscribe_Calendar')}</Button>
 				<Button small mie={4} title='Previous month' onClick={() => shift(-1)}><Icon name='chevron-left' size='x16' /></Button>
 				<Button small mie={4} onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() })}>Today</Button>
 				<Button small title='Next month' onClick={() => shift(1)}><Icon name='chevron-right' size='x16' /></Button>
