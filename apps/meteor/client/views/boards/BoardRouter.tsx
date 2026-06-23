@@ -3,15 +3,20 @@ import { Box, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber, Button 
 import { Page } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouteParameter, useRouter } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import BoardHeader from './BoardHeader';
 import BoardView from './board/BoardView';
-import CardDetail from './card/CardDetail';
-import DashboardView from './views/DashboardView';
-import TableView from './views/TableView';
-import TimelineView from './views/TimelineView';
+
+// Only the default kanban BoardView and the always-present BoardHeader are eager. The
+// Table/Timeline/Dashboard views and the card-detail drawer are code-split into their own
+// chunks so opening a board no longer downloads three unused views (and their heavier table/
+// dnd deps) before the first paint — they load on demand when that view type or a card opens.
+const CardDetail = lazy(() => import('./card/CardDetail'));
+const DashboardView = lazy(() => import('./views/DashboardView'));
+const TableView = lazy(() => import('./views/TableView'));
+const TimelineView = lazy(() => import('./views/TimelineView'));
 
 const BoardRouter = () => {
 	const { t } = useTranslation();
@@ -129,9 +134,21 @@ const BoardRouter = () => {
 					onSelectViewType={handleSelectViewType}
 					onSelectSavedView={handleSelectSavedView}
 				/>
-				{renderBody()}
+				<Suspense
+					fallback={
+						<Box display='flex' justifyContent='center' alignItems='center' height='100%'>
+							<Throbber />
+						</Box>
+					}
+				>
+					{renderBody()}
+				</Suspense>
 			</Page>
-			{cardId && <CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />}
+			{cardId && (
+				<Suspense fallback={null}>
+					<CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />
+				</Suspense>
+			)}
 		</Page>
 	);
 };
