@@ -160,3 +160,13 @@ registerBoardsRoute('/calendar', {
 	name: 'boards-calendar',
 	component: lazy(() => import('./calendar/BoardsCalendar')),
 });
+
+// Activity / Notifications inbox — the full-page version of the NavBar bell's dropdown.
+// The 'boards-inbox' path type (above) was declared but never registered, so the left-rail
+// "Activity" item, the Boards sidebar "Inbox" item, and the My Day "activity inbox" link all
+// navigated to /boards/inbox and hit the 404 NotFoundPage. NotificationsInbox is the same
+// component the bell drops down; mounted as a route its onNavigate (panel-close) prop is a no-op.
+registerBoardsRoute('/inbox', {
+	name: 'boards-inbox',
+	component: lazy(() => import('./notifications/NotificationsInbox')),
+});
