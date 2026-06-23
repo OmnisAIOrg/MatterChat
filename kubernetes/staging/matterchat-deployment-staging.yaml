@@ -81,6 +81,11 @@ spec:
               value: "https://auth-app.stg-omnisai.io"
             - name: OMNISAI_OIDC_CLIENT_ID
               value: "EEHKZTxmyKVvUXThDFuHSTAxQCgxePis"
+            # Public setting that makes the "Sign in with OmnisAI" button RENDER on the
+            # login screen. OMNISAI_OIDC_ENABLED (above) enables the server handler; this
+            # flips the client-visible setting (per RUNBOOK-wire-to-real-centralizedauth.md).
+            - name: OVERWRITE_SETTING_OmnisAI_OIDC_Enabled
+              value: "true"
             # --- LitBox integration ---
             - name: LITBOX_API_URL
               value: "https://litbox-app.stg-omnisai.io"
