@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { getCardTypeIcon } from '../lib/icons';
 import CardButtonsRow from './CardButtonsRow';
+import CardLabelsControl from './CardLabelsControl';
 import LeadPanel from './LeadPanel';
 import MatterPanel from './MatterPanel';
 import WatchToggle from './WatchToggle';
@@ -245,6 +246,9 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 								</Button>
 							</Box>
 						)}
+
+						{/* Card labels: chips + an expandable manager (toggle/create/edit/delete board labels) */}
+						<CardLabelsControl boardId={boardId} cardId={cardId} cardLabelIds={card.labels} />
 
 						{/* M7 — card-button automations runnable against this card (hidden when none) */}
 						<CardButtonsRow boardId={boardId} cardId={cardId} cardType={card.cardType} />
