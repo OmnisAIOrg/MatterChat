@@ -37,6 +37,7 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
+import { encryptToken, decryptToken } from './litboxCrypto';
 
 // Parsed once at boot. Must be an absolute https URL; the proxy pins outbound calls to this origin.
 function getLitboxBase(): URL | null {
@@ -120,7 +121,12 @@ async function resolveUser(rawToken: string): Promise<{ _id: string; litbox?: an
 	if (!user) {
 		return null;
 	}
-	return { _id: user._id, litbox: (user as any).omnisaiLitbox };
+	// Decrypt the stored credential (no-op for legacy plaintext; see litboxCrypto).
+	const stored = (user as any).omnisaiLitbox;
+	const litbox = stored
+		? { ...stored, sessionToken: decryptToken(stored.sessionToken), refreshToken: decryptToken(stored.refreshToken) }
+		: undefined;
+	return { _id: user._id, litbox };
 }
 
 /**
@@ -145,7 +151,7 @@ async function refreshLitboxToken(userId: string, refreshToken: string): Promise
 	}
 	try {
 		const tokenRes = await fetch(endpoint.url, {
-			ignoreSsrfValidation: true, // issuer is an admin-configured trusted host (OMNISAI_OIDC_ISSUER), not user input
+			ignoreSsrfValidation: true, followRedirects: false, // issuer is admin-configured; followRedirects:false so a redirect can't carry the refresh_token off-origin
 			method: 'POST',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 			body: new URLSearchParams({
@@ -171,8 +177,8 @@ async function refreshLitboxToken(userId: string, refreshToken: string): Promise
 			{ _id: userId },
 			{
 				$set: {
-					'omnisaiLitbox.sessionToken': accessToken,
-					...(tokens.refresh_token ? { 'omnisaiLitbox.refreshToken': tokens.refresh_token } : {}),
+					'omnisaiLitbox.sessionToken': encryptToken(accessToken),
+					...(tokens.refresh_token ? { 'omnisaiLitbox.refreshToken': encryptToken(tokens.refresh_token) } : {}),
 					...(tokens.expires_in ? { 'omnisaiLitbox.expiresAt': Date.now() + tokens.expires_in * 1000 } : {}),
 				},
 			},
@@ -300,7 +306,7 @@ async function handle(req: any, res: any): Promise<void> {
 
 		const forward = (bearer: string): Promise<any> =>
 			fetch(target.toString(), {
-				ignoreSsrfValidation: true, // safe: target origin is pinned to the parsed LITBOX_API_URL above
+				ignoreSsrfValidation: true, followRedirects: false, // origin pinned; followRedirects:false so serverFetch can't chase a redirect re-sending the credential
 				method,
 				headers: { ...baseHeaders, authorization: `Bearer ${bearer}` },
 				...(body && body.length ? { body } : {}),
