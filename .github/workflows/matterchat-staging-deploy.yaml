@@ -79,7 +79,16 @@ jobs:
 
       - name: Apply manifests (idempotent — creates on first run, updates after)
         run: |
-          kubectl apply -f kubernetes/staging/matterchat-mongo.yaml
+          # A StatefulSet's immutable fields (serviceName/selector/volumeClaimTemplates/
+          # podManagementPolicy) can't be changed via `apply`. If an incompatible
+          # matterchat-mongo already exists (e.g. from an earlier partial setup), fall
+          # back to delete + recreate. Deleting a StatefulSet does NOT delete its PVCs,
+          # so any data is preserved and re-adopted by the new object.
+          kubectl apply -f kubernetes/staging/matterchat-mongo.yaml || {
+            echo "↻ Recreating matterchat-mongo StatefulSet (immutable-field change; PVCs persist)"
+            kubectl delete statefulset matterchat-mongo -n "${K8S_NAMESPACE}" --ignore-not-found --wait=true
+            kubectl apply -f kubernetes/staging/matterchat-mongo.yaml
+          }
           kubectl apply -f kubernetes/staging/matterchat-deployment-staging.yaml
 
       - name: Wait for MongoDB StatefulSet
