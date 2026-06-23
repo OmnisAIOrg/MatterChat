@@ -3,6 +3,11 @@
 
 ---
 
+### 2026-06-22 — LitBox auth proxy: hardened server-side credential forwarding (mounted off /api; credential OFF services.*)
+**Chose:** a streaming server proxy `litboxProxy.ts` mounted at **`/_litbox`** that resolves the MatterChat user from the loginToken and forwards `/_litbox/v1/* → ${LITBOX_API_URL}/api/v1/*` with the user's CentralizedAuth credential (the OIDC `access_token`, Option A) injected server-side. Credential persisted on a **top-level `omnisaiLitbox` user field**, NOT `services.*`.
+**Rejected:** mounting under `/api/litbox` (Rocket.Chat's own router owns `/api/*` and 404s unknown paths — confirmed); storing the credential under `services.omnisai.litbox` (the design's first choice).
+**Why:** `getFullUserData.ts` projects the **entire `services` object** to the user themselves (blacklist of password/resume/email only) — so anything under `services.*` leaks to the browser via `users.info`/`me`. The red-team caught this (verdict: UNSAFE); a top-level field is excluded from `getDefaultUserFields` so no endpoint projects it. The proxy is hardened per the red-team: Authorization-header-only (no CSRF-able cookie), path-traversal/`//` rejection, outbound origin-pin + v1 resource-prefix + method allow-lists with the credential attached ONLY after every gate passes, `redirect:'manual'`, inbound Cookie/Origin dropped, Authorization never logged. Open: refresh-on-401, encrypt-at-rest, the JIT email-rebind footgun, and the credential-type gate — all need a REAL env to verify (local uses a mock OIDC that real LitBox rejects).
+
 ### 2026-06-22 — Embed LitBox via the official npm component + a MatterChat server proxy
 **Chose:** mount `@omnisaiorg/litbox-file-browser` (GitHub Packages, lazy-loaded) as a `/litbox` "Files" screen, pointed at a MatterChat server proxy `/api/litbox/v1` that forwards to the LitBox backend.
 **Rejected:** iframing the LitBox web app; a custom file UI against the LitBox API; calling LitBox directly from the browser.
