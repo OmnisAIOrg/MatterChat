@@ -11,8 +11,9 @@ node_modules
 apps/meteor/.meteor/local
 **/.meteor/local
 
-# VCS + logs + scratch
-.git
+# Logs + scratch. NOTE: do NOT exclude .git — the Rocket.Chat meteor build runs
+# `git log` to embed version/commit info and fails ("Command failed: git log")
+# without it. The CI checkout is shallow so .git stays small.
 .gitignore
 *.log
 **/*.log
