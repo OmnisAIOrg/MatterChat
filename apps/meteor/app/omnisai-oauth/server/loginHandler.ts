@@ -95,6 +95,18 @@ async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: str
 		},
 	);
 
+	// Bootstrap admin: stock Rocket.Chat makes the very first user an admin, but that runs in the
+	// setup-wizard / password-registration path — NOT on this OmnisAI OIDC login path, which creates
+	// users with globalRoles ['user']. Without this, the first person to sign in via OmnisAI lands as
+	// a plain member with no admin area and nobody owns the workspace. If no admin exists yet, promote
+	// this user — only ever fires while the workspace is ownerless, exactly like stock RC's first-user
+	// rule (idempotent: a $addToSet, and skipped the moment any admin exists).
+	const adminExists = await Users.findOne({ roles: 'admin' }, { projection: { _id: 1 } });
+	if (!adminExists) {
+		await Users.updateOne({ _id: user._id }, { $addToSet: { roles: 'admin' } });
+		SystemLogger.info({ msg: 'OmnisAI login: promoted first user to admin (workspace had no admin)', userId: user._id });
+	}
+
 	// Mint a stamped login token so Meteor establishes the session for this user.
 	const stampedToken = Accounts._generateStampedLoginToken();
 	await Users.addPersonalAccessTokenToUser({
