@@ -69,6 +69,11 @@ spec:
               value: "production"
             - name: OVERWRITE_SETTING_Iframe_Restrict_Access
               value: "false"
+            # Skip the first-run setup wizard: no SMTP is configured, so the wizard's
+            # email-confirmation step can never complete. OmnisAI OIDC is the real login;
+            # the first user to sign in becomes the workspace admin.
+            - name: OVERWRITE_SETTING_Show_Setup_Wizard
+              value: "completed"
             # --- OmnisAI OIDC (CentralizedAuth) ---
             - name: OMNISAI_OIDC_ENABLED
               value: "true"
