@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import NavBarItemBoards from './NavBarItemBoards';
 import NavBarItemBoardsNotifications from './NavBarItemBoardsNotifications';
 import NavBarItemCreateNew from './NavBarItemCreateNew';
+import NavBarItemFiles from './NavBarItemFiles';
 import NavBarItemDirectoryPage from './NavBarItemDirectoryPage';
 import NavBarItemHomePage from './NavBarItemHomePage';
 import NavBarItemMarketPlaceMenu from './NavBarItemMarketPlaceMenu';
@@ -28,6 +29,7 @@ const NavBarPagesGroup = () => {
 					<NavBarItemDirectoryPage title={t('Directory')} />
 					<NavBarItemBoards title={t('Boards')} />
 					<NavBarItemBoardsNotifications />
+					<NavBarItemFiles title={t('Files', { defaultValue: 'Files' })} />
 				</>
 			)}
 			{showMarketplace && !isMobile && <NavBarItemMarketPlaceMenu />}
