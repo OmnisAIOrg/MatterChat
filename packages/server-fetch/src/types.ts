@@ -11,6 +11,10 @@ type BaseExtendedOptions = FetchOptionsWithoutBody & {
 	timeout?: number;
 	params?: Record<string, any>;
 	body?: BodyInit | Record<string, any>;
+	// When false, serverFetch returns a 3xx response as-is instead of following the
+	// redirect (and re-sending headers/auth to the Location). Default (undefined/true)
+	// preserves the existing follow-up-to-MAX_REDIRECTS behaviour for all other callers.
+	followRedirects?: boolean;
 };
 
 type SsrfValidationIgnored = {

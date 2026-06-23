@@ -17,6 +17,20 @@
  * for non-`services` fields is a strict *allowlist* (defaultFields + fullFields + customFields),
  * and `omnisaiLitbox` is in none of them.
  *
+ * THE SECOND LEAK PATH (this is what the latest fix closed, and what the earlier version of
+ * this test MISSED):
+ *   `users.updateOwnBasicInfo` (app/api/server/v1/users.ts ~line 221) does NOT go through the
+ *   allowlist path above. It re-reads the user with the *EXCLUSION* projection
+ *   `API.v1.defaultFieldsToExclude` (a blacklist, defined in app/api/server/ApiClass.ts ~line
+ *   203) and feeds the result to `getUserInfo` (app/api/server/helpers/getUserInfo.ts), which
+ *   serializes it to the client with a bare `...me`. Because that projection is an EXCLUSION
+ *   list, anything NOT explicitly excluded passes through — so `omnisaiLitbox` leaked.
+ *
+ *   The fix has two layers (both asserted below):
+ *     (1) `defaultFieldsToExclude` now contains `omnisaiLitbox: 0` (drop it at the DB read).
+ *     (2) `getUserInfo` now destructures `omnisaiLitbox` out before serializing (defense in
+ *         depth: even a caller that reads the user WITHOUT that projection can't leak it).
+ *
  * What this test guards (so the above can't silently regress):
  *   (a) the field projections used by getFullUserData / users.info (defaultFields, fullFields)
  *       and by the `/me` endpoint (getDefaultUserFields / getBaseUserFields) do NOT mention
@@ -24,13 +38,28 @@
  *   (b) a user document that DOES carry `omnisaiLitbox`, when run through the real
  *       getFullUserDataByUniqueSearchTerm projection logic (including the self-view branch that
  *       additionally projects `services: 1`), comes back WITHOUT `omnisaiLitbox`.
+ *   (c) [updateOwnBasicInfo exclusion path, layer 1] `API.v1.defaultFieldsToExclude` (read from
+ *       the REAL ApiClass) contains `omnisaiLitbox: 0`, so the DB read in updateOwnBasicInfo
+ *       drops the credential.
+ *   (d) [updateOwnBasicInfo serializer, layer 2] the REAL `getUserInfo`, given a user object
+ *       carrying `omnisaiLitbox` (shaped exactly as loginHandler persists it), returns an object
+ *       with NO `omnisaiLitbox` key and the literal secret strings nowhere in the payload.
  *
  * Runnable: yes. This is a mocha + chai + sinon + proxyquire unit test, matching the existing
  * specs in this folder (e.g. sendUserEmail.spec.ts, getRoomByNameOrIdWithOptionToJoin.spec.ts).
  * It is picked up by `yarn testunit` via the tests/unit/app spec glob in .mocharc.js.
  * The heavy Meteor/Rocket.Chat imports are stubbed via proxyquire so the REAL projection code
- * (defaultFields/fullFields and the projection object built in getFullUserDataByUniqueSearchTerm)
- * is exercised — only the DB/permission/settings collaborators are faked.
+ * (defaultFields/fullFields, the projection object built in getFullUserDataByUniqueSearchTerm,
+ * the real defaultFieldsToExclude in ApiClass, and the real getUserInfo serializer) is exercised
+ * — only the DB/permission/settings/url collaborators are faked.
+ *
+ * To confirm these assertions aren't trivially green: revert either layer of the fix and the
+ * corresponding case fails — drop `omnisaiLitbox: 0` from ApiClass.defaultFieldsToExclude and (c)
+ * fails; remove the destructure in getUserInfo and (d) fails.
+ *
+ * Run just this file:
+ *   TZ=UTC TS_NODE_COMPILER_OPTIONS='{"module":"commonjs"}' \
+ *     npx mocha --config ./.mocharc.js --grep 'omnisaiLitbox'
  */
 import { expect } from 'chai';
 import { describe, it, beforeEach } from 'mocha';
@@ -134,6 +163,89 @@ const loadModule = (caller: Record<string, any>, targetDoc: Record<string, any>)
 	}) as LoadedModule;
 };
 
+/**
+ * Load the REAL ApiClass and instantiate APIClass so we can read the actual
+ * `defaultFieldsToExclude` instance property the running server uses. Every heavy Meteor /
+ * Rocket.Chat import the module pulls in at load time is stubbed via proxyquire.noCallThru(); the
+ * constructor itself only needs `RocketChatAPIRouter` (stubbed to a no-op) and runs with
+ * `useDefaultAuth: false` so `_initAuth()` is skipped. This exercises the real projection object
+ * — not a copy — so it fails if `omnisaiLitbox: 0` is ever removed from ApiClass.ts.
+ */
+const loadDefaultFieldsToExclude = (): ProjectionFields => {
+	const noop = Sinon.stub();
+	const Settings = {
+		settings: { get: Sinon.stub().returns(undefined), getByRegexp: Sinon.stub().returns([]), watch: noop },
+	};
+	const RouterStub = {
+		RocketChatAPIRouter: Sinon.stub().callsFake(function (this: any) {
+			// minimal router surface touched by the constructor (none beyond construction)
+		} as any),
+	};
+	const { APIClass } = mock.noCallThru().load('../../../../../../app/api/server/ApiClass.ts', {
+		'@rocket.chat/license': { License: {} },
+		'@rocket.chat/logger': { Logger: Sinon.stub().callsFake(function (this: any) {}) },
+		'@rocket.chat/models': { Users: {} },
+		'@rocket.chat/random': { Random: { id: () => 'rid' } },
+		'@rocket.chat/rest-typings': { ajv: {} },
+		'@rocket.chat/tools': { wrapExceptions: (fn: any) => fn },
+		'meteor/accounts-base': { Accounts: {} },
+		'meteor/ddp': { DDP: {} },
+		'meteor/ddp-common': { DDPCommon: {} },
+		'meteor/meteor': { Meteor: {} },
+		'meteor/rate-limit': { RateLimiter: Sinon.stub() },
+		'underscore': {},
+		'./api.helpers': { checkPermissions: noop, parseDeprecation: noop },
+		'./helpers/getUserInfo': { getUserInfo: noop },
+		'./helpers/parseJsonQuery': { parseJsonQuery: noop },
+		'./middlewares/authenticationHono': { authenticationMiddlewareForHono: noop },
+		'./middlewares/permissions': { permissionsMiddleware: noop },
+		'./router': RouterStub,
+		'../../../ee/app/api-enterprise/server/middlewares/license': { license: noop },
+		'../../../lib/utils/isObject': { isObject: noop },
+		'../../../server/lib/getNestedProp': { getNestedProp: noop },
+		'../../../server/lib/shouldBreakInVersion': { shouldBreakInVersion: () => false },
+		'../../2fa/server/code': { checkCodeForUser: noop },
+		'../../authorization/server/functions/hasPermission': { hasPermissionAsync: noop },
+		'../../lib/server/lib/notifyListener': { notifyOnUserChangeAsync: noop },
+		'../../settings/server': Settings,
+		'../../utils/server/functions/getDefaultUserFields': { getDefaultUserFields: () => ({}) },
+	}) as { APIClass: new (props: any) => { defaultFieldsToExclude: ProjectionFields } };
+
+	const api = new APIClass({ apiPath: '', useDefaultAuth: false, prettyJson: false });
+	return api.defaultFieldsToExclude;
+};
+
+type GetUserInfoFn = (me: Record<string, any>, pullPreferences?: boolean) => Promise<Record<string, any>>;
+
+/**
+ * Load the REAL getUserInfo serializer with its async/Meteor collaborators stubbed:
+ *   - settings.getByRegexp -> [] so no default user preferences are fetched
+ *   - settings.get -> undefined so the Outlook-calendar branch stays disabled
+ *   - getURL -> a fixed string (no Site_Url settings needed)
+ *   - getUserPreference -> never called (getByRegexp is empty), stubbed defensively
+ *   - isOAuthUser -> false (deterministic)
+ *   - Info -> minimal (only touched if `me.banners` exists; we don't set banners)
+ * This runs the genuine `...me` spread + the `omnisaiLitbox` destructure, so it fails if the
+ * destructure is removed.
+ */
+const loadGetUserInfo = (): GetUserInfoFn => {
+	const SettingsStub = {
+		settings: {
+			get: Sinon.stub().returns(undefined),
+			getByRegexp: Sinon.stub().returns([] as [string, unknown][]),
+		},
+	};
+	const mod = mock.noCallThru().load('../../../../../../app/api/server/helpers/getUserInfo.ts', {
+		'@rocket.chat/core-typings': { isOAuthUser: () => false },
+		'semver': { valid: () => true, lte: () => false },
+		'../../../settings/server': SettingsStub,
+		'../../../utils/rocketchat.info': { Info: { version: '0.0.0' } },
+		'../../../utils/server/getURL': { getURL: () => 'https://example.test/avatar' },
+		'../../../utils/server/lib/getUserPreference': { getUserPreference: Sinon.stub().resolves(undefined) },
+	}) as { getUserInfo: GetUserInfoFn };
+	return mod.getUserInfo;
+};
+
 const SECRET = 'omnisaiLitbox';
 
 describe('omnisaiLitbox must never leak to a client (users.info / getFullUserData / /me)', () => {
@@ -209,6 +321,77 @@ describe('omnisaiLitbox must never leak to a client (users.info / getFullUserDat
 			expect(user, 'expected a user document').to.not.equal(null);
 			expect(user).to.not.have.property(SECRET);
 			expect(JSON.stringify(user)).to.not.contain('SECRET-litbox');
+		});
+	});
+
+	/**
+	 * (c) + (d) cover the SECOND leak path that the earlier version of this test missed:
+	 * `users.updateOwnBasicInfo` reads the user with the EXCLUSION projection
+	 * `API.v1.defaultFieldsToExclude` and serializes it through `getUserInfo`. Neither of those
+	 * uses the allowlist guarded above, so they each need their own assertion.
+	 */
+	describe('(c) the updateOwnBasicInfo exclusion projection (ApiClass.defaultFieldsToExclude) drops omnisaiLitbox', () => {
+		it('defaultFieldsToExclude contains `omnisaiLitbox: 0`', () => {
+			const exclude = loadDefaultFieldsToExclude();
+			// EXCLUSION projection: omnisaiLitbox MUST be present and set to 0 to be dropped at the
+			// DB read in users.updateOwnBasicInfo. (Absence here = leak, hence `=== 0`, not "absent".)
+			expect(exclude).to.have.property(SECRET);
+			expect(exclude[SECRET], `defaultFieldsToExclude must drop ${SECRET}: ${JSON.stringify(exclude)}`).to.equal(0);
+		});
+	});
+
+	describe('(d) the real getUserInfo serializer strips omnisaiLitbox before sending to the client', () => {
+		const meWithSecret = {
+			_id: callerId,
+			username: 'jdoe',
+			name: 'Jane Doe',
+			emails: [{ address: 'jane@example.com', verified: true }],
+			roles: ['user'],
+			active: true,
+			type: 'user',
+			status: 'online',
+			services: {
+				omnisai: { id: 'cp-123', orgId: 'org-1', role: 'attorney' },
+				password: { bcrypt: 'hash' },
+				resume: { loginTokens: [{ hashedToken: 'x' }] },
+			},
+			// Shaped exactly as app/omnisai-oauth/server/loginHandler.ts persists it.
+			omnisaiLitbox: {
+				sessionToken: 'SECRET_ACCESS',
+				refreshToken: 'SECRET_REFRESH',
+				expiresAt: 9999999999,
+			},
+		};
+
+		it('returns NO omnisaiLitbox key and leaks none of the literal secret strings', async () => {
+			const getUserInfo = loadGetUserInfo();
+			// pullPreferences=false matches the updateOwnBasicInfo call site (users.ts ~line 221).
+			const result = await getUserInfo(meWithSecret, false);
+
+			expect(result, 'expected a serialized user object').to.be.an('object');
+			expect(result).to.not.have.property(SECRET);
+
+			const serialized = JSON.stringify(result);
+			expect(serialized, 'session token leaked').to.not.contain('SECRET_ACCESS');
+			expect(serialized, 'refresh token leaked').to.not.contain('SECRET_REFRESH');
+
+			// Sanity: the serializer still returns the user (so we know the spread actually ran and
+			// the assertion above isn't passing because `result` is empty/undefined).
+			expect(result).to.have.property('username', 'jdoe');
+			// The password hash itself must not leak either (only `password.exists`); guards that
+			// the `...me` spread didn't blindly copy services.password through.
+			expect(serialized, 'password hash leaked').to.not.contain('"bcrypt"');
+		});
+
+		it('does not mutate the caller-supplied user object (destructure is non-destructive)', async () => {
+			const getUserInfo = loadGetUserInfo();
+			await getUserInfo(meWithSecret, false);
+			// The destructure must not delete the field from the source doc the server still holds.
+			expect(meWithSecret.omnisaiLitbox, 'getUserInfo must not mutate its input').to.deep.equal({
+				sessionToken: 'SECRET_ACCESS',
+				refreshToken: 'SECRET_REFRESH',
+				expiresAt: 9999999999,
+			});
 		});
 	});
 });

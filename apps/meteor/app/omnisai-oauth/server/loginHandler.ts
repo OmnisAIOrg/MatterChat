@@ -13,6 +13,7 @@ import { Accounts } from 'meteor/accounts-base';
 import { Meteor } from 'meteor/meteor';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
+import { encryptToken } from './litboxCrypto';
 
 const makeError = (message: string): Record<string, any> => ({
 	type: 'omnisai',
@@ -85,9 +86,10 @@ async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: str
 				// under services.*) because getFullUserData projects the whole `services` object
 				// to the user themselves (blacklist, not allowlist) — services.* would leak the
 				// token to the browser. `omnisaiLitbox` is not in getDefaultUserFields, so no
-				// publication/REST endpoint projects it. (Encrypt-at-rest is a follow-up.)
-				...(profile.litboxSessionToken ? { 'omnisaiLitbox.sessionToken': profile.litboxSessionToken } : {}),
-				...(profile.litboxRefreshToken ? { 'omnisaiLitbox.refreshToken': profile.litboxRefreshToken } : {}),
+				// publication/REST endpoint projects it. Tokens are encrypted-at-rest via
+				// encryptToken (no-op until LITBOX_TOKEN_ENC_KEY is configured); the proxy decrypts.
+				...(profile.litboxSessionToken ? { 'omnisaiLitbox.sessionToken': encryptToken(profile.litboxSessionToken) } : {}),
+				...(profile.litboxRefreshToken ? { 'omnisaiLitbox.refreshToken': encryptToken(profile.litboxRefreshToken) } : {}),
 				...(profile.litboxExpiresAt ? { 'omnisaiLitbox.expiresAt': profile.litboxExpiresAt } : {}),
 			},
 		},
