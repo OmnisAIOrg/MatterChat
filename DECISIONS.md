@@ -3,6 +3,26 @@
 
 ---
 
+### 2026-06-22 — Second parallel wave: 7 features at once (3 UI + 3 server + iCal), each in its own worktree
+**Chose:** scale the worktree‑per‑agent pattern up to **7 concurrent builds** — wire the 3 server features' UI (status/bulk/list‑color) + 3 new server features (labels, list reorder, checklists) + the iCal feed — then integrate sequentially and verify.
+**Rejected:** one feature at a time; or a single mega‑branch.
+**Why:** the velocity win compounds. Integration cost stayed mechanical (all server features append to `rest-typings/boards.ts` + `service.ts` + the harness at distinct anchors; the 2 UI features that shared `Column.tsx`/`BoardView.tsx` merged by keeping both prop sets). Notable: **labels, checklists, and list `position` already existed at the model layer** — the agents found this and only added the missing API/UI, which is lower‑risk than net‑new schema.
+
+### 2026-06-22 — Re‑activating an archived board restores ALL its lists/cards
+**Chose:** in `setBoardStatus`, when moving from `archived` to any non‑archived status, un‑archive the board's lists/cards (reverse the archive cascade) via a direct `updateMany` in the service.
+**Rejected:** (a) leaving them archived (the bug — board unusable, `error-list-not-found` on card create); (b) tracking exactly which items the cascade archived so only those are restored.
+**Why:** a user who re‑opens a board expects their columns back; full restore matches that intent and stays inside `service.ts` (no model/package change, so no dist‑rebuild). The "only restore cascade‑archived items" refinement needs a per‑item flag — deferred until someone actually archives lists independently *and* then archives the board.
+
+### 2026-06-22 — iCal feed ships authenticated‑only; tokenized public URL deferred
+**Chose:** `GET boards.cards.ical` returns the caller's due cards as `text/calendar`, authenticated via `X‑Auth‑Token`.
+**Rejected:** a tokenized public `?token=` feed URL in this pass.
+**Why:** real calendar apps can't send auth headers, so a public token URL is the eventual shape — but it requires an `icalToken` on the shared **Users** model + an `authRequired:false` resolver, a cross‑cutting change that didn't fit a single narrow worktree. Logged as the next task; the endpoint + ICS builder are done and reusable.
+
+### 2026-06-22 — Verify Boards UI via the preview tool, authenticated by the browser's own session
+**Chose:** hand :3100 to the `preview_*` tool (point `.claude/launch.json`'s `matterchat` config at `/tmp/mc-dev.sh`), drive the board view, and screenshot the 3 UI controls.
+**Rejected:** asking the founder to eyeball it, or forging a session.
+**Why:** the preview browser already carried the founder's logged‑in session, so no auth injection was needed. Recorded the **board route** (`/boards/board/:id/:view?`) since the bare `/boards/:id` 404s — future UI verification needs the `/board/` segment. Confirmed all three render + interact (status menu, bulk bar on select, color swatch menu).
+
 ### 2026-06-22 — Built 3 boards‑parity features in parallel via isolated git worktrees
 **Chose:** build board‑status / bulk‑card‑ops / list‑colors **concurrently** — three parallel sub‑agents, each in its own `git worktree` + branch off `feature/matterchat-cross-firm` — then integrate sequentially and verify once with the API harness (26/26).
 **Rejected:** building the three one at a time on the live dev server.

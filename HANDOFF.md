@@ -7,36 +7,40 @@
 - **`~/MatterChat`** ← here. The product + these resume docs.
 - **`~/matterchat-mcp-v2`** — the CHI tool server (MCP; 23 deterministic tools over `boards.*`).
 - **`~/omnis-counsel`** — cross‑firm **CFCS** service + customer KB (`docs/`) + demo scripts.
-> Resuming needs only THIS repo's docs — they reference the other two by path. This session touched only `~/MatterChat`.
+> Resuming needs only THIS repo's docs. This session touched only `~/MatterChat`.
 
 ## Running services (local dev)
 | Port | What | Notes |
 |---|---|---|
-| 27018 | MongoDB (rs0) | DB `matterchat_apex` (seeded; Alex @ Apex, user id `ijT939mb6PH9oKxyy`, roles=user) |
-| 3100 | **Dev server (HMR)** | This session ran the **dev** server here via `/tmp/mc-dev.sh` (ROOT_URL :3100, OmnisAI sign‑in wired to :3100). Browseable; survives across the same browser session (existing login token). |
+| 27018 | MongoDB (rs0) | DB `matterchat_apex` (seeded; sign in as **alex**, a regular user) |
+| 3100 | **Dev server (HMR)** | `/tmp/mc-dev.sh` (ROOT_URL :3100, OmnisAI sign‑in wired to :3100). The browseable app + fast loop. |
 | 4100 | Dev server (HMR) alt | `/tmp/mc-dev-4100.sh` — same DB, alternate port |
-| 9100 | Mock OmnisAI OIDC | `~/omnis-counsel/mc-mock-oidc.js`; id_token + `/userinfo` |
+| 9100 | Mock OmnisAI OIDC | `~/omnis-counsel/mc-mock-oidc.js` |
 | 9200 | CFCS (cross‑firm) | `~/omnis-counsel/server.js` |
 
-> **NOTE:** `:3100` is also the prod‑bundle port (`run-apex.sh`). Don't run the dev server and prod bundle on :3100 at once. This session the dev server on :3100 was wrapped in a **self‑heal loop** (`while true; do bash /tmp/mc-dev.sh; done`) so a proxy crash auto‑restarts — see gotchas.
+**Run the dev loop two ways:** (a) self‑heal wrapper `while true; do bash /tmp/mc-dev.sh; done` (survives the dev‑proxy crash, see gotchas); or (b) hand it to the **preview tool** — register `matterchat`→`/tmp/mc-dev.sh` port 3100 in the workspace `.claude/launch.json`, then `preview_start` owns it and gives a browser you can screenshot. **Board view route = `/boards/board/:id/:view?`** (e.g. `/boards/board/<id>/board` for the kanban) — NOT `/boards/:id`.
 
-Start the dev loop: `bash /tmp/mc-dev.sh` (:3100) or `/tmp/mc-dev-4100.sh` (:4100). Verify the boards surface in ~2s:
-`MC_BASE=http://localhost:3100/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node scripts/boards-api-test.mjs` (token from browser `localStorage.getItem('Meteor.loginToken')`).
+**Verify the boards API in ~2s:** `MC_BASE=http://localhost:3100/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node scripts/boards-api-test.mjs` (token from the browser console: `localStorage.getItem('Meteor.loginToken')`, id from `localStorage.getItem('Meteor.userId')` — never commit these).
 
-## Built + verified this session (committed on `feature/matterchat-cross-firm`, pushed → PR #6)
-**Boards server parity — 3 features built in parallel (isolated git worktrees), integrated, and verified 26/26 by `scripts/boards-api-test.mjs` against the live :3100 server:**
-1. **Board status updates** — new `boards.setStatus` (POST). `IBoard.status` enum `active | on_hold | completed | archived`; keeps the legacy `archived` flag coherent (status=archived ⇒ archived:true + cascades; re‑activating works on archived boards); rejects invalid values (400).
-2. **Bulk card operations** — new `boards.cards.bulk` (POST). `{cardIds[], action: move|complete|archive|setPriority|delete}`, reuses the single‑card server‑lib fns in a loop, per‑card partial‑failure handling → `{results[], updated, failed}`.
-3. **List colors** — extended `boards.list.update` with an optional `color` (raw CSS/hex string) on `IBoardList`; persists + returns on read‑back.
+## Built + verified this session (committed on `feature/matterchat-cross-firm`, PR #6)
+**Two parallel build waves over the Boards surface — 49/49 harness green + UI eyeballed in the browser.**
 
-## Next safest tasks (pick one, narrow)
-1. **Surface the 3 new server features in the Boards UI** (client work in `apps/meteor/client/views/boards/**`): a board **status control**, a **multi‑select → bulk actions** toolbar (calls `boards.cards.bulk`), and a **list color picker** (calls `boards.list.update {patch:{color}}`). The endpoints are done + verified; the UI to drive them is the gap.
-2. **More server parity** (fast loop, harness‑verified): list reordering, card labels, board templates.
-3. **Gmail/Outlook calendar + email** — 2‑way sync + email‑to‑task (start with an iCal feed off `boards.cards.myDay`).
-4. **CHI go‑live:** deploy `matterchat-mcp-v2` → register in Chi (`/api/v1/mcp-servers`) → embed an in‑app CHI chat panel.
+**Wave 1 — server parity (3):** `boards.setStatus` (status enum + archive coherence), `boards.cards.bulk` (multi‑card ops), list `color` on `boards.list.update`.
+**Wave 2 — 7 at once:**
+- **UI (verified live in the board view):** board **status control** ("Active" tag + menu), **multi‑select bulk‑actions** toolbar (checkbox → Complete/Archive/Delete/priority/move), **list color picker** (palette → swatches).
+- **Server (harness‑verified):** card **labels/tags** (`boards.label.*`, `boards.card.labels.set`), **list reorder** (`boards.list.reorder`), card **checklists** (`boards.card.checklist.add|toggle|remove`), **iCal feed** (`GET boards.cards.ical`, authenticated).
+- Several of these (labels, checklists, list `position`) already existed at the **model** layer — only the API/UI was missing.
+**Bug found + fixed by the harness:** re‑activating an archived board now **un‑archives its lists/cards** (was: `error-list-not-found` on card create after re‑activate). See DECISIONS 2026‑06‑22.
+
+## Next safest task (pick one, narrow)
+1. **UI for the 4 new server features** (client work in `apps/meteor/client/views/boards/**`): label chips + a label manager on cards, a checklist panel on the card detail, **drag‑to‑reorder** lists (wire `boards.list.reorder`), and a "**Subscribe in your calendar**" link exposing the iCal feed.
+2. **Tokenized public iCal URL** — the feed is currently auth‑only; calendar apps can't send headers. Add a per‑user `icalToken` (+ an `authRequired:false` `?token=` resolver) so a feed URL can be subscribed. (Touches the shared Users model — treat as a small cross‑cutting change.)
+3. **More server parity:** card cover images, board templates (distinct from `boards.copy`), saved filters.
+4. **CHI go‑live:** deploy `matterchat-mcp-v2` → register in Chi → embed an in‑app CHI panel.
 5. **Fork hardening** (before selling): strip `ee/`, pin version, own push gateway, audit/retention, custom roles.
 
 ## In‑flight gotchas
-- **After editing `packages/rest-typings` / `packages/core-typings` (ajv schemas), the DEV server does NOT auto‑pick‑up the rebuilt `dist/`.** CLAUDE.md implies the watcher handles it — it does **not** for a one‑off `turbo` rebuild. Recipe that works: `yarn turbo run build --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings` (~38s) **then bounce the dev server** (kill the meteor process; the self‑heal wrapper warm‑restarts it ~2min). Symptom if you skip it: new fields silently stripped (`must NOT have additional properties`) and enum validation bypassed. This is what made 3 harness tests fail until the bounce. See DECISIONS 2026‑06‑22.
-- **Meteor's dev proxy (`run-proxy.js`) crashes on aborted connections** (`ERR_STREAM_WRITE_AFTER_END`) — e.g. curl health‑checks with short `--max-time`, or a browser dropping mid‑load. Don't poll the dev server with aborting curls; verify via the log file + the API harness (complete requests are fine). The self‑heal wrapper makes a crash recover in ~30s. (Patching `run-proxy.js` would fix it permanently but it's outside the repo / toolchain — left unpatched.)
-- The **prod bundle on :3100 is behind HEAD** — rebuild it (`run-apex.sh`) to surface the latest features in a browser if you need the no‑dev‑proxy stable path. Remember the `packages/*` rebuild gotcha before any prod build.
+- **After editing `packages/rest-typings` / `packages/core-typings` (ajv schemas), rebuild `dist/` AND bounce the dev server.** The dev watcher does NOT pick up a one‑off `turbo` dist rebuild. Recipe: `yarn turbo run build --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings` (~15–40s) **then** kill the meteor process so it warm‑restarts. Symptom if skipped: new fields stripped (`must NOT have additional properties`) + enum validation bypassed (this bit 3 then 8 harness tests until the bounce). App code under `apps/meteor/**` (e.g. `server/lib/boards/service.ts`) does NOT need this — Meteor recompiles it itself.
+- **Meteor's dev proxy crashes on aborted connections** (`ERR_STREAM_WRITE_AFTER_END`) — e.g. curl health‑checks with short `--max-time`, or a browser dropping mid‑load. Verify via the **log file + the API harness** (complete requests are fine), never by polling with aborting curls. The self‑heal wrapper recovers in ~30s.
+- **`localhost` is not affected by VPN** (it never leaves the machine) — a "site can't be reached" on :3100 means the dev server crashed, not networking.
+- The **prod bundle (`run-apex.sh`) on :3100 is behind HEAD** — rebuild it if you need the no‑dev‑proxy stable path; mind the `packages/*` rebuild gotcha first.
