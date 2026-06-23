@@ -121,12 +121,27 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 
 			<Box pi={12} pbs={8} pbe={8}>
 				{cardLabels.length > 0 && (
-					<Box display='flex' flexWrap='wrap' mbe={6} style={{ gap: '4px' }}>
-						{cardLabels.map((l) => (
-							<Box key={l.id} fontScale='micro' style={{ backgroundColor: l.color, color: '#ffffff', borderRadius: '4px', padding: '1px 7px' }}>
-								{l.name}
+					<Box display='flex' alignItems='center' flexWrap='wrap' mbe={6} style={{ gap: '4px' }}>
+						{/* Compact: show up to 3 chips (named -> pill, unnamed -> dot), then a +N overflow tag. */}
+						{cardLabels.slice(0, 3).map((l) =>
+							l.name ? (
+								<Box
+									key={l.id}
+									fontScale='micro'
+									withTruncatedText
+									style={{ backgroundColor: l.color, color: '#ffffff', borderRadius: '4px', padding: '1px 7px', maxWidth: '120px' }}
+								>
+									{l.name}
+								</Box>
+							) : (
+								<Box key={l.id} width='x12' height='x12' borderRadius='full' style={{ backgroundColor: l.color }} />
+							),
+						)}
+						{cardLabels.length > 3 && (
+							<Box fontScale='micro' color='hint'>
+								+{cardLabels.length - 3}
 							</Box>
-						))}
+						)}
 					</Box>
 				)}
 
