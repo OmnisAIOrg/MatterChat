@@ -16,7 +16,7 @@ import { Box } from '@rocket.chat/fuselage';
  * client. `authToken` is the caller's MatterChat session token, which the proxy validates
  * before swapping in the real LitBox credential.
  */
-const LITBOX_API_BASE = '/api/litbox/v1';
+const LITBOX_API_BASE = '/_litbox/v1';
 
 type LitboxEmbedProps = {
 	authToken: string;

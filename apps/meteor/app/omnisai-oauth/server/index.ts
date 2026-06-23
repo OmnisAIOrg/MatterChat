@@ -29,6 +29,7 @@ import { SystemLogger } from '../../../server/lib/logger/system';
 import { settings } from '../../settings/server';
 
 import './loginHandler';
+import './litboxProxy';
 
 const base64url = (buf: Buffer): string => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -171,6 +172,13 @@ async function handleCallback(req: any, res: any): Promise<void> {
 				username: u.preferred_username,
 				orgId: u['casepro:org_id'],
 				role: u['casepro:role'],
+				// LitBox credential captured at login → persisted server-side (loginHandler) →
+				// read by the /api/litbox proxy. CredentialTokens is one-time + server-only; the
+				// raw tokens never reach the browser. (LitBox accepts a CentralizedAuth session
+				// token as the bearer; access_token is that value in this OIDC setup.)
+				litboxSessionToken: tokens.access_token,
+				litboxRefreshToken: tokens.refresh_token,
+				litboxExpiresAt: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined,
 			},
 		});
 

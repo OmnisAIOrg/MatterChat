@@ -26,6 +26,11 @@ type OmnisAIProfile = {
 	username?: string;
 	orgId?: string;
 	role?: string;
+	// LitBox credential, captured at the OIDC callback. Server-only — persisted on the user doc
+	// for the /api/litbox proxy; never published/projected to the client (verified).
+	litboxSessionToken?: string;
+	litboxRefreshToken?: string;
+	litboxExpiresAt?: number;
 };
 
 async function uniqueUsername(base: string): Promise<string> {
@@ -76,6 +81,14 @@ async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: str
 				'services.omnisai.id': profile.sub,
 				...(profile.orgId ? { 'services.omnisai.orgId': profile.orgId } : {}),
 				...(profile.role ? { 'services.omnisai.role': profile.role } : {}),
+				// LitBox credential for the /api/litbox proxy. Stored on a TOP-LEVEL field (NOT
+				// under services.*) because getFullUserData projects the whole `services` object
+				// to the user themselves (blacklist, not allowlist) — services.* would leak the
+				// token to the browser. `omnisaiLitbox` is not in getDefaultUserFields, so no
+				// publication/REST endpoint projects it. (Encrypt-at-rest is a follow-up.)
+				...(profile.litboxSessionToken ? { 'omnisaiLitbox.sessionToken': profile.litboxSessionToken } : {}),
+				...(profile.litboxRefreshToken ? { 'omnisaiLitbox.refreshToken': profile.litboxRefreshToken } : {}),
+				...(profile.litboxExpiresAt ? { 'omnisaiLitbox.expiresAt': profile.litboxExpiresAt } : {}),
 			},
 		},
 	);
