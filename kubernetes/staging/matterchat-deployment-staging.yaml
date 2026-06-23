@@ -86,6 +86,12 @@ spec:
             # flips the client-visible setting (per RUNBOOK-wire-to-real-centralizedauth.md).
             - name: OVERWRITE_SETTING_OmnisAI_OIDC_Enabled
               value: "true"
+            # No SMTP is wired on staging, so Rocket.Chat's email-2FA code can never be
+            # delivered — it would wall every OmnisAI login at an un-completable prompt.
+            # OmnisAI OIDC is the real auth (and can enforce 2FA at the IdP), so disable
+            # MatterChat's own email two-factor.
+            - name: OVERWRITE_SETTING_Accounts_TwoFactorAuthentication_By_Email_Enabled
+              value: "false"
             # --- LitBox integration ---
             - name: LITBOX_API_URL
               value: "https://litbox-app.stg-omnisai.io"
