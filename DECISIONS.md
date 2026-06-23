@@ -3,6 +3,25 @@
 
 ---
 
+### 2026-06-22 — Embed LitBox via the official npm component + a MatterChat server proxy
+**Chose:** mount `@omnisaiorg/litbox-file-browser` (GitHub Packages, lazy-loaded) as a `/litbox` "Files" screen, pointed at a MatterChat server proxy `/api/litbox/v1` that forwards to the LitBox backend.
+**Rejected:** iframing the LitBox web app; a custom file UI against the LitBox API; calling LitBox directly from the browser.
+**Why:** the component is the canonical, full-featured integration and — the main risk — it **bundles + mounts + renders cleanly in Meteor** (proven this session). A server proxy bypasses LitBox CORS entirely (no LitBox-side allowlist change) and keeps the LitBox credential off the client. Lazy-load keeps the heavy deps (AG Grid, react-pdf) out of the main bundle.
+
+### 2026-06-22 — LitBox auth is a CentralizedAuth better-auth SESSION token, NOT KeyGate/OIDC
+**Chose:** design the proxy to forward a CentralizedAuth **better-auth session token** (or provision a per-user `litbox_` API key) as the LitBox credential.
+**Rejected:** forwarding MatterChat's OIDC access_token; using KeyGate (assumed, both wrong).
+**Why:** reading Litbox-backend this session (deps.py + services/auth/centralized_auth.py) proved LitBox has **no** KeyGate/JWKS/OIDC-token handling — its `Authorization: Bearer <X>` path stuffs X into the `better-auth.session_token` cookie and validates via `{CENTRALIZED_AUTH_URL}/auth/session` (valid → JIT-creates user/org). An OIDC access_token is a different credential and is rejected. So the open problem for the proxy phase: MatterChat's OIDC login only holds an OIDC access_token. Decided on a verified reading via a research→design→security-review workflow rather than guessing on a security-sensitive auth bridge.
+
+### 2026-06-22 — Files lives in the left rail with the LitBox logo (not the top nav)
+**Chose:** the Files entry sits in `AppLeftRail` next to Chats/Boards/Activity/Search, rendered with the LitBox wordmark (recolored 'Lit' white for the dark rail).
+**Rejected:** the top NavBar, where it was first placed.
+**Why:** founder direction — Files is a primary section and should read as the LitBox-branded file area in the global nav.
+
+### 2026-06-22 — Boards UI for the 4 new server features (parallel worktrees) + an i18n catch
+**Chose:** wire label chips/manager, checklist panel, drag-to-reorder lists, and the iCal Subscribe flow (incl. a public tokenized feed URL `boards.cards.ical.public`) as 4 parallel worktree builds; integrate + verify 58/58 + eyeball.
+**Why:** completes last session's server features (they had no UI); same proven parallel pattern. Browser verification caught an i18n bug — the Subscribe modal rendered raw keys; the boards convention is inline `t(key,{defaultValue})`, which that agent had skipped. Lesson: verify UI in the browser, not just the harness.
+
 ### 2026-06-22 — Second parallel wave: 7 features at once (3 UI + 3 server + iCal), each in its own worktree
 **Chose:** scale the worktree‑per‑agent pattern up to **7 concurrent builds** — wire the 3 server features' UI (status/bulk/list‑color) + 3 new server features (labels, list reorder, checklists) + the iCal feed — then integrate sequentially and verify.
 **Rejected:** one feature at a time; or a single mega‑branch.

@@ -3,44 +3,34 @@
 
 **Last updated:** 2026-06-22 · **Branch:** `feature/matterchat-cross-firm`
 
-## The three repos (all on GitHub · OmnisAIOrg · private)
-- **`~/MatterChat`** ← here. The product + these resume docs.
-- **`~/matterchat-mcp-v2`** — the CHI tool server (MCP; 23 deterministic tools over `boards.*`).
-- **`~/omnis-counsel`** — cross‑firm **CFCS** service + customer KB (`docs/`) + demo scripts.
-> Resuming needs only THIS repo's docs. This session touched only `~/MatterChat`.
+## The repos
+- **`~/MatterChat`** ← here. The product + these resume docs. (Only repo touched this session.)
+- **`~/matterchat-mcp-v2`** — CHI tool server (23 MCP tools over `boards.*`).
+- **`~/omnis-counsel`** — cross‑firm CFCS service + customer KB + demo scripts.
 
 ## Running services (local dev)
 | Port | What | Notes |
 |---|---|---|
-| 27018 | MongoDB (rs0) | DB `matterchat_apex` (seeded; sign in as **alex**, a regular user) |
-| 3100 | **Dev server (HMR)** | `/tmp/mc-dev.sh` (ROOT_URL :3100, OmnisAI sign‑in wired to :3100). The browseable app + fast loop. |
-| 4100 | Dev server (HMR) alt | `/tmp/mc-dev-4100.sh` — same DB, alternate port |
-| 9100 | Mock OmnisAI OIDC | `~/omnis-counsel/mc-mock-oidc.js` |
-| 9200 | CFCS (cross‑firm) | `~/omnis-counsel/server.js` |
+| 27018 | MongoDB (rs0) | DB `matterchat_apex` (sign in as **alex**, a regular user) |
+| 3100 | **Dev server (HMR)** | `/tmp/mc-dev.sh` (ROOT_URL :3100, OmnisAI sign‑in). Browseable app + fast loop. |
+| 9100 / 9200 | Mock OIDC / CFCS | `~/omnis-counsel/mc-mock-oidc.js` / `server.js` |
 
-**Run the dev loop two ways:** (a) self‑heal wrapper `while true; do bash /tmp/mc-dev.sh; done` (survives the dev‑proxy crash, see gotchas); or (b) hand it to the **preview tool** — register `matterchat`→`/tmp/mc-dev.sh` port 3100 in the workspace `.claude/launch.json`, then `preview_start` owns it and gives a browser you can screenshot. **Board view route = `/boards/board/:id/:view?`** (e.g. `/boards/board/<id>/board` for the kanban) — NOT `/boards/:id`.
-
-**Verify the boards API in ~2s:** `MC_BASE=http://localhost:3100/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node scripts/boards-api-test.mjs` (token from the browser console: `localStorage.getItem('Meteor.loginToken')`, id from `localStorage.getItem('Meteor.userId')` — never commit these).
+Dev loop: self‑heal wrapper `while true; do bash /tmp/mc-dev.sh; done`, OR the **preview tool** (`.claude/launch.json` `matterchat`→`/tmp/mc-dev.sh` port 3100; `preview_start` owns it + gives a browser to screenshot). The preview-managed server has **no self‑heal** and dies on the dev‑proxy abort bug — re-`preview_start` to recover. Board route = `/boards/board/:id/:view?`. Boards API harness: `MC_BASE=http://localhost:3100/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node scripts/boards-api-test.mjs` (token from browser `localStorage`, never commit it).
 
 ## Built + verified this session (committed on `feature/matterchat-cross-firm`, PR #6)
-**Two parallel build waves over the Boards surface — 49/49 harness green + UI eyeballed in the browser.**
+**Boards UI for the new server features — 58/58 harness + eyeballed in the browser:** card **label chips + manager**, card **checklist panel** (add/toggle/remove + progress), **drag‑to‑reorder lists** (mirrors card DnD; header handle), and the **iCal "Subscribe in your calendar"** flow — incl. a **public tokenized feed URL** (`boards.cards.ical.public?token=`, authRequired:false) + the Subscribe modal (i18n fixed to inline defaultValues).
 
-**Wave 1 — server parity (3):** `boards.setStatus` (status enum + archive coherence), `boards.cards.bulk` (multi‑card ops), list `color` on `boards.list.update`.
-**Wave 2 — 7 at once:**
-- **UI (verified live in the board view):** board **status control** ("Active" tag + menu), **multi‑select bulk‑actions** toolbar (checkbox → Complete/Archive/Delete/priority/move), **list color picker** (palette → swatches).
-- **Server (harness‑verified):** card **labels/tags** (`boards.label.*`, `boards.card.labels.set`), **list reorder** (`boards.list.reorder`), card **checklists** (`boards.card.checklist.add|toggle|remove`), **iCal feed** (`GET boards.cards.ical`, authenticated).
-- Several of these (labels, checklists, list `position`) already existed at the **model** layer — only the API/UI was missing.
-**Bug found + fixed by the harness:** re‑activating an archived board now **un‑archives its lists/cards** (was: `error-list-not-found` on card create after re‑activate). See DECISIONS 2026‑06‑22.
+**LitBox integration — FOUNDATION done, not yet loading files:** embeds the official `@omnisaiorg/litbox-file-browser` React component (GitHub Packages, v0.1.77).
+- ✅ **Component bundles + mounts + renders its full UI in Meteor** (verified in browser — My Folders/Files, Upload, Create Folder, grid). Lazy-loaded (`client/views/litbox/LitboxEmbed.tsx`) so it stays out of the main bundle.
+- ✅ **`/litbox` route** (`client/views/litbox/`, registered via `createRouteGroup('litbox',…)` + `main.ts`) and a **"Files" item in the LEFT RAIL** (`client/views/root/MainLayout/AppLeftRail.tsx`) rendered with the **LitBox wordmark** (recolored 'Lit' white for the dark rail).
+- ✅ **GitHub Packages wiring** — `.yarnrc.yml` `npmScopes.omnisaiorg` (registry npm.pkg.github.com, auth `${NPM_TOKEN-}`). **Install needs `NPM_TOKEN` = a GitHub token with `read:packages` on @omnisaiorg.**
+- ❌ **Server proxy + auth — the last piece** (the file grid skeleton-loads until this exists).
 
-## Next safest task (pick one, narrow)
-1. **UI for the 4 new server features** (client work in `apps/meteor/client/views/boards/**`): label chips + a label manager on cards, a checklist panel on the card detail, **drag‑to‑reorder** lists (wire `boards.list.reorder`), and a "**Subscribe in your calendar**" link exposing the iCal feed.
-2. **Tokenized public iCal URL** — the feed is currently auth‑only; calendar apps can't send headers. Add a per‑user `icalToken` (+ an `authRequired:false` `?token=` resolver) so a feed URL can be subscribed. (Touches the shared Users model — treat as a small cross‑cutting change.)
-3. **More server parity:** card cover images, board templates (distinct from `boards.copy`), saved filters.
-4. **CHI go‑live:** deploy `matterchat-mcp-v2` → register in Chi → embed an in‑app CHI panel.
-5. **Fork hardening** (before selling): strip `ee/`, pin version, own push gateway, audit/retention, custom roles.
+## ⚠️ Next safe task — the LitBox auth proxy (the file grid won't load real files without it)
+Plan: the component calls MatterChat's own origin at **`/api/litbox/v1/*`** (a Meteor server proxy that forwards to `https://litbox-app.stg-omnisai.io/api/v1/*`), injecting the user's LitBox credential server-side. A server proxy **bypasses LitBox CORS** (no LitBox-side allowlist change needed) and keeps the credential off the client.
+**THE CRUX — verified by reading Litbox-backend this session:** LitBox does **NOT** use KeyGate / OIDC access tokens. Its API accepts only (a) its **own** API key `litbox_<random>` via the `X-API-Key` header, or (b) on `Authorization: Bearer <X>`, a **CentralizedAuth better-auth SESSION token** (it stuffs X into the `better-auth.session_token` cookie and POSTs to `{CENTRALIZED_AUTH_URL}/auth/session`; valid session → JIT-creates the user/org). It rejects an **OIDC access_token**. So the OPEN problem: **MatterChat's OmnisAI OIDC login only holds an OIDC access_token, not a better-auth session token.** The proxy phase must resolve this — options to evaluate next session: (1) have MatterChat obtain/forward the user's CentralizedAuth better-auth session token; (2) provision a per-user `litbox_` API key from MatterChat's server. (Full research + the design/red-team output: workflow result saved under the session's tasks/ dir.)
 
 ## In‑flight gotchas
-- **After editing `packages/rest-typings` / `packages/core-typings` (ajv schemas), rebuild `dist/` AND bounce the dev server.** The dev watcher does NOT pick up a one‑off `turbo` dist rebuild. Recipe: `yarn turbo run build --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings` (~15–40s) **then** kill the meteor process so it warm‑restarts. Symptom if skipped: new fields stripped (`must NOT have additional properties`) + enum validation bypassed (this bit 3 then 8 harness tests until the bounce). App code under `apps/meteor/**` (e.g. `server/lib/boards/service.ts`) does NOT need this — Meteor recompiles it itself.
-- **Meteor's dev proxy crashes on aborted connections** (`ERR_STREAM_WRITE_AFTER_END`) — e.g. curl health‑checks with short `--max-time`, or a browser dropping mid‑load. Verify via the **log file + the API harness** (complete requests are fine), never by polling with aborting curls. The self‑heal wrapper recovers in ~30s.
-- **`localhost` is not affected by VPN** (it never leaves the machine) — a "site can't be reached" on :3100 means the dev server crashed, not networking.
-- The **prod bundle (`run-apex.sh`) on :3100 is behind HEAD** — rebuild it if you need the no‑dev‑proxy stable path; mind the `packages/*` rebuild gotcha first.
+- **`packages/rest-typings`/`core-typings` edits:** rebuild dist (`yarn turbo run build --filter=…`) **then bounce** the dev server — the watcher misses a one‑off dist rebuild (new ajv fields stripped, enum bypassed). App code under `apps/meteor/**` recompiles itself (no dist rebuild).
+- **Meteor dev proxy crashes on aborted connections** (`ERR_STREAM_WRITE_AFTER_END`) — don't poll with short‑`--max-time` curls; verify via log/harness. The LitBox `/litbox` screen is stable (component skeleton-loads gracefully) — earlier crashes were the proxy bug, not the component.
+- **GitHub Packages:** installing `@omnisaiorg/*` needs `NPM_TOKEN` with `read:packages`; `gh auth refresh -s read:packages` grants it on the existing login.
