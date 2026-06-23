@@ -154,6 +154,12 @@ export async function setBoardStatus(uid: string, boardId: string, status: Board
 	if (archived) {
 		await BoardsLists.archiveByBoard(boardId);
 		await BoardsCards.archiveByBoard(boardId);
+	} else if (current.archived) {
+		// Re-activating a previously-archived board: reverse the cascade so the
+		// lists/cards hidden by the archive come back. Without this the board has
+		// no usable lists and cards can't be added to it (error-list-not-found).
+		await BoardsLists.updateMany({ boardId }, { $set: { archived: false } });
+		await BoardsCards.updateMany({ boardId }, { $set: { archived: false } });
 	}
 
 	const board = await Boards.findOneById(boardId);
