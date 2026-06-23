@@ -97,3 +97,17 @@
 ### earlier — Cross‑firm chat lives inside the matter
 **Chose:** fold cross‑firm (opposing‑counsel) messaging into the matter surface; removed the standalone cross‑firm view.
 **Why:** keeps the feature in context and additive; CFCS trust core is channel‑hosted and CasePro‑free so it stands alone.
+
+### 2026-06-23 — New EKS deploy pipeline for MatterChat (not the alpha-preview system)
+**Chose:** a from-scratch GitHub Actions staging deploy (push to `staging` → `Dockerfile.alpha` → ECR → `kubectl apply` → rollout) into the reserved `matterchat.stg-omnisai.io` EKS slot.
+**Rejected:** the OmnisAI alpha-preview system (AlphaEnvironment PR #13).
+**Why:** the alpha orchestrator only builds FE+BE split apps and was never onboarded for the Rocket.Chat/Meteor monolith — it returns 400 "not configured" and the workflow times out. The EKS slot was already reserved (DNS+ingress, returning 503). Building the pipeline directly beat fixing + deploying the shared orchestrator.
+
+### 2026-06-23 — LitBox accepts OIDC access tokens, audience-bound
+**Chose:** teach LitBox (`Litbox-backend` PR #184) to validate OIDC access tokens via `mcp/get-session`, restricted to an allow-list of trusted first-party `client_id`s (`OIDC_TRUSTED_CLIENT_IDS`).
+**Rejected:** token-exchange / minting a web-session token for OIDC clients.
+**Why:** OIDC clients (MatterChat) only hold an access token, never a better-auth web session. Audience-binding prevents the confused-deputy bypass (any OmnisAI token working against LitBox) the adversarial review caught. Additive + default-off.
+
+### 2026-06-23 — Security fixes gated the refresh-on-401 ship
+**Chose:** before shipping refresh-on-401, fix the `omnisaiLitbox` token-leak (`getUserInfo`/`defaultFieldsToExclude` returned the credential to clients) and close the off-origin redirect leak (`serverFetch` opt-in `followRedirects:false`). Encrypt-at-rest shipped DORMANT (no-op until `LITBOX_TOKEN_ENC_KEY`).
+**Why:** an adversarial review found the credential was actually reaching the browser — shipping more credential code over an open leak was unacceptable. The redirect fix is additive/opt-in (zero blast radius for other `serverFetch` callers); encrypt-at-rest is backward-compatible so it can deploy ahead of the key.

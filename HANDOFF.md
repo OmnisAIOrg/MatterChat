@@ -1,40 +1,38 @@
 # HANDOFF.md — current state (read after CLAUDE.md)
 > Live state for resuming. **The "checkpoint matterchat" command updates this before a session ends.** Standing rules + the two session commands are in `CLAUDE.md`; decisions + their reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
-**Last updated:** 2026-06-22 · **Branch:** `feature/matterchat-cross-firm`
+**Last updated:** 2026-06-23 · **LIVE:** https://matterchat.stg-omnisai.io
 
-## The repos
-- **`~/MatterChat`** ← here. The product + these resume docs. (Only repo touched this session.)
-- **`~/matterchat-mcp-v2`** — CHI tool server (23 MCP tools over `boards.*`).
-- **`~/omnis-counsel`** — cross‑firm CFCS service + customer KB + demo scripts.
+## ⚡ Headline: MatterChat is DEPLOYED + LIVE with LitBox Files working
+MatterChat runs at **https://matterchat.stg-omnisai.io** (EKS staging). The **LitBox "Files" integration works end-to-end**: OmnisAI login → embedded LitBox file browser → the user's real files. Verified live: `/` → 200, `/api/info` → 200 (Rocket.Chat 8.6), `/_litbox/v1/files` → 401 (proxy wired). Final human test outstanding: log in + open Files in a browser.
 
-## Running services (local dev)
-| Port | What | Notes |
+## Branches (⚠️ TANGLED — consolidation needed before any merge)
+- **`staging`** — the EKS **auto-deploy branch** (push = deploy). The LIVE state. Review PR **#9 → develop** (do NOT merge as-is).
+- **`chore/matterchat-followups`** — docs + the extended security test + the hardening source. Pushed (no PR; or fold into the consolidation).
+- **`feature/matterchat-cross-firm`** (PR **#6**, "REVIEW ONLY") — the base everything was built on (cross-firm CFCS work). `staging` + `chore` both sit on top of it.
+- **Cleanup task:** rebase the LitBox/deploy/hardening work onto a clean branch off `develop` (separate from the cross-firm WIP) before merging.
+
+## Built + verified this session (all LIVE on staging)
+- **LitBox "Files":** `/_litbox` proxy (`apps/meteor/app/omnisai-oauth/server/litboxProxy.ts`), embedded `@omnisaiorg/litbox-file-browser` (`client/views/litbox/`), left-rail Files item. Credential captured at OIDC login, stored top-level `omnisaiLitbox`, injected server-side.
+- **LitBox accepts MatterChat's OIDC token:** `Litbox-backend` PR **#184 (MERGED + deployed)** — `validate_session` accepts an OIDC access token via `mcp/get-session`, **audience-bound** to `OIDC_TRUSTED_CLIENT_IDS` (= MatterChat's client `EEHKZ…`).
+- **EKS deploy pipeline (net-new):** `.github/workflows/matterchat-staging-deploy.yaml` + `kubernetes/staging/matterchat-{mongo,deployment-staging}.yaml`. Push to `staging` → build `apps/meteor/.docker/Dockerfile.alpha` → ECR → `kubectl apply` → rollout. Mongo replica set `rs0`, ALB ingress group `staging-backend-shared` order **870**. (The alpha-preview system never onboarded the Meteor fork — AlphaEnvironment PR #13 exists but unused.)
+- **Hardening:** refresh-on-401; `accept-encoding` strip (Files render); token-leak fix (`getUserInfo.ts` + `ApiClass.ts` — `omnisaiLitbox` was leaking via `users.updateOwnBasicInfo`); redirect/SSRF fix (`@rocket.chat/server-fetch` opt-in `followRedirects:false`); **encrypt-at-rest** (`litboxCrypto.ts`, AES-256-GCM — DORMANT until `LITBOX_TOKEN_ENC_KEY` secret set, backward-compatible).
+- **Docs/tests:** `docs/litbox-files-integration.md`, `docs/matterchat-staging-deploy.md` (build gotchas), `tests/unit/app/lib/server/functions/omnisaiLitbox-no-leak.spec.ts` (8 passing).
+
+## Running services
+| What | URL | Notes |
 |---|---|---|
-| 27018 | MongoDB (rs0) | DB `matterchat_apex` (sign in as **alex**, a regular user) |
-| 3100 | **Dev server (HMR)** | `/tmp/mc-dev.sh` (ROOT_URL :3100, OmnisAI sign‑in). Browseable app + fast loop. |
-| 9100 / 9200 | Mock OIDC / CFCS | `~/omnis-counsel/mc-mock-oidc.js` / `server.js` |
+| MatterChat (live) | https://matterchat.stg-omnisai.io | EKS staging; **push to `staging` branch = deploy** (~15–30 min build) |
+| LitBox backend | https://litbox-app.stg-omnisai.io | accepts MatterChat's OIDC token (PR #184 deployed) |
+| Local dev | localhost:3100 (`/tmp/mc-dev.sh`) | FLAKY — Meteor dev-proxy `ERR_STREAM_WRITE_AFTER_END` crash bug. Prefer the live URL. |
 
-Dev loop: self‑heal wrapper `while true; do bash /tmp/mc-dev.sh; done`, OR the **preview tool** (`.claude/launch.json` `matterchat`→`/tmp/mc-dev.sh` port 3100; `preview_start` owns it + gives a browser to screenshot). The preview-managed server has **no self‑heal** and dies on the dev‑proxy abort bug — re-`preview_start` to recover. Board route = `/boards/board/:id/:view?`. Boards API harness: `MC_BASE=http://localhost:3100/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node scripts/boards-api-test.mjs` (token from browser `localStorage`, never commit it).
+## In-flight gotchas
+- **Branch tangle** (above) — consolidate before merging.
+- Deploy gotchas (all fixed, see `docs/matterchat-staging-deploy.md`): Deno **2.3.1 build / 1.37.1 runtime**; keep `.git` (meteor build runs `git log`); StatefulSet **and** Deployment need delete+recreate fallback (pre-existing incompatible resources in the reserved slot); `NPM_TOKEN`→`ENV` for `@omnisaiorg` GitHub Packages; ALB `group.order` must be unique; Mongo headless Service needs `publishNotReadyAddresses`.
+- Secrets: AWS + `NPM_TOKEN` wired (org/repo). For encrypt-at-rest add `LITBOX_TOKEN_ENC_KEY` (base64 32 bytes).
+- **`Chi-Omnis` can't self-approve PRs** — needs a non-author approver (`omnisai-io`, an engineer).
 
-## Built + verified this session (committed on `feature/matterchat-cross-firm`, PR #6)
-**Boards UI for the new server features — 58/58 harness + eyeballed in the browser:** card **label chips + manager**, card **checklist panel** (add/toggle/remove + progress), **drag‑to‑reorder lists** (mirrors card DnD; header handle), and the **iCal "Subscribe in your calendar"** flow — incl. a **public tokenized feed URL** (`boards.cards.ical.public?token=`, authRequired:false) + the Subscribe modal (i18n fixed to inline defaultValues).
-
-**LitBox integration — FOUNDATION done, not yet loading files:** embeds the official `@omnisaiorg/litbox-file-browser` React component (GitHub Packages, v0.1.77).
-- ✅ **Component bundles + mounts + renders its full UI in Meteor** (verified in browser — My Folders/Files, Upload, Create Folder, grid). Lazy-loaded (`client/views/litbox/LitboxEmbed.tsx`) so it stays out of the main bundle.
-- ✅ **`/litbox` route** (`client/views/litbox/`, registered via `createRouteGroup('litbox',…)` + `main.ts`) and a **"Files" item in the LEFT RAIL** (`client/views/root/MainLayout/AppLeftRail.tsx`) rendered with the **LitBox wordmark** (recolored 'Lit' white for the dark rail).
-- ✅ **GitHub Packages wiring** — `.yarnrc.yml` `npmScopes.omnisaiorg` (registry npm.pkg.github.com, auth `${NPM_TOKEN-}`). **Install needs `NPM_TOKEN` = a GitHub token with `read:packages` on @omnisaiorg.**
-- ✅ **Server auth proxy built + hardened** — `apps/meteor/app/omnisai-oauth/server/litboxProxy.ts`, mounted at **`/_litbox`** (NOT `/api/...` — Rocket.Chat owns that namespace and 404s it). The OIDC callback (`index.ts`) captures the CentralizedAuth credential; `loginHandler.ts` persists it on a **top-level `omnisaiLitbox` user field (NOT `services.*` — `getFullUserData` projects `services` wholesale to self, so it would leak)**. The proxy resolves the MatterChat user from the loginToken, injects the credential, forwards `/_litbox/v1/* → ${LITBOX_API_URL}/api/v1/*`. Hardened per red-team: Authorization-header-only, path-traversal/protocol-relative rejection, origin-pin + resource-prefix + method allow-lists (credential attached only after all gates pass), redirect:manual, Cookie/Origin dropped. **Route registration verified locally (503 until `LITBOX_API_URL` set).**
-
-## ⚠️ Next safe task — verify LitBox file-loading on a REAL env (cannot be done on local mock)
-The proxy is built; what's left is verifying it loads real files, which the local dev **cannot** do: local MatterChat logs in via a **mock OIDC** (`:9100`) whose tokens the real staging LitBox/CentralizedAuth reject. So:
-1. **Set `LITBOX_API_URL`** (the LitBox backend base, e.g. `https://litbox-app.stg-omnisai.io`) in the run env / RUNBOOK. Until set the proxy returns 503.
-2. **Deploy to alpha** (or point local at the REAL CentralizedAuth OIDC + use a real LitBox account) and open Files. Confirm the grid loads the user's files.
-3. **Probe the credential-type gate:** the proxy forwards the OIDC `access_token` as the LitBox bearer (Option A — the callback already calls CentralizedAuth's `mcp/get-session` with `Bearer ${access_token}` successfully). If real LitBox 401s, switch to capturing the better-auth `set-cookie` session value instead (Option B). **Verify against real staging — local cannot.**
-4. **Remaining proxy follow-ups** (deferred, all need real env): refresh-on-401 via the `refresh_token` grant; a regression test asserting `users.info`/`me` never return `omnisaiLitbox` (defense for the leak fix); encrypt the token at rest; and confirm MatterChat users carry the same `centralized_user_id` (`services.omnisai.id == sub`) so LitBox's JIT match-by-id wins over the email-rebind footgun.
-(Full research + design + red-team output: the `litbox-auth-design` workflow result under the session's tasks/ dir.)
-
-## In‑flight gotchas
-- **`packages/rest-typings`/`core-typings` edits:** rebuild dist (`yarn turbo run build --filter=…`) **then bounce** the dev server — the watcher misses a one‑off dist rebuild (new ajv fields stripped, enum bypassed). App code under `apps/meteor/**` recompiles itself (no dist rebuild).
-- **Meteor dev proxy crashes on aborted connections** (`ERR_STREAM_WRITE_AFTER_END`) — don't poll with short‑`--max-time` curls; verify via log/harness. The LitBox `/litbox` screen is stable (component skeleton-loads gracefully) — earlier crashes were the proxy bug, not the component.
-- **GitHub Packages:** installing `@omnisaiorg/*` needs `NPM_TOKEN` with `read:packages`; `gh auth refresh -s read:packages` grants it on the existing login.
+## Next safe task
+1. **Founder's final test:** sign in at matterchat.stg-omnisai.io + click Files.
+2. **Consolidate branches:** rebase the LitBox/deploy/hardening work onto a clean `develop`-based branch (off the cross-firm WIP), fold in `chore` docs+tests, replace PR #9.
+3. **Enable encryption:** add the `LITBOX_TOKEN_ENC_KEY` secret.
