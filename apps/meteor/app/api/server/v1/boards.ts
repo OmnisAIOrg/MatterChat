@@ -13,6 +13,7 @@ import {
 	isBoardsListReorderProps,
 	isBoardsListArchiveProps,
 	isBoardsCardsProps,
+	isBoardsCardsIcalPublicProps,
 	isBoardsCardProps,
 	isBoardsCardCreateProps,
 	isBoardsCardUpdateProps,
@@ -72,6 +73,8 @@ import {
 	toggleChecklistItem,
 	removeChecklistItem,
 	buildICalForUser,
+	getOrCreateIcalToken,
+	resolveUserIdByIcalToken,
 } from '../../../../server/lib/boards';
 import { settings } from '../../../settings/server';
 import { API } from '../api';
@@ -434,13 +437,17 @@ API.v1.get(
 // date (same set as boards.cards.myDay). Returns a raw RFC-5545 `text/calendar` body (NOT the
 // usual JSON envelope) so Google / Apple / Outlook Calendar can subscribe to it.
 //
-// AUTH (intentionally narrow): this endpoint is authenticated (X-Auth-Token / X-User-Id), so it
-// returns the *current* user's feed. Calendar apps can't send login headers, so a fully
-// subscribable public URL needs a per-user feed token (e.g. `GET boards.cards.ical?token=...`
-// resolving the user from a stored `icalToken`). That requires touching the shared Users model +
-// IUser typings + a token-generate endpoint — out of scope for this narrow change. FOLLOW-UP:
-// add `icalToken` storage + an `authRequired:false` token-resolving variant of this route.
+// AUTH: there are two ways to read the feed:
+//   1. GET boards.cards.ical            — authenticated (X-Auth-Token / X-User-Id); current user.
+//   2. GET boards.cards.ical.public?token=…  — UNAUTHENTICATED; resolves the user from a per-user
+//      secret token (boardsIcalToken), so a calendar app can subscribe to a plain URL it cannot
+//      attach login headers to. Mint the token with POST boards.cards.ical.token.
 const icalSuccessSchema = ajv.compile<string>({ type: 'string' });
+
+const icalHeaders = {
+	'Content-Type': 'text/calendar; charset=utf-8',
+	'Content-Disposition': 'attachment; filename="matterchat-deadlines.ics"',
+};
 
 API.v1.get(
 	'boards.cards.ical',
@@ -457,10 +464,55 @@ API.v1.get(
 		return {
 			statusCode: 200,
 			body: ics,
-			headers: {
-				'Content-Type': 'text/calendar; charset=utf-8',
-				'Content-Disposition': 'attachment; filename="matterchat-deadlines.ics"',
-			},
+			headers: icalHeaders,
+		};
+	},
+);
+
+// Mint (idempotently) + return the caller's per-user secret token for the public iCal feed.
+// First call generates + persists boardsIcalToken on the user; subsequent calls return the same
+// token. The client builds the subscribe URL from it: `<siteUrl>/api/v1/boards.cards.ical.public?token=…`.
+API.v1.post(
+	'boards.cards.ical.token',
+	{
+		authRequired: true,
+		response: {
+			200: successSchema,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const token = await getOrCreateIcalToken(this.userId);
+		return API.v1.success({ token });
+	},
+);
+
+// Public, UNAUTHENTICATED iCal feed. Resolves the user from `?token=`, then returns the same raw
+// RFC-5545 `text/calendar` body as boards.cards.ical. A missing/unknown token is rejected with 401
+// and a minimal body (never leaks whether a token exists).
+API.v1.get(
+	'boards.cards.ical.public',
+	{
+		authRequired: false,
+		query: isBoardsCardsIcalPublicProps,
+		response: {
+			200: icalSuccessSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const token = typeof this.queryParams.token === 'string' ? this.queryParams.token : '';
+		const uid = await resolveUserIdByIcalToken(token);
+		if (!uid) {
+			return API.v1.unauthorized();
+		}
+		const siteUrl = settings.get<string>('Site_Url') || undefined;
+		const ics = await buildICalForUser(uid, siteUrl);
+		return {
+			statusCode: 200,
+			body: ics,
+			headers: icalHeaders,
 		};
 	},
 );

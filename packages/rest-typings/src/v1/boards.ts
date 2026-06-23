@@ -64,6 +64,19 @@ const BoardsCardsSchema = {
 
 export const isBoardsCardsProps = ajvQuery.compile<BoardsCardsProps>(BoardsCardsSchema);
 
+// Public (unauthenticated) iCal feed: resolves the user from a per-user `?token=` secret so
+// calendar apps can subscribe to a plain URL. The token is the only param.
+type BoardsCardsIcalPublicProps = { token: string };
+
+const BoardsCardsIcalPublicSchema = {
+	type: 'object',
+	properties: { token: { type: 'string', minLength: 1 } },
+	required: ['token'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardsIcalPublicProps = ajvQuery.compile<BoardsCardsIcalPublicProps>(BoardsCardsIcalPublicSchema);
+
 type BoardsCardProps = { cardId: string };
 
 const BoardsCardSchema = {
@@ -591,6 +604,16 @@ export type BoardsEndpoints = {
 	// `text/calendar` document (a string), NOT the usual JSON envelope.
 	'/v1/boards.cards.ical': {
 		GET: () => string;
+	};
+	// Mint (idempotently) + return the caller's per-user secret token for the public iCal feed,
+	// so a calendar app can subscribe to `/api/v1/boards.cards.ical.public?token=...`.
+	'/v1/boards.cards.ical.token': {
+		POST: () => { token: string };
+	};
+	// Public, UNAUTHENTICATED iCal feed. Resolves the user from `?token=` and returns the same
+	// raw RFC-5545 `text/calendar` document as boards.cards.ical (no JSON envelope, no auth headers).
+	'/v1/boards.cards.ical.public': {
+		GET: (params: { token: string }) => string;
 	};
 	'/v1/boards.card': {
 		GET: (params: BoardsCardProps) => { card: IBoardCard };
