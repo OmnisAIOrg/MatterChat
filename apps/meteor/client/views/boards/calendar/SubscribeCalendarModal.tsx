@@ -56,26 +56,29 @@ const SubscribeCalendarModal = ({ onClose }: { onClose: () => void }) => {
 		<GenericModal
 			variant='info'
 			icon='calendar'
-			title={t('Boards_Subscribe_Calendar')}
+			title={t('Boards_Subscribe_Calendar', { defaultValue: 'Subscribe in your calendar' })}
 			confirmText={t('Close')}
 			onConfirm={onClose}
 			onClose={onClose}
 		>
 			<Box mbe={12} color='hint' fontScale='p2'>
-				{t('Boards_Subscribe_Calendar_Hint')}
+				{t('Boards_Subscribe_Calendar_Hint', {
+					defaultValue:
+						'Add your Boards deadlines to your calendar app. Subscribe to this private feed and your due cards show up — and stay in sync — in Google, Apple, or Outlook Calendar.',
+				})}
 			</Box>
 
 			{isLoading && <Throbber />}
 			{isError && (
 				<Box color='danger' fontScale='p2'>
-					{t('Boards_Subscribe_Calendar_Error')}
+					{t('Boards_Subscribe_Calendar_Error', { defaultValue: "Couldn't generate your calendar link. Please try again." })}
 				</Box>
 			)}
 
 			{token && (
 				<>
 					<Field>
-						<FieldLabel htmlFor={webcalId}>{t('Boards_Subscribe_Calendar_OneClick')}</FieldLabel>
+						<FieldLabel htmlFor={webcalId}>{t('Boards_Subscribe_Calendar_OneClick', { defaultValue: 'One-click subscribe' })}</FieldLabel>
 						<FieldRow>
 							<TextInput id={webcalId} readOnly value={webcalUrl} />
 							<Button mis={8} icon='clipboard' onClick={() => copyWebcal.copy()} title={t('Copy')}>
@@ -92,13 +95,13 @@ const SubscribeCalendarModal = ({ onClose }: { onClose: () => void }) => {
 								rel='noopener'
 							>
 								<Icon name='calendar' size='x16' mie={4} />
-								{t('Boards_Subscribe_Calendar_Open')}
+								{t('Boards_Subscribe_Calendar_Open', { defaultValue: 'Open in calendar app' })}
 							</Button>
 						</Box>
 					</Field>
 
 					<Field mbs={16}>
-						<FieldLabel htmlFor={httpsId}>{t('Boards_Subscribe_Calendar_Url')}</FieldLabel>
+						<FieldLabel htmlFor={httpsId}>{t('Boards_Subscribe_Calendar_Url', { defaultValue: 'Feed URL (paste into your calendar app)' })}</FieldLabel>
 						<FieldRow>
 							<TextInput id={httpsId} readOnly value={httpsUrl} />
 							<Button mis={8} icon='clipboard' onClick={() => copyHttps.copy()} title={t('Copy')}>
@@ -106,7 +109,10 @@ const SubscribeCalendarModal = ({ onClose }: { onClose: () => void }) => {
 							</Button>
 						</FieldRow>
 						<Box mbs={4} fontScale='c1' color='hint'>
-							{t('Boards_Subscribe_Calendar_Paste_Hint')}
+							{t('Boards_Subscribe_Calendar_Paste_Hint', {
+								defaultValue:
+									'Google Calendar: Other calendars → From URL. Apple Calendar: File → New Calendar Subscription. Outlook: Add calendar → Subscribe from web.',
+							})}
 						</Box>
 					</Field>
 				</>

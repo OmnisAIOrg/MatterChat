@@ -64,7 +64,7 @@ const BoardsCalendar = () => {
 		<Box p={24} style={{ overflowY: 'auto', height: '100%' }}>
 			<Box display='flex' alignItems='center' mbe={12}>
 				<Box fontScale='h2' flexGrow={1}>{MONTHS[ym.m]} {ym.y}</Box>
-				<Button small mie={4} icon='calendar' onClick={openSubscribe} title={t('Boards_Subscribe_Calendar')}>{t('Boards_Subscribe_Calendar')}</Button>
+				<Button small mie={4} icon='calendar' onClick={openSubscribe} title={t('Boards_Subscribe_Calendar', { defaultValue: 'Subscribe in your calendar' })}>{t('Boards_Subscribe_Calendar_Button', { defaultValue: 'Subscribe' })}</Button>
 				<Button small mie={4} title='Previous month' onClick={() => shift(-1)}><Icon name='chevron-left' size='x16' /></Button>
 				<Button small mie={4} onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() })}>Today</Button>
 				<Button small title='Next month' onClick={() => shift(1)}><Icon name='chevron-right' size='x16' /></Button>
