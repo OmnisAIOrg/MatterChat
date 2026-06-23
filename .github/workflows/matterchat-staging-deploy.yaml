@@ -89,7 +89,14 @@ jobs:
             kubectl delete statefulset matterchat-mongo -n "${K8S_NAMESPACE}" --ignore-not-found --wait=true
             kubectl apply -f kubernetes/staging/matterchat-mongo.yaml
           }
-          kubectl apply -f kubernetes/staging/matterchat-deployment-staging.yaml
+          # Same for the app Deployment: spec.selector is immutable, so an incompatible
+          # pre-existing matterchat Deployment can't be `apply`d over. Delete + recreate
+          # (this also re-applies the Service + Ingress in the file idempotently).
+          kubectl apply -f kubernetes/staging/matterchat-deployment-staging.yaml || {
+            echo "↻ Recreating matterchat Deployment (immutable selector change)"
+            kubectl delete deployment matterchat -n "${K8S_NAMESPACE}" --ignore-not-found --wait=true
+            kubectl apply -f kubernetes/staging/matterchat-deployment-staging.yaml
+          }
 
       - name: Wait for MongoDB StatefulSet
         run: kubectl rollout status statefulset/matterchat-mongo -n "${K8S_NAMESPACE}" --timeout=180s
