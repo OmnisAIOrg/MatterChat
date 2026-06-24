@@ -108,6 +108,9 @@ const AppLeftRail = () => {
 	const currentRoute = useCurrentRoutePath();
 
 	const canViewBoards = usePermission('boards-view');
+	// Admins get a direct rail entry to /admin. This custom rail replaced the stock sidebar's
+	// admin affordance, so without it an admin has no visible way into the admin area.
+	const isAdmin = Boolean(user?.roles?.includes('admin'));
 
 	// Active-section detection. `/boards/inbox` must win for Activity, so Boards
 	// excludes the inbox sub-route to avoid both lighting up at once.
@@ -115,6 +118,7 @@ const AppLeftRail = () => {
 	const boardsActive = currentRoute?.includes('/boards') && !inboxActive;
 	const filesActive = Boolean(currentRoute?.includes('/litbox'));
 	const chatActive = !currentRoute?.includes('/boards') && Boolean(currentRoute?.includes('/home') || currentRoute?.includes('/channel'));
+	const adminActive = Boolean(currentRoute?.includes('/admin'));
 
 	const handleChat = useStableCallback(() => {
 		router.navigate('/home');
@@ -130,6 +134,10 @@ const AppLeftRail = () => {
 
 	const handleActivity = useStableCallback(() => {
 		router.navigate('/boards/inbox');
+	});
+
+	const handleAdmin = useStableCallback(() => {
+		router.navigate('/admin');
 	});
 
 	// Search has no global "open" action; the NavBar search is a focus-driven
@@ -206,6 +214,7 @@ const AppLeftRail = () => {
 				</Box>
 				{canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
 				{renderItem('magnifier', t('Search'), handleSearch, false)}
+				{isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
 			{user && (
 				<Box display='flex' flexDirection='column' alignItems='center' mbs={8}>
