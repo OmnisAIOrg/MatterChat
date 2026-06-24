@@ -25,4 +25,26 @@ export const createOmnisAIOAuthSettings = () =>
 			public: true,
 			i18nLabel: 'OmnisAI_OIDC_Button_Label',
 		});
+
+		// Cross-firm (Omnis Counsel / CFCS) — opt-in, off by default (standalone principle).
+		await this.add('CrossFirm_Enabled', false, {
+			type: 'boolean',
+			public: true,
+			i18nLabel: 'CrossFirm_Enabled',
+			i18nDescription: 'CrossFirm_Enabled_Description',
+		});
+
+		await this.add('CrossFirm_CFCS_URL', '', {
+			type: 'string',
+			public: true,
+			i18nLabel: 'CrossFirm_CFCS_URL',
+			i18nDescription: 'CrossFirm_CFCS_URL_Description',
+		});
+
+		await this.add('CrossFirm_Firm_Name', '', {
+			type: 'string',
+			public: true,
+			i18nLabel: 'CrossFirm_Firm_Name',
+			i18nDescription: 'CrossFirm_Firm_Name_Description',
+		});
 	});

@@ -3,6 +3,12 @@ import type { IUser } from './IUser';
 
 export type BoardsPipelineType = 'leads' | 'matters' | 'general';
 
+/**
+ * Lifecycle status of a board. `archived` mirrors the boolean `archived` flag
+ * (kept for back-compat); the others are non-archived working states.
+ */
+export type BoardsStatus = 'active' | 'on_hold' | 'completed' | 'archived';
+
 export type BoardsFieldType =
 	| 'text'
 	| 'number'
@@ -75,6 +81,9 @@ export interface IBoard extends IRocketChatRecord {
 
 	schemaVersion: number;
 	archived: boolean;
+	// Lifecycle status. Optional for back-compat: absent ⇒ treat as 'active'
+	// (or 'archived' when the boolean `archived` flag is set).
+	status?: BoardsStatus;
 	rev: number;
 	createdBy: IUser['_id'];
 	createdAt: Date;

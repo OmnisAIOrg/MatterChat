@@ -175,7 +175,7 @@ export async function serverFetch(input: string, options?: ExtendedFetchOptions,
 				...(agent ? { agent } : {}),
 			});
 
-			if (!redirectStatus.has(response.status)) {
+			if (!redirectStatus.has(response.status) || options?.followRedirects === false) {
 				return response;
 			}
 

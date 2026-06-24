@@ -76,3 +76,46 @@ export async function getActivities(
 	const page = activities.slice(paging.offset, paging.offset + (paging.count || total));
 	return { activities: page, total };
 }
+
+/**
+ * "My Day": every card assigned to the user that has a due date, across all the boards they belong
+ * to (ANY card type — the list needs only title + due date, so it is CasePro-free). Bucketing into
+ * Overdue/Today/This-week is done client-side.
+ */
+export async function getMyDayCards(uid: string): Promise<{ cards: IBoardCard[] }> {
+	const boards = await Boards.findByMember(uid).toArray();
+	const boardIds = boards.filter((b) => !b.archived).map((b) => b._id);
+	if (!boardIds.length) {
+		return { cards: [] };
+	}
+	const cards = await BoardsCards.find({
+		boardId: { $in: boardIds },
+		assignees: uid,
+		dueDate: { $exists: true, $ne: null },
+		archived: { $ne: true },
+	} as any).toArray();
+	return { cards };
+}
+
+/**
+ * Global search across the user's cards (title + description) over every board they belong to.
+ * Case-insensitive substring match (regex-escaped). Powers a cross-board search + CHI's search_cards.
+ */
+export async function searchCards(uid: string, text: string, limit = 50): Promise<{ cards: IBoardCard[] }> {
+	const q = (text || '').trim();
+	if (!q) {
+		return { cards: [] };
+	}
+	const boards = await Boards.findByMember(uid).toArray();
+	const boardIds = boards.filter((b) => !b.archived).map((b) => b._id);
+	if (!boardIds.length) {
+		return { cards: [] };
+	}
+	const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+	const cards = await BoardsCards.find({
+		boardId: { $in: boardIds },
+		archived: { $ne: true },
+		$or: [{ title: rx }, { description: rx }],
+	} as any).toArray();
+	return { cards: cards.slice(0, limit) };
+}

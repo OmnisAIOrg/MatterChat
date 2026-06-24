@@ -5,7 +5,7 @@ import { appLayout } from './appLayout';
 import { router } from '../providers/RouterProvider';
 import MainLayout from '../views/root/MainLayout';
 
-type GroupName = 'omnichannel' | 'marketplace' | 'account' | 'admin' | 'boards';
+type GroupName = 'omnichannel' | 'marketplace' | 'account' | 'admin' | 'boards' | 'litbox';
 
 type GroupPrefix<TGroupName extends GroupName> = IRouterPaths[`${TGroupName}-index`]['pattern'];
 

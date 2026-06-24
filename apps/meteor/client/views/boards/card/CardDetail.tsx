@@ -14,6 +14,8 @@ import { useTranslation } from 'react-i18next';
 
 import { getCardTypeIcon } from '../lib/icons';
 import CardButtonsRow from './CardButtonsRow';
+import CardLabelsControl from './CardLabelsControl';
+import ChecklistPanel from './ChecklistPanel';
 import LeadPanel from './LeadPanel';
 import MatterPanel from './MatterPanel';
 import WatchToggle from './WatchToggle';
@@ -25,34 +27,6 @@ type CardDetailProps = {
 };
 
 type CardTab = 'detail' | 'activity';
-
-const ChecklistBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
-	if (card.checklists.length === 0) {
-		return null;
-	}
-	return (
-		<Box mbs={16}>
-			<Box fontScale='p2b' color='default' mbe={8}>
-				Checklist
-			</Box>
-			{card.checklists.map((checklist) => (
-				<Box key={checklist.id} mbe={8}>
-					<Box fontScale='c1' color='hint' mbe={4}>
-						{checklist.title}
-					</Box>
-					{checklist.items.map((item) => (
-						<Box key={item.id} display='flex' alignItems='center' mbe={2}>
-							<Icon name={item.done ? 'circle-check' : 'circle'} size='x16' mie={4} color={item.done ? 'status-font-on-success' : 'hint'} />
-							<Box fontScale='p2' color='default'>
-								{item.text}
-							</Box>
-						</Box>
-					))}
-				</Box>
-			))}
-		</Box>
-	);
-};
 
 const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 	const { t } = useTranslation();
@@ -246,6 +220,9 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 							</Box>
 						)}
 
+						{/* Card labels: chips + an expandable manager (toggle/create/edit/delete board labels) */}
+						<CardLabelsControl boardId={boardId} cardId={cardId} cardLabelIds={card.labels} />
+
 						{/* M7 — card-button automations runnable against this card (hidden when none) */}
 						<CardButtonsRow boardId={boardId} cardId={cardId} cardType={card.cardType} />
 
@@ -255,7 +232,7 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 							#{card.cardNumber} · {card.cardType}
 						</Box>
 
-						<ChecklistBlock card={card} />
+						<ChecklistPanel boardId={boardId} cardId={cardId} checklists={card.checklists} />
 						<CommentsBlock card={card} />
 					</Box>
 				)}

@@ -91,4 +91,11 @@ export const {
 		tag: 'Beta',
 		permissionGranted: (): boolean => hasPermission('boards-view'),
 	},
+	{
+		href: '/boards/calendar',
+		i18nLabel: 'Calendar',
+		icon: 'calendar',
+		tag: 'Beta',
+		permissionGranted: (): boolean => hasPermission('boards-view'),
+	},
 ]);

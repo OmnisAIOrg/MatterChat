@@ -1,0 +1,183 @@
+# ---------------------------------------------------------------------------
+# MatterChat (Rocket.Chat / Meteor) — staging deployment
+# Namespace: staging
+# Public host: https://matterchat.stg-omnisai.io
+#
+# NOTE ON IMAGE:
+#   The container image is a literal placeholder 'matterchat:staging-latest'.
+#   CI overwrites it on each deploy with:
+#     kubectl -n staging set image deployment/matterchat \
+#       matterchat=${ECR_REGISTRY}/matterchat:staging-latest
+#   (the ECR repo name is "matterchat"). imagePullPolicy is Always so a
+#   re-deploy to the same :staging-latest tag still re-pulls.
+#
+# NOTE ON FIRST DEPLOY:
+#   MatterChat boots against an in-cluster single-node Mongo REPLICA SET
+#   (Service "matterchat-mongo"). Until that replica set (rs0) is initiated
+#   and reachable, the app WILL crash-loop on boot. That is expected — bring
+#   Mongo up / initiate rs0 first, then the app settles. Meteor also boots
+#   slowly (~60-120s), hence the generous probe initialDelaySeconds below.
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matterchat
+  namespace: staging
+  labels:
+    app: matterchat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: matterchat
+  strategy:
+    # Meteor/DDP sessions are sticky; avoid two versions racing the same Mongo
+    # during a roll. Recreate keeps the migration story simple on staging.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: matterchat
+    spec:
+      # Staging nodes are tainted; every pod must tolerate it to schedule.
+      tolerations:
+        - key: "staging"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      containers:
+        - name: matterchat
+          # Literal placeholder — CI sets the real ECR image via 'kubectl set image'.
+          image: matterchat:staging-latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # --- Mongo (single-node replica set rs0, in-cluster) ---
+            - name: MONGO_URL
+              value: "mongodb://matterchat-mongo:27017/matterchat?replicaSet=rs0"
+            - name: MONGO_OPLOG_URL
+              value: "mongodb://matterchat-mongo:27017/local?replicaSet=rs0"
+            # --- Core Rocket.Chat / Meteor app config ---
+            - name: ROOT_URL
+              value: "https://matterchat.stg-omnisai.io"
+            - name: PORT
+              value: "3000"
+            - name: NODE_ENV
+              value: "production"
+            - name: OVERWRITE_SETTING_Iframe_Restrict_Access
+              value: "false"
+            # Skip the first-run setup wizard: no SMTP is configured, so the wizard's
+            # email-confirmation step can never complete. OmnisAI OIDC is the real login;
+            # the first user to sign in becomes the workspace admin.
+            - name: OVERWRITE_SETTING_Show_Setup_Wizard
+              value: "completed"
+            # --- OmnisAI OIDC (CentralizedAuth) ---
+            - name: OMNISAI_OIDC_ENABLED
+              value: "true"
+            - name: OMNISAI_OIDC_ISSUER
+              value: "https://auth-app.stg-omnisai.io"
+            - name: OMNISAI_OIDC_CLIENT_ID
+              value: "WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz"
+            # Public setting that makes the "Sign in with OmnisAI" button RENDER on the
+            # login screen. OMNISAI_OIDC_ENABLED (above) enables the server handler; this
+            # flips the client-visible setting (per RUNBOOK-wire-to-real-centralizedauth.md).
+            - name: OVERWRITE_SETTING_OmnisAI_OIDC_Enabled
+              value: "true"
+            # No SMTP is wired on staging, so Rocket.Chat's email-2FA code can never be
+            # delivered — it would wall every OmnisAI login at an un-completable prompt.
+            # OmnisAI OIDC is the real auth (and can enforce 2FA at the IdP), so disable
+            # MatterChat's own email two-factor.
+            - name: OVERWRITE_SETTING_Accounts_TwoFactorAuthentication_By_Email_Enabled
+              value: "false"
+            # --- LitBox integration ---
+            - name: LITBOX_API_URL
+              value: "https://litbox-app.stg-omnisai.io"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "3Gi"
+              cpu: "2000m"
+          readinessProbe:
+            httpGet:
+              path: /api/info
+              port: 3000
+            # Meteor boots slowly; don't start probing for 90s.
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/info
+              port: 3000
+            # Liveness very lenient: first cold boot also runs Rocket.Chat
+            # migrations against an empty DB before /api/info answers, which can
+            # exceed the default budget on a loaded node. 180s + 8 failures.
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 8
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: matterchat
+  namespace: staging
+  labels:
+    app: matterchat
+spec:
+  type: ClusterIP
+  selector:
+    app: matterchat
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: matterchat
+  namespace: staging
+  labels:
+    app: matterchat
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:921840973142:certificate/88281aef-cdb3-4b19-a912-9171e35901a4
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    # Share the same ALB as LitBox et al. (group "staging-backend-shared").
+    # Occupied orders in this group: 100=auth-app, 800=crm-app, 850=casepro-mcp-v2,
+    # 860=carepro/matterchat-mcp-v2. MatterChat takes 870 (must stay unique or the
+    # ALB controller fails to reconcile the WHOLE group, harming every tenant).
+    alb.ingress.kubernetes.io/group.name: staging-backend-shared
+    alb.ingress.kubernetes.io/group.order: "870"
+    alb.ingress.kubernetes.io/healthcheck-path: /api/info
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/success-codes: "200,201,204,302"
+    # Meteor DDP runs over websocket on the same port. ALB does websocket on
+    # HTTP/1.1 by default; enable lb_cookie stickiness so a client stays pinned
+    # to one pod (needed once replicas > 1), and shrink deregistration delay.
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400,deregistration_delay.timeout_seconds=10
+spec:
+  rules:
+    - host: matterchat.stg-omnisai.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: matterchat
+                port:
+                  number: 80
