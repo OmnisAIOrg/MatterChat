@@ -12,7 +12,9 @@ type ReqOpts = { method?: string; body?: unknown };
  */
 export const useCrossFirmFetch = () => {
 	const user = useUser();
-	const cfcsUrl = String(useSetting('CrossFirm_CFCS_URL', '') || '').replace(/\/$/, '');
+	// Gate on the public CrossFirm_Enabled flag — the proxy owns CFCS origin resolution server-side, so
+	// the browser no longer needs (or should depend on) the CFCS URL to decide whether the panel works.
+	const cfEnabled = Boolean(useSetting('CrossFirm_Enabled'));
 	const firmName = String(useSetting('CrossFirm_Firm_Name', '') || '');
 
 	const getIdentity = useEndpoint('GET', '/v1/cross-firm.identity' as any);
@@ -29,15 +31,19 @@ export const useCrossFirmFetch = () => {
 
 	const request = useCallback(
 		async (path: string, opts: ReqOpts = {}): Promise<any> => {
-			if (!cfcsUrl) {
-				throw new Error('Cross-firm service URL is not configured (CrossFirm_CFCS_URL).');
+			if (!cfEnabled) {
+				throw new Error('Cross-firm is not enabled (CrossFirm_Enabled).');
 			}
-			const res = await fetch(`${cfcsUrl}${path}`, {
+			// Call MatterChat's OWN origin: the /_crossfirm server proxy authenticates this loginToken,
+			// derives the user's SERVER-VERIFIED OmnisAI subject, and forwards to the internal CFCS with
+			// that identity stamped on an unforgeable header. The old spoofable X-User-Id / X-Omnisai-Id
+			// headers are gone — the browser no longer asserts who it is.
+			const token = (typeof window !== 'undefined' && window.localStorage.getItem('Meteor.loginToken')) || '';
+			const res = await fetch(`/_crossfirm${path}`, {
 				method: opts.method || 'GET',
 				headers: {
 					'Content-Type': 'application/json',
-					'X-User-Id': user?._id || '',
-					'X-Omnisai-Id': omnisaiId || '',
+					...(token ? { Authorization: `Bearer ${token}` } : {}),
 				},
 				body: opts.body ? JSON.stringify(opts.body) : undefined,
 			});
@@ -47,8 +53,8 @@ export const useCrossFirmFetch = () => {
 			}
 			return data;
 		},
-		[cfcsUrl, user?._id, omnisaiId],
+		[cfEnabled, user?._id, omnisaiId],
 	);
 
-	return { request, cfcsUrl, firmName, userKey, displayName };
+	return { request, cfEnabled, firmName, userKey, displayName };
 };

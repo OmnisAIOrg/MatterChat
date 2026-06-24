@@ -15,7 +15,7 @@ import { useCrossFirmFetch } from './useCrossFirmFetch';
 const CrossFirmSection = ({ rid }: { rid: string }) => {
 	const dispatchToast = useToastMessageDispatch();
 	const qc = useQueryClient();
-	const { request, cfcsUrl, firmName, userKey, displayName } = useCrossFirmFetch();
+	const { request, cfEnabled, firmName, userKey, displayName } = useCrossFirmFetch();
 
 	const [draft, setDraft] = useState('');
 	const [newRepresents, setNewRepresents] = useState('');
@@ -25,7 +25,7 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 	const me = useQuery({
 		queryKey: ['cf', 'whoami', userKey, firmName],
 		queryFn: () => request('/whoami', { method: 'POST', body: { userKey, name: displayName, firmName: firmName || 'My Firm' } }),
-		enabled: Boolean(cfcsUrl && userKey),
+		enabled: Boolean(cfEnabled && userKey),
 	});
 	const attorneyId: string | undefined = me.data?.attorney?.id;
 	const firmId: string | undefined = me.data?.firm?.id;
@@ -117,8 +117,8 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 		</Box>
 	);
 
-	if (!cfcsUrl) {
-		return <Box p={16}>{Header}<Callout type='warning' title='Cross-firm not configured'>Set <b>CrossFirm_CFCS_URL</b> in Admin → Settings → OmnisAI to enable opposing-counsel messaging on this matter. (Works without CasePro.)</Callout></Box>;
+	if (!cfEnabled) {
+		return <Box p={16}>{Header}<Callout type='warning' title='Cross-firm not enabled'>Turn on <b>CrossFirm_Enabled</b> in Admin → Settings → OmnisAI to enable opposing-counsel messaging on this matter. (Works without CasePro.)</Callout></Box>;
 	}
 
 	return (
