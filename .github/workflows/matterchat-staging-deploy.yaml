@@ -107,4 +107,16 @@ jobs:
           kubectl set image deployment/matterchat matterchat="${IMAGE}" -n "${K8S_NAMESPACE}"
 
       - name: Wait for app rollout (Meteor boot + migrations are slow)
-        run: kubectl rollout status deployment/matterchat -n "${K8S_NAMESPACE}" --timeout=600s
+        run: kubectl rollout status deployment/matterchat -n "${K8S_NAMESPACE}" --timeout=420s
+
+      # TEMPORARY diagnostic — on a failed rollout, dump WHY the new pod did not become ready
+      # (boot crash vs scheduling vs image pull). Remove once the cross-firm boot issue is resolved.
+      - name: Diagnose failed rollout (pod state + crash logs)
+        if: failure()
+        run: |
+          echo "===== deployment status ====="; kubectl describe deployment/matterchat -n "${K8S_NAMESPACE}" 2>&1 | tail -25 || true
+          echo "===== pods ====="; kubectl get pods -n "${K8S_NAMESPACE}" -l app=matterchat -o wide 2>&1 || true
+          echo "===== describe pod (events + state) ====="; kubectl describe pod -n "${K8S_NAMESPACE}" -l app=matterchat 2>&1 | tail -70 || true
+          echo "===== current container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=140 2>&1 || true
+          echo "===== previous (crashed) container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --previous --tail=140 2>&1 || true
+          echo "===== recent namespace events ====="; kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.lastTimestamp 2>&1 | tail -30 || true
