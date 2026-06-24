@@ -95,16 +95,6 @@ spec:
             # --- LitBox integration ---
             - name: LITBOX_API_URL
               value: "https://litbox-app.stg-omnisai.io"
-            # --- Cross-firm (CFCS / Omnis Counsel) ---
-            # The /_crossfirm server proxy forwards to the internal CFCS ClusterIP service (same namespace).
-            - name: CFCS_API_URL
-              value: "http://cfcs:9200"
-            # Turn cross-firm on, and set the firm identity this instance represents — the proxy stamps it
-            # as the verified x-cfcs-firm (CFCS rejects an empty firm in strict mode, so this MUST be set).
-            - name: OVERWRITE_SETTING_CrossFirm_Enabled
-              value: "true"
-            - name: OVERWRITE_SETTING_CrossFirm_Firm_Name
-              value: "Apex Law LLP"
           resources:
             requests:
               memory: "1Gi"

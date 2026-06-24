@@ -30,7 +30,6 @@ import { settings } from '../../settings/server';
 
 import './loginHandler';
 import './litboxProxy';
-import './crossFirmProxy';
 
 const base64url = (buf: Buffer): string => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
