@@ -3,6 +3,21 @@
 
 ---
 
+### 2026-06-23 — Cross-firm = CFCS multi-tenant trust domain, NOT federation (re-confirmed); going live secure-first
+**Chose:** wire the already-built cross-firm UI to a live CFCS backend deployed INTERNAL-ONLY (ClusterIP, no public ingress), fronted by a new MatterChat `/_crossfirm` server proxy that injects the verified OmnisAI identity (overriding the client-supplied actor `*AttorneyId` fields).
+**Rejected:** (a) Rocket.Chat/Matrix federation for the MatterChat-org case — re-confirmed the prior rejection (E2EE×federation mutually exclusive in RC, EE-only, beta, no deletion enforcement → not legal-grade); (b) a fresh from-scratch design — caught that CFCS already exists (designed + 17/17 POC + the UI already on `staging`); (c) the browser calling CFCS directly with a spoofable identity header (the current POC wiring).
+**Why:** the founder nearly paid for a duplicate — CFCS *is* the multi-org architecture, already built. The only real gap vs. "talk to people still on Slack" is a LIVE Slack bridge (not built; Slack today is migration-only). Internal-only CFCS + a proxy that injects the verified identity closes the POC's "identity trusted from the request" hole WITHOUT touching the hardened trust core; a public CFCS would need CORS + a bigger attack surface.
+
+### 2026-06-23 — First OmnisAI user auto-promoted to admin (the OIDC path skipped stock RC's first-user rule)
+**Chose:** in `loginHandler.ts`, on login grant `admin` to the user if the workspace has no admin yet.
+**Rejected:** a DB-level role grant (no local cluster access); `ADMIN_*` env bootstrap (a second account + a committed password).
+**Why:** the OmnisAI OIDC login creates users with `globalRoles:['user']` and never ran Rocket.Chat's "first user is admin" (that lives in the password/setup-wizard path), so the workspace had no owner and `/admin` blocked everyone. The fix is idempotent (fires only while ownerless) and fixes every future workspace. GOTCHA: it only takes effect on a TRUE logout→login — incognito windows share a session, so a "fresh" incognito silently resumed and the promotion never ran (that cost an hour of debugging).
+
+### 2026-06-23 — Re-registered the OmnisAI OIDC client for staging (the login blocker)
+**Chose:** register a NEW public OIDC client (`WoqX…`) whose redirect URIs include the staging + prod callbacks, and point MatterChat + LitBox at it.
+**Rejected:** editing the original client's redirect URIs (the clean fix, but needs CentralizedAuth admin access we lacked — founder hit a dashboard 401).
+**Why:** the original client was DCR-registered for localhost, so the staging callback returned INVALID_REDIRECT_URI for any logged-in user. Re-registering was the only autonomous path; founder explicitly authorized it. NOTE: registering on shared staging CentralizedAuth is high-severity — the safety classifier requires a specific, unambiguous yes, not a terse one.
+
 ### 2026-06-22 — LitBox auth proxy: hardened server-side credential forwarding (mounted off /api; credential OFF services.*)
 **Chose:** a streaming server proxy `litboxProxy.ts` mounted at **`/_litbox`** that resolves the MatterChat user from the loginToken and forwards `/_litbox/v1/* → ${LITBOX_API_URL}/api/v1/*` with the user's CentralizedAuth credential (the OIDC `access_token`, Option A) injected server-side. Credential persisted on a **top-level `omnisaiLitbox` user field**, NOT `services.*`.
 **Rejected:** mounting under `/api/litbox` (Rocket.Chat's own router owns `/api/*` and 404s unknown paths — confirmed); storing the credential under `services.omnisai.litbox` (the design's first choice).

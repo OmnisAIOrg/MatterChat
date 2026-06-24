@@ -1,40 +1,31 @@
 # HANDOFF.md — current state (read after CLAUDE.md)
-> Live state for resuming. **The "checkpoint matterchat" command updates this before a session ends.** Standing rules + the two session commands are in `CLAUDE.md`; decisions + their reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
+> Live state for resuming. **"checkpoint matterchat" updates this before a session ends.** Decisions + reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
-**Last updated:** 2026-06-22 · **Branch:** `feature/matterchat-cross-firm`
+**Last updated:** 2026-06-23 · **Branch:** `staging` (the LIVE deploy branch → matterchat.stg-omnisai.io)
 
-## The repos
-- **`~/MatterChat`** ← here. The product + these resume docs. (Only repo touched this session.)
-- **`~/matterchat-mcp-v2`** — CHI tool server (23 MCP tools over `boards.*`).
-- **`~/omnis-counsel`** — cross‑firm CFCS service + customer KB + demo scripts.
+## ⚡ MatterChat is LIVE on real staging
+**https://matterchat.stg-omnisai.io** — off localhost, on EKS. Deploy model: push to **`staging`** → GitHub Actions builds `apps/meteor/.docker/Dockerfile.alpha` → ECR → `kubectl apply` `kubernetes/staging/matterchat-{mongo,deployment-staging}.yaml` → rollout. (Branches are tangled — `staging` is the deploy branch; `feature/matterchat-cross-firm` + `develop` also exist. Consolidation deferred.)
 
-## Running services (local dev)
-| Port | What | Notes |
-|---|---|---|
-| 27018 | MongoDB (rs0) | DB `matterchat_apex` (sign in as **alex**, a regular user) |
-| 3100 | **Dev server (HMR)** | `/tmp/mc-dev.sh` (ROOT_URL :3100, OmnisAI sign‑in). Browseable app + fast loop. |
-| 9100 / 9200 | Mock OIDC / CFCS | `~/omnis-counsel/mc-mock-oidc.js` / `server.js` |
+## Built + verified LIVE this session (2026-06-23, all on `staging`, deployed + confirmed)
+- **OmnisAI OIDC login works end-to-end.** The login failures were a stale OIDC client (registered for localhost). Re-registered a new client `WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz` (redirect URIs include the staging + prod callbacks); `OMNISAI_OIDC_CLIENT_ID`→WoqX. LitBox PR #186 trusts it (UNAPPROVED — see deferred).
+- **Setup wizard skipped**, **login button shown**, **email 2FA disabled** (no SMTP on staging → the 2FA code could never arrive). All via `OVERWRITE_SETTING_*` env on the deployment.
+- **First OmnisAI user auto-promoted to admin** — `app/omnisai-oauth/server/loginHandler.ts` grants `admin` if the workspace has none (the OIDC path skipped stock RC's first-user rule). Founder IS admin. ⚠️ requires a TRUE logout→login (incognito shares sessions — that was the gotcha).
+- **Admin entry added to the left rail** (`AppLeftRail.tsx`, gated on the admin role).
+- **Activity 404 fixed** — registered the missing `/boards/inbox` route (`views/boards/routes.tsx`; made `NotificationsInbox.onNavigate` optional). Fixes the rail "Activity", the Boards sidebar "Inbox", and the My Day "activity inbox" link (all hit the same dead route).
+- **Boards load faster** — code-split the non-default board views + card drawer in `views/boards/BoardRouter.tsx`.
+- **Slack IMPORT verified working** — Admin→Import→Slack imported a test export. (Import = one-time MIGRATION, NOT live comms — that's cross-firm, below.)
 
-Dev loop: self‑heal wrapper `while true; do bash /tmp/mc-dev.sh; done`, OR the **preview tool** (`.claude/launch.json` `matterchat`→`/tmp/mc-dev.sh` port 3100; `preview_start` owns it + gives a browser to screenshot). The preview-managed server has **no self‑heal** and dies on the dev‑proxy abort bug — re-`preview_start` to recover. Board route = `/boards/board/:id/:view?`. Boards API harness: `MC_BASE=http://localhost:3100/api/v1 MC_USER_ID=<id> MC_AUTH_TOKEN=<token> node scripts/boards-api-test.mjs` (token from browser `localStorage`, never commit it).
+## ⚠️ In progress — Cross-firm (CFCS) going live, secure-first. BLOCKED on AWS secrets.
+The cross-firm UI is ALREADY on `staging` (deployed but OFF — `CrossFirm_Enabled/CFCS_URL/Firm_Name` empty; CFCS backend not deployed). Founder chose to wire it live with a security proxy first.
+- **Stage 1 (deploy CFCS) is BUILT on `omnis-counsel` `staging`** (Dockerfile + internal ClusterIP manifest + CI) **but the deploy FAILED — that repo lacks the AWS deploy secrets.**
+- **Critical-path blocker → engineer:** add `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` to the `omnis-counsel` repo (same IAM as MatterChat), then re-run "CFCS — Staging Deploy".
+- **Full plan + the secure-proxy design** (CFCS internal-only + a `/_crossfirm` MatterChat proxy that injects the verified OmnisAI identity, overriding the actor `*AttorneyId` fields): in memory `omnis-counsel-crossfirm` — exact files, fields, and remaining stages.
 
-## Built + verified this session (committed on `feature/matterchat-cross-firm`, PR #6)
-**Boards UI for the new server features — 58/58 harness + eyeballed in the browser:** card **label chips + manager**, card **checklist panel** (add/toggle/remove + progress), **drag‑to‑reorder lists** (mirrors card DnD; header handle), and the **iCal "Subscribe in your calendar"** flow — incl. a **public tokenized feed URL** (`boards.cards.ical.public?token=`, authRequired:false) + the Subscribe modal (i18n fixed to inline defaultValues).
+## Deferred / open
+- **LitBox Files:** PR https://github.com/OmnisAIOrg/Litbox-backend/pull/186 (trust the new OIDC client) UNAPPROVED → Files 401s until merged. Parked per founder.
+- Branch consolidation (staging / develop / feature-cross-firm).
+- Boards server-side pagination (task chip spawned).
+- Encrypt-at-rest for LitBox tokens (`LITBOX_TOKEN_ENC_KEY` secret).
 
-**LitBox integration — FOUNDATION done, not yet loading files:** embeds the official `@omnisaiorg/litbox-file-browser` React component (GitHub Packages, v0.1.77).
-- ✅ **Component bundles + mounts + renders its full UI in Meteor** (verified in browser — My Folders/Files, Upload, Create Folder, grid). Lazy-loaded (`client/views/litbox/LitboxEmbed.tsx`) so it stays out of the main bundle.
-- ✅ **`/litbox` route** (`client/views/litbox/`, registered via `createRouteGroup('litbox',…)` + `main.ts`) and a **"Files" item in the LEFT RAIL** (`client/views/root/MainLayout/AppLeftRail.tsx`) rendered with the **LitBox wordmark** (recolored 'Lit' white for the dark rail).
-- ✅ **GitHub Packages wiring** — `.yarnrc.yml` `npmScopes.omnisaiorg` (registry npm.pkg.github.com, auth `${NPM_TOKEN-}`). **Install needs `NPM_TOKEN` = a GitHub token with `read:packages` on @omnisaiorg.**
-- ✅ **Server auth proxy built + hardened** — `apps/meteor/app/omnisai-oauth/server/litboxProxy.ts`, mounted at **`/_litbox`** (NOT `/api/...` — Rocket.Chat owns that namespace and 404s it). The OIDC callback (`index.ts`) captures the CentralizedAuth credential; `loginHandler.ts` persists it on a **top-level `omnisaiLitbox` user field (NOT `services.*` — `getFullUserData` projects `services` wholesale to self, so it would leak)**. The proxy resolves the MatterChat user from the loginToken, injects the credential, forwards `/_litbox/v1/* → ${LITBOX_API_URL}/api/v1/*`. Hardened per red-team: Authorization-header-only, path-traversal/protocol-relative rejection, origin-pin + resource-prefix + method allow-lists (credential attached only after all gates pass), redirect:manual, Cookie/Origin dropped. **Route registration verified locally (503 until `LITBOX_API_URL` set).**
-
-## ⚠️ Next safe task — verify LitBox file-loading on a REAL env (cannot be done on local mock)
-The proxy is built; what's left is verifying it loads real files, which the local dev **cannot** do: local MatterChat logs in via a **mock OIDC** (`:9100`) whose tokens the real staging LitBox/CentralizedAuth reject. So:
-1. **Set `LITBOX_API_URL`** (the LitBox backend base, e.g. `https://litbox-app.stg-omnisai.io`) in the run env / RUNBOOK. Until set the proxy returns 503.
-2. **Deploy to alpha** (or point local at the REAL CentralizedAuth OIDC + use a real LitBox account) and open Files. Confirm the grid loads the user's files.
-3. **Probe the credential-type gate:** the proxy forwards the OIDC `access_token` as the LitBox bearer (Option A — the callback already calls CentralizedAuth's `mcp/get-session` with `Bearer ${access_token}` successfully). If real LitBox 401s, switch to capturing the better-auth `set-cookie` session value instead (Option B). **Verify against real staging — local cannot.**
-4. **Remaining proxy follow-ups** (deferred, all need real env): refresh-on-401 via the `refresh_token` grant; a regression test asserting `users.info`/`me` never return `omnisaiLitbox` (defense for the leak fix); encrypt the token at rest; and confirm MatterChat users carry the same `centralized_user_id` (`services.omnisai.id == sub`) so LitBox's JIT match-by-id wins over the email-rebind footgun.
-(Full research + design + red-team output: the `litbox-auth-design` workflow result under the session's tasks/ dir.)
-
-## In‑flight gotchas
-- **`packages/rest-typings`/`core-typings` edits:** rebuild dist (`yarn turbo run build --filter=…`) **then bounce** the dev server — the watcher misses a one‑off dist rebuild (new ajv fields stripped, enum bypassed). App code under `apps/meteor/**` recompiles itself (no dist rebuild).
-- **Meteor dev proxy crashes on aborted connections** (`ERR_STREAM_WRITE_AFTER_END`) — don't poll with short‑`--max-time` curls; verify via log/harness. The LitBox `/litbox` screen is stable (component skeleton-loads gracefully) — earlier crashes were the proxy bug, not the component.
-- **GitHub Packages:** installing `@omnisaiorg/*` needs `NPM_TOKEN` with `read:packages`; `gh auth refresh -s read:packages` grants it on the existing login.
+## Single next safe task
+Once the engineer adds the AWS secrets to `omnis-counsel`: re-run the CFCS deploy, then build the `/_crossfirm` proxy → repoint `useCrossFirmFetch` → flip the 3 `CrossFirm_*` settings → seed `omnis-counsel/seed-demo.js` → cross-firm goes live. (Step-by-step in the `omnis-counsel-crossfirm` memory.)
