@@ -107,10 +107,11 @@ jobs:
           kubectl set image deployment/matterchat matterchat="${IMAGE}" -n "${K8S_NAMESPACE}"
 
       - name: Wait for app rollout (Meteor boot + migrations are slow)
-        run: kubectl rollout status deployment/matterchat -n "${K8S_NAMESPACE}" --timeout=420s
+        run: kubectl rollout status deployment/matterchat -n "${K8S_NAMESPACE}" --timeout=600s
 
-      # TEMPORARY diagnostic — on a failed rollout, dump WHY the new pod did not become ready
-      # (boot crash vs scheduling vs image pull). Remove once the cross-firm boot issue is resolved.
+      # On a failed rollout, dump WHY the new pod did not become ready (boot crash vs scheduling vs
+      # image pull) — pod state, namespace events, and current + previous container logs. Turns a blind
+      # "Recreate took staging down" into an actionable diagnosis without needing local cluster access.
       - name: Diagnose failed rollout (pod state + crash logs)
         if: failure()
         run: |

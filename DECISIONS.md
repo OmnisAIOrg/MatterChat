@@ -3,6 +3,12 @@
 
 ---
 
+### 2026-06-24 — Cross-firm went LIVE via a verified-identity proxy, hardened after a red-team
+**Chose:** route the browser → CFCS through the MatterChat `/_crossfirm` server proxy that injects the server-verified OmnisAI subject as an unforgeable `x-cfcs-caller`; run CFCS in STRICT mode where a single pre-dispatch identity gateway binds every actor field to the resolved caller (unique-or-fail-closed) and the service refuses to start without a real `CFCS_AUDIT_KEY`.
+**Rejected:** the pre-existing browser→CFCS direct fetch with a client-supplied `X-Omnisai-Id` (spoofable); and the POC's header-less body-trust as a production posture.
+**Why:** in a legal-trust system an attorney acting as another is sanctions-level. A 5-lens red-team of the first cut found 5 must-fixes — M1 (any in-cluster pod could impersonate by omitting the header), M2 (client-chosen firm on a blank setting), M3 (no login-token expiry), M5 (non-unique `caUserId` principal), S4 (default/forgeable audit-MAC key) — all fixed + verified before deploy (CFCS 26/0, audit 8/0, strict-mode security suite all-pass). **M4** (bind firm to a verified tenant-id, not a name — name collisions merge escrow domains) is deferred behind M2's fail-closed stopgap until before authoritative production.
+**Note:** the first staging rollout flaked (stuck `Recreate` termination, NOT a code bug — a clean redeploy was green); the deploy workflow now dumps pod state/events/logs on a failed rollout so the next boot failure is diagnosable.
+
 ### 2026-06-23 — Cross-firm = CFCS multi-tenant trust domain, NOT federation (re-confirmed); going live secure-first
 **Chose:** wire the already-built cross-firm UI to a live CFCS backend deployed INTERNAL-ONLY (ClusterIP, no public ingress), fronted by a new MatterChat `/_crossfirm` server proxy that injects the verified OmnisAI identity (overriding the client-supplied actor `*AttorneyId` fields).
 **Rejected:** (a) Rocket.Chat/Matrix federation for the MatterChat-org case — re-confirmed the prior rejection (E2EE×federation mutually exclusive in RC, EE-only, beta, no deletion enforcement → not legal-grade); (b) a fresh from-scratch design — caught that CFCS already exists (designed + 17/17 POC + the UI already on `staging`); (c) the browser calling CFCS directly with a spoofable identity header (the current POC wiring).

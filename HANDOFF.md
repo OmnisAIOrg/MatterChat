@@ -1,31 +1,28 @@
 # HANDOFF.md — current state (read after CLAUDE.md)
 > Live state for resuming. **"checkpoint matterchat" updates this before a session ends.** Decisions + reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
-**Last updated:** 2026-06-23 · **Branch:** `staging` (the LIVE deploy branch → matterchat.stg-omnisai.io)
+**Last updated:** 2026-06-24 · **Branch:** `staging` (the LIVE deploy branch → matterchat.stg-omnisai.io)
 
 ## ⚡ MatterChat is LIVE on real staging
-**https://matterchat.stg-omnisai.io** — off localhost, on EKS. Deploy model: push to **`staging`** → GitHub Actions builds `apps/meteor/.docker/Dockerfile.alpha` → ECR → `kubectl apply` `kubernetes/staging/matterchat-{mongo,deployment-staging}.yaml` → rollout. (Branches are tangled — `staging` is the deploy branch; `feature/matterchat-cross-firm` + `develop` also exist. Consolidation deferred.)
+**https://matterchat.stg-omnisai.io** — on EKS. Deploy model: push to **`staging`** → GitHub Actions builds → ECR → `kubectl apply` `kubernetes/staging/matterchat-{mongo,deployment-staging}.yaml` → rollout (**`Recreate`** strategy). The `matterchat-staging-deploy.yaml` workflow now dumps pod state + events + crash logs on a failed rollout (so a boot failure is diagnosable, not a blind revert). ⚠️ `Recreate` = brief downtime if a rollout fails, and a rollout can flake on a stuck termination (one did 2026-06-24 — a clean redeploy was green).
 
-## Built + verified LIVE this session (2026-06-23, all on `staging`, deployed + confirmed)
-- **OmnisAI OIDC login works end-to-end.** The login failures were a stale OIDC client (registered for localhost). Re-registered a new client `WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz` (redirect URIs include the staging + prod callbacks); `OMNISAI_OIDC_CLIENT_ID`→WoqX. LitBox PR #186 trusts it (UNAPPROVED — see deferred).
-- **Setup wizard skipped**, **login button shown**, **email 2FA disabled** (no SMTP on staging → the 2FA code could never arrive). All via `OVERWRITE_SETTING_*` env on the deployment.
-- **First OmnisAI user auto-promoted to admin** — `app/omnisai-oauth/server/loginHandler.ts` grants `admin` if the workspace has none (the OIDC path skipped stock RC's first-user rule). Founder IS admin. ⚠️ requires a TRUE logout→login (incognito shares sessions — that was the gotcha).
-- **Admin entry added to the left rail** (`AppLeftRail.tsx`, gated on the admin role).
-- **Activity 404 fixed** — registered the missing `/boards/inbox` route (`views/boards/routes.tsx`; made `NotificationsInbox.onNavigate` optional). Fixes the rail "Activity", the Boards sidebar "Inbox", and the My Day "activity inbox" link (all hit the same dead route).
-- **Boards load faster** — code-split the non-default board views + card drawer in `views/boards/BoardRouter.tsx`.
-- **Slack IMPORT verified working** — Admin→Import→Slack imported a test export. (Import = one-time MIGRATION, NOT live comms — that's cross-firm, below.)
+## ⚡ Cross-firm (CFCS / Omnis Counsel) is LIVE + SECURE on staging (2026-06-24)
+Opposing-counsel messaging is wired end-to-end and turned ON:
+- **CFCS backend** (`~/omnis-counsel`, `staging`) — internal ClusterIP service in **STRICT identity mode** + real audit key + a NetworkPolicy. REFUSES to start without `CFCS_AUDIT_KEY`; requires the proxy's verified `x-cfcs-caller` on every non-`/health` route (no header-less body-trust in prod). `CFCS_TEST_MODE=1` relaxes it for the test suite/demo only.
+- **`/_crossfirm` server proxy** (`app/omnisai-oauth/server/crossFirmProxy.ts`) — authenticates the MatterChat user, derives the verified OmnisAI subject (`services.omnisai.id`), strips inbound `x-cfcs-*`, forwards to `http://cfcs:9200` with an unforgeable `x-cfcs-caller`/`x-cfcs-firm`. **Verified live:** unauth `POST /_crossfirm/whoami` → 401 (mounted + enabled + auth-gated).
+- **CFCS identity gateway** (`omnis-counsel/server.js`) — single pre-dispatch step binds every actor field to the resolved caller (unique principal or fail closed); firm asserted ONLY by the verified header.
+- **Browser** (`useCrossFirmFetch.ts` / `CrossFirmSection.tsx`) — calls same-origin `/_crossfirm` with a Bearer loginToken; the panel gates on `CrossFirm_Enabled`.
+- **Enabled via deployment env:** `CFCS_API_URL=http://cfcs:9200`, `OVERWRITE_SETTING_CrossFirm_Enabled=true`, `OVERWRITE_SETTING_CrossFirm_Firm_Name="Apex Law LLP"`.
+- **Red-teamed before deploy** (5 lenses): go-list M1/M2/M3/M5 + S1–S6 + the audit-key all fixed + verified — CFCS `test.js` **26/0**, `test-audit.js` **8/0**, strict-mode security suite all-pass (spoof blocked, header-less→401, missing firm→400, unprovisioned→403, refuses-boot-without-key).
 
-## ⚠️ In progress — Cross-firm (CFCS) going live, secure-first. BLOCKED on AWS secrets.
-The cross-firm UI is ALREADY on `staging` (deployed but OFF — `CrossFirm_Enabled/CFCS_URL/Firm_Name` empty; CFCS backend not deployed). Founder chose to wire it live with a security proxy first.
-- **Stage 1 (deploy CFCS) is BUILT on `omnis-counsel` `staging`** (Dockerfile + internal ClusterIP manifest + CI) **but the deploy FAILED — that repo lacks the AWS deploy secrets.**
-- **Critical-path blocker → engineer:** add `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` to the `omnis-counsel` repo (same IAM as MatterChat), then re-run "CFCS — Staging Deploy".
-- **Full plan + the secure-proxy design** (CFCS internal-only + a `/_crossfirm` MatterChat proxy that injects the verified OmnisAI identity, overriding the actor `*AttorneyId` fields): in memory `omnis-counsel-crossfirm` — exact files, fields, and remaining stages.
+## Prior session (2026-06-23, all live on staging)
+OmnisAI OIDC login E2E (client `WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz`); setup-wizard skip; email-2FA off; first-OmnisAI-user→admin; Admin rail entry; Activity `/boards/inbox` route fixed; Boards code-split; Slack IMPORT verified.
 
 ## Deferred / open
-- **LitBox Files:** PR https://github.com/OmnisAIOrg/Litbox-backend/pull/186 (trust the new OIDC client) UNAPPROVED → Files 401s until merged. Parked per founder.
-- Branch consolidation (staging / develop / feature-cross-firm).
-- Boards server-side pagination (task chip spawned).
-- Encrypt-at-rest for LitBox tokens (`LITBOX_TOKEN_ENC_KEY` secret).
+- **M4 — before authoritative PRODUCTION cross-firm:** bind firm to a verified CentralizedAuth tenant/org id, not the free-text `CrossFirm_Firm_Name` (name collisions merge escrow domains). Safely deferred behind M2's fail-closed stopgap. Also required before a production launch: real per-state bar verification, firm-held KMS/HSM escrow, and the **legal-ethics (Rule 4.2) + security/crypto expert sign-offs**.
+- **Two-firm demo:** staging is a single firm ("Apex Law LLP"), so the panel/identity/create-room work but a full two-firm exchange needs a second instance — or a strict-mode-compatible seed path (`seed-demo.js` hits `POST /firms|/attorneys`, which strict mode now gates).
+- **LitBox proxy token-expiry** (`litboxProxy.ts resolveUser`) has the same M3 gap the cross-firm proxy just fixed — task chip spawned.
+- LitBox Files PR #186 (trust the OIDC client); branch consolidation; Boards server-side pagination; LitBox encrypt-at-rest key.
 
 ## Single next safe task
-Once the engineer adds the AWS secrets to `omnis-counsel`: re-run the CFCS deploy, then build the `/_crossfirm` proxy → repoint `useCrossFirmFetch` → flip the 3 `CrossFirm_*` settings → seed `omnis-counsel/seed-demo.js` → cross-firm goes live. (Step-by-step in the `omnis-counsel-crossfirm` memory.)
+Browser E2E of cross-firm: log into matterchat.stg-omnisai.io → open a channel → "Cross-firm · Opposing counsel" action → confirm `/whoami` bridges identity + a matter room can be created. Then design the two-firm demo (second instance, or a bootstrap seed path that works under strict mode).
