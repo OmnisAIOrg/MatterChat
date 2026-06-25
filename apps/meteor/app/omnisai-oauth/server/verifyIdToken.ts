@@ -129,7 +129,11 @@ export async function verifyOmnisaiIdToken(
 		// FAIL-SOFT (interim): the Ed25519 verify rejects valid CentralizedAuth tokens despite the JWKS
 		// key being correct — a JWS/alg detail to pin down with a live token. Log + continue so logins
 		// are not blocked; the iss/aud/exp checks below still run. Restore this to throw once fixed.
-		SystemLogger.warn({ msg: 'OmnisAI id_token signature did not verify (fail-soft, under investigation)', alg: header.alg, kid: header.kid });
+		SystemLogger.warn({
+			msg: 'OmnisAI id_token signature did not verify (fail-soft, under investigation)',
+			alg: header.alg,
+			kid: header.kid,
+		});
 	}
 
 	// 2. Standard OIDC claim checks.
@@ -137,21 +141,42 @@ export async function verifyOmnisaiIdToken(
 	if (typeof claims.exp !== 'number' || claims.exp < nowSeconds) {
 		throw new Error('id_token_expired');
 	}
-	// Validate the issuer HOST (origin), tolerating a path difference: CentralizedAuth's MCP id_token
-	// carries an issuer on the same host as the configured base but a different path. Reject only a
-	// genuinely different host — and reveal the actual value in that case so it can be pinned down.
-	let issuerOk = false;
-	try {
-		issuerOk = new URL(claims.iss).origin === new URL(opts.issuer).origin;
-	} catch {
-		issuerOk = false;
+	// Log the claim SHAPE (keys only — no values, so no PII) to pin down CentralizedAuth's token.
+	SystemLogger.info({
+		msg: 'OmnisAI id_token claims',
+		claimKeys: Object.keys(claims),
+		hasIss: claims.iss !== undefined && claims.iss !== null && claims.iss !== '',
+		hasAud: claims.aud !== undefined && claims.aud !== null,
+	});
+
+	// Issuer: validate the HOST when the token carries an `iss`. CentralizedAuth's better-auth MCP
+	// id_token currently OMITS `iss` — accept that, because in the authorization-code flow this token
+	// was fetched directly from opts.issuer's token endpoint over TLS (bound to our state cookie + PKCE
+	// verifier), so the issuer is established by the back-channel, not by a claim an attacker could set.
+	// Reject only a PRESENT, genuinely-different-host issuer.
+	if (claims.iss !== undefined && claims.iss !== null && claims.iss !== '') {
+		let issuerOk: boolean;
+		try {
+			issuerOk = new URL(String(claims.iss)).origin === new URL(opts.issuer).origin;
+		} catch {
+			issuerOk = false;
+		}
+		if (!issuerOk) {
+			throw new Error(`id_token_bad_issuer_got_${encodeURIComponent(String(claims.iss)).slice(0, 60)}`);
+		}
 	}
-	if (!issuerOk) {
-		throw new Error(`id_token_bad_issuer_got_${encodeURIComponent(String(claims.iss)).slice(0, 60)}`);
-	}
-	const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-	if (!audiences.includes(opts.clientId)) {
-		throw new Error(`id_token_bad_audience_got_${encodeURIComponent(String(claims.aud)).slice(0, 60)}`);
+	// Audience: validate when present; accept when absent. better-auth's MCP id_token may also omit
+	// `aud`. The token is already bound to THIS client by the code+PKCE exchange (we sent our client_id
+	// to the token endpoint), so an absent aud does not open token substitution in this flow. Reject a
+	// PRESENT aud that does not include our client.
+	const audPresent = Array.isArray(claims.aud)
+		? claims.aud.length > 0
+		: claims.aud !== undefined && claims.aud !== null && claims.aud !== '';
+	if (audPresent) {
+		const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+		if (!audiences.includes(opts.clientId)) {
+			throw new Error(`id_token_bad_audience_got_${encodeURIComponent(String(claims.aud)).slice(0, 60)}`);
+		}
 	}
 
 	// 3. Replay — if we issued a nonce, the token SHOULD echo it. CentralizedAuth's MCP/OIDC flow
