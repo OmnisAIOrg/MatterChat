@@ -51,6 +51,36 @@ export interface IProviderUser {
 	avatarUrl?: string;
 }
 
+/**
+ * A direct chat (1:1 or group DM) visible to the connection's user, in the provider's own
+ * vocabulary. Modeled as an IProviderChannel-like item so the "Chats" section renders with the same
+ * shape as channels — `externalId` is the provider-native chat id, addressed for read/post WITHOUT a
+ * team (Teams: `/chats/{chatId}/messages`, not `/teams/.../channels/...`).
+ */
+export interface IProviderDirectChat {
+	/** Provider-native chat id (Teams: `19:…@unq.gbl.spaces` 1:1 or `19:…@thread.v2` group). */
+	externalId: string;
+	/** Human label — the OTHER member's name (1:1) or the group's topic / joined member names. */
+	name: string;
+	/** True for a group DM (3+ people), false for a 1:1 — lets the UI badge group chats. */
+	isGroup: boolean;
+	/** Provider-native ids of the chat's members, when cheaply available. */
+	memberExternalIds?: string[];
+}
+
+/**
+ * A person in the org/workspace directory, for the "People" section. Provider-native id + the
+ * cheaply-available profile fields (display name, email/handle). This is the directory-roster shape;
+ * IProviderUser is the per-message identity shape. They overlap but are surfaced for different views.
+ */
+export interface IProviderMember {
+	/** Provider-native user id. */
+	externalId: string;
+	displayName: string;
+	/** Email (Teams/Google) or handle (Slack `@…`), when the provider exposes it. */
+	email?: string;
+}
+
 /** A reference to a file/attachment carried by an external message. */
 export interface IProviderFileRef {
 	externalId: string;
@@ -176,11 +206,35 @@ export interface IChatProvider {
 	/** List the channels visible to this connection's user. */
 	listChannels(connection: IProviderConnection): Promise<IProviderChannel[]>;
 
+	/**
+	 * List the user's direct chats — 1:1 and group DMs — as IProviderChannel-like items so the UI can
+	 * render a "Chats" section. The returned `externalId` is the provider-native chat id; reading and
+	 * posting reuse `syncMessages`/`postMessage` with that id, which providers MUST accept alongside a
+	 * channel id (each provider detects which it was handed — see TeamsProvider's id-shape detection).
+	 *
+	 * Optional in the contract: a provider that has no DM concept may omit it (callers treat a missing
+	 * implementation / `not_implemented` as "no Chats section").
+	 */
+	listDirectChats?(connection: IProviderConnection): Promise<IProviderDirectChat[]>;
+
+	/**
+	 * List the org/workspace people for a "People" section — id, display name, email/handle. Sourced
+	 * from the provider's directory (Teams: aggregated team members; Slack: users.list; Google: the
+	 * directory). Deduped by external id by the provider.
+	 *
+	 * Optional in the contract: a provider with no cheap roster may omit it (callers treat a missing
+	 * implementation / `not_implemented` as "no People section").
+	 */
+	listMembers?(connection: IProviderConnection): Promise<IProviderMember[]>;
+
 	// ─── sync (read) ─────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Backfill historical messages for a channel (paged internally; yields oldest→newest or
-	 * provider-native order — the bridge sorts). `since` is an optional cursor/timestamp.
+	 * Backfill historical messages for a channel OR a direct chat (paged internally; yields
+	 * oldest→newest or provider-native order — the bridge sorts). `since` is an optional
+	 * cursor/timestamp. The id may be either a channel `externalId` (from `listChannels`) or a direct
+	 * chat `externalId` (from `listDirectChats`); the provider detects which and addresses the right
+	 * endpoint (Teams: `/teams/{teamId}/channels/{channelId}/messages` vs `/chats/{chatId}/messages`).
 	 */
 	syncMessages(connection: IProviderConnection, channelExternalId: string, since?: string): AsyncIterable<IProviderMessage>;
 
@@ -198,7 +252,11 @@ export interface IChatProvider {
 
 	// ─── write ───────────────────────────────────────────────────────────────────────────────
 
-	/** Post a message to an external channel AS the connection's signed-in user. */
+	/**
+	 * Post a message to an external channel OR a direct chat AS the connection's signed-in user. The id
+	 * may be either a channel `externalId` (from `listChannels`) or a direct chat `externalId` (from
+	 * `listDirectChats`); the provider detects which and posts to the right endpoint.
+	 */
 	postMessage(connection: IProviderConnection, channelExternalId: string, message: IOutboundMessage): Promise<{ externalId: string }>;
 }
 

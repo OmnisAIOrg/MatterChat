@@ -15,7 +15,14 @@ import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.cha
 import { ExternalWorkspaceConnections } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import type { IProviderChannel, IProviderConnection, IProviderCredentials, IProviderMessage } from './ChatProvider';
+import type {
+	IProviderChannel,
+	IProviderConnection,
+	IProviderCredentials,
+	IProviderDirectChat,
+	IProviderMember,
+	IProviderMessage,
+} from './ChatProvider';
 import { providerRegistry } from './providerRegistry';
 import { isGoogleConfigured } from './providers/google/config';
 import { isTeamsConfigured } from './providers/teams/config';
@@ -172,21 +179,17 @@ function splitChannelLabel(channel: IProviderChannel, fallbackTeam: string): { t
 }
 
 /**
- * List the channels of ONE of the caller's OWN connections, grouped by team.
- *
- * Loads the connection (ownership-scoped), rebuilds the runtime credentials, calls
- * `providerRegistry.get(provider).listChannels(conn)` — the REAL Microsoft Graph call for Teams —
- * and returns the channels grouped by team. On a Graph/auth/config error it returns a structured
- * ListChannelsError (NOT swallowed) so the UI — and we — can see whether listChannels actually
- * works against real Teams. A successful call also persists any token the provider refreshed mid-call.
- *
- * `connectionId` is optional: when omitted, the user's most recent `connected` connection for
- * `provider` is used (the rail tile knows the provider, not necessarily the connection id).
+ * Resolve ONE of the caller's OWN connections for a discovery view (channels / chats / members),
+ * by id (ownership-scoped) or by provider (most-recent `connected`), and rebuild its runtime
+ * credentials — or return the structured reason it can't be used (not found / wrong status /
+ * undecryptable creds). Shared by listMyChannels / listMyDirectChats / listMyMembers so all three
+ * gate IDENTICALLY. The `subject` word is spliced into the not-active/consent messages.
  */
-export async function listMyChannels(
+async function resolveDiscoveryConnection(
 	userId: string,
 	opts: { connectionId?: string; provider?: ExternalProvider },
-): Promise<{ groups: ClientChannelGroup[]; connection: ClientConnection } | ListChannelsError> {
+	subject: 'channels' | 'chats' | 'people',
+): Promise<{ doc: IExternalWorkspaceConnection; connection: IProviderConnection } | ProviderError> {
 	// Resolve which connection to read — by id (ownership-scoped) or by provider (most recent).
 	let doc: IExternalWorkspaceConnection | null = null;
 	if (opts.connectionId) {
@@ -205,7 +208,7 @@ export async function listMyChannels(
 			error: `connection_${doc.status}`,
 			message:
 				doc.status === 'consent_required'
-					? 'This Teams connection needs admin consent before channels can be read.'
+					? `This Teams connection needs admin consent before ${subject} can be read.`
 					: 'This connection is not active — reconnect the workspace and try again.',
 		};
 	}
@@ -214,6 +217,31 @@ export async function listMyChannels(
 	if (!connection) {
 		return { error: 'credentials_unavailable', message: 'Stored credentials could not be read — reconnect the workspace.', status: 401 };
 	}
+
+	return { doc, connection };
+}
+
+/**
+ * List the channels of ONE of the caller's OWN connections, grouped by team.
+ *
+ * Loads the connection (ownership-scoped), rebuilds the runtime credentials, calls
+ * `providerRegistry.get(provider).listChannels(conn)` — the REAL Microsoft Graph call for Teams —
+ * and returns the channels grouped by team. On a Graph/auth/config error it returns a structured
+ * ListChannelsError (NOT swallowed) so the UI — and we — can see whether listChannels actually
+ * works against real Teams. A successful call also persists any token the provider refreshed mid-call.
+ *
+ * `connectionId` is optional: when omitted, the user's most recent `connected` connection for
+ * `provider` is used (the rail tile knows the provider, not necessarily the connection id).
+ */
+export async function listMyChannels(
+	userId: string,
+	opts: { connectionId?: string; provider?: ExternalProvider },
+): Promise<{ groups: ClientChannelGroup[]; connection: ClientConnection } | ListChannelsError> {
+	const resolved = await resolveDiscoveryConnection(userId, opts, 'channels');
+	if ('error' in resolved) {
+		return resolved;
+	}
+	const { doc, connection } = resolved;
 
 	try {
 		const provider = providerRegistry.get(doc.provider);
@@ -243,6 +271,108 @@ export async function listMyChannels(
 		// DO NOT swallow — surface the real Graph/auth error so the UI (and we) can see if listChannels
 		// works against real Teams. graphFetch throws `graph_error:<code>:<message>` and stamps `status`.
 		return providerError(err, 'list_channels_failed');
+	}
+}
+
+/**
+ * A direct chat (1:1 or group DM) as returned to the client for the "Chats" section. The `externalId`
+ * is the provider-native chat id — the SAME token the messages/sendMessage routes take (the provider
+ * detects a chat id vs a channel id), so the frontend reads/posts a DM exactly like a channel.
+ */
+export type ClientDirectChat = {
+	/** Provider-native chat id (Teams: a chat id, NOT a `teamId|channelId` composite). */
+	externalId: string;
+	/** Human label — the other member's name (1:1) or the group's topic / member names. */
+	name: string;
+	/** True for a group DM (3+ people), false for a 1:1. */
+	isGroup: boolean;
+};
+
+/** A person in the org/workspace directory, as returned to the client for the "People" section. */
+export type ClientMember = {
+	/** Provider-native user id. */
+	externalId: string;
+	displayName: string;
+	/** Email (Teams/Google) or handle (Slack), when the provider exposes it. */
+	email?: string;
+};
+
+/**
+ * List the direct chats (1:1 + group DMs) of ONE of the caller's OWN connections, for the "Chats"
+ * section. Gates identically to listMyChannels (ownership / status / creds via
+ * resolveDiscoveryConnection), then calls the provider's REAL `listDirectChats` (Microsoft Graph
+ * `GET /me/chats` for Teams). On a Graph/auth/config error it returns a structured ProviderError (NOT
+ * swallowed). A provider that doesn't implement DMs (`listDirectChats` absent) returns an empty list
+ * so the UI simply shows no Chats section.
+ *
+ * `connectionId` is optional: when omitted, the user's most recent `connected` connection for
+ * `provider` is used (same resolution as listMyChannels).
+ */
+export async function listMyDirectChats(
+	userId: string,
+	opts: { connectionId?: string; provider?: ExternalProvider },
+): Promise<{ chats: ClientDirectChat[]; connection: ClientConnection } | ProviderError> {
+	const resolved = await resolveDiscoveryConnection(userId, opts, 'chats');
+	if ('error' in resolved) {
+		return resolved;
+	}
+	const { doc, connection } = resolved;
+
+	try {
+		const provider = providerRegistry.get(doc.provider);
+		// A provider with no DM concept omits listDirectChats — surface an empty Chats section, not an error.
+		if (typeof provider.listDirectChats !== 'function') {
+			return { chats: [], connection: toClientConnection(doc) };
+		}
+		const chats = await provider.listDirectChats(connection);
+		const clientChats: ClientDirectChat[] = chats.map((c: IProviderDirectChat) => ({
+			externalId: c.externalId,
+			name: c.name,
+			isGroup: c.isGroup,
+		}));
+		return { chats: clientChats, connection: toClientConnection(doc) };
+	} catch (err) {
+		// DO NOT swallow — surface the real Graph/auth error (e.g. Chat.Read missing) so the UI can show it.
+		return providerError(err, 'list_direct_chats_failed');
+	}
+}
+
+/**
+ * List the org/workspace people of ONE of the caller's OWN connections, for the "People" section.
+ * Gates identically to listMyChannels (ownership / status / creds), then calls the provider's REAL
+ * `listMembers` (Microsoft Graph aggregated team members for Teams). On a Graph/auth/config error it
+ * returns a structured ProviderError (NOT swallowed). A provider that doesn't implement a roster
+ * (`listMembers` absent) returns an empty list so the UI simply shows no People section.
+ *
+ * `connectionId` is optional: when omitted, the user's most recent `connected` connection for
+ * `provider` is used (same resolution as listMyChannels).
+ */
+export async function listMyMembers(
+	userId: string,
+	opts: { connectionId?: string; provider?: ExternalProvider },
+): Promise<{ members: ClientMember[]; connection: ClientConnection } | ProviderError> {
+	const resolved = await resolveDiscoveryConnection(userId, opts, 'people');
+	if ('error' in resolved) {
+		return resolved;
+	}
+	const { doc, connection } = resolved;
+
+	try {
+		const provider = providerRegistry.get(doc.provider);
+		// A provider with no cheap roster omits listMembers — surface an empty People section, not an error.
+		if (typeof provider.listMembers !== 'function') {
+			return { members: [], connection: toClientConnection(doc) };
+		}
+		const members = await provider.listMembers(connection);
+		const clientMembers: ClientMember[] = members.map((m: IProviderMember) => ({
+			externalId: m.externalId,
+			displayName: m.displayName,
+			...(m.email ? { email: m.email } : {}),
+		}));
+		return { members: clientMembers, connection: toClientConnection(doc) };
+	} catch (err) {
+		// DO NOT swallow — surface the real Graph/auth error (e.g. TeamMember.Read.All missing) for the UI.
+		return providerError(err, 'list_members_failed');
 	}
 }
 

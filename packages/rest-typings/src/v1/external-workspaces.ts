@@ -38,6 +38,42 @@ export type ExternalWorkspaceChannelsResult =
 	| { ok: true; groups: ExternalWorkspaceChannelGroup[]; connection: ExternalWorkspaceClientConnection }
 	| { ok: false; error: string; message: string; status?: number };
 
+/**
+ * A single direct chat (1:1 or group DM) in the "Chats" section. `externalId` is the provider-native
+ * chat id — the SAME token the messages/sendMessage endpoints take (the provider detects a chat id vs
+ * a channel id), so the client reads/posts a DM exactly like a channel.
+ */
+export type ExternalWorkspaceDirectChat = {
+	externalId: string;
+	name: string;
+	/** True for a group DM (3+ people), false for a 1:1. */
+	isGroup: boolean;
+};
+
+/**
+ * The "list direct chats" result. Same 200-envelope discriminated union as channels: a real
+ * Graph/auth/config failure rides back as `{ ok:false, error, message, status }` (NOT swallowed).
+ */
+export type ExternalWorkspaceDirectChatsResult =
+	| { ok: true; chats: ExternalWorkspaceDirectChat[]; connection: ExternalWorkspaceClientConnection }
+	| { ok: false; error: string; message: string; status?: number };
+
+/** A single person in the org/workspace directory, for the "People" section. */
+export type ExternalWorkspaceMember = {
+	externalId: string;
+	displayName: string;
+	/** Email (Teams/Google) or handle (Slack), when the provider exposes it. */
+	email?: string;
+};
+
+/**
+ * The "list members" result. Same 200-envelope discriminated union as channels: a real
+ * Graph/auth/config failure rides back as `{ ok:false, error, message, status }` (NOT swallowed).
+ */
+export type ExternalWorkspaceMembersResult =
+	| { ok: true; members: ExternalWorkspaceMember[]; connection: ExternalWorkspaceClientConnection }
+	| { ok: false; error: string; message: string; status?: number };
+
 /** A single message in the "channel messages" view (provider-native ids; newest-first). */
 export type ExternalWorkspaceMessage = {
 	externalId: string;
@@ -71,6 +107,14 @@ export type ExternalWorkspacesEndpoints = {
 	'/v1/external-workspaces.channels': {
 		GET: (params: { connectionId?: string; provider?: ExternalProvider }) => ExternalWorkspaceChannelsResult;
 	};
+	'/v1/external-workspaces.directChats': {
+		GET: (params: { connectionId?: string; provider?: ExternalProvider }) => ExternalWorkspaceDirectChatsResult;
+	};
+	'/v1/external-workspaces.members': {
+		GET: (params: { connectionId?: string; provider?: ExternalProvider }) => ExternalWorkspaceMembersResult;
+	};
+	// `channelExternalId` is EITHER a channel id (from .channels) OR a direct-chat id (from .directChats);
+	// the provider detects which (Teams: `teamId|channelId` composite = channel, bare id = DM).
 	'/v1/external-workspaces.messages': {
 		GET: (params: { connectionId: string; channelExternalId: string; since?: string }) => ExternalWorkspaceMessagesResult;
 	};
