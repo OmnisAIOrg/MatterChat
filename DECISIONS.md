@@ -3,6 +3,25 @@
 
 ---
 
+### 2026-06-24 — Omnis Boards: hand-build the Gantt; do NOT adopt Plane or any third-party Gantt lib
+**Chose:** build the Gantt natively in the existing Timeline view (a pure `ganttModel.ts` + a `GanttChart.tsx` renderer), reusing the card data already there (startDate/dueDate/relations/isMilestone/priority/checklists) and the generic `boards.views.cards` + `boards.cardUpdate` surface.
+**Rejected:** adopting **Plane** (plane.so) wholesale — AGPL-3.0, a second un-owned Django/Postgres app with no legal concept; and dropping in a "free" Gantt library (dhtmlx/SVAR are GPL or paywall critical-path/auto-schedule).
+**Why:** MatterChat's value is that it stays MIT/proprietary and sellable (on RC's MIT core); a copyleft dependency or a second app is the opposite. Hand-building keeps it standalone-safe, themed, and license-clean, and the scheduling logic (the legal moat) stays ours. Cost: we write the bars/arrows/drag ourselves — bounded.
+
+### 2026-06-24 — Subtasks reuse the parent/child relation; resolve children per-id, not from the board-cards cache
+**Chose:** subtasks are ordinary child cards linked by the existing `child` relation (the service auto-mirrors the inverse `parent` edge); the panel resolves each child by id (`useQueries` over `boards.card`).
+**Rejected:** a new "subtask" entity; and deriving children from the `boards.cards` list.
+**Why:** the relation primitive already existed. `boards.cards` caps at `API_Upper_Count_Limit` (100), so deriving children from it silently dropped subtasks on large boards (a multi-agent review caught this). Per-id resolution is correct at any size and — since `getCardForUser` returns archived cards too — keeps the panel count consistent with the board-tile badge.
+
+### 2026-06-24 — Time tracking via REST routes + service fns, additive optional card fields
+**Chose:** an `ITimeEntry` sub-doc + optional `timeEstimateMinutes`/`timeEntries` on `IBoardCard`; `logTime`/`deleteTimeEntry` in the shared service with new REST routes (mirroring the checklist `$push`/`$pull` pattern); the estimate rides the existing `boards.cardUpdate`. Validation at both the ajv and service layers.
+**Rejected:** Meteor methods for the entry mutations (checklists/comments are REST-only in this fork — methods would be inconsistent and need extra `ServerMethods` typing); a separate time-tracking collection.
+**Why:** additive optional fields need no migration (the card collection is schemaless), and REST matches the existing client idiom. Build gotcha (same family as the prod-build note below): the meteor app consumes `core-typings`/`rest-typings` as built `dist`, so new fields/endpoints require rebuilding those two packages before the app's `tsc` sees them.
+
+### 2026-06-24 — Adversarially review my own Boards work before the checkpoint
+**Chose:** run a multi-agent review (5 dimension reviewers → per-finding verification) over the feature diff before opening the PR, and fix every confirmed finding in a second commit.
+**Why:** none of it is browser-verified (the Meteor stack is heavy to boot), so an automated adversarial pass is the strongest correctness gate available pre-merge. It found 11 real bugs — including the >100-card subtask cap and a Gantt drag listener leak — that typecheck and lint alone would never surface.
+
 ### 2026-06-24 — Cross-firm went LIVE via a verified-identity proxy, hardened after a red-team
 **Chose:** route the browser → CFCS through the MatterChat `/_crossfirm` server proxy that injects the server-verified OmnisAI subject as an unforgeable `x-cfcs-caller`; run CFCS in STRICT mode where a single pre-dispatch identity gateway binds every actor field to the resolved caller (unique-or-fail-closed) and the service refuses to start without a real `CFCS_AUDIT_KEY`.
 **Rejected:** the pre-existing browser→CFCS direct fetch with a client-supplied `X-Omnisai-Id` (spoofable); and the POC's header-less body-trust as a production posture.

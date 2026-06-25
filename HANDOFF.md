@@ -1,7 +1,15 @@
 # HANDOFF.md — current state (read after CLAUDE.md)
 > Live state for resuming. **"checkpoint matterchat" updates this before a session ends.** Decisions + reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
-**Last updated:** 2026-06-24 · **Branch:** `staging` (the LIVE deploy branch → matterchat.stg-omnisai.io)
+**Last updated:** 2026-06-24 · **Branch:** `staging` (the LIVE deploy branch → matterchat.stg-omnisai.io) · plus open PR branch `feature/boards-gantt-timeline` → PR #12
+
+## ⚡ This session (2026-06-24) — Omnis Boards parity (PR #12, base `staging`, NOT merged / NOT browser-verified)
+Three Trello/Asana parity features on **Omnis Boards**, all generic / **standalone-safe** (work on a plain `general`/`task` board, no CasePro — verified by an 8-agent code map + adversarial standalone check):
+- **True Gantt** in the Timeline view — **hand-built, no third-party Gantt lib** (the free ones are AGPL/GPL or paywall advanced features). Month/week/day axis, bars, milestone diamonds, finish-to-start dependency arrows, progress fill, today line, drag-to-reschedule + edge-resize. Timeline gains a Gantt|List toggle (Gantt default). New: `client/views/boards/views/gantt/{ganttModel.ts,GanttChart.tsx}`.
+- **Nested subtasks** — child cards in the same board+list via the existing `parent`/`child` relation; new `card/SubtasksPanel.tsx` (add/complete/unlink/drill-in) + progress rollup + tile badge. Typed the relations.add/remove + complete REST endpoints (server routes already existed).
+- **Time tracking** — `ITimeEntry` sub-doc + `timeEstimateMinutes`/`timeEntries` on `IBoardCard`; `logTime`/`deleteTimeEntry` service fns + `boards.card.log-time`/`delete-time-entry` routes; new `card/TimePanel.tsx` + tile badge. Estimate rides existing `boards.cardUpdate`.
+
+A **multi-agent adversarial review found 11 real bugs → all fixed** (2nd commit): subtasks silently dropped on boards >100 cards (the board-cards endpoint caps at `API_Upper_Count_Limit`=100 → children now resolved per-id via `useQueries`); Gantt drag listener leak + no `pointercancel`; orphan card if a subtask link fails (now archived back); time-input validation (minutes>0, valid `spentAt`, non-negative integer estimate). **Typecheck-clean (0 new errors vs the 23 pre-existing baseline), ESLint-clean.** Shared `core-typings`/`rest-typings` gained additive optional fields/endpoints — the meteor app consumes them as built `dist`, so **rebuild those two packages after pulling** (`yarn workspace @rocket.chat/core-typings run build`, then rest-typings) before the meteor `tsc`.
 
 ## ⚡ MatterChat is LIVE on real staging
 **https://matterchat.stg-omnisai.io** — on EKS. Deploy model: push to **`staging`** → GitHub Actions builds → ECR → `kubectl apply` `kubernetes/staging/matterchat-{mongo,deployment-staging}.yaml` → rollout (**`Recreate`** strategy). The `matterchat-staging-deploy.yaml` workflow now dumps pod state + events + crash logs on a failed rollout (so a boot failure is diagnosable, not a blind revert). ⚠️ `Recreate` = brief downtime if a rollout fails, and a rollout can flake on a stuck termination (one did 2026-06-24 — a clean redeploy was green).
@@ -25,4 +33,6 @@ OmnisAI OIDC login E2E (client `WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz`); setup-wizard
 - LitBox Files PR #186 (trust the OIDC client); branch consolidation; Boards server-side pagination; LitBox encrypt-at-rest key.
 
 ## Single next safe task
-Browser E2E of cross-firm: log into matterchat.stg-omnisai.io → open a channel → "Cross-firm · Opposing counsel" action → confirm `/whoami` bridges identity + a matter room can be created. Then design the two-firm demo (second instance, or a bootstrap seed path that works under strict mode).
+**This session's open loop (Boards parity, PR #12):** browser-verify it via an alpha preview — click through Gantt drag-reschedule + edge-resize, subtask add/complete/unlink, and time logging — then land the 1 required non-author review (PRs open under Chi-Omnis can't self-approve) and merge `feature/boards-gantt-timeline` → `staging`. Remaining Boards parity gap after this: a Forms/intake builder.
+
+**Prior standing thread (cross-firm):** Browser E2E of cross-firm — log into matterchat.stg-omnisai.io → open a channel → "Cross-firm · Opposing counsel" action → confirm `/whoami` bridges identity + a matter room can be created. Then design the two-firm demo (second instance, or a bootstrap seed path that works under strict mode).
