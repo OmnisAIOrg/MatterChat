@@ -12,13 +12,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { getCardTypeIcon } from '../lib/icons';
 import CardButtonsRow from './CardButtonsRow';
 import CardLabelsControl from './CardLabelsControl';
 import ChecklistPanel from './ChecklistPanel';
 import LeadPanel from './LeadPanel';
 import MatterPanel from './MatterPanel';
+import SubtasksPanel from './SubtasksPanel';
+import TimePanel from './TimePanel';
 import WatchToggle from './WatchToggle';
+import { getCardTypeIcon } from '../lib/icons';
 
 type CardDetailProps = {
 	boardId: string;
@@ -233,6 +235,8 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 						</Box>
 
 						<ChecklistPanel boardId={boardId} cardId={cardId} checklists={card.checklists} />
+						<SubtasksPanel boardId={boardId} cardId={cardId} card={card} />
+						<TimePanel boardId={boardId} cardId={cardId} estimateMinutes={card.timeEstimateMinutes} entries={card.timeEntries ?? []} />
 						<CommentsBlock card={card} />
 					</Box>
 				)}

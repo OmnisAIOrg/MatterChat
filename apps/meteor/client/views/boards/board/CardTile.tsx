@@ -84,13 +84,22 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 		[card.labels, labelMap],
 	);
 
-	const cover = card.cover;
+	const { cover } = card;
 	const coverImage = cover ? resolveCoverImage(cover, card.attachments) : undefined;
 
 	const doneCount = card.checklists.reduce((sum, cl) => sum + cl.items.filter((i) => i.done).length, 0);
 	const totalCount = card.checklists.reduce((sum, cl) => sum + cl.items.length, 0);
+	const childCount = (card.relations ?? []).filter((r) => r.type === 'child').length;
+	const loggedMinutes = (card.timeEntries ?? []).reduce((sum, e) => sum + e.minutes, 0);
 
-	const hasMeta = Boolean(card.dueDate) || totalCount > 0 || card.assignees.length > 0 || Boolean(card.cardNumber);
+	const hasMeta =
+		Boolean(card.dueDate) ||
+		totalCount > 0 ||
+		childCount > 0 ||
+		loggedMinutes > 0 ||
+		Boolean(card.timeEstimateMinutes) ||
+		card.assignees.length > 0 ||
+		Boolean(card.cardNumber);
 
 	return (
 		<Box
@@ -177,6 +186,19 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 							<Tag>
 								<Icon name='circle-check' size='x12' mie={2} />
 								{doneCount}/{totalCount}
+							</Tag>
+						)}
+						{childCount > 0 && (
+							<Tag>
+								<Icon name='squares' size='x12' mie={2} />
+								{childCount}
+							</Tag>
+						)}
+						{(loggedMinutes > 0 || Boolean(card.timeEstimateMinutes)) && (
+							<Tag>
+								<Icon name='clock' size='x12' mie={2} />
+								{Math.round((loggedMinutes / 60) * 10) / 10}h
+								{card.timeEstimateMinutes ? `/${Math.round((card.timeEstimateMinutes / 60) * 10) / 10}h` : ''}
 							</Tag>
 						)}
 						{card.assignees.length > 0 && (
