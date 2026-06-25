@@ -66,3 +66,27 @@ jobs:
 
       - name: Recent namespace events
         run: kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.lastTimestamp 2>&1 | tail -40 || true
+
+      - name: Deployment ownership (who manages it — GitOps/Stakater/Argo/Flux?)
+        run: |
+          echo "===== deployment annotations + labels (management ownership) ====="
+          kubectl get deployment matterchat -n "${K8S_NAMESPACE}" -o jsonpath='{.metadata.annotations}' 2>&1 | tr ',' '\n' || true
+          echo
+          kubectl get deployment matterchat -n "${K8S_NAMESPACE}" -o jsonpath='{.metadata.labels}' 2>&1 | tr ',' '\n' || true
+          echo "===== managedFields managers ====="
+          kubectl get deployment matterchat -n "${K8S_NAMESPACE}" -o jsonpath='{range .metadata.managedFields[*]}{.manager}{" / "}{.operation}{"\n"}{end}' 2>&1 || true
+
+      - name: Service + endpoints (does the Service point at the healthy pod?)
+        run: |
+          kubectl get svc matterchat -n "${K8S_NAMESPACE}" -o wide 2>&1 || true
+          echo "===== endpoints (should list the healthy pod IP:3000) ====="
+          kubectl get endpoints matterchat -n "${K8S_NAMESPACE}" -o wide 2>&1 || true
+
+      - name: Ingress + ALB routing (the public 404 cause)
+        run: |
+          echo "===== all ingresses in namespace (shared ALB group) ====="
+          kubectl get ingress -n "${K8S_NAMESPACE}" -o wide 2>&1 || true
+          echo "===== matterchat ingress describe (ALB controller events/errors) ====="
+          kubectl describe ingress matterchat -n "${K8S_NAMESPACE}" 2>&1 | tail -60 || true
+          echo "===== group.order across all ingresses (conflict check) ====="
+          kubectl get ingress -n "${K8S_NAMESPACE}" -o jsonpath='{range .items[*]}{.metadata.name}{"  order="}{.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.order}{"  group="}{.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name}{"  host="}{.spec.rules[0].host}{"\n"}{end}' 2>&1 || true
