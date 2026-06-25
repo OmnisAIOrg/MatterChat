@@ -89,7 +89,7 @@ jobs:
           echo "pod=$POD"
           echo "===== does the SERVER bundle contain the new message endpoints (this deploy)? ====="
           kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- sendMessage route (NEW) ---'; grep -rl 'external-workspaces.sendMessage' /app/bundle/programs/server 2>/dev/null | head -2; echo '--- messages route (NEW) ---'; grep -rl 'external-workspaces.messages' /app/bundle/programs/server 2>/dev/null | head -2" 2>&1 || echo "server grep failed"
-          echo "===== does the CLIENT bundle contain the Teams-tile code (string literals survive minify)? ====="
-          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "grep -rl 'external-workspaces.list' /app/bundle/programs/web.browser 2>/dev/null | head -3; echo '--- TeamsChannelsPanel marker ---'; grep -rlE 'Microsoft_Teams|teamsConnection|TeamsChannels' /app/bundle/programs/web.browser 2>/dev/null | head -3" 2>&1 || echo "client grep failed"
+          echo "===== does the CLIENT bundle contain the V2 workspace code (error boundary + lazy Teams chunks)? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- TeamsErrorBoundary (v2 marker) ---'; ls /app/bundle/programs/web.browser/dynamic/client/views/root/MainLayout/ 2>/dev/null | grep -iE 'TeamsChannelView|TeamsSidebar|TeamsErrorBoundary'; echo '--- TeamsErrorBoundary in bundle ---'; grep -rlE 'TeamsErrorBoundary|TeamsChannelView' /app/bundle/programs/web.browser 2>/dev/null | head -3; echo '--- old overlay TeamsChannelsPanel should be GONE ---'; grep -rl 'TeamsChannelsPanel' /app/bundle/programs/web.browser/dynamic 2>/dev/null | head -2 || echo '(none - good)'" 2>&1 || echo "client grep failed"
           echo "===== image the pod is actually running ====="
           kubectl get pod -n "${K8S_NAMESPACE}" "$POD" -o jsonpath='{.spec.containers[0].image}{"\n"}' 2>&1 || true
