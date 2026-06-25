@@ -7,9 +7,14 @@ import { settingsRegistry } from '../../app/settings/server';
  *                               server-side /_omnisai/authorize route. Off by default so a
  *                               fresh MatterChat is fully standalone.
  * - OmnisAI_OIDC_Button_Label : the login-screen button text (public).
+ * - OmnisAI_OIDC_Issuer       : CentralizedAuth issuer base URL (server-only).
+ * - OmnisAI_OIDC_Client_Id    : the OIDC client id (server-only).
  *
- * The issuer URL / client id / scope are supplied via env (OMNISAI_OIDC_ISSUER, _CLIENT_ID,
- * _SCOPE) for now — infra-level config the admin sets per environment.
+ * Issuer + client id resolve from THESE settings first (seeded per-environment via
+ * OVERWRITE_SETTING_OmnisAI_OIDC_Issuer / _Client_Id), then fall back to the env vars
+ * OMNISAI_OIDC_ISSUER / _CLIENT_ID. Settings persist in Mongo, so the login keeps working even on a
+ * pod whose container env didn't carry the OMNISAI_OIDC_* vars (see app/omnisai-oauth/server/index.ts
+ * getConfig). Scope stays env-only (OMNISAI_OIDC_SCOPE) — it always has a safe built-in default.
  */
 export const createOmnisAIOAuthSettings = () =>
 	settingsRegistry.addGroup('OmnisAI', async function () {
@@ -24,6 +29,22 @@ export const createOmnisAIOAuthSettings = () =>
 			type: 'string',
 			public: true,
 			i18nLabel: 'OmnisAI_OIDC_Button_Label',
+		});
+
+		// Server-only OIDC endpoint config. Seeded per-environment via OVERWRITE_SETTING_* and read by
+		// getConfig (settings first, env fallback). Not public — only the server redirect dance needs them.
+		await this.add('OmnisAI_OIDC_Issuer', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'OmnisAI_OIDC_Issuer',
+			i18nDescription: 'OmnisAI_OIDC_Issuer_Description',
+		});
+
+		await this.add('OmnisAI_OIDC_Client_Id', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'OmnisAI_OIDC_Client_Id',
+			i18nDescription: 'OmnisAI_OIDC_Client_Id_Description',
 		});
 
 		// Cross-firm (Omnis Counsel / CFCS) — opt-in, off by default (standalone principle).
