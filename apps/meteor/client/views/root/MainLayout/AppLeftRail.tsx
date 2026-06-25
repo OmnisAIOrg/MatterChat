@@ -199,17 +199,15 @@ const AppLeftRail = () => {
 					aria-label={t('Files', { defaultValue: 'Files' })}
 					aria-current={filesActive ? 'page' : undefined}
 				>
-					{/* The LitBox brand wordmark, recolored ('Lit' white) so it reads on the dark rail. */}
-					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '24px' }}>
-						<svg width='52' height='13' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
+					{/* The LitBox brand wordmark, recolored ('Lit' white) so it reads on the dark rail. Enlarged +
+					    vertically centered; the "Files" text label is intentionally omitted (the wordmark carries it). */}
+					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '38px' }}>
+						<svg width='68' height='17' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
 							<text x='0' y='30' fontFamily='Arial, Helvetica, sans-serif' fontSize='28' fontWeight='bold'>
 								<tspan fill='#ffffff'>Lit</tspan>
 								<tspan fill='#5b7cff'>Box</tspan>
 							</text>
 						</svg>
-					</Box>
-					<Box is='span' className='rail-label'>
-						{t('Files', { defaultValue: 'Files' })}
 					</Box>
 				</Box>
 				{canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
