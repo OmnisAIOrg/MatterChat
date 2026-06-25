@@ -15,7 +15,7 @@ import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.cha
 import { ExternalWorkspaceConnections } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import type { IProviderChannel, IProviderConnection, IProviderCredentials } from './ChatProvider';
+import type { IProviderChannel, IProviderConnection, IProviderCredentials, IProviderMessage } from './ChatProvider';
 import { providerRegistry } from './providerRegistry';
 import { isTeamsConfigured } from './providers/teams/config';
 import { decryptCredentials } from './tokenCrypto';
@@ -232,9 +232,134 @@ export async function listMyChannels(
 	} catch (err) {
 		// DO NOT swallow — surface the real Graph/auth error so the UI (and we) can see if listChannels
 		// works against real Teams. graphFetch throws `graph_error:<code>:<message>` and stamps `status`.
-		const message = err instanceof Error ? err.message : String(err);
-		const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : undefined;
-		const graphCode = (err as { graphCode?: string })?.graphCode;
-		return { error: graphCode ? `graph_error:${graphCode}` : message.split(':')[0] || 'list_channels_failed', message, status };
+		return providerError(err, 'list_channels_failed');
+	}
+}
+
+/**
+ * Normalize any provider/Graph error into the structured ProviderError envelope the UI renders.
+ * graphFetch throws `graph_error:<code>:<message>` and stamps `.status`/`.graphCode`; everything
+ * else (config gate, decode, not_implemented) rides back as its message. NOT swallowed — see WS-5.
+ */
+function providerError(err: unknown, fallbackCode: string): ProviderError {
+	const message = err instanceof Error ? err.message : String(err);
+	const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : undefined;
+	const graphCode = (err as { graphCode?: string })?.graphCode;
+	return { error: graphCode ? `graph_error:${graphCode}` : message.split(':')[0] || fallbackCode, message, status };
+}
+
+/** A single message as returned to the client by the messages view (provider-native ids). */
+export type ClientMessage = {
+	/** Provider-native message id. */
+	externalId: string;
+	/** Display name of the author (falls back to the provider-native author id). */
+	author: string;
+	/** Plain text (Teams HTML bodies are stripped to text by the provider). */
+	text: string;
+	/** ISO-8601 (or provider-native) creation timestamp. */
+	createdAt: string;
+	/** Set when the message has been edited. */
+	editedAt?: string;
+};
+
+/** Same structured-error shape used everywhere a provider/Graph call can fail (alias of ListChannelsError). */
+export type ProviderError = ListChannelsError;
+
+/**
+ * Load ONE of the caller's OWN connections (ownership-scoped) and rebuild its runtime credentials,
+ * or return the structured reason it can't be used. Shared by the messages read/send paths so they
+ * gate identically to listMyChannels (not found / wrong status / undecryptable creds).
+ */
+async function loadOwnedConnection(
+	userId: string,
+	connectionId: string,
+): Promise<{ doc: IExternalWorkspaceConnection; connection: IProviderConnection } | ProviderError> {
+	const doc = await ExternalWorkspaceConnections.findOneByIdAndUserId(connectionId, userId);
+	if (!doc) {
+		return { error: 'connection_not_found', message: 'No connected workspace found for this account.', status: 404 };
+	}
+	if (doc.status !== 'connected') {
+		return {
+			error: `connection_${doc.status}`,
+			message:
+				doc.status === 'consent_required'
+					? 'This Teams connection needs admin consent before messages can be read or sent.'
+					: 'This connection is not active — reconnect the workspace and try again.',
+		};
+	}
+	const connection = toProviderConnection(doc);
+	if (!connection) {
+		return { error: 'credentials_unavailable', message: 'Stored credentials could not be read — reconnect the workspace.', status: 401 };
+	}
+	return { doc, connection };
+}
+
+/**
+ * Read the messages of one channel in ONE of the caller's OWN connections.
+ *
+ * Ownership-scoped (loadOwnedConnection), decrypts creds, and calls the provider's REAL
+ * `syncMessages` (Microsoft Graph for Teams; Slack stays a clear not_implemented error). Returns
+ * newest-first. On any Graph/auth/config error it returns a structured ProviderError (NOT swallowed)
+ * so the panel can render it plainly — including admin-consent / permission failures.
+ */
+export async function listMyMessages(
+	userId: string,
+	opts: { connectionId: string; channelExternalId: string; since?: string },
+): Promise<{ messages: ClientMessage[]; connection: ClientConnection } | ProviderError> {
+	const loaded = await loadOwnedConnection(userId, opts.connectionId);
+	if ('error' in loaded) {
+		return loaded;
+	}
+
+	try {
+		const provider = providerRegistry.get(loaded.doc.provider);
+		const messages: ClientMessage[] = [];
+		for await (const msg of provider.syncMessages(loaded.connection, opts.channelExternalId, opts.since)) {
+			messages.push(toClientMessage(msg));
+		}
+		return { messages, connection: toClientConnection(loaded.doc) };
+	} catch (err) {
+		return providerError(err, 'list_messages_failed');
+	}
+}
+
+/** Project a provider message to the client shape; prefer the carried display name, fall back to the author id. */
+function toClientMessage(msg: IProviderMessage): ClientMessage {
+	return {
+		externalId: msg.externalId,
+		author: msg.authorDisplayName || msg.authorExternalId,
+		text: msg.text,
+		createdAt: msg.ts,
+		...(msg.editedTs ? { editedAt: msg.editedTs } : {}),
+	};
+}
+
+/**
+ * Send a message to one channel in ONE of the caller's OWN connections, AS the caller.
+ *
+ * Ownership-scoped (loadOwnedConnection), decrypts creds, and calls the provider's REAL
+ * `postMessage` (Microsoft Graph for Teams; Slack stays a clear not_implemented error). Returns the
+ * created message id. On any Graph/auth/config error it returns a structured ProviderError (NOT
+ * swallowed) so the panel can render it plainly.
+ */
+export async function sendMyMessage(
+	userId: string,
+	opts: { connectionId: string; channelExternalId: string; text: string },
+): Promise<{ externalId: string; connection: ClientConnection } | ProviderError> {
+	if (typeof opts.text !== 'string' || !opts.text.trim()) {
+		return { error: 'empty_message', message: 'A non-empty message is required.', status: 400 };
+	}
+
+	const loaded = await loadOwnedConnection(userId, opts.connectionId);
+	if ('error' in loaded) {
+		return loaded;
+	}
+
+	try {
+		const provider = providerRegistry.get(loaded.doc.provider);
+		const { externalId } = await provider.postMessage(loaded.connection, opts.channelExternalId, { text: opts.text });
+		return { externalId, connection: toClientConnection(loaded.doc) };
+	} catch (err) {
+		return providerError(err, 'send_message_failed');
 	}
 }

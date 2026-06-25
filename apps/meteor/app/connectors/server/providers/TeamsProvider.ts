@@ -12,12 +12,23 @@
  *   - listChannels       → GET /me/joinedTeams then GET /teams/{id}/channels, paged via
  *                          @odata.nextLink, mapped to IProviderChannel. REAL.
  *
- * WHAT IS A TODO STUB (the NEXT milestone — read/post/realtime):
- *   - syncMessages       → GET /teams/{id}/channels/{id}/messages (+ /replies), or /messages/delta.
+ * WHAT IS REAL as of the read/post milestone:
+ *   - syncMessages       → GET /teams/{teamId}/channels/{channelId}/messages?$top=50 (newest first),
+ *                          paged via @odata.nextLink up to a cap; each mapped to IProviderMessage
+ *                          (author from `from.user.displayName`, body.content HTML stripped to text).
+ *   - postMessage        → POST /teams/{teamId}/channels/{channelId}/messages, AS the signed-in user
+ *                          (delegated ChannelMessage.Send). Returns the created message id.
+ *
+ * WHAT IS A TODO STUB (the realtime milestone):
  *   - subscribe          → Graph change-notifications (webhooks) keyed by (tenantId, channelId);
  *                          polling fallback on a per-connection toggle.
- *   - postMessage        → POST /teams/{id}/channels/{id}/messages, contentType html, AS the user.
  *   - resolveIdentity    → from the message `from.user` block (avoids User.ReadBasic.All).
+ *
+ * CHANNEL IDENTITY: Microsoft Graph addresses a channel as `/teams/{teamId}/channels/{channelId}` —
+ * it needs BOTH ids. So `listChannels` emits a composite `externalId` of `teamId|channelId` (see
+ * `encodeChannelId`); `syncMessages`/`postMessage` split it back apart (see `decodeChannelId`). The
+ * separator is `|`, which appears in neither a team GUID nor a `19:…@thread.tacv2` channel id, so the
+ * split is unambiguous. Callers (the rail, REST) treat the composite as an opaque token.
  *
  * STANDALONE-SAFE: every live method throws `teams_not_configured` when the connector is disabled
  * or no client secret is set, so a fresh MatterChat with Teams off has zero Teams behavior.
@@ -52,6 +63,56 @@ const NEXT_MILESTONE =
 
 function notConfigured(): never {
 	throw new Error('teams_not_configured');
+}
+
+/** Separator joining teamId + channelId into one opaque `externalId`. Absent from both id formats. */
+const CHANNEL_ID_SEP = '|';
+
+/** How many message pages (×$top) to read in one syncMessages call — a reasonable backfill cap. */
+const MAX_MESSAGE_PAGES = 5;
+const MESSAGE_PAGE_SIZE = 50;
+
+/**
+ * Encode a channel's Graph address — `{teamId}/{channelId}` — into the single `externalId` the
+ * IChatProvider contract carries everywhere. Graph needs BOTH ids to read/post; listChannels emits
+ * this composite and syncMessages/postMessage decode it.
+ */
+function encodeChannelId(teamId: string, channelId: string): string {
+	return `${teamId}${CHANNEL_ID_SEP}${channelId}`;
+}
+
+/**
+ * Split a composite channel `externalId` back into its `{ teamId, channelId }`. Tolerates a bare
+ * channel id (no separator) by throwing a clear error — a channel can't be addressed without its
+ * team, so the caller must pass the id listChannels emitted.
+ */
+function decodeChannelId(externalId: string): { teamId: string; channelId: string } {
+	const idx = externalId.indexOf(CHANNEL_ID_SEP);
+	if (idx <= 0 || idx >= externalId.length - 1) {
+		throw new Error('teams_invalid_channel_id');
+	}
+	return { teamId: externalId.slice(0, idx), channelId: externalId.slice(idx + CHANNEL_ID_SEP.length) };
+}
+
+/**
+ * Reduce a Teams message HTML body to plain text: drop tags, decode the handful of entities Graph
+ * emits, and collapse whitespace. Deliberately tiny (no DOM dep) — the bridge does richer rendering
+ * later; here we just need legible, safe text for the panel/log.
+ */
+function htmlToText(html: string): string {
+	return html
+		.replace(/<br\s*\/?>(?=)/gi, '\n')
+		.replace(/<\/(p|div|li)>/gi, '\n')
+		.replace(/<[^>]+>/g, '')
+		.replace(/&nbsp;/gi, ' ')
+		.replace(/&amp;/gi, '&')
+		.replace(/&lt;/gi, '<')
+		.replace(/&gt;/gi, '>')
+		.replace(/&quot;/gi, '"')
+		.replace(/&#39;/gi, "'")
+		.replace(/[ \t]+\n/g, '\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
 }
 
 /** Build the mutable GraphTokens bundle the graphClient reads/refreshes from stored credentials. */
@@ -201,7 +262,8 @@ export class TeamsProvider implements IChatProvider {
 					continue;
 				}
 				channels.push({
-					externalId: ch.id,
+					// Composite `teamId|channelId` — Graph needs both to read/post (see encodeChannelId).
+					externalId: encodeChannelId(team.id, ch.id),
 					// Qualify with the team name so a flat channel list is legible across teams.
 					name: team.displayName ? `${team.displayName} / ${ch.displayName || ch.id}` : ch.displayName || ch.id,
 					isPrivate: ch.membershipType === 'private',
@@ -212,14 +274,91 @@ export class TeamsProvider implements IChatProvider {
 		return channels;
 	}
 
-	// ─── sync (read) — NEXT MILESTONE ────────────────────────────────────────────────────────────
+	// ─── sync (read) — REAL ──────────────────────────────────────────────────────────────────────
 
-	// eslint-disable-next-line require-yield
-	async *syncMessages(_connection: IProviderConnection, _channelExternalId: string, _since?: string): AsyncIterable<IProviderMessage> {
-		// TODO(next milestone): GET /teams/{id}/channels/{id}/messages (+ /replies), paged via
-		// @odata.nextLink, or /messages/delta with a persisted deltaLink. Map html→markdown +
-		// resolve `from.user` for the author. See spec §3.3/§3.5.
-		throw new Error(NEXT_MILESTONE);
+	/**
+	 * Read a channel's messages: GET /teams/{teamId}/channels/{channelId}/messages?$top=50 (Graph
+	 * returns newest-first), paged via @odata.nextLink up to MAX_MESSAGE_PAGES. Each Graph message is
+	 * mapped to IProviderMessage — author from `from.user.displayName` (falls back to the user id),
+	 * text from `body.content` (HTML stripped to plain text; HTML bodies are noted), `ts` from
+	 * `createdDateTime`. System messages (no `from.user`, e.g. "X added Y") are skipped.
+	 *
+	 * `channelExternalId` is the composite `teamId|channelId` listChannels emitted. `since` is an
+	 * optional ISO timestamp: messages at/older than it stop the scan (Graph has no `$filter` on this
+	 * endpoint, so we filter client-side and stop early since the feed is newest-first).
+	 */
+	async *syncMessages(connection: IProviderConnection, channelExternalId: string, since?: string): AsyncIterable<IProviderMessage> {
+		if (!isTeamsConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const { teamId, channelId } = decodeChannelId(channelExternalId);
+
+		type GraphMessageBody = { content?: string; contentType?: 'text' | 'html' };
+		type GraphMessageFrom = { user?: { id?: string; displayName?: string } };
+		type GraphMessage = {
+			id?: string;
+			messageType?: string;
+			createdDateTime?: string;
+			lastModifiedDateTime?: string;
+			deletedDateTime?: string | null;
+			body?: GraphMessageBody;
+			from?: GraphMessageFrom;
+		};
+
+		const sinceMs = since ? Date.parse(since) : NaN;
+		const hasSince = !Number.isNaN(sinceMs);
+
+		let next: string | undefined = `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(
+			channelId,
+		)}/messages?$top=${MESSAGE_PAGE_SIZE}`;
+		let pages = 0;
+
+		while (next && pages < MAX_MESSAGE_PAGES) {
+			const page = await graphFetch<{ value?: GraphMessage[]; '@odata.nextLink'?: string }>(next, tokens);
+			pages++;
+
+			for (const msg of page.value || []) {
+				if (!msg?.id || msg.deletedDateTime) {
+					continue;
+				}
+				// Skip system/event messages (joins, renames) — they carry no human `from.user`.
+				const authorId = msg.from?.user?.id;
+				if (!authorId || (msg.messageType && msg.messageType !== 'message')) {
+					continue;
+				}
+				const authorName = msg.from?.user?.displayName;
+
+				const ts = msg.createdDateTime || '';
+				// Newest-first feed: once we cross the `since` cursor we can stop entirely.
+				if (hasSince && ts) {
+					const tsMs = Date.parse(ts);
+					if (!Number.isNaN(tsMs) && tsMs <= sinceMs) {
+						return;
+					}
+				}
+
+				const rawBody = msg.body?.content || '';
+				const isHtml = msg.body?.contentType === 'html';
+				const text = isHtml ? htmlToText(rawBody) : rawBody.trim();
+
+				yield {
+					externalId: msg.id,
+					channelExternalId,
+					authorExternalId: authorId,
+					// Display name rides on the message (`from.user.displayName`), so the bridge/UI can render
+					// a name without a separate resolveIdentity lookup. Falls back to the id at the client.
+					...(authorName ? { authorDisplayName: authorName } : {}),
+					text,
+					ts,
+					...(msg.lastModifiedDateTime && msg.lastModifiedDateTime !== msg.createdDateTime
+						? { editedTs: msg.lastModifiedDateTime }
+						: {}),
+				};
+			}
+
+			next = page['@odata.nextLink'];
+		}
 	}
 
 	async subscribe(
@@ -241,15 +380,38 @@ export class TeamsProvider implements IChatProvider {
 		throw new Error(NEXT_MILESTONE);
 	}
 
-	// ─── write — NEXT MILESTONE ──────────────────────────────────────────────────────────────────
+	// ─── write — REAL ────────────────────────────────────────────────────────────────────────────
 
+	/**
+	 * Post a message to a channel AS the signed-in user (delegated ChannelMessage.Send):
+	 * POST /teams/{teamId}/channels/{channelId}/messages with `{ body: { content } }`. Sends the text
+	 * as-is (contentType defaults to text on Graph) and returns the created message id.
+	 *
+	 * `channelExternalId` is the composite `teamId|channelId` listChannels emitted.
+	 */
 	async postMessage(
-		_connection: IProviderConnection,
-		_channelExternalId: string,
-		_message: IOutboundMessage,
+		connection: IProviderConnection,
+		channelExternalId: string,
+		message: IOutboundMessage,
 	): Promise<{ externalId: string }> {
-		// TODO(next milestone): POST /teams/{id}/channels/{id}/messages with contentType:"html",
-		// built `mentions[]`, AS the signed-in user (delegated ChannelMessage.Send). See spec §3.4.
-		throw new Error(NEXT_MILESTONE);
+		if (!isTeamsConfigured()) {
+			return notConfigured();
+		}
+		const text = message?.text;
+		if (typeof text !== 'string' || !text.trim()) {
+			throw new Error('teams_empty_message');
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const { teamId, channelId } = decodeChannelId(channelExternalId);
+
+		const created = await graphFetch<{ id?: string }>(
+			`${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages`,
+			tokens,
+			{ method: 'POST', body: { body: { content: text } } },
+		);
+		if (!created?.id) {
+			throw new Error('teams_post_no_message_id');
+		}
+		return { externalId: created.id };
 	}
 }
