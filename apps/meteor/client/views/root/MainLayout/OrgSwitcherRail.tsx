@@ -7,6 +7,7 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useOrgSwitcherSelection } from './OrgSwitcherContext';
+import { useExternalWorkspaces } from './useExternalWorkspaces';
 import type { SwitchableOrg } from './useOrgSwitcher';
 import { useOrgSwitcher } from './useOrgSwitcher';
 
@@ -110,6 +111,8 @@ const dividerClass = css`
 	margin-block: 1px;
 `;
 
+const TEAMS_PURPLE = '#4B53BC';
+
 // The Slack 4-colour mark (rendered, never recoloured). Used on a Slack-connected tile + its badge.
 const SlackMark = ({ size }: { size: number }): ReactElement => (
 	<svg width={size} height={size} viewBox='0 0 24 24' aria-hidden focusable='false'>
@@ -118,6 +121,42 @@ const SlackMark = ({ size }: { size: number }): ReactElement => (
 		<rect x='2.5' y='9' width='19' height='2.8' rx='1.4' fill='#ECB22E' />
 		<rect x='2.5' y='12.2' width='19' height='2.8' rx='1.4' fill='#E01E5A' />
 	</svg>
+);
+
+// The Microsoft Teams mark (on the purple tile). Rendered, never recoloured.
+const TeamsMark = ({ size }: { size: number }): ReactElement => (
+	<svg width={size} height={size} viewBox='0 0 24 24' aria-hidden focusable='false'>
+		<rect x='2' y='5' width='12' height='14' rx='2' fill='#ffffff' opacity='0.95' />
+		<text x='8' y='15' fontSize='9' fontWeight='700' textAnchor='middle' fill={TEAMS_PURPLE} fontFamily='Arial, sans-serif'>
+			T
+		</text>
+		<circle cx='18' cy='8' r='3.4' fill='#ffffff' opacity='0.95' />
+		<rect x='14.4' y='10.5' width='7.2' height='8' rx='2' fill='#ffffff' opacity='0.75' />
+	</svg>
+);
+
+/**
+ * The connected-Teams tile. Appears only when the user has a connected Teams connection
+ * (external-workspaces.list). Selecting it opens the TeamsChannelsPanel, which lists the user's real
+ * Microsoft Teams channels pulled live from Graph.
+ */
+const TeamsTile = ({ name, isSelected, onClick }: { name: string; isSelected: boolean; onClick: () => void }): ReactElement => (
+	<Box
+		is='button'
+		type='button'
+		className={tileClass}
+		onClick={onClick}
+		title={name}
+		aria-label={name}
+		aria-current={isSelected ? 'true' : undefined}
+		style={{
+			backgroundColor: TEAMS_PURPLE,
+			opacity: isSelected ? 1 : 0.82,
+			boxShadow: isSelected ? '0 0 0 2.5px rgba(255, 255, 255, 0.92)' : undefined,
+		}}
+	>
+		<TeamsMark size={22} />
+	</Box>
 );
 
 const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected: boolean; onClick: () => void }): ReactElement => {
@@ -207,6 +246,8 @@ const OrgSwitcherRail = (): ReactElement | null => {
 	const { t } = useTranslation();
 	const { orgs, switchOrg, connectSlack, connectTeams, teamsEnabled } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
+	// A connected Teams workspace surfaces its OWN tile (per-user, from external-workspaces.list).
+	const { teamsConnection } = useExternalWorkspaces();
 
 	// The "+" tile opens a menu of the workspaces you can connect: Slack (admin deep-link, always) +
 	// Teams (per-user OAuth, only when the connector is enabled in admin — standalone-safe).
@@ -252,6 +293,13 @@ const OrgSwitcherRail = (): ReactElement | null => {
 				{orgs.map((org) => (
 					<OrgTile key={org.id} org={org} isSelected={selectedOrgId === org.id} onClick={(): void => handleSelect(org)} />
 				))}
+				{teamsConnection && (
+					<TeamsTile
+						name={teamsConnection.externalOrgName || t('Microsoft_Teams', { defaultValue: 'Microsoft Teams' })}
+						isSelected={selectedOrgId === 'teams'}
+						onClick={(): void => setSelectedOrgId('teams')}
+					/>
+				)}
 				<Box className={dividerClass} />
 				<GenericMenu
 					title={t('Add_workspace', { defaultValue: 'Add a workspace' })}

@@ -26,6 +26,7 @@ import type { ImEndpoints, DmEndpoints } from './v1/dm';
 import type { E2eEndpoints } from './v1/e2e';
 import type { EmailInboxEndpoints } from './v1/email-inbox';
 import type { EmojiCustomEndpoints } from './v1/emojiCustom';
+import type { ExternalWorkspacesEndpoints } from './v1/external-workspaces';
 import type { FederationEndpoints } from './v1/federation';
 import type { GroupsEndpoints } from './v1/groups';
 import type { ImportEndpoints } from './v1/import';
@@ -106,6 +107,7 @@ export interface Endpoints
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
+		ExternalWorkspacesEndpoints,
 		DefaultEndpoints {}
 
 type OperationsByPathPatternAndMethod<
@@ -280,6 +282,7 @@ export * from './v1/boards-reports';
 export * from './v1/boards-views';
 export * from './v1/boards-notifications';
 export * from './v1/boards-ai';
+export type * from './v1/external-workspaces';
 export * from './v1/federation';
 export * from './v1/rooms';
 export * from './v1/groups';

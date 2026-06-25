@@ -13,13 +13,29 @@
  * first OmnisAI user to sign in is auto-promoted to workspace admin (see loginHandler.ts). So we
  * hold the wizard at 'completed'.
  *
- * We use a `settings.watch` (not a one-shot `Meteor.startup`) deliberately: startup ordering
- * between this app and the cloud-registration migration is not guaranteed, so a one-shot hook
- * could run first and lose the race. Watching reacts to the revert whenever it happens. There is
- * no loop — re-asserting to 'completed' fires the watcher once more, which sees 'completed' and
- * returns. Gated on OmnisAI mode so a vanilla MatterChat keeps stock wizard behavior.
+ * Defense in depth — three independent mechanisms, all gated on OmnisAI mode so a vanilla
+ * MatterChat keeps stock wizard behavior:
+ *
+ *   1. `settings.watch` — fires once with the current value when settings become ready, then on
+ *      every change, so any revert (whenever it happens, from any instance) is reacted to.
+ *
+ *   2. A `Meteor.startup` FORCE-set — `Meteor.startup` callbacks run AFTER all server modules
+ *      finish loading. The cloud-registration flip happens during `server/startup/index.ts`'s
+ *      `startup()`, which is awaited at top level in `server/main.ts` BEFORE Meteor signals
+ *      startup. So this force-set is guaranteed to run after the boot-time flip and win the race
+ *      regardless of module-load ordering.
+ *
+ *   3. Timed re-assertions over the first ~60s (5s/15s/30s/60s). Belt-and-suspenders against any
+ *      deferred/async revert or a multi-instance cluster where another node flips it slightly
+ *      after our startup hook ran. Cheap: each tick early-returns the instant the value is already
+ *      'completed', so steady state is a no-op.
+ *
+ * No loop: every write path early-returns on `value === 'completed'`, and our own write only
+ * re-fires the watcher once (which then sees 'completed' and returns). No log spam: we only write
+ * and log when the value was actually NOT 'completed'.
  */
 import { Settings } from '@rocket.chat/models';
+import { Meteor } from 'meteor/meteor';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
 import { notifyOnSettingChangedById } from '../../lib/server/lib/notifyListener';
@@ -30,15 +46,17 @@ function omnisaiModeEnabled(): boolean {
 }
 
 // Re-entrancy guard: our own write re-fires the watcher; combined with the `=== 'completed'`
-// early-return below this guarantees we never write twice for one revert.
+// early-returns below this guarantees we never write twice for one revert.
 let reasserting = false;
 
-async function holdSetupWizardCompleted(value: unknown): Promise<void> {
+/**
+ * Force `Show_Setup_Wizard` back to 'completed' iff it isn't already. Idempotent and quiet:
+ * reads current value first and returns without writing/logging when it's already 'completed'.
+ * `reason` only colors the log line on an actual revert.
+ */
+async function forceSetupWizardCompleted(reason: string): Promise<void> {
 	if (!omnisaiModeEnabled()) {
 		return; // vanilla MatterChat: leave the stock first-run wizard alone
-	}
-	if (value === 'completed') {
-		return; // already skipped — nothing to do (and stops the watcher looping on our own write)
 	}
 	if (reasserting) {
 		return;
@@ -46,24 +64,52 @@ async function holdSetupWizardCompleted(value: unknown): Promise<void> {
 
 	reasserting = true;
 	try {
+		// Read-before-write so a steady state (already 'completed') is a pure no-op: no Mongo write,
+		// no notify, no log. This is what keeps the timed ticks from being spammy.
+		const current = await Settings.getValueById('Show_Setup_Wizard');
+		if (current === 'completed') {
+			return;
+		}
+
 		const { modifiedCount } = await Settings.updateValueById('Show_Setup_Wizard', 'completed');
 		if (modifiedCount) {
 			// Broadcast so connected clients (the login screen) and other instances pick it up live.
 			void notifyOnSettingChangedById('Show_Setup_Wizard');
 			SystemLogger.info({
 				msg: 'OmnisAI mode: re-asserted Show_Setup_Wizard=completed (cloud-registration reverts it, which would hide the login screen + the "Sign in with OmnisAI" button)',
-				revertedFrom: value,
+				revertedFrom: current,
+				via: reason,
 			});
 		}
 	} catch (err) {
-		SystemLogger.error({ msg: 'OmnisAI mode: failed to re-assert Show_Setup_Wizard=completed', err });
+		SystemLogger.error({ msg: 'OmnisAI mode: failed to re-assert Show_Setup_Wizard=completed', err, via: reason });
 	} finally {
 		reasserting = false;
 	}
 }
 
-// Fires once with the current value when settings become ready, then on every change — including
-// the boot-time revert from cloudRegistration — so this is immune to startup ordering.
+// (1) Reactive watcher: fires once with the current value when settings become ready, then on
+// every change — including the boot-time revert from cloudRegistration — so this is immune to
+// startup ordering. The early-return on 'completed' (inside forceSetupWizardCompleted) stops the
+// watcher from looping on our own write.
 settings.watch('Show_Setup_Wizard', (value) => {
-	void holdSetupWizardCompleted(value);
+	if (value === 'completed') {
+		return; // fast path: nothing to do, and avoids re-entering on our own write
+	}
+	void forceSetupWizardCompleted('settings.watch');
+});
+
+// (2) + (3) Meteor.startup runs AFTER the awaited boot-time cloudRegistration flip (see header),
+// so the force-set here deterministically wins the race even if module-load order put the watcher
+// before cloudRegistration. The timed re-assertions then mop up any deferred/multi-instance flip
+// over the first ~60s. Each tick early-returns when already 'completed', so this self-terminates
+// (the timers fire a fixed number of times and stop) — there is no loop and no steady-state cost.
+Meteor.startup(() => {
+	void forceSetupWizardCompleted('Meteor.startup');
+
+	for (const delayMs of [5000, 15000, 30000, 60000]) {
+		setTimeout(() => {
+			void forceSetupWizardCompleted(`reassert+${delayMs}ms`);
+		}, delayMs);
+	}
 });

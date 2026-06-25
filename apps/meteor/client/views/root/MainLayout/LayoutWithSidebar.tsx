@@ -11,6 +11,7 @@ import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
+import TeamsChannelsPanel from './TeamsChannelsPanel';
 import NavBar from '../../../navbar';
 import Sidebar from '../../../sidebar';
 import NavigationRegion from '../../navigation';
@@ -79,8 +80,12 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 							</FeaturePreviewOff>
 						</FeaturePreview>
 					)}
+					<MainContent>
+						{children}
+						{/* Overlays the main content when the connected-Teams tile is selected; no-op otherwise. */}
+						{!removeSidenav && <TeamsChannelsPanel />}
+					</MainContent>
 				</OrgSwitcherProvider>
-				<MainContent>{children}</MainContent>
 			</Box>
 		</>
 	);
