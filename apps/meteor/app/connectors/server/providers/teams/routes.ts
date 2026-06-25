@@ -129,16 +129,25 @@ async function resolveUserId(req: any): Promise<string | null> {
 	return user?._id ?? null;
 }
 
-// ─── /start ──────────────────────────────────────────────────────────────────────────────────
+// ─── authorize URL (shared) ────────────────────────────────────────────────────────────────────
 
-async function handleStart(req: any, res: any): Promise<void> {
+/**
+ * The reusable "mint PKCE + park state (bound to the userId) + build the Microsoft authorize URL"
+ * step, factored out of `/start` so the AUTHENTICATED `connectors:getAuthorizeUrl` Meteor method can
+ * reuse it without a cookie. The state cookie is the one-time CSRF binding for the COOKIE-based
+ * `/start` flow; the method-based flow doesn't set it (it has no response to write a cookie on), and
+ * the callback degrades gracefully — it falls back to the parked token (which is bound to this
+ * userId) when the state cookie is absent.
+ *
+ * Returns both the ready-to-redirect `authorizeUrl` and the `state` (so the cookie-based `/start`
+ * can set its one-time state cookie). Throws 'teams-not-configured' when Teams is off/unconfigured.
+ */
+export async function buildTeamsAuthorizeUrl(userId: string): Promise<{ authorizeUrl: string; state: string }> {
 	if (!isTeamsConfigured()) {
-		return fail(res, 'not_configured');
+		throw new Error('teams-not-configured');
 	}
-
-	const userId = await resolveUserId(req);
 	if (!userId) {
-		return fail(res, 'not_authenticated');
+		throw new Error('not_authenticated');
 	}
 
 	const config = getTeamsConfig();
@@ -146,7 +155,8 @@ async function handleStart(req: any, res: any): Promise<void> {
 	const codeVerifier = base64url(crypto.randomBytes(32));
 	const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-	// Park the verifier + owner userId server-side, keyed by state (60s TTL via CredentialTokens).
+	// Park the verifier + owner userId server-side, keyed by state (TTL via CredentialTokens). This
+	// is what binds the callback to THIS user without trusting a cookie.
 	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, userId } });
 
 	const url = new URL(authorizeEndpoint(config));
@@ -159,6 +169,23 @@ async function handleStart(req: any, res: any): Promise<void> {
 	url.searchParams.set('code_challenge', codeChallenge);
 	url.searchParams.set('code_challenge_method', 'S256');
 
+	return { authorizeUrl: url.toString(), state };
+}
+
+// ─── /start ──────────────────────────────────────────────────────────────────────────────────
+
+async function handleStart(req: any, res: any): Promise<void> {
+	if (!isTeamsConfigured()) {
+		return fail(res, 'not_configured');
+	}
+
+	const userId = await resolveUserId(req);
+	if (!userId) {
+		return fail(res, 'not_authenticated');
+	}
+
+	const { authorizeUrl, state } = await buildTeamsAuthorizeUrl(userId);
+
 	// One-time HttpOnly state cookie set in the same redirect: the callback must present a state
 	// matching BOTH this cookie and the parked token (CSRF defence — mirrors the spec's "bind to
 	// userId + a one-time cookie"). Lax + 10-min Max-Age survives the Microsoft consent round-trip.
@@ -168,7 +195,7 @@ async function handleStart(req: any, res: any): Promise<void> {
 		path: ROUTE_PREFIX,
 		maxAge: 600000,
 	});
-	res.writeHead(302, { Location: url.toString(), 'Set-Cookie': setCookie });
+	res.writeHead(302, { Location: authorizeUrl, 'Set-Cookie': setCookie });
 	res.end();
 }
 
@@ -204,8 +231,13 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			return fail(res, 'missing_code_or_state');
 		}
 
-		// Verify state: must match the one-time cookie AND a non-expired parked token.
-		if (!cookieState || cookieState !== state) {
+		// Verify state. The cookie-based `/start` flow sets a one-time state cookie, so when a cookie
+		// IS present it MUST match the returned state (CSRF defence for that flow). The method-based
+		// `connectors:getAuthorizeUrl` flow can't set a cookie (no HTTP response to write it on), so a
+		// MISSING cookie is allowed: the binding falls back to the parked token below, which is itself
+		// keyed by a server-minted random state and bound to a specific userId with a short TTL. A
+		// PRESENT-but-mismatched cookie is always rejected.
+		if (cookieState && cookieState !== state) {
 			return fail(res, 'state_cookie_mismatch');
 		}
 		const stateDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
