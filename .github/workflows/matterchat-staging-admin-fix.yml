@@ -51,4 +51,13 @@ jobs:
               if (id === "Teams_OAuth_Client_Secret") { print("  " + id + " => " + (v ? "SET (len " + String(v).length + ")" : "EMPTY")); }
               else { print("  " + id + " => " + JSON.stringify(v)); }
             });
+            print("--- external workspace connections (did the Teams connect persist?) ---");
+            var colls = db.getCollectionNames().filter(function(c){ return /external_workspace/i.test(c); });
+            print("  matching collections: " + JSON.stringify(colls));
+            colls.forEach(function(c){
+              print("  " + c + " count=" + db[c].countDocuments({}));
+              db[c].find({}).limit(10).forEach(function(d){
+                print("    conn: provider=" + d.provider + " status=" + d.status + " org=" + JSON.stringify(d.externalOrgName) + " externalOrgId=" + d.externalOrgId + " user=" + d.userId + " scopes=" + (d.scopes ? d.scopes.length : 0) + " hasCreds=" + (!!d.credentials));
+              });
+            });
           '
