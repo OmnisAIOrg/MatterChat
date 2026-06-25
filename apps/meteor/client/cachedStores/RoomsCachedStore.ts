@@ -34,6 +34,7 @@ class RoomsCachedStore extends PrivateCachedStore<IRoom> {
 			teamMain: room.teamMain,
 			matterCardId: room.matterCardId,
 			matterId: room.matterId,
+			importIds: room.importIds,
 			v: (room as IOmnichannelRoom | undefined)?.v,
 			transcriptRequest: (room as IOmnichannelRoom | undefined)?.transcriptRequest,
 			servedBy: (room as IOmnichannelRoom | undefined)?.servedBy,
