@@ -1,0 +1,74 @@
+name: MatterChat — Staging Fix (authorized)
+
+# One-shot, MatterChat-scoped remediation. EXPLICITLY founder-authorized (both ops):
+#  1) Seed OIDC issuer + client_id into Mongo settings (durable — ArgoCD never touches the DB),
+#     fixing the login dead-end at omnisai_error=not_configured.
+#  2) Delete the matterchat Ingress so ArgoCD (automated + selfHeal) recreates it, forcing the AWS
+#     Load Balancer Controller to re-bind it to the CORRECT (frontend) shared ALB. A prior pipeline
+#     deploy flipped its group to the backend ALB; ArgoCD reverted the annotation but the controller
+#     stayed stuck on the backend ALB, so the public host (DNS -> frontend ALB) 404s.
+#  3) Verify routing + login end-to-end. No effect on other tenants.
+on:
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: stg-omnisai-cluster
+  K8S_NAMESPACE: staging
+  ARGOCD_NS: argocd
+
+jobs:
+  fix:
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    permissions:
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure kubectl
+        run: |
+          which kubectl || { curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"; chmod +x kubectl; sudo mv kubectl /usr/local/bin/; }
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: 'Op 2 — seed OIDC issuer + client_id into Mongo (durable; bump _updatedAt for live reload)'
+        run: |
+          kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
+            db.rocketchat_settings.updateOne({_id:"OmnisAI_OIDC_Issuer"},   {$set:{value:"https://auth-app.stg-omnisai.io", _updatedAt:new Date()}});
+            db.rocketchat_settings.updateOne({_id:"OmnisAI_OIDC_Client_Id"}, {$set:{value:"WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz", _updatedAt:new Date()}});
+            ["OmnisAI_OIDC_Enabled","OmnisAI_OIDC_Issuer","OmnisAI_OIDC_Client_Id"].forEach(function(id){var s=db.rocketchat_settings.findOne({_id:id}); print(id+" => "+JSON.stringify(s.value));});
+          '
+
+      - name: 'Op 1 — delete Ingress so ArgoCD recreates it on the correct ALB'
+        run: |
+          echo "before: status.LB=$(kubectl get ingress matterchat -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)"
+          kubectl delete ingress matterchat -n "${K8S_NAMESPACE}" --wait=false || true
+          # nudge ArgoCD (automated + selfHeal) to reconcile immediately and recreate from git
+          kubectl annotate application matterchat-staging -n "${ARGOCD_NS}" argocd.argoproj.io/refresh=hard --overwrite || true
+
+      - name: 'Wait for Ingress recreated + bound to the FRONTEND ALB'
+        run: |
+          for i in $(seq 1 30); do
+            host=$(kubectl get ingress matterchat -n "${K8S_NAMESPACE}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+            echo "t=$((i*10))s  ingress status.LB=${host:-<recreating>}"
+            case "$host" in *stagingfrontendsh*) echo ">>> BOUND TO FRONTEND ALB"; break;; esac
+            sleep 10
+          done
+
+      - name: 'Verify routing + login end-to-end (public)'
+        run: |
+          BASE=https://matterchat.stg-omnisai.io
+          for i in $(seq 1 24); do
+            code=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' "$BASE/api/info" 2>/dev/null || echo 000)
+            echo "t=$((i*10))s  /api/info=$code"
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          echo "=== /_omnisai/authorize (expect 302 -> auth-app.stg-omnisai.io, NOT omnisai_error=not_configured) ==="
+          curl -sS -m 10 -o /dev/null -D - "$BASE/_omnisai/authorize" | grep -iE '^location:|^HTTP' || true
