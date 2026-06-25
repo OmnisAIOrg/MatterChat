@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useOrgSwitcherSelection } from './OrgSwitcherContext';
 import type { SwitchableOrg } from './useOrgSwitcher';
 import { useOrgSwitcher } from './useOrgSwitcher';
 
@@ -117,7 +118,7 @@ const SlackMark = ({ size }: { size: number }): ReactElement => (
 	</svg>
 );
 
-const OrgTile = ({ org, onClick }: { org: SwitchableOrg; onClick: () => void }): ReactElement => {
+const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected: boolean; onClick: () => void }): ReactElement => {
 	const isSlack = org.type === 'slack';
 
 	return (
@@ -128,11 +129,11 @@ const OrgTile = ({ org, onClick }: { org: SwitchableOrg; onClick: () => void }):
 			onClick={onClick}
 			title={org.name}
 			aria-label={org.name}
-			aria-current={org.active ? 'true' : undefined}
+			aria-current={isSelected ? 'true' : undefined}
 			style={{
 				backgroundColor: isSlack ? '#ffffff' : org.color || '#3a3d44',
-				opacity: org.active ? 1 : org.unread ? 0.9 : 0.78,
-				boxShadow: org.active ? '0 0 0 2.5px rgba(255, 255, 255, 0.92)' : undefined,
+				opacity: isSelected ? 1 : org.unread ? 0.9 : 0.78,
+				boxShadow: isSelected ? '0 0 0 2.5px rgba(255, 255, 255, 0.92)' : undefined,
 				fontSize: org.initial.length > 1 ? '14px' : '16px',
 			}}
 		>
@@ -203,16 +204,27 @@ const OrgTile = ({ org, onClick }: { org: SwitchableOrg; onClick: () => void }):
 const OrgSwitcherRail = (): ReactElement | null => {
 	const { t } = useTranslation();
 	const { orgs, switchOrg, addWorkspace } = useOrgSwitcher();
+	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
 
 	if (!orgs.length) {
 		return null;
 	}
 
+	// In-instance workspaces (this MatterChat + its connected Slack) switch the sidebar view in
+	// place; other firms (future, gated on per-firm instances) fall back to the switchOrg stub.
+	const handleSelect = (org: SwitchableOrg): void => {
+		if (org.type === 'slack' || org.id === 'current') {
+			setSelectedOrgId(org.id);
+			return;
+		}
+		switchOrg(org);
+	};
+
 	return (
 		<Box is='nav' aria-label={t('Workspaces', { defaultValue: 'Workspaces' })} className={columnClass}>
 			<Box className={tabClass}>
 				{orgs.map((org) => (
-					<OrgTile key={org.id} org={org} onClick={(): void => switchOrg(org)} />
+					<OrgTile key={org.id} org={org} isSelected={selectedOrgId === org.id} onClick={(): void => handleSelect(org)} />
 				))}
 				<Box className={dividerClass} />
 				<Box

@@ -9,6 +9,7 @@ import AccessibilityShortcut from './AccessibilityShortcut';
 import AppLeftRail from './AppLeftRail';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
+import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
 import NavBar from '../../../navbar';
 import Sidebar from '../../../sidebar';
@@ -63,20 +64,22 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav'].filter(Boolean).join(' ')}
 			>
 				<MainLayoutStyleTags />
-				{!removeSidenav && <OrgSwitcherRail />}
-				{!removeSidenav && <AppLeftRail />}
-				{!removeSidenav && (
-					<FeaturePreview feature='secondarySidebar'>
-						<FeaturePreviewOn>
-							<RoomsNavigationProvider>
-								<NavigationRegion />
-							</RoomsNavigationProvider>
-						</FeaturePreviewOn>
-						<FeaturePreviewOff>
-							<Sidebar />
-						</FeaturePreviewOff>
-					</FeaturePreview>
-				)}
+				<OrgSwitcherProvider>
+					{!removeSidenav && <OrgSwitcherRail />}
+					{!removeSidenav && <AppLeftRail />}
+					{!removeSidenav && (
+						<FeaturePreview feature='secondarySidebar'>
+							<FeaturePreviewOn>
+								<RoomsNavigationProvider>
+									<NavigationRegion />
+								</RoomsNavigationProvider>
+							</FeaturePreviewOn>
+							<FeaturePreviewOff>
+								<Sidebar />
+							</FeaturePreviewOff>
+						</FeaturePreview>
+					)}
+				</OrgSwitcherProvider>
 				<MainContent>{children}</MainContent>
 			</Box>
 		</>
