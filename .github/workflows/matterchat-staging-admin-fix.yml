@@ -1,0 +1,45 @@
+name: MatterChat — Staging Admin Fix (authorized)
+
+# Founder-authorized one-shot, MatterChat-scoped. Promotes the founder's accounts (phillip, john)
+# to admin — the setup-wizard skip meant the "first OmnisAI user -> admin" bootstrap was already
+# claimed by 'Chi', so OmnisAI logins came in as plain users. Also force Show_Setup_Wizard=completed.
+on:
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: stg-omnisai-cluster
+  K8S_NAMESPACE: staging
+
+jobs:
+  fix:
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    permissions:
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure kubectl
+        run: |
+          which kubectl || { curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"; chmod +x kubectl; sudo mv kubectl /usr/local/bin/; }
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: Promote phillip + john to admin; force Show_Setup_Wizard=completed
+        run: |
+          kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
+            db.rocketchat_settings.updateOne({_id:"Show_Setup_Wizard"},{$set:{value:"completed", _updatedAt:new Date()}});
+            ["phillip","john"].forEach(function(u){
+              var r = db.users.updateOne({username:u},{$addToSet:{roles:"admin"}});
+              print("promote " + u + ": matched=" + r.matchedCount + " modified=" + r.modifiedCount);
+            });
+            print("--- all non-bot users (username + roles) ---");
+            db.users.find({type:{$ne:"bot"}},{username:1,roles:1}).forEach(function(u){ print("  " + u.username + "  roles=" + JSON.stringify(u.roles)); });
+            print("Show_Setup_Wizard = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"Show_Setup_Wizard"})||{}).value));
+          '
