@@ -56,6 +56,7 @@ type OmnisAIConfig = {
 	enabled: boolean;
 	issuer: string;
 	clientId: string;
+	clientSecret: string;
 	scope: string;
 };
 
@@ -73,6 +74,9 @@ function getConfig(): OmnisAIConfig {
 		enabled: Boolean(settings.get('OmnisAI_OIDC_Enabled')) || process.env.OMNISAI_OIDC_ENABLED === 'true',
 		issuer: (settingStr('OmnisAI_OIDC_Issuer') || process.env.OMNISAI_OIDC_ISSUER || '').replace(/\/$/, ''),
 		clientId: settingStr('OmnisAI_OIDC_Client_Id') || process.env.OMNISAI_OIDC_CLIENT_ID || '',
+		// Shared app secret for strict HS256 id_token signature verification. Empty by default → the
+		// verifier stays fail-soft (current live behavior). See verifyIdToken.ts / DECISIONS.md 2026-06-25.
+		clientSecret: settingStr('OmnisAI_OIDC_Client_Secret') || process.env.OMNISAI_OIDC_CLIENT_SECRET || '',
 		scope: process.env.OMNISAI_OIDC_SCOPE || 'openid profile email offline_access casepro:read',
 	};
 }
@@ -189,7 +193,12 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			// Cryptographically verify the id_token: signature via the issuer JWKS, plus iss / aud /
 			// exp and the nonce we issued. Fail the login closed on any mismatch.
 			try {
-				u = await verifyOmnisaiIdToken(tokens.id_token, { issuer: config.issuer, clientId: config.clientId, nonce });
+				u = await verifyOmnisaiIdToken(tokens.id_token, {
+					issuer: config.issuer,
+					clientId: config.clientId,
+					clientSecret: config.clientSecret,
+					nonce,
+				});
 			} catch (err: any) {
 				return fail(res, err?.message || 'id_token_invalid', { 'Set-Cookie': clearStateCookie() });
 			}
