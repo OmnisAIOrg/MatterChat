@@ -1,4 +1,4 @@
-import { useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { usePermission, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useCallback, useMemo } from 'react';
 
 /**
@@ -23,7 +23,7 @@ export type SwitchableOrg = {
  *  - Multi-FIRM switching needs the per-firm-instance model (Phase 2 — gated; nothing to switch to
  *    with one instance).
  *  - The Slack tile's dedicated "workspace view" (its bridged channels — the rooms carrying Slack
- *    `importIds`) is the next chunk.
+ *    `importIds`) is now wired (see OrgSwitcherRail.handleSelect -> setSelectedOrgId + useRoomList).
  */
 export const useOrgSwitcher = (): {
 	orgs: SwitchableOrg[];
@@ -31,8 +31,14 @@ export const useOrgSwitcher = (): {
 	addWorkspace: () => void;
 } => {
 	const dispatchToast = useToastMessageDispatch();
+	const router = useRouter();
 	const siteName = String(useSetting('Site_Name') || 'MatterChat');
 	const slackConnected = Boolean(useSetting('SlackBridge_Enabled'));
+	// "Connect a Slack" lives in the SlackBridge admin settings, so the add action is admin-gated —
+	// mirrors the permission set that guards the admin/settings area (see admin sidebarItems).
+	const canEditSettings = usePermission('edit-privileged-setting');
+	const canViewSettings = usePermission('view-privileged-setting');
+	const canManageSettings = canEditSettings || canViewSettings;
 
 	const orgs = useMemo<SwitchableOrg[]>(() => {
 		const initial = (siteName.trim().match(/\b\w/g) || ['M']).slice(0, 2).join('').toUpperCase();
@@ -43,13 +49,13 @@ export const useOrgSwitcher = (): {
 		return list;
 	}, [siteName, slackConnected]);
 
+	// switchOrg handles ONLY the cross-firm case: the connected Slack ('slack') and the native
+	// workspace ('current') switch the sidebar view in place via OrgSwitcherContext (see
+	// OrgSwitcherRail.handleSelect) and never reach here. Multi-firm switching needs the per-firm
+	// instance model (Phase 2 — nothing to switch to with one instance), hence the explanatory toast.
 	const switchOrg = useCallback(
 		(org: SwitchableOrg) => {
 			if (org.active) {
-				return;
-			}
-			if (org.type === 'slack') {
-				dispatchToast({ type: 'info', message: 'Your connected Slack — its channels are bridged into your list. A dedicated Slack-workspace view is the next step.' });
 				return;
 			}
 			dispatchToast({ type: 'info', message: 'Switching to another firm needs the per-firm setup — that comes in the next phase.' });
@@ -57,9 +63,19 @@ export const useOrgSwitcher = (): {
 		[dispatchToast],
 	);
 
+	// "Add a workspace" → Connect a Slack. The only workspace you can add today is a Slack via the
+	// SlackBridge, which is configured in admin settings, so this deep-links there for admins. Non-
+	// admins get a plain message (they can't reach the settings) rather than a dead-end navigation.
 	const addWorkspace = useCallback(() => {
-		dispatchToast({ type: 'info', message: 'Add a workspace — connect a Slack or add a firm (coming next).' });
-	}, [dispatchToast]);
+		if (canManageSettings) {
+			router.navigate('/admin/settings/SlackBridge');
+			return;
+		}
+		dispatchToast({
+			type: 'info',
+			message: 'Connecting a Slack workspace is an admin setting — ask a workspace admin to connect one under Admin → SlackBridge.',
+		});
+	}, [canManageSettings, router, dispatchToast]);
 
 	return { orgs, switchOrg, addWorkspace };
 };
