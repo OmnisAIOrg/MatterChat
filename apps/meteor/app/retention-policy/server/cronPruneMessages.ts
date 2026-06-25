@@ -44,6 +44,7 @@ async function job(): Promise<void> {
 				't': type,
 				'$or': [{ 'retention.enabled': { $eq: true } }, { 'retention.enabled': { $exists: false } }],
 				'retention.overrideGlobal': { $ne: true },
+				'retention.legalHold.enabled': { $ne: true }, // litigation hold: never auto-prune a held room
 				...ignoreDiscussionQuery,
 			},
 			{ projection: { _id: 1 } },
@@ -67,6 +68,7 @@ async function job(): Promise<void> {
 			'retention.enabled': { $eq: true },
 			'retention.overrideGlobal': { $eq: true },
 			'retention.maxAge': { $gte: 0 },
+			'retention.legalHold.enabled': { $ne: true }, // litigation hold: never auto-prune a held room
 			...ignoreDiscussionQuery,
 		},
 		{ projection: { _id: 1, retention: 1 } },

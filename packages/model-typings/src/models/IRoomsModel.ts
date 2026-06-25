@@ -308,6 +308,8 @@ export interface IRoomsModel extends IBaseModel<IRoom> {
 	saveRetentionIgnoreThreadsById(rid: string, retentionIgnoreThreads: boolean): Promise<UpdateResult>;
 	saveRetentionFilesOnlyById(rid: string, retentionFilesOnly: boolean): Promise<UpdateResult>;
 	saveRetentionOverrideGlobalById(rid: string, retentionOverrideGlobal: boolean): Promise<UpdateResult>;
+	saveLegalHoldById(rid: string, hold?: { setBy?: { _id: string; username?: string }; caseId?: string; reason?: string }): Promise<UpdateResult>;
+	clearLegalHoldById(rid: string): Promise<UpdateResult>;
 	saveEncryptedById(rid: string, encrypted: boolean): Promise<UpdateResult>;
 	updateGroupDMsRemovingUsernamesByUsername(username: string, userId: string): Promise<UpdateResult | Document>;
 	createWithIdTypeAndName(id: string, type: IRoom['t'], name: string, extraData?: Record<string, unknown>): Promise<IRoom>;
