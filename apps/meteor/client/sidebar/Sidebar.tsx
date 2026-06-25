@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import SidebarRoomList from './RoomList';
 import SidebarFooter from './footer';
 import BannerSection from './sections/BannerSection';
+import SlackWorkspaceBanner from './sections/SlackWorkspaceBanner';
 
 const Sidebar = () => {
 	const { t } = useTranslation();
@@ -20,6 +21,7 @@ const Sidebar = () => {
 				.join(' ')}
 		>
 			<BannerSection />
+			<SlackWorkspaceBanner />
 			<SidebarRoomList />
 			<SidebarFooter />
 		</SidebarV2>

@@ -30,6 +30,7 @@ import {
 	CalendarEventRaw,
 	CallHistoryRaw,
 	CredentialTokensRaw,
+	ExternalWorkspaceConnectionsRaw,
 	CronHistoryRaw,
 	CustomSoundsRaw,
 	CustomUserStatusRaw,
@@ -131,6 +132,7 @@ registerModel('IBoardsNotificationsModel', new BoardsNotificationsRaw(db, trashC
 registerModel('IBoardsSavedViewsModel', new BoardsSavedViewsRaw(db, trashCollection));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
+registerModel('IExternalWorkspaceConnectionsModel', new ExternalWorkspaceConnectionsRaw(db));
 registerModel('ICronHistoryModel', new CronHistoryRaw(db));
 registerModel('ICustomSoundsModel', new CustomSoundsRaw(db));
 registerModel('ICustomUserStatusModel', new CustomUserStatusRaw(db));
