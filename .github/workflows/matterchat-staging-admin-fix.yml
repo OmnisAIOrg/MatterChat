@@ -70,4 +70,15 @@ jobs:
                 print("    conn " + d._id + " userId=" + d.userId + " -> " + (johnIds.indexOf(String(d.userId))>=0 ? "MATCHES a john user" : "NO match -> orphaned to a different user record"));
               });
             });
+            print("--- other tiles: SlackBridge_Enabled (the white tile in the rail) ---");
+            print("  SlackBridge_Enabled = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"SlackBridge_Enabled"})||{}).value));
           '
+
+      - name: App logs — any error from the external-workspaces.list endpoint / connectors (why no Teams tile)?
+        run: |
+          echo "===== connector / external-workspace / API errors in current pod logs ====="
+          kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=4000 2>&1 \
+            | grep -iE "external-workspace|connector|listMyConnections|providerRegistry|teams" | tail -40 || echo "(no matching log lines)"
+          echo "===== generic exceptions (tail) ====="
+          kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=4000 2>&1 \
+            | grep -iE "Exception|Error:|nonAPIError|500" | tail -20 || echo "(none)"
