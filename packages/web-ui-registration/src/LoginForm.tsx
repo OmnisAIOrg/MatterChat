@@ -233,31 +233,35 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 						</FieldGroup>
 						{errorOnSubmit && <FieldGroup disabled={loginMutation.isPending}>{renderErrorOnSubmit(errorOnSubmit)}</FieldGroup>}
 					</Form.Container>
-					<Form.Footer>
-						<ButtonGroup>
+				</>
+			)}
+			{(showFormLogin || omnisaiOidcEnabled) && (
+				<Form.Footer>
+					<ButtonGroup vertical stretch>
+						{showFormLogin && (
 							<Button loading={loginMutation.isPending} type='submit' primary>
 								{t('registration.component.login')}
 							</Button>
-						</ButtonGroup>
+						)}
+						{omnisaiOidcEnabled && (
+							<Button
+								disabled={loginMutation.isPending}
+								onClick={(): void => {
+									window.location.href = '/_omnisai/authorize';
+								}}
+							>
+								{omnisaiButtonLabel}
+							</Button>
+						)}
+					</ButtonGroup>
+					{showFormLogin && (
 						<p>
 							<Trans i18nKey='registration.page.login.register'>
 								New here? <ActionLink onClick={(): void => setLoginRoute('register')}>Create an account</ActionLink>
 							</Trans>
 						</p>
-					</Form.Footer>
-				</>
-			)}
-			{omnisaiOidcEnabled && (
-				<ButtonGroup>
-					<Button
-						disabled={loginMutation.isPending}
-						onClick={(): void => {
-							window.location.href = '/_omnisai/authorize';
-						}}
-					>
-						{omnisaiButtonLabel}
-					</Button>
-				</ButtonGroup>
+					)}
+				</Form.Footer>
 			)}
 			<LoginServices disabled={loginMutation.isPending} setError={setErrorOnSubmit} />
 		</Form>

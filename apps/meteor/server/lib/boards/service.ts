@@ -5,6 +5,7 @@ import type {
 	IBoardLabelDef,
 	IChecklist,
 	IChecklistItem,
+	ITimeEntry,
 	BoardsPipelineType,
 	BoardsStatus,
 	BoardsCardType,
@@ -461,7 +462,17 @@ export async function createCard(uid: string, params: CreateCardParams): Promise
 export type UpdateCardPatch = Partial<
 	Pick<
 		IBoardCard,
-		'title' | 'description' | 'startDate' | 'dueDate' | 'dueComplete' | 'cover' | 'subStatus' | 'assignees' | 'watchers' | 'priority'
+		| 'title'
+		| 'description'
+		| 'startDate'
+		| 'dueDate'
+		| 'dueComplete'
+		| 'cover'
+		| 'subStatus'
+		| 'assignees'
+		| 'watchers'
+		| 'priority'
+		| 'timeEstimateMinutes'
 	>
 >;
 
@@ -502,6 +513,11 @@ export async function updateCard(uid: string, cardId: string, patch: UpdateCardP
 	}
 	if (patch.priority !== undefined) {
 		set.priority = patch.priority;
+	}
+	if (patch.timeEstimateMinutes !== undefined) {
+		// Normalize: reject negative/NaN, round fractional minutes; 0 clears the estimate.
+		const est = Number(patch.timeEstimateMinutes);
+		set.timeEstimateMinutes = Number.isFinite(est) && est > 0 ? Math.round(est) : 0;
 	}
 
 	await BoardsCards.updateOne({ _id: cardId }, { $set: set, $inc: { rev: 1 } });
@@ -840,6 +856,82 @@ export async function removeChecklistItem(uid: string, cardId: string, itemId: s
 		actor: uid,
 		verb: 'card.updated',
 		to: { checklistItemRemoved: itemId },
+		ts: new Date(),
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
+// ---------------------------------------------------------------------------
+// Time tracking (logged-time entries)
+// ---------------------------------------------------------------------------
+
+/**
+ * Append a logged-time entry to a card. Generic / CasePro-free — applies to any
+ * card type. `minutes` must be a positive number; `spentAt` defaults to now.
+ */
+export async function logTime(uid: string, cardId: string, entry: { minutes: number; note?: string; spentAt?: Date }): Promise<IBoardCard> {
+	const minutes = Number(entry?.minutes);
+	if (!Number.isFinite(minutes) || minutes <= 0) {
+		throw new Meteor.Error('error-invalid-time-minutes', 'Invalid minutes', { method: 'boards.cardLogTime' });
+	}
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardLogTime' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	const now = new Date();
+	// Guard against an invalid/NaN Date reaching the document (the route coerces a string).
+	const spentAt = entry.spentAt && !Number.isNaN(entry.spentAt.getTime()) ? entry.spentAt : now;
+	const timeEntry: ITimeEntry = {
+		id: Random.id(),
+		userId: uid,
+		minutes,
+		...(entry.note?.trim() ? { note: entry.note.trim() } : {}),
+		spentAt,
+		createdAt: now,
+	};
+	await BoardsCards.updateOne({ _id: cardId }, { $push: { timeEntries: timeEntry }, $inc: { rev: 1 } });
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardLogTime' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { timeLogged: minutes },
+		ts: now,
+	});
+	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });
+	return card;
+}
+
+/** Remove a logged-time entry by id. */
+export async function deleteTimeEntry(uid: string, cardId: string, entryId: string): Promise<IBoardCard> {
+	const current = await BoardsCards.findOneById(cardId);
+	if (!current) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardDeleteTimeEntry' });
+	}
+	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
+
+	await BoardsCards.updateOne({ _id: cardId }, { $pull: { timeEntries: { id: entryId } }, $inc: { rev: 1 } });
+
+	const card = await BoardsCards.findOneById(cardId);
+	if (!card) {
+		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.cardDeleteTimeEntry' });
+	}
+	await BoardsActivities.log({
+		boardId: current.boardId,
+		listId: current.listId,
+		cardId,
+		actor: uid,
+		verb: 'card.updated',
+		to: { timeEntryRemoved: entryId },
 		ts: new Date(),
 	});
 	emitBoardEvent('card.updated', { boardId: current.boardId, listId: current.listId, cardId, actor: uid });

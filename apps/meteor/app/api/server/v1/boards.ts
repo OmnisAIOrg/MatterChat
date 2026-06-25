@@ -23,6 +23,8 @@ import {
 	isBoardsCardChecklistAddProps,
 	isBoardsCardChecklistToggleProps,
 	isBoardsCardChecklistRemoveProps,
+	isBoardsCardLogTimeProps,
+	isBoardsCardDeleteTimeEntryProps,
 	isBoardsActivitiesProps,
 	isBoardsLabelCreateProps,
 	isBoardsLabelUpdateProps,
@@ -72,6 +74,8 @@ import {
 	addChecklistItem,
 	toggleChecklistItem,
 	removeChecklistItem,
+	logTime,
+	deleteTimeEntry,
 	buildICalForUser,
 	getOrCreateIcalToken,
 	resolveUserIdByIcalToken,
@@ -720,7 +724,11 @@ const isApprovalRequestProps = ajv.compile({
 
 API.v1.post(
 	'boards.card.approval.request',
-	{ authRequired: true, body: isApprovalRequestProps, response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse } },
+	{
+		authRequired: true,
+		body: isApprovalRequestProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
 	async function action() {
 		const { cardId, approvers } = this.bodyParams as { cardId: string; approvers?: string[] };
 		const card = await requestApproval(this.userId, cardId, approvers || []);
@@ -737,7 +745,11 @@ const isApprovalDecideProps = ajv.compile({
 
 API.v1.post(
 	'boards.card.approval.decide',
-	{ authRequired: true, body: isApprovalDecideProps, response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse } },
+	{
+		authRequired: true,
+		body: isApprovalDecideProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
 	async function action() {
 		const { cardId, decision } = this.bodyParams as { cardId: string; decision: 'approved' | 'changes' | 'rejected' };
 		const card = await decideApproval(this.userId, cardId, decision);
@@ -784,6 +796,39 @@ API.v1.post(
 	async function action() {
 		const { cardId, itemId } = this.bodyParams;
 		const card = await removeChecklistItem(this.userId, cardId, itemId);
+		return API.v1.success({ card });
+	},
+);
+
+// Time tracking: append / remove a logged-time entry on a card.
+API.v1.post(
+	'boards.card.log-time',
+	{
+		authRequired: true,
+		body: isBoardsCardLogTimeProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, minutes, note, spentAt } = this.bodyParams;
+		const card = await logTime(this.userId, cardId, {
+			minutes,
+			...(note ? { note } : {}),
+			...(spentAt ? { spentAt: new Date(spentAt) } : {}),
+		});
+		return API.v1.success({ card });
+	},
+);
+
+API.v1.post(
+	'boards.card.delete-time-entry',
+	{
+		authRequired: true,
+		body: isBoardsCardDeleteTimeEntryProps,
+		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
+	},
+	async function action() {
+		const { cardId, entryId } = this.bodyParams;
+		const card = await deleteTimeEntry(this.userId, cardId, entryId);
 		return API.v1.success({ card });
 	},
 );
