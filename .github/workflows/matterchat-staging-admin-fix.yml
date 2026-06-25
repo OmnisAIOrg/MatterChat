@@ -45,4 +45,10 @@ jobs:
             db.users.find({roles:"admin"},{username:1,name:1}).forEach(function(u){ print("  ADMIN: " + u.username + " (" + (u.name||"no name") + ")"); });
             print("UI_Use_Real_Name = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"UI_Use_Real_Name"})||{}).value));
             print("Show_Setup_Wizard = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"Show_Setup_Wizard"})||{}).value));
+            print("--- Teams config (why not_configured?) ---");
+            ["Teams_Enabled","Teams_OAuth_Client_Id","Teams_OAuth_Client_Secret"].forEach(function(id){
+              var s = db.rocketchat_settings.findOne({_id:id}); var v = s ? s.value : undefined;
+              if (id === "Teams_OAuth_Client_Secret") { print("  " + id + " => " + (v ? "SET (len " + String(v).length + ")" : "EMPTY")); }
+              else { print("  " + id + " => " + JSON.stringify(v)); }
+            });
           '
