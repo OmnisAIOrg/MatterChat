@@ -67,6 +67,12 @@ export interface IProviderMessage {
 	externalId: string;
 	channelExternalId: string;
 	authorExternalId: string;
+	/**
+	 * Author display name when the provider carries it on the message itself (Teams `from.user.
+	 * displayName`) — lets the bridge/UI render a name without a separate resolveIdentity lookup.
+	 * Optional: not every provider/message has it (system messages, providers that only ship ids).
+	 */
+	authorDisplayName?: string;
 	/** Plain/normalized text. Provider-specific rich formatting is normalized by the provider. */
 	text: string;
 	/** ISO-8601 (or provider-native) timestamp string. */

@@ -38,6 +38,29 @@ export type ExternalWorkspaceChannelsResult =
 	| { ok: true; groups: ExternalWorkspaceChannelGroup[]; connection: ExternalWorkspaceClientConnection }
 	| { ok: false; error: string; message: string; status?: number };
 
+/** A single message in the "channel messages" view (provider-native ids; newest-first). */
+export type ExternalWorkspaceMessage = {
+	externalId: string;
+	author: string;
+	text: string;
+	createdAt: string;
+	editedAt?: string;
+};
+
+/**
+ * The "read messages" result. Same 200-envelope discriminated union as channels: a real
+ * Graph/auth/config failure rides back as `{ ok:false, error, message, status }` (NOT swallowed) so
+ * the UI can show it plainly — admin-consent / permission errors included.
+ */
+export type ExternalWorkspaceMessagesResult =
+	| { ok: true; messages: ExternalWorkspaceMessage[]; connection: ExternalWorkspaceClientConnection }
+	| { ok: false; error: string; message: string; status?: number };
+
+/** The "send message" result. The created provider-native message id, in the same 200 envelope. */
+export type ExternalWorkspaceSendMessageResult =
+	| { ok: true; externalId: string; connection: ExternalWorkspaceClientConnection }
+	| { ok: false; error: string; message: string; status?: number };
+
 export type ExternalWorkspacesEndpoints = {
 	'/v1/external-workspaces.list': {
 		GET: () => { connections: ExternalWorkspaceClientConnection[] };
@@ -47,6 +70,12 @@ export type ExternalWorkspacesEndpoints = {
 	};
 	'/v1/external-workspaces.channels': {
 		GET: (params: { connectionId?: string; provider?: ExternalProvider }) => ExternalWorkspaceChannelsResult;
+	};
+	'/v1/external-workspaces.messages': {
+		GET: (params: { connectionId: string; channelExternalId: string; since?: string }) => ExternalWorkspaceMessagesResult;
+	};
+	'/v1/external-workspaces.sendMessage': {
+		POST: (params: { connectionId: string; channelExternalId: string; text: string }) => ExternalWorkspaceSendMessageResult;
 	};
 	'/v1/external-workspaces.disconnect': {
 		POST: (params: { connectionId: string }) => { disconnected: boolean };
