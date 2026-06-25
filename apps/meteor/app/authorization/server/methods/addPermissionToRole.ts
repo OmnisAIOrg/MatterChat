@@ -3,6 +3,7 @@ import type { ServerMethods } from '@rocket.chat/ddp-client';
 import { Permissions } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { auditPermissionChanged } from '../../../../server/lib/auditServerEvents/auditAuthorizationChanges';
 import { notifyOnPermissionChangedById } from '../../../lib/server/lib/notifyListener';
 import { CONSTANTS, AuthorizationUtils } from '../../lib';
 import { hasPermissionAsync } from '../functions/hasPermission';
@@ -57,5 +58,7 @@ Meteor.methods<ServerMethods>({
 		await Permissions.addRole(permission._id, role);
 
 		void notifyOnPermissionChangedById(permission._id);
+
+		void auditPermissionChanged(uid, 'granted', permission._id, role).catch(() => undefined);
 	},
 });
