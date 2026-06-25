@@ -1,6 +1,6 @@
 import type { ExternalProvider, IExternalWorkspaceConnection, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
-import type { IExternalWorkspaceConnectionsModel } from '@rocket.chat/model-typings';
-import type { Collection, DeleteResult, Db, FindCursor, IndexDescription } from 'mongodb';
+import type { IExternalWorkspaceConnectionsModel, UpsertExternalWorkspaceConnection } from '@rocket.chat/model-typings';
+import type { Collection, DeleteResult, Db, FindCursor, IndexDescription, UpdateResult } from 'mongodb';
 
 import { BaseRaw } from './BaseRaw';
 
@@ -37,6 +37,52 @@ export class ExternalWorkspaceConnectionsRaw extends BaseRaw<IExternalWorkspaceC
 	findOneByIdAndUserId(id: string, userId: string): Promise<IExternalWorkspaceConnection | null> {
 		// Ownership-scoped: returns null if the connection exists but belongs to someone else.
 		return this.findOne({ _id: id, userId });
+	}
+
+	findOneByUserIdAndProviderAndOrg(
+		userId: string,
+		provider: ExternalProvider,
+		externalOrgId: string,
+	): Promise<IExternalWorkspaceConnection | null> {
+		return this.findOne({ userId, provider, externalOrgId });
+	}
+
+	/**
+	 * Create-or-update the single connection for a (user, provider, external org) triple. The OAuth
+	 * callback calls this after a successful token exchange so re-connecting the same Teams tenant
+	 * refreshes the stored credentials/status in place instead of piling up duplicate documents.
+	 * Returns the connection's `_id` so the caller can reference it (e.g. for logging/redirects).
+	 */
+	async upsertUserConnection(
+		userId: string,
+		provider: ExternalProvider,
+		externalOrgId: string,
+		data: UpsertExternalWorkspaceConnection,
+	): Promise<{ _id: string; result: UpdateResult }> {
+		const now = new Date();
+		const result = (await this.updateOne(
+			{ userId, provider, externalOrgId },
+			{
+				$set: {
+					externalOrgName: data.externalOrgName,
+					status: data.status,
+					scopes: data.scopes,
+					...(data.credentials ? { credentials: data.credentials } : {}),
+					...(data.lastSyncAt ? { lastSyncAt: data.lastSyncAt } : {}),
+				},
+				$setOnInsert: {
+					userId,
+					provider,
+					externalOrgId,
+					createdAt: now,
+				},
+			},
+			{ upsert: true },
+		)) as UpdateResult;
+
+		const doc = await this.findOne({ userId, provider, externalOrgId }, { projection: { _id: 1 } });
+
+		return { _id: doc?._id ?? String(result.upsertedId ?? ''), result };
 	}
 
 	deleteByIdAndUserId(id: string, userId: string): Promise<DeleteResult> {

@@ -13,8 +13,10 @@
  */
 import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.chat/core-typings';
 import { ExternalWorkspaceConnections } from '@rocket.chat/models';
+import { Meteor } from 'meteor/meteor';
 
 import { providerRegistry } from './providerRegistry';
+import { isTeamsConfigured } from './providers/teams/config';
 
 /**
  * Client-safe projection of a connection — everything EXCEPT the encrypted credential blob.
@@ -36,12 +38,17 @@ export async function listMyConnections(userId: string): Promise<ClientConnectio
 /**
  * Build the provider's OAuth authorize URL for a user to begin connecting a workspace.
  *
- * STUB for the foundation: real authorize URLs come with the providers (Slack OAuth route /
- * Teams `/_teams/authorize` PKCE dance). For now this validates the provider is registered and
- * returns a placeholder so the UI can code against the shape; it never returns a usable URL yet.
+ * TEAMS (real): returns the server-side `/api/apps/teamsbridge/oauth/start` URL. The client just
+ * navigates there; the route mints PKCE + state (bound to the signed-in user via the login-token
+ * cookie) and redirects on to Microsoft. PKCE stays entirely server-side — the client never sees a
+ * verifier. Returns `authorizeUrl: null, implemented: false` when Teams is disabled or no client
+ * secret is configured (standalone-safe), so the UI can show a disabled state.
+ *
+ * SLACK: still a stub here (per-user Slack OAuth is a later milestone); workspace-level Slack is
+ * surfaced separately.
  */
 export async function getProviderAuthUrl(
-	// Bound to the user so the real OAuth flow can tie PKCE state to them; unused in the stub.
+	// Bound to the user by the OAuth route via the login-token cookie; not needed to build the URL.
 	_userId: string,
 	provider: ExternalProvider,
 ): Promise<{ provider: ExternalProvider; authorizeUrl: string | null; implemented: boolean }> {
@@ -51,9 +58,15 @@ export async function getProviderAuthUrl(
 	// Touch the provider so an unregistered/garbage key fails the same way callers will see later.
 	providerRegistry.get(provider);
 
-	// TODO(WS-2/WS-1): return the real authorize URL once the provider OAuth routes land
-	// (Teams: PKCE authorize against login.microsoftonline.com/organizations; Slack: /_slack/oauth).
-	// Until then, signal "not implemented" without throwing so the UI can show a disabled state.
+	if (provider === 'teams') {
+		if (!isTeamsConfigured()) {
+			// Disabled or no client secret pasted yet — signal "not ready" without throwing.
+			return { provider, authorizeUrl: null, implemented: false };
+		}
+		return { provider, authorizeUrl: Meteor.absoluteUrl('api/apps/teamsbridge/oauth/start'), implemented: true };
+	}
+
+	// TODO(later): per-user Slack OAuth route. Until then, signal "not implemented".
 	return { provider, authorizeUrl: null, implemented: false };
 }
 
