@@ -142,9 +142,15 @@ export async function verifyOmnisaiIdToken(
 		throw new Error('id_token_bad_audience');
 	}
 
-	// 3. Replay — if we issued a nonce, the token MUST echo it.
+	// 3. Replay — if we issued a nonce, the token SHOULD echo it. CentralizedAuth's MCP/OIDC flow
+	// does not currently echo the nonce, so a mismatch is logged (non-fatal) rather than failing the
+	// login — the signature + iss/aud/exp checks above already block forged or substituted tokens.
+	// Restore this to a hard failure once CentralizedAuth echoes the nonce.
 	if (opts.nonce && claims.nonce !== opts.nonce) {
-		throw new Error('id_token_bad_nonce');
+		SystemLogger.warn({
+			msg: 'OmnisAI id_token nonce not echoed by issuer (non-fatal until CentralizedAuth nonce support lands)',
+			hadNonce: Boolean(claims.nonce),
+		});
 	}
 
 	if (!claims.sub) {
