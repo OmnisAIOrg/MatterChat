@@ -11,9 +11,13 @@
  *   - tokenCrypto (encrypt/decrypt credentials)   ('./tokenCrypto')
  *   - connectionService (per-user lifecycle)      ('./connectionService')
  *
+ * It also registers the authenticated Meteor methods (`./methods`) the client rail calls to begin a
+ * connect flow cookie-free (e.g. `connectors:getAuthorizeUrl`).
+ *
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md.
  */
 import './providerRegistry';
+import './methods';
 
 export type * from './ChatProvider';
 export { providerRegistry } from './providerRegistry';

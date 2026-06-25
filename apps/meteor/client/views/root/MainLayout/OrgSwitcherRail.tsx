@@ -1,7 +1,9 @@
 import { css } from '@rocket.chat/css-in-js';
 import { Box } from '@rocket.chat/fuselage';
+import { GenericMenu } from '@rocket.chat/ui-client';
+import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
 import type { ReactElement } from 'react';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useOrgSwitcherSelection } from './OrgSwitcherContext';
@@ -203,8 +205,32 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 
 const OrgSwitcherRail = (): ReactElement | null => {
 	const { t } = useTranslation();
-	const { orgs, switchOrg, addWorkspace } = useOrgSwitcher();
+	const { orgs, switchOrg, connectSlack, connectTeams, teamsEnabled } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
+
+	// The "+" tile opens a menu of the workspaces you can connect: Slack (admin deep-link, always) +
+	// Teams (per-user OAuth, only when the connector is enabled in admin — standalone-safe).
+	const addItems = useMemo<GenericMenuItemProps[]>(() => {
+		const items: GenericMenuItemProps[] = [
+			{
+				id: 'connect-slack',
+				icon: 'hash',
+				content: t('Connect_Slack', { defaultValue: 'Connect Slack' }),
+				onClick: (): void => connectSlack(),
+			},
+		];
+		if (teamsEnabled) {
+			items.push({
+				id: 'connect-teams',
+				icon: 'team',
+				content: t('Connect_Teams', { defaultValue: 'Connect Teams' }),
+				onClick: (): void => {
+					void connectTeams();
+				},
+			});
+		}
+		return items;
+	}, [t, connectSlack, connectTeams, teamsEnabled]);
 
 	if (!orgs.length) {
 		return null;
@@ -227,16 +253,22 @@ const OrgSwitcherRail = (): ReactElement | null => {
 					<OrgTile key={org.id} org={org} isSelected={selectedOrgId === org.id} onClick={(): void => handleSelect(org)} />
 				))}
 				<Box className={dividerClass} />
-				<Box
-					is='button'
-					type='button'
-					className={addClass}
-					onClick={(): void => addWorkspace()}
+				<GenericMenu
 					title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-					aria-label={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-				>
-					+
-				</Box>
+					items={addItems}
+					placement='right-start'
+					button={
+						<Box
+							is='button'
+							type='button'
+							className={addClass}
+							title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
+							aria-label={t('Add_workspace', { defaultValue: 'Add a workspace' })}
+						>
+							+
+						</Box>
+					}
+				/>
 			</Box>
 		</Box>
 	);

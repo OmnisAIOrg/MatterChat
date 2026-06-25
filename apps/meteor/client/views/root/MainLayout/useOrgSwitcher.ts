@@ -1,4 +1,4 @@
-import { usePermission, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useMethod, usePermission, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useCallback, useMemo } from 'react';
 
 /**
@@ -29,11 +29,19 @@ export const useOrgSwitcher = (): {
 	orgs: SwitchableOrg[];
 	switchOrg: (org: SwitchableOrg) => void;
 	addWorkspace: () => void;
+	connectSlack: () => void;
+	connectTeams: () => void;
+	teamsEnabled: boolean;
 } => {
 	const dispatchToast = useToastMessageDispatch();
 	const router = useRouter();
 	const siteName = String(useSetting('Site_Name') || 'MatterChat');
 	const slackConnected = Boolean(useSetting('SlackBridge_Enabled'));
+	// Teams is standalone-safe: the "Connect Teams" action only shows/works when the connector is
+	// enabled in admin (Teams_Enabled, a PUBLIC setting). Whether the client SECRET is set is not a
+	// public setting, so a missing secret surfaces at click-time as the `teams-not-configured` toast.
+	const teamsEnabled = Boolean(useSetting('Teams_Enabled'));
+	const getAuthorizeUrl = useMethod('connectors:getAuthorizeUrl');
 	// "Connect a Slack" lives in the SlackBridge admin settings, so the add action is admin-gated —
 	// mirrors the permission set that guards the admin/settings area (see admin sidebarItems).
 	const canEditSettings = usePermission('edit-privileged-setting');
@@ -63,10 +71,10 @@ export const useOrgSwitcher = (): {
 		[dispatchToast],
 	);
 
-	// "Add a workspace" → Connect a Slack. The only workspace you can add today is a Slack via the
-	// SlackBridge, which is configured in admin settings, so this deep-links there for admins. Non-
-	// admins get a plain message (they can't reach the settings) rather than a dead-end navigation.
-	const addWorkspace = useCallback(() => {
+	// "Connect Slack" → the SlackBridge admin settings. Slack is configured in admin settings, so this
+	// deep-links there for admins. Non-admins get a plain message (they can't reach the settings)
+	// rather than a dead-end navigation. (Unchanged behavior; just named explicitly.)
+	const connectSlack = useCallback(() => {
 		if (canManageSettings) {
 			router.navigate('/admin/settings/SlackBridge');
 			return;
@@ -77,5 +85,30 @@ export const useOrgSwitcher = (): {
 		});
 	}, [canManageSettings, router, dispatchToast]);
 
-	return { orgs, switchOrg, addWorkspace };
+	// "Connect Teams" → start the per-user Microsoft Teams OAuth. Cookie-FREE: we call the
+	// authenticated `connectors:getAuthorizeUrl` method (it mints PKCE + state bound to this.userId
+	// server-side), then full-page-redirect the browser to Microsoft. On 'teams-not-configured' we
+	// tell the admin to paste the secret + enable Teams. Any user can connect their OWN Teams.
+	const connectTeams = useCallback(async () => {
+		try {
+			const url = await getAuthorizeUrl('teams');
+			window.location.href = url;
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			if (reason === 'teams-not-configured' || (error as { error?: string })?.error === 'teams-not-configured') {
+				dispatchToast({
+					type: 'error',
+					message: 'Microsoft Teams isn’t set up yet. An admin needs to paste the client secret and enable Teams under Admin → Settings → Teams.',
+				});
+				return;
+			}
+			dispatchToast({ type: 'error', message: error });
+		}
+	}, [getAuthorizeUrl, dispatchToast]);
+
+	// "Add a workspace" → the default add action. Kept for existing callers; defaults to Connect Slack
+	// (the long-standing behavior). The rail surfaces Connect Slack / Connect Teams discretely.
+	const addWorkspace = connectSlack;
+
+	return { orgs, switchOrg, addWorkspace, connectSlack, connectTeams, teamsEnabled };
 };
