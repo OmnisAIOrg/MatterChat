@@ -87,7 +87,9 @@ function clearStateCookie(): string {
  */
 function done(res: any, params: Record<string, string>): void {
 	const qs = new URLSearchParams(params).toString();
-	res.writeHead(302, { Location: Meteor.absoluteUrl(`admin/external-workspaces?${qs}`), 'Set-Cookie': clearStateCookie() });
+	// Land on a page that EXISTS. The dedicated /admin/external-workspaces UI is the next milestone;
+	// until then bounce to home with the teams_connected=1 / teams_error=<reason> result in the URL.
+	res.writeHead(302, { Location: Meteor.absoluteUrl(`home?${qs}`), 'Set-Cookie': clearStateCookie() });
 	res.end();
 }
 
