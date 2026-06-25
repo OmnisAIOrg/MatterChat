@@ -9,24 +9,26 @@ import { useExternalWorkspaces } from './useExternalWorkspaces';
 import { useTeamsChannels } from './useTeamsChannels';
 
 /**
- * TeamsSidebar — the LEFT SIDEBAR contents while the connected Teams workspace is selected.
+ * TeamsChannelsPanel — the "see your connected Teams channels" view.
  *
- * This REPLACES the MatterChat room list (Channels / DMs) when `selectedOrgId === 'teams'` — see
- * Sidebar.tsx. It lists the user's REAL Teams channels (external-workspaces.channels -> Graph
- * listChannels) grouped by team, and clicking a channel opens it in the MAIN content area by setting
- * `selectedTeamsChannel`. The header carries the primary way back to MatterChat. Being "in Teams" is
- * its own mode: the MatterChat nav is not shown alongside this (no half-overlay).
+ * Renders ONLY when the Teams tile is selected in the OrgSwitcherRail (selectedOrgId === 'teams').
+ * It calls `external-workspaces.channels`, which runs the provider's REAL Microsoft Graph
+ * `listChannels` (GET /me/joinedTeams -> /teams/{id}/channels) for the caller's OWN connection, and
+ * LISTS the channels grouped by team. It shows a loading state and surfaces any Graph/auth error
+ * message plainly (the endpoint returns the error in a 200 envelope rather than swallowing it).
  *
- * Standalone-safe: only ever mounted when a Teams connection exists and its tile is selected.
+ * It is a pure no-op for the normal view and when no Teams is connected (the tile never appears, so
+ * it can never be selected). Standalone-safe: zero Teams behavior with the connector off.
  */
 
 const TEAMS_PURPLE = '#4B53BC';
 
-const rootClass = css`
+const panelClass = css`
+	position: absolute;
+	inset: 0;
+	z-index: 2;
 	display: flex;
 	flex-direction: column;
-	height: 100%;
-	width: 100%;
 	background: var(--rcx-color-surface-light, #ffffff);
 	overflow: hidden;
 `;
@@ -35,32 +37,58 @@ const headerClass = css`
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 12px 14px;
+	padding: 12px 16px;
 	background: ${TEAMS_PURPLE};
 	color: #ffffff;
 	flex-shrink: 0;
 `;
 
+const backClass = css`
+	margin-inline-start: auto;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	border: 0;
+	border-radius: 6px;
+	padding: 4px 8px;
+	background: rgba(255, 255, 255, 0.16);
+	color: #ffffff;
+	font-family: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1;
+	cursor: pointer;
+	white-space: nowrap;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.26);
+	}
+
+	&:focus-visible {
+		outline: 2px solid #ffffff;
+		outline-offset: 1px;
+	}
+`;
+
 const bodyClass = css`
 	flex: 1;
 	overflow-y: auto;
-	padding: 8px 8px 24px;
+	padding: 16px 24px 32px;
 `;
 
 const teamHeadingClass = css`
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	margin-block: 14px 4px;
-	padding-inline: 8px;
-	font-size: 12px;
+	gap: 8px;
+	margin-block: 20px 8px;
+	font-size: 13px;
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: var(--rcx-color-font-hint, #6c727a);
 
 	&:first-of-type {
-		margin-block-start: 6px;
+		margin-block-start: 4px;
 	}
 `;
 
@@ -68,39 +96,18 @@ const channelRowClass = css`
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	width: 100%;
-	padding: 7px 10px;
-	border: 0;
+	padding: 8px 10px;
 	border-radius: 8px;
-	background: transparent;
 	color: var(--rcx-color-font-default, #2f343d);
-	font-family: inherit;
 	font-size: 14px;
-	text-align: start;
-	cursor: pointer;
 
 	&:hover {
 		background: var(--rcx-color-surface-neutral, #f2f3f5);
 	}
-
-	&:focus-visible {
-		outline: 2px solid ${TEAMS_PURPLE};
-		outline-offset: -2px;
-	}
 `;
 
-const channelRowSelectedClass = css`
-	background: rgba(75, 83, 188, 0.12);
-	color: ${TEAMS_PURPLE};
-	font-weight: 600;
-
-	&:hover {
-		background: rgba(75, 83, 188, 0.16);
-	}
-`;
-
-// The Microsoft Teams mark (rendered, never recoloured). Declared as an element to keep one
-// component per file.
+// The Microsoft Teams mark (rendered, never recoloured) — used in the header so the context reads
+// as Teams at a glance. Declared as an element (not a component) to keep one component per file.
 const teamsMark = (
 	<svg width={18} height={18} viewBox='0 0 24 24' aria-hidden focusable='false'>
 		<rect x='2' y='5' width='12' height='14' rx='2' fill='#ffffff' opacity='0.92' />
@@ -112,54 +119,44 @@ const teamsMark = (
 	</svg>
 );
 
-const TeamsSidebar = (): ReactElement => {
+const TeamsChannelsPanel = (): ReactElement | null => {
 	const { t } = useTranslation();
-	const { selectedTeamsChannel, setSelectedTeamsChannel, setSelectedOrgId } = useOrgSwitcherSelection();
+	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
+	const isOpen = selectedOrgId === 'teams';
+
 	const { teamsConnection } = useExternalWorkspaces();
-	const { groups, error, isLoading, refetch } = useTeamsChannels(teamsConnection?._id, true);
+	const { groups, error, isLoading, refetch } = useTeamsChannels(teamsConnection?._id, isOpen);
+
+	// No-op for the normal view / when no Teams is connected.
+	if (!isOpen) {
+		return null;
+	}
 
 	const channelCount = groups?.reduce((sum, g) => sum + g.channels.length, 0) ?? 0;
 
 	return (
-		<Box className={rootClass} role='navigation' aria-label={t('Teams_channels', { defaultValue: 'Teams channels' })}>
+		<Box className={panelClass} role='region' aria-label={t('Teams_channels', { defaultValue: 'Teams channels' })}>
 			<Box className={headerClass}>
 				{teamsMark}
-				<Box is='span' fontWeight={700} fontSize={15} withTruncatedText flexGrow={1}>
+				<Box is='span' fontWeight={700} fontSize={15}>
 					{teamsConnection?.externalOrgName || t('Microsoft_Teams', { defaultValue: 'Microsoft Teams' })}
 				</Box>
 				<Box
 					is='button'
 					type='button'
+					className={backClass}
 					onClick={(): void => setSelectedOrgId('current')}
 					title={t('Back_to_MatterChat', { defaultValue: 'Back to MatterChat' })}
 					aria-label={t('Back_to_MatterChat', { defaultValue: 'Back to MatterChat' })}
-					className={css`
-						display: flex;
-						align-items: center;
-						border: 0;
-						border-radius: 6px;
-						padding: 5px;
-						background: rgba(255, 255, 255, 0.16);
-						color: #ffffff;
-						cursor: pointer;
-
-						&:hover {
-							background: rgba(255, 255, 255, 0.26);
-						}
-
-						&:focus-visible {
-							outline: 2px solid #ffffff;
-							outline-offset: 1px;
-						}
-					`}
 				>
-					<Icon name='arrow-back' size='x18' />
+					<Icon name='arrow-back' size='x14' />
+					{t('Back_to_MatterChat', { defaultValue: 'Back to MatterChat' })}
 				</Box>
 			</Box>
 
 			<Box className={bodyClass}>
 				{isLoading && (
-					<Box display='flex' flexDirection='column' alignItems='center' justifyContent='center' pbs={48}>
+					<Box display='flex' flexDirection='column' alignItems='center' justifyContent='center' height='60%'>
 						<Throbber />
 						<Box mbs={12} color='hint' fontSize={13}>
 							{t('Loading_your_Teams_channels', { defaultValue: 'Loading your Teams channels…' })}
@@ -171,7 +168,7 @@ const TeamsSidebar = (): ReactElement => {
 					<States>
 						<StatesIcon name='warning' variation='danger' />
 						<StatesTitle>{t('Couldnt_load_Teams_channels', { defaultValue: 'Couldn’t load your Teams channels' })}</StatesTitle>
-						{/* Surface the REAL provider/auth message plainly (e.g. admin-consent 403). */}
+						{/* Surface the REAL provider/auth message plainly — we need to see if listChannels worked. */}
 						<StatesSubtitle>
 							{error.message}
 							{error.status ? ` (${error.status})` : ''}
@@ -197,48 +194,39 @@ const TeamsSidebar = (): ReactElement => {
 					</States>
 				)}
 
-				{!isLoading &&
-					!error &&
-					channelCount > 0 &&
-					groups?.map((group) => (
-						<Box key={group.teamName}>
-							<Box className={teamHeadingClass}>
-								<Icon name='team' size='x14' />
-								<Box is='span' withTruncatedText>
-									{group.teamName}
-								</Box>
-							</Box>
-							{group.channels.map((channel) => {
-								const isSelected = selectedTeamsChannel?.externalId === channel.externalId;
-								return (
-									<Box
-										is='button'
-										type='button'
-										key={channel.externalId}
-										className={[channelRowClass, isSelected && channelRowSelectedClass].filter(Boolean)}
-										aria-current={isSelected ? 'true' : undefined}
-										title={channel.topic || channel.name}
-										onClick={(): void =>
-											setSelectedTeamsChannel({
-												externalId: channel.externalId,
-												name: channel.name,
-												teamName: group.teamName,
-												isPrivate: channel.isPrivate,
-											})
-										}
-									>
-										<Icon name={channel.isPrivate ? 'lock' : 'hash'} size='x18' color={isSelected ? undefined : 'hint'} />
-										<Box is='span' withTruncatedText>
-											{channel.name}
-										</Box>
-									</Box>
-								);
+				{!isLoading && !error && channelCount > 0 && (
+					<>
+						<Box color='hint' fontSize={12} mbe={4}>
+							{t('Teams_channels_count', {
+								defaultValue: '{{count}} channels across {{teams}} teams',
+								count: channelCount,
+								teams: groups?.length ?? 0,
 							})}
 						</Box>
-					))}
+						{groups?.map((group) => (
+							<Box key={group.teamName}>
+								<Box className={teamHeadingClass}>
+									<Icon name='team' size='x16' />
+									{group.teamName}
+								</Box>
+								{group.channels.map((channel) => (
+									<Box key={channel.externalId} className={channelRowClass} title={channel.topic || channel.name}>
+										<Icon name={channel.isPrivate ? 'lock' : 'hash'} size='x18' color='hint' />
+										<Box is='span'>{channel.name}</Box>
+										{channel.topic && (
+											<Box is='span' color='hint' fontSize={12} withTruncatedText flexShrink={1}>
+												{channel.topic}
+											</Box>
+										)}
+									</Box>
+								))}
+							</Box>
+						))}
+					</>
+				)}
 			</Box>
 		</Box>
 	);
 };
 
-export default memo(TeamsSidebar);
+export default memo(TeamsChannelsPanel);

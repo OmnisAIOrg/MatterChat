@@ -137,9 +137,8 @@ const TeamsMark = ({ size }: { size: number }): ReactElement => (
 
 /**
  * The connected-Teams tile. Appears only when the user has a connected Teams connection
- * (external-workspaces.list). Selecting it switches the whole shell into Teams MODE (see
- * LayoutWithSidebar): the left sidebar becomes the user's real Microsoft Teams channels and the main
- * content becomes the open channel's messages + composer. The M tile is the way back to MatterChat.
+ * (external-workspaces.list). Selecting it opens the TeamsChannelsPanel, which lists the user's real
+ * Microsoft Teams channels pulled live from Graph.
  */
 const TeamsTile = ({ name, isSelected, onClick }: { name: string; isSelected: boolean; onClick: () => void }): ReactElement => (
 	<Box

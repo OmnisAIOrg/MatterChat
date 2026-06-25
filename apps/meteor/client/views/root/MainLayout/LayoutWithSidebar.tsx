@@ -2,79 +2,22 @@ import { Box } from '@rocket.chat/fuselage';
 import { FeaturePreview, FeaturePreviewOff, FeaturePreviewOn } from '@rocket.chat/ui-client';
 import type { IRouterPaths } from '@rocket.chat/ui-contexts';
 import { useLayout, useSetting, useCurrentRoutePath, useRouter } from '@rocket.chat/ui-contexts';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 
 import AccessibilityShortcut from './AccessibilityShortcut';
 import AppLeftRail from './AppLeftRail';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
-import { useOrgSwitcherSelection } from './OrgSwitcherContext';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
-import TeamsChannelView from './TeamsChannelView';
-import TeamsSidebar from './TeamsSidebar';
+import TeamsChannelsPanel from './TeamsChannelsPanel';
 import NavBar from '../../../navbar';
 import Sidebar from '../../../sidebar';
 import NavigationRegion from '../../navigation';
 import RoomsNavigationProvider from '../../navigation/providers/RoomsNavigationProvider';
 
 const INVALID_ROOM_NAME_PREFIXES = ['#', '?'] as const;
-
-/**
- * The Teams sidebar wrapped to occupy the sidebar region's width, so swapping it in for the
- * MatterChat sidebar keeps the shell layout identical (rail + sidebar + main).
- */
-const TeamsSidebarRegion = (): ReactElement => (
-	<Box position='relative' zIndex={2} display='flex' flexDirection='column' height='100%' width='var(--sidebar-width)' flexShrink={0}>
-		<TeamsSidebar />
-	</Box>
-);
-
-/**
- * The inner shell, mounted INSIDE OrgSwitcherProvider so it can read the selected workspace. When the
- * connected Teams workspace is selected we render a self-contained Teams MODE: the Teams channel list
- * IS the sidebar and the open channel (messages + composer) IS the main content. The MatterChat
- * sidebar + room are not mounted at all — this is what resolves the founder's "shouldn't be able to
- * click any tab and go back to MatterChat" gripe (no half-overlay; the M tile is the way back).
- */
-const ShellBody = ({ children, removeSidenav }: { children: ReactNode; removeSidenav: boolean }): ReactElement => {
-	const { selectedOrgId } = useOrgSwitcherSelection();
-	const inTeamsMode = !removeSidenav && selectedOrgId === 'teams';
-
-	if (inTeamsMode) {
-		return (
-			<>
-				<OrgSwitcherRail />
-				<AppLeftRail />
-				<TeamsSidebarRegion />
-				<MainContent>
-					<TeamsChannelView />
-				</MainContent>
-			</>
-		);
-	}
-
-	return (
-		<>
-			{!removeSidenav && <OrgSwitcherRail />}
-			{!removeSidenav && <AppLeftRail />}
-			{!removeSidenav && (
-				<FeaturePreview feature='secondarySidebar'>
-					<FeaturePreviewOn>
-						<RoomsNavigationProvider>
-							<NavigationRegion />
-						</RoomsNavigationProvider>
-					</FeaturePreviewOn>
-					<FeaturePreviewOff>
-						<Sidebar />
-					</FeaturePreviewOff>
-				</FeaturePreview>
-			)}
-			<MainContent>{children}</MainContent>
-		</>
-	);
-};
 
 const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 	const { isEmbedded: embeddedLayout } = useLayout();
@@ -123,7 +66,25 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 			>
 				<MainLayoutStyleTags />
 				<OrgSwitcherProvider>
-					<ShellBody removeSidenav={removeSidenav}>{children}</ShellBody>
+					{!removeSidenav && <OrgSwitcherRail />}
+					{!removeSidenav && <AppLeftRail />}
+					{!removeSidenav && (
+						<FeaturePreview feature='secondarySidebar'>
+							<FeaturePreviewOn>
+								<RoomsNavigationProvider>
+									<NavigationRegion />
+								</RoomsNavigationProvider>
+							</FeaturePreviewOn>
+							<FeaturePreviewOff>
+								<Sidebar />
+							</FeaturePreviewOff>
+						</FeaturePreview>
+					)}
+					<MainContent>
+						{children}
+						{/* Overlays the main content when the connected-Teams tile is selected; no-op otherwise. */}
+						{!removeSidenav && <TeamsChannelsPanel />}
+					</MainContent>
 				</OrgSwitcherProvider>
 			</Box>
 		</>
