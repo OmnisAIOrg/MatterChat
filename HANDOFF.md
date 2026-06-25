@@ -15,6 +15,14 @@ Opposing-counsel messaging is wired end-to-end and turned ON:
 - **Enabled via deployment env:** `CFCS_API_URL=http://cfcs:9200`, `OVERWRITE_SETTING_CrossFirm_Enabled=true`, `OVERWRITE_SETTING_CrossFirm_Firm_Name="Apex Law LLP"`.
 - **Red-teamed before deploy** (5 lenses): go-list M1/M2/M3/M5 + S1–S6 + the audit-key all fixed + verified — CFCS `test.js` **26/0**, `test-audit.js` **8/0**, strict-mode security suite all-pass (spoof blocked, header-less→401, missing firm→400, unprovisioned→403, refuses-boot-without-key).
 
+## 🆕 Org auto-provision — built 2026-06-24, PRs up (NOT merged)
+On a firm **admin's first "Sign in with OmnisAI"**, MatterChat now mirrors the firm's CasePro team into the workspace automatically. Branch `feature/matterchat-org-autoprovision` in BOTH repos:
+- **MatterChat** ([PR #11](https://github.com/OmnisAIOrg/MatterChat/pull/11), base `staging`) — `app/omnisai-oauth/server/orgProvision.ts` (`provisionOrgFromRoster`: roster fetch + idempotent per-member pre-create) + `loginHandler.ts` `maybeAutoProvisionOrg` hook (admin + orgId + per-admin `services.omnisai.provisionedOrgId` marker set only after success; background; never blocks/breaks login).
+- **CentralizedAuth** ([PR #352](https://github.com/OmnisAIOrg/CentralizedAuthBackend/pull/352), base `staging-backend`) — new `GET /organizations/:id/members` (service-auth) + `ProvisionApiAuthGuard` (shared secret `x-provision-key` or KeyGate `auth:organizations:read`). Shared-auth ⇒ **needs a non-author review; do not self-merge.**
+- **Two deliberate deviations from the design** (see DECISIONS 2026-06-24): service provision-key (not user-token replay, which the session-based AuthGuard rejects); IMPORT/pre-create accounts (not `invite-multiple`, which no-ops on the already-member team — and import needs no SMTP).
+- **Config to set on both Alpha/staging apps:** `MATTERCHAT_PROVISION_KEY` (same secret both sides), MatterChat also `OMNISAI_OIDC_ISSUER` (or `OMNISAI_AUTH_API_BASE`). Absent ⇒ silent no-op.
+- **Verified:** CentralizedAuth `tsc` clean; MatterChat scoped `tsc` consistent with shipping code. **NOT yet:** live E2E (needs both full stacks → run in Alpha per-PR env).
+
 ## Prior session (2026-06-23, all live on staging)
 OmnisAI OIDC login E2E (client `WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz`); setup-wizard skip; email-2FA off; first-OmnisAI-user→admin; Admin rail entry; Activity `/boards/inbox` route fixed; Boards code-split; Slack IMPORT verified.
 
