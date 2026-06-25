@@ -1,0 +1,68 @@
+name: MatterChat — Staging Diagnostics
+
+# On-demand, READ-ONLY cluster introspection for staging. No build, no deploy,
+# no writes — authenticates to EKS and dumps why the matterchat pod is unhealthy
+# (state + last-termination reason, current + previous container logs, OIDC env
+# presence on the live Deployment, Mongo rs0 state, recent events). Trigger via:
+#   gh workflow run matterchat-staging-diag.yml --ref develop
+on:
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: stg-omnisai-cluster
+  K8S_NAMESPACE: staging
+
+jobs:
+  diagnose:
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    permissions:
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure kubectl
+        run: |
+          which kubectl || {
+            curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          }
+          kubectl version --client
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: App pods (status + restart count)
+        run: kubectl get pods -n "${K8S_NAMESPACE}" -l app=matterchat -o wide || true
+
+      - name: Describe app pod (events + last-termination reason)
+        run: kubectl describe pod -n "${K8S_NAMESPACE}" -l app=matterchat 2>&1 | tail -140 || true
+
+      - name: OmnisAI OIDC env on the LIVE Deployment (env names redacted; only non-secret OIDC values shown)
+        run: |
+          echo "===== all env var NAMES on container[0] (values redacted) ====="
+          kubectl get deployment matterchat -n "${K8S_NAMESPACE}" \
+            -o jsonpath='{range .spec.template.spec.containers[0].env[*]}{.name}{"\n"}{end}' | sort || true
+          echo "===== OmnisAI OIDC vars name=value (non-secret config, already in the committed manifest) ====="
+          kubectl get deployment matterchat -n "${K8S_NAMESPACE}" \
+            -o jsonpath='{range .spec.template.spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' \
+            | grep -iE 'OMNISAI|OVERWRITE_SETTING_OmnisAI' || echo ">>> NO OMNISAI / OVERWRITE_SETTING_OmnisAI env on the Deployment"
+
+      - name: Current container logs (tail)
+        run: kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=200 2>&1 | tail -200 || true
+
+      - name: Previous (crashed) container logs (tail)
+        run: kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --previous --tail=200 2>&1 | tail -200 || true
+
+      - name: Mongo rs0 statefulset + pods
+        run: |
+          kubectl get statefulset matterchat-mongo -n "${K8S_NAMESPACE}" -o wide 2>&1 || true
+          kubectl get pods -n "${K8S_NAMESPACE}" -l app=matterchat-mongo -o wide 2>&1 || true
+
+      - name: Recent namespace events
+        run: kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.lastTimestamp 2>&1 | tail -40 || true
