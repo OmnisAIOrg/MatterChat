@@ -82,3 +82,14 @@ jobs:
           echo "===== generic exceptions (tail) ====="
           kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=4000 2>&1 \
             | grep -iE "Exception|Error:|nonAPIError|500" | tail -20 || echo "(none)"
+
+      - name: Is the NEW client code actually in the running image? (rule out a stale bundle vs build that dropped it)
+        run: |
+          POD=$(kubectl get pod -n "${K8S_NAMESPACE}" -l app=matterchat -o jsonpath='{.items[0].metadata.name}')
+          echo "pod=$POD"
+          echo "===== does the SERVER bundle contain the new endpoint route? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "grep -rl 'external-workspaces.channels' /app/bundle/programs/server 2>/dev/null | head -3; echo '--- list route ---'; grep -rl 'external-workspaces.list' /app/bundle/programs/server 2>/dev/null | head -3" 2>&1 || echo "server grep failed"
+          echo "===== does the CLIENT bundle contain the Teams-tile code (string literals survive minify)? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "grep -rl 'external-workspaces.list' /app/bundle/programs/web.browser 2>/dev/null | head -3; echo '--- TeamsChannelsPanel marker ---'; grep -rlE 'Microsoft_Teams|teamsConnection|TeamsChannels' /app/bundle/programs/web.browser 2>/dev/null | head -3" 2>&1 || echo "client grep failed"
+          echo "===== image the pod is actually running ====="
+          kubectl get pod -n "${K8S_NAMESPACE}" "$POD" -o jsonpath='{.spec.containers[0].image}{"\n"}' 2>&1 || true
