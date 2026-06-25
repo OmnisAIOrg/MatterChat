@@ -17,6 +17,7 @@ import { Meteor } from 'meteor/meteor';
 
 import type { IProviderChannel, IProviderConnection, IProviderCredentials, IProviderMessage } from './ChatProvider';
 import { providerRegistry } from './providerRegistry';
+import { isGoogleConfigured } from './providers/google/config';
 import { isTeamsConfigured } from './providers/teams/config';
 import { decryptCredentials } from './tokenCrypto';
 
@@ -66,6 +67,15 @@ export async function getProviderAuthUrl(
 			return { provider, authorizeUrl: null, implemented: false };
 		}
 		return { provider, authorizeUrl: Meteor.absoluteUrl('api/apps/teamsbridge/oauth/start'), implemented: true };
+	}
+
+	if (provider === 'google') {
+		if (!isGoogleConfigured()) {
+			// Disabled or no client secret pasted yet — signal "not ready" without throwing.
+			return { provider, authorizeUrl: null, implemented: false };
+		}
+		// The route mounts at /_google/oauth (NOT under /api — RC's REST router shadows /api/*).
+		return { provider, authorizeUrl: Meteor.absoluteUrl('_google/oauth/start'), implemented: true };
 	}
 
 	// TODO(later): per-user Slack OAuth route. Until then, signal "not implemented".

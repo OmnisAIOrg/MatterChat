@@ -31,7 +31,7 @@ import {
 } from '../../../connectors/server/connectionService';
 import { API } from '../api';
 
-const VALID_PROVIDERS: ExternalProvider[] = ['slack', 'teams'];
+const VALID_PROVIDERS: ExternalProvider[] = ['slack', 'teams', 'google'];
 
 API.v1.addRoute(
 	'external-workspaces.list',

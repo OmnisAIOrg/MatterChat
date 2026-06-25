@@ -20,6 +20,7 @@ import type { ExternalProvider } from '@rocket.chat/core-typings';
 import type { ServerMethods } from '@rocket.chat/ddp-client';
 import { Meteor } from 'meteor/meteor';
 
+import { buildGoogleAuthorizeUrl } from '../providers/google/routes';
 import { buildTeamsAuthorizeUrl } from '../providers/teams/routes';
 
 declare module '@rocket.chat/ddp-client' {
@@ -44,6 +45,22 @@ Meteor.methods<ServerMethods>({
 				// the admin to paste the secret + enable Teams.
 				if (err instanceof Error && err.message === 'teams-not-configured') {
 					throw new Meteor.Error('teams-not-configured', 'Microsoft Teams is not enabled or configured', {
+						method: 'connectors:getAuthorizeUrl',
+					});
+				}
+				throw err;
+			}
+		}
+
+		if (provider === 'google') {
+			try {
+				const { authorizeUrl } = await buildGoogleAuthorizeUrl(this.userId);
+				return authorizeUrl;
+			} catch (err) {
+				// Surface the standalone-safe gate as a clean, client-readable error so the UI can tell
+				// the admin to paste the secret + enable Google Chat.
+				if (err instanceof Error && err.message === 'google-not-configured') {
+					throw new Meteor.Error('google-not-configured', 'Google Chat is not enabled or configured', {
 						method: 'connectors:getAuthorizeUrl',
 					});
 				}

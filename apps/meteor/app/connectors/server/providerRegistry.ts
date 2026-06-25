@@ -14,6 +14,7 @@
 import type { ExternalProvider } from '@rocket.chat/core-typings';
 
 import type { IChatProvider } from './ChatProvider';
+import { GoogleChatProvider } from './providers/GoogleChatProvider';
 import { SlackProvider } from './providers/SlackProvider';
 import { TeamsProvider } from './providers/TeamsProvider';
 
@@ -48,6 +49,7 @@ class ProviderRegistry {
 /** Singleton registry. Import this everywhere; do not instantiate providers directly. */
 export const providerRegistry = new ProviderRegistry();
 
-// Freeze the two providers behind their keys. Real implementations replace these stubs in place.
+// Freeze the providers behind their keys. Real implementations replace any stubs in place.
 providerRegistry.register(new SlackProvider());
 providerRegistry.register(new TeamsProvider());
+providerRegistry.register(new GoogleChatProvider());

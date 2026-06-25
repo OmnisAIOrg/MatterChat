@@ -5,7 +5,7 @@ import type { IRocketChatRecord } from './IRocketChatRecord';
  * a matching provider in the server-side providerRegistry) to add a provider — callers
  * must NEVER branch on the value; they go through the registry + ChatProvider interface.
  */
-export type ExternalProvider = 'slack' | 'teams';
+export type ExternalProvider = 'slack' | 'teams' | 'google';
 
 /**
  * Lifecycle status of a per-user external-workspace connection.
