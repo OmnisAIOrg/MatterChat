@@ -4,26 +4,29 @@ import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useOrgSwitcherSelection } from './OrgSwitcherContext';
+import { externalConnectionIdFromSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
+import { externalProviderBranding } from './externalProviders';
+import { useExternalChannels } from './useExternalChannels';
 import { useExternalWorkspaces } from './useExternalWorkspaces';
-import { useTeamsChannels } from './useTeamsChannels';
 
 /**
- * TeamsSidebar — the LEFT SIDEBAR contents while the connected Teams workspace is selected.
+ * ExternalSidebar — the LEFT SIDEBAR contents while a connected external workspace is selected.
  *
- * This REPLACES the MatterChat room list (Channels / DMs) when `selectedOrgId === 'teams'` — see
- * LayoutWithSidebar. It lists the user's REAL Teams channels (external-workspaces.channels -> Graph
- * listChannels) grouped by team, and clicking a channel opens it in the MAIN content area by setting
- * `selectedTeamsChannel`. The header carries the primary way back to MatterChat. Being "in Teams" is
- * its own mode: the MatterChat nav is not shown alongside this (no half-overlay).
+ * Provider-agnostic (Teams OR Google Chat): it REPLACES the MatterChat room list when an external
+ * tile is selected (selectedOrgId === `ext:<connectionId>`) — see LayoutWithSidebar. It resolves the
+ * SELECTED connection from the selection (not a hardcoded provider), lists that connection's REAL
+ * channels/spaces (external-workspaces.channels -> the provider's listChannels) grouped by team, and
+ * clicking a channel opens it in the MAIN content area by setting `selectedExternalChannel`. The
+ * header colour + mark + name come from the connection's provider branding, and the header carries
+ * the primary way back to MatterChat. Being "in a workspace" is its own mode: the MatterChat nav is
+ * not shown alongside this (no half-overlay).
  *
- * Standalone-safe: only ever mounted when a Teams connection exists and its tile is selected.
+ * Standalone-safe: only ever mounted when an external connection exists and its tile is selected.
  *
- * Crash-safety: every external value is read defensively (`teamsConnection?._id`, `groups ?? []`)
- * and all hooks run unconditionally with no early return before them.
+ * Crash-safety: every external value is read defensively (`connection?._id`, `groups ?? []`,
+ * `externalProviderBranding(...)` falls back for an unknown provider) and all hooks run
+ * unconditionally with no early return before them.
  */
-
-const TEAMS_PURPLE = '#4B53BC';
 
 const rootClass = css`
 	display: flex;
@@ -34,12 +37,11 @@ const rootClass = css`
 	overflow: hidden;
 `;
 
-const headerClass = css`
+const headerBaseClass = css`
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	padding: 12px 14px;
-	background: ${TEAMS_PURPLE};
 	color: #ffffff;
 	flex-shrink: 0;
 `;
@@ -67,7 +69,7 @@ const teamHeadingClass = css`
 	}
 `;
 
-const channelRowClass = css`
+const channelRowBaseClass = css`
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -85,52 +87,41 @@ const channelRowClass = css`
 	&:hover {
 		background: var(--rcx-color-surface-neutral, #f2f3f5);
 	}
-
-	&:focus-visible {
-		outline: 2px solid ${TEAMS_PURPLE};
-		outline-offset: -2px;
-	}
 `;
 
-const channelRowSelectedClass = css`
-	background: rgba(75, 83, 188, 0.12);
-	color: ${TEAMS_PURPLE};
-	font-weight: 600;
-
-	&:hover {
-		background: rgba(75, 83, 188, 0.16);
-	}
-`;
-
-// The Microsoft Teams mark (rendered, never recoloured). Declared as an element to keep one
-// component per file.
-const teamsMark = (
-	<svg width={18} height={18} viewBox='0 0 24 24' aria-hidden focusable='false'>
-		<rect x='2' y='5' width='12' height='14' rx='2' fill='#ffffff' opacity='0.92' />
-		<text x='8' y='15' fontSize='9' fontWeight='700' textAnchor='middle' fill={TEAMS_PURPLE} fontFamily='Arial, sans-serif'>
-			T
-		</text>
-		<circle cx='18' cy='8' r='3.4' fill='#ffffff' opacity='0.92' />
-		<rect x='14.4' y='10.5' width='7.2' height='8' rx='2' fill='#ffffff' opacity='0.72' />
-	</svg>
-);
-
-const TeamsSidebar = (): ReactElement => {
+const ExternalSidebar = (): ReactElement => {
 	const { t } = useTranslation();
-	const { selectedTeamsChannel, setSelectedTeamsChannel, setSelectedOrgId } = useOrgSwitcherSelection();
-	const { teamsConnection } = useExternalWorkspaces();
-	const { groups, error, isLoading, refetch } = useTeamsChannels(teamsConnection?._id, true);
+	const { selectedOrgId, selectedExternalChannel, setSelectedExternalChannel, setSelectedOrgId } = useOrgSwitcherSelection();
+	const { getConnectionById } = useExternalWorkspaces();
+
+	// Resolve the SELECTED connection from the selection sentinel — provider-agnostic.
+	const connection = getConnectionById(externalConnectionIdFromSelection(selectedOrgId));
+	const branding = externalProviderBranding(connection?.provider);
+	const workspaceName = connection?.externalOrgName || branding.defaultName;
+
+	const { groups, error, isLoading, refetch } = useExternalChannels(connection?._id, true);
 
 	// Defensive: `groups` may be undefined (loading / error / unexpected shape); never deref blindly.
 	const safeGroups = Array.isArray(groups) ? groups : [];
 	const channelCount = safeGroups.reduce((sum, g) => sum + (Array.isArray(g?.channels) ? g.channels.length : 0), 0);
 
+	// Provider-coloured selected-row style (kept inline so it tracks the connection's brand colour).
+	const channelRowSelectedClass = css`
+		background: ${branding.color}1f;
+		color: ${branding.color};
+		font-weight: 600;
+
+		&:hover {
+			background: ${branding.color}29;
+		}
+	`;
+
 	return (
-		<Box className={rootClass} role='navigation' aria-label={t('Teams_channels', { defaultValue: 'Teams channels' })}>
-			<Box className={headerClass}>
-				{teamsMark}
+		<Box className={rootClass} role='navigation' aria-label={t('External_workspace_channels', { defaultValue: 'Workspace channels' })}>
+			<Box className={headerBaseClass} style={{ background: branding.color }}>
+				<branding.Mark size={18} />
 				<Box is='span' fontWeight={700} fontSize={15} withTruncatedText flexGrow={1}>
-					{teamsConnection?.externalOrgName || t('Microsoft_Teams', { defaultValue: 'Microsoft Teams' })}
+					{workspaceName}
 				</Box>
 				<Box
 					is='button'
@@ -167,7 +158,7 @@ const TeamsSidebar = (): ReactElement => {
 					<Box display='flex' flexDirection='column' alignItems='center' justifyContent='center' pbs={48}>
 						<Throbber />
 						<Box mbs={12} color='hint' fontSize={13}>
-							{t('Loading_your_Teams_channels', { defaultValue: 'Loading your Teams channels…' })}
+							{t('Loading_workspace_channels', { defaultValue: 'Loading your channels…' })}
 						</Box>
 					</Box>
 				)}
@@ -175,7 +166,7 @@ const TeamsSidebar = (): ReactElement => {
 				{!isLoading && error && (
 					<States>
 						<StatesIcon name='warning' variation='danger' />
-						<StatesTitle>{t('Couldnt_load_Teams_channels', { defaultValue: 'Couldn’t load your Teams channels' })}</StatesTitle>
+						<StatesTitle>{t('Couldnt_load_workspace_channels', { defaultValue: 'Couldn’t load your channels' })}</StatesTitle>
 						{/* Surface the REAL provider/auth message plainly (e.g. admin-consent 403). */}
 						<StatesSubtitle>
 							{error.message}
@@ -190,9 +181,9 @@ const TeamsSidebar = (): ReactElement => {
 				{!isLoading && !error && channelCount === 0 && (
 					<States>
 						<StatesIcon name='team' />
-						<StatesTitle>{t('No_Teams_channels_found', { defaultValue: 'No channels found' })}</StatesTitle>
+						<StatesTitle>{t('No_workspace_channels_found', { defaultValue: 'No channels found' })}</StatesTitle>
 						<StatesSubtitle>
-							{t('No_Teams_channels_found_subtitle', {
+							{t('No_workspace_channels_found_subtitle', {
 								defaultValue: 'You’re connected, but we didn’t find any channels you’re a member of.',
 							})}
 						</StatesSubtitle>
@@ -214,17 +205,17 @@ const TeamsSidebar = (): ReactElement => {
 								</Box>
 							</Box>
 							{(Array.isArray(group?.channels) ? group.channels : []).map((channel) => {
-								const isSelected = selectedTeamsChannel?.externalId === channel.externalId;
+								const isSelected = selectedExternalChannel?.externalId === channel.externalId;
 								return (
 									<Box
 										is='button'
 										type='button'
 										key={channel.externalId}
-										className={[channelRowClass, isSelected && channelRowSelectedClass].filter(Boolean)}
+										className={[channelRowBaseClass, isSelected && channelRowSelectedClass].filter(Boolean)}
 										aria-current={isSelected ? 'true' : undefined}
 										title={channel.topic || channel.name}
 										onClick={(): void =>
-											setSelectedTeamsChannel({
+											setSelectedExternalChannel({
 												externalId: channel.externalId,
 												name: channel.name,
 												teamName: group.teamName,
@@ -246,4 +237,4 @@ const TeamsSidebar = (): ReactElement => {
 	);
 };
 
-export default memo(TeamsSidebar);
+export default memo(ExternalSidebar);

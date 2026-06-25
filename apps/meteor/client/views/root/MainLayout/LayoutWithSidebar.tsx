@@ -7,12 +7,12 @@ import { Suspense, lazy, useEffect, useRef } from 'react';
 
 import AccessibilityShortcut from './AccessibilityShortcut';
 import AppLeftRail from './AppLeftRail';
+import ExternalErrorBoundary from './ExternalErrorBoundary';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
-import { useOrgSwitcherSelection } from './OrgSwitcherContext';
+import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
-import TeamsErrorBoundary from './TeamsErrorBoundary';
 import NavBar from '../../../navbar';
 import Sidebar from '../../../sidebar';
 import NavigationRegion from '../../navigation';
@@ -21,56 +21,60 @@ import RoomsNavigationProvider from '../../navigation/providers/RoomsNavigationP
 const INVALID_ROOM_NAME_PREFIXES = ['#', '?'] as const;
 
 /**
- * The Teams components are LAZY-loaded — they are NOT statically imported at this module's top. This
- * is a structural crash-guard: if any Teams file (or one of its transitive imports) fails to load or
- * has a bad import, the failure is confined to the lazy chunk and surfaces as a Suspense/boundary
- * event INSIDE the Teams branch — it can never break this module's graph and take down the shell.
- * The MatterChat (non-Teams) shell below imports zero Teams code, so it renders fully independently.
+ * The external-workspace view components are LAZY-loaded — they are NOT statically imported at this
+ * module's top. This is a structural crash-guard: if any external-view file (or one of its transitive
+ * imports) fails to load or has a bad import, the failure is confined to the lazy chunk and surfaces
+ * as a Suspense/boundary event INSIDE the external branch — it can never break this module's graph and
+ * take down the shell. The MatterChat (native) shell below imports zero external-view code, so it
+ * renders fully independently. Provider-agnostic: the SAME two lazy components render Teams OR Google
+ * Chat (they read the selected connection), so adding a provider added NO new top-level imports.
  */
-const TeamsSidebar = lazy(() => import('./TeamsSidebar'));
-const TeamsChannelView = lazy(() => import('./TeamsChannelView'));
+const ExternalSidebar = lazy(() => import('./ExternalSidebar'));
+const ExternalChannelView = lazy(() => import('./ExternalChannelView'));
 
 /**
- * The Teams sidebar wrapped to occupy the sidebar region's width, so swapping it in for the
+ * The external sidebar wrapped to occupy the sidebar region's width, so swapping it in for the
  * MatterChat sidebar keeps the shell layout identical (rail + sidebar + main).
  */
-const TeamsSidebarRegion = (): ReactElement => (
+const ExternalSidebarRegion = (): ReactElement => (
 	<Box position='relative' zIndex={2} display='flex' flexDirection='column' height='100%' width='var(--sidebar-width)' flexShrink={0}>
-		<TeamsSidebar />
+		<ExternalSidebar />
 	</Box>
 );
 
 /**
- * The inner shell, mounted INSIDE OrgSwitcherProvider so it can read the selected workspace. When the
- * connected Teams workspace is selected we render a self-contained Teams MODE: the Teams channel list
- * IS the sidebar and the open channel (messages + composer) IS the main content. The MatterChat
- * sidebar + room are not mounted at all — this resolves the founder's "shouldn't be able to click any
- * tab and go back to MatterChat" gripe (no half-overlay; the M tile / Back is the way back).
+ * The inner shell, mounted INSIDE OrgSwitcherProvider so it can read the selected workspace. When a
+ * connected EXTERNAL workspace is selected (Teams OR Google Chat — selectedOrgId === `ext:<id>`) we
+ * render a self-contained workspace MODE: that connection's channel/space list IS the sidebar and the
+ * open channel (messages + composer) IS the main content. The MatterChat sidebar + room are not
+ * mounted at all — this resolves the founder's "shouldn't be able to click any tab and go back to
+ * MatterChat" gripe (no half-overlay; the M tile / Back is the way back). The branch is PROVIDER-
+ * AGNOSTIC: the same two lazy components render whichever provider the selected connection is.
  *
- * Crash-isolation in Teams mode:
+ * Crash-isolation in workspace mode:
  *  - The OrgSwitcherRail + AppLeftRail render OUTSIDE the boundary, so the way back to MatterChat (the
- *    M tile) survives even if the Teams subtree throws.
- *  - TeamsErrorBoundary wraps the Teams sidebar + channel view; a render error there shows a contained
- *    "Couldn't load the Teams view" panel and NEVER reaches the app root.
+ *    M tile) survives even if the external subtree throws.
+ *  - ExternalErrorBoundary wraps the external sidebar + channel view; a render error there shows a
+ *    contained "Couldn't load this workspace" panel and NEVER reaches the app root.
  *  - Suspense covers the lazy chunk load with a Throbber.
  */
 const ShellBody = ({ children, removeSidenav }: { children: ReactNode; removeSidenav: boolean }): ReactElement => {
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
-	const inTeamsMode = !removeSidenav && selectedOrgId === 'teams';
+	const inExternalMode = !removeSidenav && isExternalSelection(selectedOrgId);
 
-	if (inTeamsMode) {
+	if (inExternalMode) {
 		return (
 			<>
 				<OrgSwitcherRail />
 				<AppLeftRail />
-				<TeamsErrorBoundary onBack={(): void => setSelectedOrgId('current')}>
+				<ExternalErrorBoundary onBack={(): void => setSelectedOrgId('current')}>
 					<Suspense fallback={<Throbber />}>
-						<TeamsSidebarRegion />
+						<ExternalSidebarRegion />
 						<MainContent>
-							<TeamsChannelView />
+							<ExternalChannelView />
 						</MainContent>
 					</Suspense>
-				</TeamsErrorBoundary>
+				</ExternalErrorBoundary>
 			</>
 		);
 	}
