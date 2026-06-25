@@ -1,0 +1,73 @@
+import type { IRocketChatRecord } from './IRocketChatRecord';
+
+/**
+ * External chat providers MatterChat can connect to. Extend this union (and register
+ * a matching provider in the server-side providerRegistry) to add a provider — callers
+ * must NEVER branch on the value; they go through the registry + ChatProvider interface.
+ */
+export type ExternalProvider = 'slack' | 'teams';
+
+/**
+ * Lifecycle status of a per-user external-workspace connection.
+ *
+ * - `connected`        — credentials valid; the bridge can sync/post.
+ * - `consent_required` — the external tenant admin (Teams) or the user (Slack OAuth) has
+ *                        not yet granted the scopes we need; surface a "grant access" link.
+ * - `error`            — credentials present but failing (e.g. refresh-token death); needs reconnect.
+ * - `disconnected`     — the user (or we) tore the connection down; kept for history/audit.
+ */
+export type ExternalWorkspaceConnectionStatus = 'connected' | 'consent_required' | 'error' | 'disconnected';
+
+/**
+ * An ENCRYPTED token reference. Raw OAuth tokens are NEVER stored in Mongo in plaintext —
+ * `encryptedBlob` is the output of the AES-256-GCM helper (see
+ * apps/meteor/app/connectors/server/tokenCrypto.ts), and `keyId` records which encryption
+ * key version produced it so keys can be rotated without losing the ability to decrypt
+ * older blobs. When no encryption key is configured the helper is a no-op (dev), but the
+ * field shape is identical so the storage contract never changes.
+ */
+export interface IEncryptedTokenRef {
+	/** The `enc:v1:<iv>:<authTag>:<ciphertext>` blob (or legacy plaintext when no key is set). */
+	encryptedBlob: string;
+	/** Identifier of the encryption key used (e.g. `v1`), for rotation. */
+	keyId: string;
+}
+
+/**
+ * PER-USER external-workspace connection record. One document per (MatterChat user, external
+ * workspace) pair. This is the durable store the org-switcher rail reads to show each user's
+ * own connected Slack/Teams workspaces, and the bridge reads to know which credentials to use.
+ *
+ * Collection: `external_workspace_connections`. Indexed by `{ userId, provider }`.
+ *
+ * NOTE: this is the per-user shape from the connectors spec. The legacy workspace-level Slack
+ * bridge (admin settings) is the degenerate case and is surfaced separately; nothing here
+ * changes that path.
+ */
+export interface IExternalWorkspaceConnection extends IRocketChatRecord {
+	/** The MatterChat (Rocket.Chat) user that owns this connection. */
+	userId: string;
+	/** Which external provider this connection targets. */
+	provider: ExternalProvider;
+	/**
+	 * The external workspace/tenant identifier:
+	 *  - Slack: the workspace/team id (e.g. `T01234567`).
+	 *  - Teams: the Entra ID tenant id (the `tid` claim).
+	 */
+	externalOrgId: string;
+	/** Human-readable external workspace/tenant name, for the rail tile label. */
+	externalOrgName: string;
+	/** Current lifecycle status. */
+	status: ExternalWorkspaceConnectionStatus;
+	/** OAuth scopes actually granted on this connection (empty until consent completes). */
+	scopes: string[];
+	/**
+	 * Encrypted credential reference. Optional because a freshly-created `consent_required`
+	 * connection may exist before any token is obtained.
+	 */
+	credentials?: IEncryptedTokenRef;
+	/** When the connection record was first created. */
+	createdAt: Date;
+	/** Last successful sync against the external workspace, if any. */
+	lastSyncAt?: Date;
+}
