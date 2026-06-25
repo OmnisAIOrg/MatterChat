@@ -116,3 +116,16 @@ jobs:
               print(id + " => exists=" + (!!s) + " value=" + (s ? JSON.stringify(s.value) : "MISSING"));
             });
           ' 2>&1 || echo "mongo read failed"
+
+      - name: Admin + setup-wizard state (is there a real admin? founder user roles?)
+        run: |
+          kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
+            print("Show_Setup_Wizard = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"Show_Setup_Wizard"})||{}).value));
+            print("admin count = " + db.users.countDocuments({roles:"admin"}));
+            db.users.find({roles:"admin"},{username:1,roles:1}).forEach(function(u){ print("  ADMIN: " + u.username); });
+            print("--- omnisai-linked users (the founder logs in via OmnisAI) ---");
+            db.users.find({"services.omnisai":{$exists:true}},{username:1,roles:1,"emails.address":1}).limit(10).forEach(function(u){
+              print("  user " + u.username + "  roles=" + JSON.stringify(u.roles));
+            });
+            print("total users = " + db.users.countDocuments({type:{$ne:"bot"}}));
+          ' 2>&1 || echo "mongo read failed"
