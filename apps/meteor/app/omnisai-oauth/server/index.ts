@@ -60,10 +60,19 @@ type OmnisAIConfig = {
 };
 
 function getConfig(): OmnisAIConfig {
+	// Resolve issuer/clientId from the persisted Mongo setting FIRST, then fall back to process.env.
+	// Why: the settings are seeded via OVERWRITE_SETTING_* and live in Mongo, so they survive a pod whose
+	// container env didn't carry the OMNISAI_OIDC_* vars (e.g. env dropped from the live Deployment by a
+	// kubectl apply 3-way merge) — which otherwise dead-ends the login at `not_configured` even though the
+	// button (driven by the persisted OmnisAI_OIDC_Enabled setting) still renders. See settings/omnisai.ts.
+	const settingStr = (id: string): string => {
+		const v = settings.get(id);
+		return typeof v === 'string' ? v.trim() : '';
+	};
 	return {
 		enabled: Boolean(settings.get('OmnisAI_OIDC_Enabled')) || process.env.OMNISAI_OIDC_ENABLED === 'true',
-		issuer: (process.env.OMNISAI_OIDC_ISSUER || '').replace(/\/$/, ''),
-		clientId: process.env.OMNISAI_OIDC_CLIENT_ID || '',
+		issuer: (settingStr('OmnisAI_OIDC_Issuer') || process.env.OMNISAI_OIDC_ISSUER || '').replace(/\/$/, ''),
+		clientId: settingStr('OmnisAI_OIDC_Client_Id') || process.env.OMNISAI_OIDC_CLIENT_ID || '',
 		scope: process.env.OMNISAI_OIDC_SCOPE || 'openid profile email offline_access casepro:read',
 	};
 }
@@ -89,7 +98,14 @@ const clearStateCookie = (): string => `${STATE_COOKIE}=; HttpOnly; Path=/_omnis
 async function handleAuthorize(res: any): Promise<void> {
 	const config = getConfig();
 	if (!config.enabled || !config.issuer || !config.clientId) {
-		return fail(res, 'not_configured');
+		// Reveal WHICH field is missing (in the redirect URL) so a misconfig is diagnosable without pod access.
+		let missing = 'client_id';
+		if (!config.enabled) {
+			missing = 'enabled';
+		} else if (!config.issuer) {
+			missing = 'issuer';
+		}
+		return fail(res, `not_configured_${missing}`);
 	}
 
 	const state = Random.id();
