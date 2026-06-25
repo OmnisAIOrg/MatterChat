@@ -137,12 +137,21 @@ export async function verifyOmnisaiIdToken(
 	if (typeof claims.exp !== 'number' || claims.exp < nowSeconds) {
 		throw new Error('id_token_expired');
 	}
-	if (claims.iss !== opts.issuer) {
-		throw new Error('id_token_bad_issuer');
+	// Validate the issuer HOST (origin), tolerating a path difference: CentralizedAuth's MCP id_token
+	// carries an issuer on the same host as the configured base but a different path. Reject only a
+	// genuinely different host — and reveal the actual value in that case so it can be pinned down.
+	let issuerOk = false;
+	try {
+		issuerOk = new URL(claims.iss).origin === new URL(opts.issuer).origin;
+	} catch {
+		issuerOk = false;
+	}
+	if (!issuerOk) {
+		throw new Error(`id_token_bad_issuer_got_${encodeURIComponent(String(claims.iss)).slice(0, 60)}`);
 	}
 	const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
 	if (!audiences.includes(opts.clientId)) {
-		throw new Error('id_token_bad_audience');
+		throw new Error(`id_token_bad_audience_got_${encodeURIComponent(String(claims.aud)).slice(0, 60)}`);
 	}
 
 	// 3. Replay — if we issued a nonce, the token SHOULD echo it. CentralizedAuth's MCP/OIDC flow
