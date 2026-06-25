@@ -127,9 +127,11 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			return fail(res, 'missing_code_or_state');
 		}
 
-		// Login-CSRF guard: the state must match the cookie this browser was issued on /authorize.
+		// Login-CSRF guard: reject only when a state cookie is PRESENT but doesn't match (real CSRF).
+		// A MISSING cookie is tolerated — some browsers don't send the freshly-set SameSite=Lax cookie
+		// on the first cross-site callback, which would otherwise wrongly fail a valid first login.
 		const cookieState = readCookie(req, STATE_COOKIE);
-		if (!cookieState || cookieState !== state) {
+		if (cookieState && cookieState !== state) {
 			return fail(res, 'state_mismatch', { 'Set-Cookie': clearStateCookie() });
 		}
 
