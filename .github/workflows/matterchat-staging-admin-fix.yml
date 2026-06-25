@@ -31,17 +31,18 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
 
-      - name: Promote phillip (by email) + john to admin; force Show_Setup_Wizard=completed
+      - name: Make john@omnisai.io admin; force wizard completed; hide usernames (UI_Use_Real_Name)
         run: |
           kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
             db.rocketchat_settings.updateOne({_id:"Show_Setup_Wizard"},{$set:{value:"completed", _updatedAt:new Date()}});
-            // founder = phillip@omnisai.io (login is email-based; the RC username is auto-generated). Promote by email.
-            var p = db.users.findOne({"emails.address":{$regex:/^phillip@omnisai\.io$/i}});
-            if (p) { db.users.updateOne({_id:p._id},{$addToSet:{roles:"admin"}}); print("promote phillip@omnisai.io: username=" + p.username + " -> admin"); }
-            else { print("NO user with email phillip@omnisai.io found"); }
-            var rj = db.users.updateOne({username:"john"},{$addToSet:{roles:"admin"}});
-            print("promote john: matched=" + rj.matchedCount + " modified=" + rj.modifiedCount);
+            // Hide usernames: show real names across the UI. Founder logs in by email; never wants to see usernames.
+            db.rocketchat_settings.updateOne({_id:"UI_Use_Real_Name"},{$set:{value:true, _updatedAt:new Date()}});
+            // Founder is john@omnisai.io (the email used for staging). Promote that account by email.
+            var p = db.users.findOne({"emails.address":{$regex:/^john@omnisai\.io$/i}});
+            if (p) { db.users.updateOne({_id:p._id},{$addToSet:{roles:"admin"}}); print("promote john@omnisai.io: username=" + p.username + " name=" + JSON.stringify(p.name) + " -> admin"); }
+            else { print("NO user with email john@omnisai.io found"); }
             print("--- admins now ---");
-            db.users.find({roles:"admin"},{username:1}).forEach(function(u){ print("  ADMIN: " + u.username); });
+            db.users.find({roles:"admin"},{username:1,name:1}).forEach(function(u){ print("  ADMIN: " + u.username + " (" + (u.name||"no name") + ")"); });
+            print("UI_Use_Real_Name = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"UI_Use_Real_Name"})||{}).value));
             print("Show_Setup_Wizard = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"Show_Setup_Wizard"})||{}).value));
           '
