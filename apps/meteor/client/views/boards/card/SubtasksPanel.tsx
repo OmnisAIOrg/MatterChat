@@ -1,7 +1,7 @@
 import type { IBoardCard, Serialized } from '@rocket.chat/core-typings';
 import { Box, Button, CheckBox, IconButton, ProgressBar, TextInput, Throbber } from '@rocket.chat/fuselage';
 import { useEndpoint, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,8 +13,8 @@ import { useTranslation } from 'react-i18next';
  * by a `child` relation (the parent stores `{type:'child', cardId}`; the service
  * mirrors `{type:'parent'}` onto the child). "Add subtask" creates a plain `task`
  * card (`boards.cardCreate`) then links it (`boards.card.relations.add`). Children
- * are resolved purely client-side from the already-cached board cards query, so
- * completion progress rolls up with no extra server round-trip.
+ * are resolved by fetching each child card by id (boards.cards is count-capped, so a
+ * large board would drop children), keeping completion progress correct at any size.
  *
  * Generic / standalone-safe: operates only on `task` cards via the generic
  * create + relation + complete primitives — no CasePro dependency. Mirrors
@@ -35,21 +35,23 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 
 	const [newTitle, setNewTitle] = useState('');
 
-	const getCards = useEndpoint('GET', '/v1/boards.cards');
+	const getCard = useEndpoint('GET', '/v1/boards.card');
 	const cardCreate = useMethod('boards.cardCreate');
+	const cardArchive = useEndpoint('POST', '/v1/boards.card.archive');
 	const relationsAdd = useEndpoint('POST', '/v1/boards.card.relations.add');
 	const relationsRemove = useEndpoint('POST', '/v1/boards.card.relations.remove');
 	const cardComplete = useEndpoint('POST', '/v1/boards.card.complete');
 
-	// Same key/query as BoardView — React Query dedupes and serves from cache.
-	const { data, isLoading } = useQuery({
-		queryKey: ['boards', 'cards', boardId],
-		queryFn: () => getCards({ boardId, count: 1000 }),
-	});
-
+	// Resolve each child by id. boards.cards is capped at API_Upper_Count_Limit, so deriving
+	// children from that list would silently drop them on large boards. These share the
+	// ['boards','card',id] cache with CardDetail; getCardForUser returns archived cards too,
+	// so this count matches the relation-edge count shown on the board tile's subtask badge.
 	const childIds = (card.relations ?? []).filter((r) => r.type === 'child').map((r) => r.cardId);
-	const byId = new Map((data?.cards ?? []).map((c) => [c._id, c] as const));
-	const children = childIds.map((id) => byId.get(id)).filter((c): c is Serialized<IBoardCard> => Boolean(c));
+	const childQueries = useQueries({
+		queries: childIds.map((id) => ({ queryKey: ['boards', 'card', id], queryFn: () => getCard({ cardId: id }) })),
+	});
+	const children = childQueries.map((q) => q.data?.card).filter((c): c is Serialized<IBoardCard> => Boolean(c));
+	const isLoading = childQueries.some((q) => q.isLoading);
 
 	const total = children.length;
 	const done = children.filter((c) => c.completed).length;
@@ -65,7 +67,13 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 	const addMutation = useMutation({
 		mutationFn: async (title: string) => {
 			const created = await cardCreate({ boardId: card.boardId, listId: card.listId, title });
-			await relationsAdd({ cardId, type: 'child', targetCardId: created._id });
+			try {
+				await relationsAdd({ cardId, type: 'child', targetCardId: created._id });
+			} catch (error) {
+				// Roll back the just-created card so a failed link doesn't leave an orphan on the board.
+				await cardArchive({ cardId: created._id }).catch(() => undefined);
+				throw error;
+			}
 		},
 		onSuccess: () => {
 			setNewTitle('');
@@ -76,7 +84,10 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 
 	const toggleMutation = useMutation({
 		mutationFn: (child: Serialized<IBoardCard>) => cardComplete({ cardId: child._id, completed: !child.completed }),
-		onSuccess: invalidate,
+		onSuccess: (_data, child) => {
+			void queryClient.invalidateQueries({ queryKey: ['boards', 'card', child._id] });
+			invalidate();
+		},
 		onError,
 	});
 

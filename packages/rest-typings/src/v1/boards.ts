@@ -357,7 +357,7 @@ const BoardsCardUpdateSchema = {
 				assignees: { type: 'array', items: { type: 'string' }, nullable: true },
 				watchers: { type: 'array', items: { type: 'string' }, nullable: true },
 				priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], nullable: true },
-				timeEstimateMinutes: { type: 'number', nullable: true },
+				timeEstimateMinutes: { type: 'number', minimum: 0, nullable: true },
 				cover: {
 					type: 'object',
 					nullable: true,
@@ -491,9 +491,9 @@ const BoardsCardLogTimeSchema = {
 	type: 'object',
 	properties: {
 		cardId: { type: 'string', minLength: 1 },
-		minutes: { type: 'number' },
+		minutes: { type: 'number', exclusiveMinimum: 0 },
 		note: { type: 'string', nullable: true },
-		spentAt: { type: 'string', nullable: true },
+		spentAt: { type: 'string', format: 'date-time', nullable: true },
 	},
 	required: ['cardId', 'minutes'],
 	additionalProperties: false,

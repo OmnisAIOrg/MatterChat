@@ -515,7 +515,9 @@ export async function updateCard(uid: string, cardId: string, patch: UpdateCardP
 		set.priority = patch.priority;
 	}
 	if (patch.timeEstimateMinutes !== undefined) {
-		set.timeEstimateMinutes = patch.timeEstimateMinutes;
+		// Normalize: reject negative/NaN, round fractional minutes; 0 clears the estimate.
+		const est = Number(patch.timeEstimateMinutes);
+		set.timeEstimateMinutes = Number.isFinite(est) && est > 0 ? Math.round(est) : 0;
 	}
 
 	await BoardsCards.updateOne({ _id: cardId }, { $set: set, $inc: { rev: 1 } });
@@ -880,12 +882,14 @@ export async function logTime(uid: string, cardId: string, entry: { minutes: num
 	await assertBoardRole(current.boardId, uid, 'member', 'boards.cardUpdate');
 
 	const now = new Date();
+	// Guard against an invalid/NaN Date reaching the document (the route coerces a string).
+	const spentAt = entry.spentAt && !Number.isNaN(entry.spentAt.getTime()) ? entry.spentAt : now;
 	const timeEntry: ITimeEntry = {
 		id: Random.id(),
 		userId: uid,
 		minutes,
 		...(entry.note?.trim() ? { note: entry.note.trim() } : {}),
-		spentAt: entry.spentAt ?? now,
+		spentAt,
 		createdAt: now,
 	};
 	await BoardsCards.updateOne({ _id: cardId }, { $push: { timeEntries: timeEntry }, $inc: { rev: 1 } });

@@ -2,7 +2,7 @@ import { Box, Button, ButtonGroup, Icon } from '@rocket.chat/fuselage';
 import { useMethod, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -57,6 +57,9 @@ type DragContext = {
 	hasDue: boolean;
 	dayWidth: number;
 	maxMovedPx: number;
+	// frozen visible range for clamping the dragged bar so it can't escape the chart
+	rangeStartMs: number;
+	rangeEndMs: number;
 };
 
 const GUTTER = 248;
@@ -76,23 +79,33 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 	const [localOverrides, setLocalOverrides] = useState<Record<string, { startDate?: string; dueDate?: string }>>({});
 	const [drag, setDrag] = useState<DragState | null>(null);
 	const dragRef = useRef<DragContext | null>(null);
+	// Per-card token so a settling mutation only clears its OWN optimistic override
+	// (a newer drag on the same card bumps the token and keeps its override).
+	const overrideTokenRef = useRef<Record<string, number>>({});
+
+	const clearOverrideIfCurrent = useCallback((cardId: string, token: number): void => {
+		if (overrideTokenRef.current[cardId] !== token) {
+			return;
+		}
+		setLocalOverrides((prev) => {
+			const next = { ...prev };
+			delete next[cardId];
+			return next;
+		});
+	}, []);
 
 	const { mutate } = useMutation({
-		mutationFn: (vars: { cardId: string; patch: { startDate?: Date; dueDate?: Date } }) => cardUpdate(vars),
+		mutationFn: (vars: { cardId: string; patch: { startDate?: Date; dueDate?: Date }; token: number }) =>
+			cardUpdate({ cardId: vars.cardId, patch: vars.patch }),
 		onSuccess: async (_data, vars) => {
+			// Refresh the Gantt's own view AND the board / table / card-drawer views.
 			await queryClient.invalidateQueries({ queryKey: ['boards', 'views', 'cards', board._id] });
-			setLocalOverrides((prev) => {
-				const next = { ...prev };
-				delete next[vars.cardId];
-				return next;
-			});
+			void queryClient.invalidateQueries({ queryKey: ['boards', 'cards', board._id] });
+			void queryClient.invalidateQueries({ queryKey: ['boards', 'card', vars.cardId] });
+			clearOverrideIfCurrent(vars.cardId, vars.token);
 		},
 		onError: (error, vars) => {
-			setLocalOverrides((prev) => {
-				const next = { ...prev };
-				delete next[vars.cardId];
-				return next;
-			});
+			clearOverrideIfCurrent(vars.cardId, vars.token);
 			dispatchToast({ type: 'error', message: error });
 		},
 	});
@@ -134,26 +147,33 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 		const dx = e.clientX - ctx.startClientX;
 		ctx.maxMovedPx = Math.max(ctx.maxMovedPx, Math.abs(dx));
 		const dxDays = Math.round(dx / ctx.dayWidth);
+		// Clamp only the DISPLAYED bar to the frozen range so it can't slide under the
+		// sticky gutter / off-chart; the committed value (computed in onDragSettle from
+		// the original card date) is intentionally unclamped — the range re-expands on refetch.
+		const clamp = (ms: number): number => Math.max(ctx.rangeStartMs, Math.min(ctx.rangeEndMs, ms));
 		let startMs = ctx.origStartMs;
 		let endMs = ctx.origEndMs;
 		if (ctx.mode === 'move') {
-			startMs = ctx.origStartMs + dxDays * DAY_MS;
-			endMs = ctx.origEndMs + dxDays * DAY_MS;
+			startMs = clamp(ctx.origStartMs + dxDays * DAY_MS);
+			endMs = clamp(ctx.origEndMs + dxDays * DAY_MS);
 		} else if (ctx.mode === 'resize-end') {
-			endMs = Math.max(ctx.origStartMs + DAY_MS, ctx.origEndMs + dxDays * DAY_MS);
+			endMs = clamp(Math.max(ctx.origStartMs + DAY_MS, ctx.origEndMs + dxDays * DAY_MS));
 		} else {
-			startMs = Math.min(ctx.origEndMs - DAY_MS, ctx.origStartMs + dxDays * DAY_MS);
+			startMs = clamp(Math.min(ctx.origEndMs - DAY_MS, ctx.origStartMs + dxDays * DAY_MS));
 		}
 		setDrag({ cardId: ctx.cardId, mode: ctx.mode, startMs, endMs });
 	}, []);
 
-	const onDragEnd = useCallback(
+	const onDragSettle = useCallback(
 		(e: PointerEvent) => {
-			const ctx = dragRef.current;
 			window.removeEventListener('pointermove', onDragMove);
+			window.removeEventListener('pointerup', onDragSettle);
+			window.removeEventListener('pointercancel', onDragSettle);
+			const ctx = dragRef.current;
 			dragRef.current = null;
 			setDrag(null);
-			if (!ctx) {
+			// pointercancel (OS / gesture takeover): abandon the gesture — no commit, no click.
+			if (!ctx || e.type === 'pointercancel') {
 				return;
 			}
 			const dxDays = Math.round((e.clientX - ctx.startClientX) / ctx.dayWidth);
@@ -199,8 +219,10 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 			if (!patch.startDate && !patch.dueDate) {
 				return;
 			}
+			const token = (overrideTokenRef.current[ctx.cardId] ?? 0) + 1;
+			overrideTokenRef.current[ctx.cardId] = token;
 			setLocalOverrides((prev) => ({ ...prev, [ctx.cardId]: { ...prev[ctx.cardId], ...override } }));
-			mutate({ cardId: ctx.cardId, patch });
+			mutate({ cardId: ctx.cardId, patch, token });
 		},
 		[mutate, onDragMove, onOpenCard],
 	);
@@ -224,12 +246,25 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 				hasDue: row.hasDue,
 				dayWidth,
 				maxMovedPx: 0,
+				rangeStartMs: model.rangeStartMs,
+				rangeEndMs: model.rangeEndMs,
 			};
 			setDrag({ cardId: row.card._id, mode, startMs: row.startMs, endMs: row.endMs });
 			window.addEventListener('pointermove', onDragMove);
-			window.addEventListener('pointerup', onDragEnd, { once: true });
+			window.addEventListener('pointerup', onDragSettle);
+			window.addEventListener('pointercancel', onDragSettle);
 		},
-		[dayWidth, onDragMove, onDragEnd],
+		[dayWidth, model.rangeStartMs, model.rangeEndMs, onDragMove, onDragSettle],
+	);
+
+	// Safety net: if the component unmounts mid-drag, drop the window listeners.
+	useEffect(
+		() => () => {
+			window.removeEventListener('pointermove', onDragMove);
+			window.removeEventListener('pointerup', onDragSettle);
+			window.removeEventListener('pointercancel', onDragSettle);
+		},
+		[onDragMove, onDragSettle],
 	);
 
 	// --- render -------------------------------------------------------------

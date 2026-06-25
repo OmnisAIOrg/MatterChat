@@ -3,7 +3,7 @@ import { Box, Button, IconButton, ProgressBar, TextInput, Throbber } from '@rock
 import { useEndpoint, useMethod, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { KeyboardEvent, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -50,10 +50,14 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 	const [estimateInput, setEstimateInput] = useState(estimateMinutes ? String(estimateMinutes / 60) : '');
 	const [logHours, setLogHours] = useState('');
 	const [logNote, setLogNote] = useState('');
+	// Last estimate we actually committed — guards against a double-commit (Enter then blur
+	// both fire before the prop round-trips) without relying on the async-lagging prop.
+	const lastCommittedRef = useRef(estimateMinutes ?? 0);
 
 	// Keep the estimate field in sync when the card refetches (e.g. edited elsewhere).
 	useEffect(() => {
 		setEstimateInput(estimateMinutes ? String(estimateMinutes / 60) : '');
+		lastCommittedRef.current = estimateMinutes ?? 0;
 	}, [estimateMinutes]);
 
 	const invalidate = (): void => {
@@ -93,9 +97,10 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 
 	const commitEstimate = (): void => {
 		const minutes = hoursToMinutes(estimateInput);
-		if (minutes === estimate) {
+		if (minutes === lastCommittedRef.current) {
 			return;
 		}
+		lastCommittedRef.current = minutes;
 		estimateMutation.mutate(minutes);
 	};
 
