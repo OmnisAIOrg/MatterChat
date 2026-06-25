@@ -60,4 +60,14 @@ jobs:
                 print("    conn: provider=" + d.provider + " status=" + d.status + " org=" + JSON.stringify(d.externalOrgName) + " externalOrgId=" + d.externalOrgId + " user=" + d.userId + " scopes=" + (d.scopes ? d.scopes.length : 0) + " hasCreds=" + (!!d.credentials));
               });
             });
+            print("--- user-id reconciliation (does the connection belong to the logged-in john?) ---");
+            var johns = db.users.find({$or:[{"emails.address":{$regex:/^john@omnisai\.io$/i}},{username:"john"}]},{username:1,"emails.address":1,"services.omnisai":1}).toArray();
+            print("  john user records = " + johns.length + (johns.length>1 ? "  <<< DUPLICATE USERS (the bug)" : ""));
+            johns.forEach(function(u){ print("    john _id=" + u._id + " username=" + u.username + " email=" + ((u.emails&&u.emails[0])?u.emails[0].address:"none") + " omnisaiId=" + ((u.services&&u.services.omnisai)?u.services.omnisai.id:"none")); });
+            var johnIds = johns.map(function(u){ return String(u._id); });
+            colls.forEach(function(c){
+              db[c].find({}).limit(20).forEach(function(d){
+                print("    conn " + d._id + " userId=" + d.userId + " -> " + (johnIds.indexOf(String(d.userId))>=0 ? "MATCHES a john user" : "NO match -> orphaned to a different user record"));
+              });
+            });
           '
