@@ -32,6 +32,7 @@ import { createPushSettings } from './push';
 import { createRateLimitSettings } from './rate';
 import { createRetentionSettings } from './retention-policy';
 import { createSetupWSettings } from './setup-wizard';
+import { createSlackSettings } from './slack';
 import { createSlackBridgeSettings } from './slackbridge';
 import { createSmarshSettings } from './smarsh';
 import { createTeamsSettings } from './teams';
@@ -76,6 +77,7 @@ await Promise.all([
 	createRateLimitSettings(),
 	createRetentionSettings(),
 	createSetupWSettings(),
+	createSlackSettings(),
 	createSlackBridgeSettings(),
 	createSmarshSettings(),
 	createTeamsSettings(),

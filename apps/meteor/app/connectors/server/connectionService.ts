@@ -17,6 +17,7 @@ import { Meteor } from 'meteor/meteor';
 
 import type { IProviderChannel, IProviderConnection, IProviderCredentials } from './ChatProvider';
 import { providerRegistry } from './providerRegistry';
+import { isSlackConfigured } from './providers/slack/config';
 import { isTeamsConfigured } from './providers/teams/config';
 import { decryptCredentials } from './tokenCrypto';
 
@@ -40,14 +41,15 @@ export async function listMyConnections(userId: string): Promise<ClientConnectio
 /**
  * Build the provider's OAuth authorize URL for a user to begin connecting a workspace.
  *
- * TEAMS (real): returns the server-side `/api/apps/teamsbridge/oauth/start` URL. The client just
- * navigates there; the route mints PKCE + state (bound to the signed-in user via the login-token
- * cookie) and redirects on to Microsoft. PKCE stays entirely server-side — the client never sees a
- * verifier. Returns `authorizeUrl: null, implemented: false` when Teams is disabled or no client
- * secret is configured (standalone-safe), so the UI can show a disabled state.
+ * TEAMS (real): returns the server-side `/_teams/oauth/start` URL. The client just navigates there;
+ * the route mints PKCE + state (bound to the signed-in user via the login-token cookie) and redirects
+ * on to Microsoft. PKCE stays entirely server-side — the client never sees a verifier.
  *
- * SLACK: still a stub here (per-user Slack OAuth is a later milestone); workspace-level Slack is
- * surfaced separately.
+ * SLACK (real): returns the server-side `/_slack/oauth/start` URL. Same shape — the route mints state
+ * (bound to the signed-in user) and redirects on to Slack's OAuth v2 authorize with the USER scopes.
+ *
+ * Returns `authorizeUrl: null, implemented: false` when the provider is disabled or no client secret
+ * is configured (standalone-safe), so the UI can show a disabled state.
  */
 export async function getProviderAuthUrl(
 	// Bound to the user by the OAuth route via the login-token cookie; not needed to build the URL.
@@ -65,10 +67,17 @@ export async function getProviderAuthUrl(
 			// Disabled or no client secret pasted yet — signal "not ready" without throwing.
 			return { provider, authorizeUrl: null, implemented: false };
 		}
-		return { provider, authorizeUrl: Meteor.absoluteUrl('api/apps/teamsbridge/oauth/start'), implemented: true };
+		return { provider, authorizeUrl: Meteor.absoluteUrl('_teams/oauth/start'), implemented: true };
 	}
 
-	// TODO(later): per-user Slack OAuth route. Until then, signal "not implemented".
+	if (provider === 'slack') {
+		if (!isSlackConfigured()) {
+			// Disabled or no client secret pasted yet — signal "not ready" without throwing.
+			return { provider, authorizeUrl: null, implemented: false };
+		}
+		return { provider, authorizeUrl: Meteor.absoluteUrl('_slack/oauth/start'), implemented: true };
+	}
+
 	return { provider, authorizeUrl: null, implemented: false };
 }
 

@@ -9,9 +9,9 @@ import AccessibilityShortcut from './AccessibilityShortcut';
 import AppLeftRail from './AppLeftRail';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
+import ExternalChannelsPanel from './ExternalChannelsPanel';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
-import TeamsChannelsPanel from './TeamsChannelsPanel';
 import NavBar from '../../../navbar';
 import Sidebar from '../../../sidebar';
 import NavigationRegion from '../../navigation';
@@ -82,8 +82,8 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 					)}
 					<MainContent>
 						{children}
-						{/* Overlays the main content when the connected-Teams tile is selected; no-op otherwise. */}
-						{!removeSidenav && <TeamsChannelsPanel />}
+						{/* Overlays the main content when a connected external tile (Slack/Teams) is selected; no-op otherwise. */}
+						{!removeSidenav && <ExternalChannelsPanel />}
 					</MainContent>
 				</OrgSwitcherProvider>
 			</Box>

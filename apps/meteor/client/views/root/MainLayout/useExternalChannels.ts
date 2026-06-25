@@ -1,19 +1,24 @@
+import type { ExternalProvider } from '@rocket.chat/core-typings';
 import type { ExternalWorkspaceChannelGroup } from '@rocket.chat/rest-typings';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 
 /**
- * useTeamsChannels — the REAL Microsoft Teams channels for one of the caller's OWN connections.
+ * useExternalChannels — the REAL channels for one of the caller's OWN external-workspace connections,
+ * provider-AGNOSTIC (Slack or Teams).
  *
  * Calls `external-workspaces.channels`, which loads the connection (ownership-scoped), decrypts the
- * stored credentials, and runs the provider's live `listChannels` (GET /me/joinedTeams ->
- * /teams/{id}/channels via Graph). The result is a discriminated envelope: on a Graph/auth/config
- * error the endpoint returns `{ ok:false, error, message }` (NOT swallowed) so we surface the real
- * message here for the panel to show plainly.
+ * stored credentials, and runs the provider's live `listChannels` (Teams: GET /me/joinedTeams ->
+ * /teams/{id}/channels via Graph; Slack: GET conversations.list via the Web API). The result is a
+ * discriminated envelope: on a provider/auth/config error the endpoint returns `{ ok:false, error,
+ * message }` (NOT swallowed) so we surface the real message here for the panel to show plainly.
  *
- * `enabled` gates the fetch so it only runs while the Teams tile is actually selected.
+ * Pass either a `connectionId` (preferred) or the `provider` (the endpoint then uses the user's most
+ * recent connected connection for that provider). `enabled` gates the fetch so it only runs while the
+ * tile is actually selected.
  */
-export const useTeamsChannels = (
+export const useExternalChannels = (
+	provider: ExternalProvider,
 	connectionId: string | undefined,
 	enabled: boolean,
 ): {
@@ -26,10 +31,10 @@ export const useTeamsChannels = (
 	const getChannels = useEndpoint('GET', '/v1/external-workspaces.channels');
 
 	const query = useQuery({
-		queryKey: ['external-workspaces.channels', connectionId ?? 'teams'],
-		queryFn: () => (connectionId ? getChannels({ connectionId }) : getChannels({ provider: 'teams' })),
+		queryKey: ['external-workspaces.channels', provider, connectionId ?? provider],
+		queryFn: () => (connectionId ? getChannels({ connectionId }) : getChannels({ provider })),
 		enabled,
-		// Live Graph data; don't hammer it, but let a manual refetch pull fresh channels.
+		// Live provider data; don't hammer it, but let a manual refetch pull fresh channels.
 		staleTime: 15_000,
 		retry: false,
 	});

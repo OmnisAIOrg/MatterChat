@@ -137,8 +137,8 @@ const TeamsMark = ({ size }: { size: number }): ReactElement => (
 
 /**
  * The connected-Teams tile. Appears only when the user has a connected Teams connection
- * (external-workspaces.list). Selecting it opens the TeamsChannelsPanel, which lists the user's real
- * Microsoft Teams channels pulled live from Graph.
+ * (external-workspaces.list). Selecting it opens the ExternalChannelsPanel, which lists the user's
+ * real Microsoft Teams channels pulled live from Graph.
  */
 const TeamsTile = ({ name, isSelected, onClick }: { name: string; isSelected: boolean; onClick: () => void }): ReactElement => (
 	<Box
@@ -156,6 +156,31 @@ const TeamsTile = ({ name, isSelected, onClick }: { name: string; isSelected: bo
 		}}
 	>
 		<TeamsMark size={22} />
+	</Box>
+);
+
+/**
+ * The connected-Slack tile. Appears only when the user has a connected per-user Slack connection
+ * (external-workspaces.list). Selecting it opens the SAME ExternalChannelsPanel, which lists the
+ * user's real Slack channels pulled live from conversations.list. White tile + the Slack mark so it
+ * reads as Slack at a glance.
+ */
+const SlackTile = ({ name, isSelected, onClick }: { name: string; isSelected: boolean; onClick: () => void }): ReactElement => (
+	<Box
+		is='button'
+		type='button'
+		className={tileClass}
+		onClick={onClick}
+		title={name}
+		aria-label={name}
+		aria-current={isSelected ? 'true' : undefined}
+		style={{
+			backgroundColor: '#ffffff',
+			opacity: isSelected ? 1 : 0.9,
+			boxShadow: isSelected ? '0 0 0 2.5px rgba(255, 255, 255, 0.92)' : undefined,
+		}}
+	>
+		<SlackMark size={20} />
 	</Box>
 );
 
@@ -244,22 +269,25 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 
 const OrgSwitcherRail = (): ReactElement | null => {
 	const { t } = useTranslation();
-	const { orgs, switchOrg, connectSlack, connectTeams, teamsEnabled } = useOrgSwitcher();
+	const { orgs, switchOrg, connectSlack, connectTeams, teamsEnabled, slackEnabled } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
-	// A connected Teams workspace surfaces its OWN tile (per-user, from external-workspaces.list).
-	const { teamsConnection } = useExternalWorkspaces();
+	// Connected external workspaces surface their OWN tiles (per-user, from external-workspaces.list).
+	const { teamsConnection, slackConnection } = useExternalWorkspaces();
 
-	// The "+" tile opens a menu of the workspaces you can connect: Slack (admin deep-link, always) +
-	// Teams (per-user OAuth, only when the connector is enabled in admin — standalone-safe).
+	// The "+" tile opens a menu of the workspaces you can connect: Slack + Teams, each a per-user OAuth
+	// shown only when its connector is enabled in admin (Slack_Enabled / Teams_Enabled) — standalone-safe.
 	const addItems = useMemo<GenericMenuItemProps[]>(() => {
-		const items: GenericMenuItemProps[] = [
-			{
+		const items: GenericMenuItemProps[] = [];
+		if (slackEnabled) {
+			items.push({
 				id: 'connect-slack',
 				icon: 'hash',
 				content: t('Connect_Slack', { defaultValue: 'Connect Slack' }),
-				onClick: (): void => connectSlack(),
-			},
-		];
+				onClick: (): void => {
+					void connectSlack();
+				},
+			});
+		}
 		if (teamsEnabled) {
 			items.push({
 				id: 'connect-teams',
@@ -271,7 +299,7 @@ const OrgSwitcherRail = (): ReactElement | null => {
 			});
 		}
 		return items;
-	}, [t, connectSlack, connectTeams, teamsEnabled]);
+	}, [t, connectSlack, connectTeams, teamsEnabled, slackEnabled]);
 
 	if (!orgs.length) {
 		return null;
@@ -293,6 +321,13 @@ const OrgSwitcherRail = (): ReactElement | null => {
 				{orgs.map((org) => (
 					<OrgTile key={org.id} org={org} isSelected={selectedOrgId === org.id} onClick={(): void => handleSelect(org)} />
 				))}
+				{slackConnection && (
+					<SlackTile
+						name={slackConnection.externalOrgName || t('Slack', { defaultValue: 'Slack' })}
+						isSelected={selectedOrgId === 'slack-connector'}
+						onClick={(): void => setSelectedOrgId('slack-connector')}
+					/>
+				)}
 				{teamsConnection && (
 					<TeamsTile
 						name={teamsConnection.externalOrgName || t('Microsoft_Teams', { defaultValue: 'Microsoft Teams' })}
@@ -300,23 +335,27 @@ const OrgSwitcherRail = (): ReactElement | null => {
 						onClick={(): void => setSelectedOrgId('teams')}
 					/>
 				)}
-				<Box className={dividerClass} />
-				<GenericMenu
-					title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-					items={addItems}
-					placement='right-start'
-					button={
-						<Box
-							is='button'
-							type='button'
-							className={addClass}
+				{addItems.length > 0 && (
+					<>
+						<Box className={dividerClass} />
+						<GenericMenu
 							title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-							aria-label={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-						>
-							+
-						</Box>
-					}
-				/>
+							items={addItems}
+							placement='right-start'
+							button={
+								<Box
+									is='button'
+									type='button'
+									className={addClass}
+									title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
+									aria-label={t('Add_workspace', { defaultValue: 'Add a workspace' })}
+								>
+									+
+								</Box>
+							}
+						/>
+					</>
+				)}
 			</Box>
 		</Box>
 	);

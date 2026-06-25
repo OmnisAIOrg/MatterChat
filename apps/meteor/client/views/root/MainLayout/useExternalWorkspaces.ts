@@ -7,12 +7,18 @@ import { useQuery } from '@tanstack/react-query';
  *
  * Reads `external-workspaces.list` (per-user, no secrets). The org-switcher rail uses this to render
  * a tile for each connected external workspace — e.g. a "Teams" tile once the user has a connected
- * Microsoft Teams connection. Standalone-safe: when nothing is connected the list is empty and no
- * external tiles render.
+ * Microsoft Teams connection, and a "Slack" tile once the user has a connected Slack workspace.
+ * Standalone-safe: when nothing is connected the list is empty and no external tiles render.
+ *
+ * Provider-agnostic: `connectionFor(provider)` returns the best connection for a provider (prefer a
+ * fully-connected one; fall back to any so a consent_required/error connection still surfaces a tile,
+ * and the channels panel explains the state).
  */
 export const useExternalWorkspaces = (): {
 	connections: ExternalWorkspaceClientConnection[];
 	teamsConnection: ExternalWorkspaceClientConnection | undefined;
+	slackConnection: ExternalWorkspaceClientConnection | undefined;
+	connectionFor: (provider: ExternalWorkspaceClientConnection['provider']) => ExternalWorkspaceClientConnection | undefined;
 	isLoading: boolean;
 } => {
 	const listConnections = useEndpoint('GET', '/v1/external-workspaces.list');
@@ -26,10 +32,17 @@ export const useExternalWorkspaces = (): {
 	});
 
 	const connections = data?.connections ?? [];
-	// Prefer a fully-connected Teams connection; fall back to any teams connection so a
-	// consent_required / error connection still surfaces a tile (the panel explains the state).
-	const teamsConnections = connections.filter((c) => c.provider === 'teams');
-	const teamsConnection = teamsConnections.find((c) => c.status === 'connected') ?? teamsConnections[0];
 
-	return { connections, teamsConnection, isLoading };
+	const connectionFor = (provider: ExternalWorkspaceClientConnection['provider']): ExternalWorkspaceClientConnection | undefined => {
+		const forProvider = connections.filter((c) => c.provider === provider);
+		return forProvider.find((c) => c.status === 'connected') ?? forProvider[0];
+	};
+
+	return {
+		connections,
+		teamsConnection: connectionFor('teams'),
+		slackConnection: connectionFor('slack'),
+		connectionFor,
+		isLoading,
+	};
 };
