@@ -70,11 +70,11 @@ export const tokenEndpoint = (c: TeamsConfig): string => `${c.authority}/oauth2/
 
 /**
  * The OAuth redirect URI. MUST match the Entra app registration EXACTLY:
- *   https://matterchat.stg-omnisai.io/api/apps/teamsbridge/oauth/callback
- * Built from the instance Site_Url so prod/staging/dev each produce their own registered URI; the
- * path segment is fixed to the registered value.
+ *   https://matterchat.stg-omnisai.io/_teams/oauth/callback
+ * NOTE: not under `/api/...` — Rocket.Chat's REST/Apps router owns `/api/*` and 404s custom routes
+ * there. Built from the instance Site_Url so prod/staging/dev each produce their own registered URI.
  */
-export const TEAMS_REDIRECT_PATH = 'api/apps/teamsbridge/oauth/callback';
+export const TEAMS_REDIRECT_PATH = '_teams/oauth/callback';
 export const redirectUri = (): string => Meteor.absoluteUrl(TEAMS_REDIRECT_PATH);
 
 /**

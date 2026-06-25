@@ -49,7 +49,9 @@ import {
 	TEAMS_DELEGATED_SCOPES,
 } from './config';
 
-const ROUTE_PREFIX = '/api/apps/teamsbridge/oauth';
+// NOTE: must NOT be under `/api/...` — Rocket.Chat's REST/Apps router owns `/api/*` and shadows
+// custom connect-handlers there (→ 404). Mirror the working `/_omnisai/` OAuth routes.
+const ROUTE_PREFIX = '/_teams/oauth';
 const STATE_COOKIE = 'teams_oauth_state';
 
 // Read-only cookie helper (the vendored ostrio:cookies server class ignores constructor cookie
