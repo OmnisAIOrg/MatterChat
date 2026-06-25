@@ -3,12 +3,29 @@
 
 ---
 
+### 2026-06-24 — Omnis Boards: hand-build the Gantt; do NOT adopt Plane or any third-party Gantt lib
+**Chose:** build the Gantt natively in the existing Timeline view (a pure `ganttModel.ts` + a `GanttChart.tsx` renderer), reusing the card data already there (startDate/dueDate/relations/isMilestone/priority/checklists) and the generic `boards.views.cards` + `boards.cardUpdate` surface.
+**Rejected:** adopting **Plane** (plane.so) wholesale — AGPL-3.0, a second un-owned Django/Postgres app with no legal concept; and dropping in a "free" Gantt library (dhtmlx/SVAR are GPL or paywall critical-path/auto-schedule).
+**Why:** MatterChat's value is that it stays MIT/proprietary and sellable (on RC's MIT core); a copyleft dependency or a second app is the opposite. Hand-building keeps it standalone-safe, themed, and license-clean, and the scheduling logic (the legal moat) stays ours. Cost: we write the bars/arrows/drag ourselves — bounded.
+
+### 2026-06-24 — Subtasks reuse the parent/child relation; resolve children per-id, not from the board-cards cache
+**Chose:** subtasks are ordinary child cards linked by the existing `child` relation (the service auto-mirrors the inverse `parent` edge); the panel resolves each child by id (`useQueries` over `boards.card`).
+**Rejected:** a new "subtask" entity; and deriving children from the `boards.cards` list.
+**Why:** the relation primitive already existed. `boards.cards` caps at `API_Upper_Count_Limit` (100), so deriving children from it silently dropped subtasks on large boards (a multi-agent review caught this). Per-id resolution is correct at any size and — since `getCardForUser` returns archived cards too — keeps the panel count consistent with the board-tile badge.
+
+### 2026-06-24 — Time tracking via REST routes + service fns, additive optional card fields
+**Chose:** an `ITimeEntry` sub-doc + optional `timeEstimateMinutes`/`timeEntries` on `IBoardCard`; `logTime`/`deleteTimeEntry` in the shared service with new REST routes (mirroring the checklist `$push`/`$pull` pattern); the estimate rides the existing `boards.cardUpdate`. Validation at both the ajv and service layers.
+**Rejected:** Meteor methods for the entry mutations (checklists/comments are REST-only in this fork — methods would be inconsistent and need extra `ServerMethods` typing); a separate time-tracking collection.
+**Why:** additive optional fields need no migration (the card collection is schemaless), and REST matches the existing client idiom. Build gotcha (same family as the prod-build note below): the meteor app consumes `core-typings`/`rest-typings` as built `dist`, so new fields/endpoints require rebuilding those two packages before the app's `tsc` sees them.
+
+### 2026-06-24 — Adversarially review my own Boards work before the checkpoint
+**Chose:** run a multi-agent review (5 dimension reviewers → per-finding verification) over the feature diff before opening the PR, and fix every confirmed finding in a second commit.
+**Why:** none of it is browser-verified (the Meteor stack is heavy to boot), so an automated adversarial pass is the strongest correctness gate available pre-merge. It found 11 real bugs — including the >100-card subtask cap and a Gantt drag listener leak — that typecheck and lint alone would never surface.
+
 ### 2026-06-24 — Org auto-provision: service provision-key + IMPORT accounts (not user-token + invite)
 **Chose:** (1) MatterChat authenticates to CentralizedAuth's roster endpoint with a shared **provision key** (`x-provision-key`, or a KeyGate `auth:organizations:read` token) via a new `ProvisionApiAuthGuard` mirroring `EmailApiAuthGuard`. (2) On a firm admin's first OmnisAI login, MatterChat fetches the org roster (new `GET /organizations/:id/members`) and **pre-creates a linked MatterChat account per teammate** (`services.omnisai.id = sub`); their later sign-in adopts the doc.
 **Rejected:** (1) reusing the admin's OIDC access token as a Bearer to the org endpoints — CentralizedAuth's `AuthGuard` is session-cookie based (no `bearer` plugin) and rejects it (LitBox only works because it validates the JWT via JWKS; auth's own endpoints don't). (2) `invite-multiple` — the firm's team are **already** the org's `organization_users`, so it rejects every one as "already a member" (0 invited), and it would need SMTP (staging has none).
 **Why:** the design assumed the existing bulk-invite + user token would "just work"; investigation showed neither does. The provision-key is the same server-to-server model CasePro uses with `CRM_API_KEY` (founder-approved); pre-create is what actually delivers "the whole team is just there," and works without email. Additive on both sides → low blast radius. PRs: MatterChat #11, CentralizedAuth #352.
-
----
 
 ### 2026-06-24 — Cross-firm went LIVE via a verified-identity proxy, hardened after a red-team
 **Chose:** route the browser → CFCS through the MatterChat `/_crossfirm` server proxy that injects the server-verified OmnisAI subject as an unforgeable `x-cfcs-caller`; run CFCS in STRICT mode where a single pre-dispatch identity gateway binds every actor field to the resolved caller (unique-or-fail-closed) and the service refuses to start without a real `CFCS_AUDIT_KEY`.
