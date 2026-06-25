@@ -1,9 +1,14 @@
 # HANDOFF.md — current state (read after CLAUDE.md)
 > Live state for resuming. **"checkpoint matterchat" updates this before a session ends.** Decisions + reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
-**Last updated:** 2026-06-24 · **Branch:** `staging` (the LIVE deploy branch → matterchat.stg-omnisai.io) · plus open PR branch `feature/boards-gantt-timeline` → PR #12
+**Last updated:** 2026-06-25 · **Branch:** `staging` (deploy is now BUILD-ONLY — ArgoCD owns the cluster; see below)
 
-## ⚡ This session (2026-06-24) — Omnis Boards parity (PR #12, base `staging`, NOT merged / NOT browser-verified)
+## 🔴 READ FIRST (2026-06-25) — staging is ArgoCD-owned; deploy is BUILD-ONLY; OmnisAI login works E2E
+- **Staging is deployed by ArgoCD** (app `matterchat-staging`, syncs from repo **`MatterChat-New`** `kubernetes/staging/`, automated+prune+selfHeal — owns Deployment/Service/**Ingress**). THIS repo only BUILDS the image (→ ECR `matterchat:staging-latest`); its `kubernetes/staging/*.yaml` is **DEAD** (ArgoCD reverts it). The GHA deploy (PR #16) is now **build-only** → builds image + `kubectl delete pod` to roll it. So merging to `staging` is **safe again** (it no longer `kubectl apply`s the conflicting manifests that flipped the Ingress to the wrong ALB and 404'd the site). Full story in `DECISIONS.md` (2026-06-25) + memory `matterchat-staging-argocd-truth`.
+- **OmnisAI login works end-to-end.** Fixes: ingress rebound to the frontend ALB; OIDC issuer/clientId seeded as **persisted Mongo settings** (`getConfig` reads settings-first) — survive ArgoCD; Setup Wizard held at `completed`; `verifyIdToken` accepts a missing `iss`/`aud`. **Still fail-soft (production TODO):** Ed25519 signature verify + nonce; CentralizedAuth should emit standard iss/aud/nonce, then re-enable strict.
+- **No local `kubectl`.** Cluster introspection = founder-authorized read-only `matterchat-staging-diag.yml` (`workflow_dispatch` on `develop`). cluster `stg-omnisai-cluster`, ns `staging`.
+
+## ⚡ Prior session (2026-06-24) — Omnis Boards parity (PR #12, merged 2026-06-25)
 Three Trello/Asana parity features on **Omnis Boards**, all generic / **standalone-safe** (work on a plain `general`/`task` board, no CasePro — verified by an 8-agent code map + adversarial standalone check):
 - **True Gantt** in the Timeline view — **hand-built, no third-party Gantt lib** (the free ones are AGPL/GPL or paywall advanced features). Month/week/day axis, bars, milestone diamonds, finish-to-start dependency arrows, progress fill, today line, drag-to-reschedule + edge-resize. Timeline gains a Gantt|List toggle (Gantt default). New: `client/views/boards/views/gantt/{ganttModel.ts,GanttChart.tsx}`.
 - **Nested subtasks** — child cards in the same board+list via the existing `parent`/`child` relation; new `card/SubtasksPanel.tsx` (add/complete/unlink/drill-in) + progress rollup + tile badge. Typed the relations.add/remove + complete REST endpoints (server routes already existed).
