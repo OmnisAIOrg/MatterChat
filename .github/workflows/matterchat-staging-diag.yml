@@ -90,3 +90,29 @@ jobs:
           kubectl describe ingress matterchat -n "${K8S_NAMESPACE}" 2>&1 | tail -60 || true
           echo "===== group.order across all ingresses (conflict check) ====="
           kubectl get ingress -n "${K8S_NAMESPACE}" -o jsonpath='{range .items[*]}{.metadata.name}{"  order="}{.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.order}{"  group="}{.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name}{"  host="}{.spec.rules[0].host}{"\n"}{end}' 2>&1 || true
+
+      - name: ArgoCD app (name/ns, syncPolicy, status, does it own the ingress?)
+        run: |
+          echo "===== find the ArgoCD Application ====="
+          kubectl get applications.argoproj.io -A 2>&1 | grep -i matterchat || echo "no matterchat app via -A"
+          APPNS=$(kubectl get applications.argoproj.io -A 2>/dev/null | grep -i 'matterchat-staging' | awk '{print $1}' | head -1)
+          echo "APP_NAMESPACE=${APPNS:-argocd}"
+          NS="${APPNS:-argocd}"
+          echo "===== syncPolicy (auto? selfHeal? prune?) + status ====="
+          kubectl get application matterchat-staging -n "$NS" -o jsonpath='{"syncPolicy="}{.spec.syncPolicy}{"\nrepoURL="}{.spec.source.repoURL}{"\npath="}{.spec.source.path}{"\nsyncStatus="}{.status.sync.status}{"\nhealth="}{.status.health.status}{"\n"}' 2>&1 || true
+          echo
+          echo "===== resources ArgoCD manages (does it list the Ingress?) ====="
+          kubectl get application matterchat-staging -n "$NS" -o jsonpath='{range .status.resources[*]}{.kind}{"/"}{.name}{" sync="}{.status}{" health="}{.health.status}{"\n"}{end}' 2>&1 | grep -iE "ingress|deployment|service" || true
+
+      - name: Ingress ALB association (which ALB is matterchat actually bound to?)
+        run: |
+          kubectl get ingress matterchat -n "${K8S_NAMESPACE}" -o jsonpath='{"group.name="}{.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.order}{" / "}{.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name}{"\nstatus.LB="}{.status.loadBalancer.ingress[0].hostname}{"\n"}' 2>&1 || true
+
+      - name: Confirm OIDC settings exist in Mongo (my new image registers them)
+        run: |
+          kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
+            ["OmnisAI_OIDC_Enabled","OmnisAI_OIDC_Issuer","OmnisAI_OIDC_Client_Id"].forEach(function(id){
+              var s = db.rocketchat_settings.findOne({_id:id});
+              print(id + " => exists=" + (!!s) + " value=" + (s ? JSON.stringify(s.value) : "MISSING"));
+            });
+          ' 2>&1 || echo "mongo read failed"
