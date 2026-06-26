@@ -24,13 +24,15 @@ export const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 /**
  * Delegated OAuth scopes requested at authorize time. DELEGATED (act as the signed-in user), not a
  * service account — so messages post AS the real human. `chat.spaces.readonly` lists spaces,
- * `chat.messages.readonly` reads messages, `chat.messages.create` posts; `openid email` give us the
- * id_token (we read the email/domain for the workspace name).
+ * `chat.messages.readonly` reads messages, `chat.messages.create` posts, `chat.memberships.readonly`
+ * lists a space's members (powers the "People" directory + names DMs by the other member); `openid
+ * email` give us the id_token (we read the email/domain for the workspace name).
  */
 export const GOOGLE_DELEGATED_SCOPES = [
 	'https://www.googleapis.com/auth/chat.spaces.readonly',
 	'https://www.googleapis.com/auth/chat.messages.readonly',
 	'https://www.googleapis.com/auth/chat.messages.create',
+	'https://www.googleapis.com/auth/chat.memberships.readonly',
 	'openid',
 	'email',
 ];

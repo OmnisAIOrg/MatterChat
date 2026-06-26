@@ -11,12 +11,20 @@
  *                          /_google/oauth/callback route runs) and returns usable credentials.
  *                          DELEGATED scopes; acts AS the signed-in user.
  *   - verifyCredentials  → lists spaces (cheapest authenticated call) to confirm the token works.
- *   - listChannels       → GET /v1/spaces (paged via nextPageToken), each space mapped to
+ *   - listChannels       → GET /v1/spaces (paged via nextPageToken), the SPACE-type spaces mapped to
  *                          IProviderChannel { externalId: space.name, name, isPrivate }.
+ *   - listDirectChats    → GET /v1/spaces, the DIRECT_MESSAGE + GROUP_CHAT spaces mapped to
+ *                          IProviderDirectChat. A DM is named by the OTHER member(s) via
+ *                          GET /v1/{space}/members (chat.memberships.readonly); falls back to the
+ *                          space displayName/id when the membership lookup yields nothing.
+ *   - listMembers        → GET /v1/{space}/members for one space; for the org-wide People roster,
+ *                          aggregate members across all the user's spaces, deduped by user id.
  *   - syncMessages       → GET /v1/{space}/messages?pageSize=50 (paged), each mapped to
- *                          IProviderMessage (author from sender.displayName, text, createdAt).
+ *                          IProviderMessage (author from sender.displayName, text, createdAt). Works
+ *                          for DM-type spaces too — same /v1/{space}/messages path.
  *   - postMessage        → POST /v1/{space}/messages with { text }, AS the signed-in user. Returns
- *                          the created message resource name as the externalId.
+ *                          the created message resource name as the externalId. Works for DM-type
+ *                          spaces too — same /v1/{space}/messages path.
  *
  * WHAT IS A TODO STUB (the realtime milestone):
  *   - subscribe          → Google Chat does not push per-space message events to a generic OAuth
@@ -35,6 +43,8 @@ import type {
 	IProviderChannel,
 	IProviderConnection,
 	IProviderCredentials,
+	IProviderDirectChat,
+	IProviderMember,
 	IProviderMessage,
 	IProviderOAuthInput,
 	IProviderSubscription,
@@ -51,6 +61,7 @@ import {
 } from './google/config';
 import type { GoogleTokens } from './google/googleApi';
 import { googleFetch, googleGetAll } from './google/googleApi';
+import { SystemLogger } from '../../../../server/lib/logger/system';
 
 // Mounting the OAuth routes is a side-effect of importing this provider, so booting the connectors
 // index (which constructs the registry with `new GoogleChatProvider()`) also wires /_google/oauth.
@@ -85,6 +96,52 @@ function toSpaceName(externalId: string): string {
 		throw new Error('google_invalid_channel_id');
 	}
 	return externalId.startsWith('spaces/') ? externalId : `spaces/${externalId}`;
+}
+
+/**
+ * A Google Chat space, in the shape the spaces.list endpoint returns. `spaceType` is the current field
+ * (`SPACE` = named channel/room, `DIRECT_MESSAGE` = 1:1, `GROUP_CHAT` = group DM); `type` is the
+ * legacy field (`ROOM`/`DM`) — we tolerate both. spaces.list does NOT inline members, so a DM is named
+ * via a separate spaces.members.list call (see fetchSpaceMembers).
+ */
+type GoogleSpace = { name?: string; displayName?: string; spaceType?: string; type?: string };
+
+/**
+ * A `User` (a human or app principal) as it appears inside a membership's `member` block. `name` is the
+ * `users/{id}` resource id, `displayName` the human label, `type` is HUMAN vs BOT.
+ */
+type GoogleChatUser = { name?: string; displayName?: string; type?: string };
+
+/**
+ * A space membership, in the shape spaces.members.list returns under the `memberships` field. Human
+ * members carry a `member` (a User); Google-group members carry `groupMember` (which has no per-person
+ * user id) — we only surface `member` people.
+ */
+type GoogleMembership = { name?: string; member?: GoogleChatUser; groupMember?: { name?: string } };
+
+/** Page size for spaces.members.list — members per space are few, one page usually suffices. */
+const MEMBER_PAGE_SIZE = 100;
+
+/**
+ * List a space's HUMAN members via spaces.members.list: GET /v1/{space}/members?pageSize=100 (paged via
+ * nextPageToken, field `memberships`). Returns the `member` User of each membership (group memberships,
+ * which have no per-person id, are dropped). Requires the delegated `chat.memberships.readonly` scope —
+ * a missing-scope/permission failure rides back UNSWALLOWED via googleGetAll (`google_error:...`).
+ */
+async function fetchSpaceMembers(space: string, tokens: GoogleTokens): Promise<GoogleChatUser[]> {
+	const memberships = await googleGetAll<GoogleMembership>(
+		`${CHAT_BASE}/${space}/members?pageSize=${MEMBER_PAGE_SIZE}`,
+		'memberships',
+		tokens,
+	);
+	const users: GoogleChatUser[] = [];
+	for (const m of memberships) {
+		// Only person ("member") memberships carry a user id; skip Google-group ("groupMember") rows.
+		if (m?.member?.name) {
+			users.push(m.member);
+		}
+	}
+	return users;
 }
 
 export class GoogleChatProvider implements IChatProvider {
@@ -179,18 +236,17 @@ export class GoogleChatProvider implements IChatProvider {
 	// ─── discovery ─────────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * List the spaces visible to this connection's user: GET /v1/spaces, paged via nextPageToken,
-	 * mapped to IProviderChannel. The space resource name (`spaces/{id}`) IS the channel id.
-	 * `isPrivate` is derived from spaceType (anything that isn't a named `SPACE` — i.e. a DM or group
-	 * DM — is treated as private).
+	 * List the NAMED-SPACE channels visible to this connection's user: GET /v1/spaces, paged via
+	 * nextPageToken, the `SPACE` (legacy `ROOM`) spaces mapped to IProviderChannel. The space resource
+	 * name (`spaces/{id}`) IS the channel id, passed straight to the messages endpoints. DM-type spaces
+	 * (DIRECT_MESSAGE / GROUP_CHAT) are EXCLUDED here — they surface via listDirectChats instead, so a
+	 * DM never appears both as a "private channel" and as a "Chat".
 	 */
 	async listChannels(connection: IProviderConnection): Promise<IProviderChannel[]> {
 		if (!isGoogleConfigured()) {
 			return notConfigured();
 		}
 		const tokens = tokensFromCredentials(connection.credentials);
-
-		type GoogleSpace = { name?: string; displayName?: string; spaceType?: string; type?: string };
 
 		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
 
@@ -201,14 +257,141 @@ export class GoogleChatProvider implements IChatProvider {
 			}
 			// spaceType is the current field; `type` is the legacy field (ROOM/DM) — tolerate both.
 			const spaceType = space.spaceType || space.type || '';
+			// Channels are named spaces only; DMs/group DMs are listDirectChats' job.
+			if (spaceType !== 'SPACE' && spaceType !== 'ROOM') {
+				continue;
+			}
 			channels.push({
 				// The space resource name is the channel id — passed straight to the messages endpoints.
 				externalId: space.name,
 				name: space.displayName || space.name,
-				isPrivate: spaceType !== 'SPACE' && spaceType !== 'ROOM',
+				// A named SPACE can still be a private/restricted space; without an extra field on the
+				// list payload we treat named spaces as non-private (matches the channels-section intent).
+				isPrivate: false,
 			});
 		}
 		return channels;
+	}
+
+	/**
+	 * List the user's direct chats — 1:1 (DIRECT_MESSAGE) and group DMs (GROUP_CHAT) — for the "Chats"
+	 * section: GET /v1/spaces (the same spaces.list listChannels reads), keeping only the DM-type spaces.
+	 * The `externalId` is the space resource name (addressed via /v1/{space}/messages for read/post, same
+	 * as a channel — syncMessages/postMessage accept it unchanged). `isGroup` is true for GROUP_CHAT.
+	 *
+	 * Naming: a Google DM space has no useful displayName, so we name it by its member(s) via
+	 * spaces.members.list (chat.memberships.readonly), joining the human members' display names. (Google
+	 * Chat memberships do not flag which membership is the signed-in user, so we label by all human
+	 * members rather than excluding self.) When the membership lookup yields nothing usable we fall back
+	 * to the space displayName, then the resource id, so the chat always has a label.
+	 *
+	 * The top-level spaces.list call surfaces Google errors ({error:{code,message,status}}) UNSWALLOWED
+	 * via googleGetAll; a single per-space membership failure is logged + tolerated (the DM still lists,
+	 * named by its fallback label) so one inaccessible space does not blank the whole Chats section.
+	 */
+	async listDirectChats(connection: IProviderConnection): Promise<IProviderDirectChat[]> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+
+		const out: IProviderDirectChat[] = [];
+		for (const space of spaces) {
+			if (!space?.name) {
+				continue;
+			}
+			const spaceType = space.spaceType || space.type || '';
+			// Only DM-type spaces: DIRECT_MESSAGE (1:1) and GROUP_CHAT (group DM). Skip SPACE/ROOM.
+			const isDm = spaceType === 'DIRECT_MESSAGE';
+			const isGroupChat = spaceType === 'GROUP_CHAT';
+			if (!isDm && !isGroupChat) {
+				continue;
+			}
+
+			// Name the DM by its members. spaces.list does not inline members, so look them up per space.
+			let members: GoogleChatUser[] = [];
+			try {
+				members = await fetchSpaceMembers(space.name, tokens);
+			} catch (err) {
+				// A per-space membership read can fail (e.g. a space we can no longer enumerate members of);
+				// don't drop the whole DM list for one space — fall back to the space's own label below.
+				SystemLogger.debug({ msg: 'Google Chat listDirectChats member lookup failed for a space', space: space.name, err: String(err) });
+			}
+
+			const memberNames = members.map((m) => m.displayName).filter((n): n is string => Boolean(n));
+			const memberExternalIds = members.map((m) => m.name).filter((id): id is string => Boolean(id));
+
+			// Prefer the joined member display names (the other people in the DM). Group DMs may also carry a
+			// displayName; fall back to it, then to the resource id, so the chat always has a label.
+			const name = (memberNames.length ? memberNames.join(', ') : '') || space.displayName || space.name;
+
+			out.push({
+				externalId: space.name,
+				name,
+				isGroup: isGroupChat,
+				...(memberExternalIds.length ? { memberExternalIds } : {}),
+			});
+		}
+		return out;
+	}
+
+	/**
+	 * List the org/workspace people for the "People" section by aggregating members across ALL the
+	 * spaces the signed-in user can see: GET /v1/spaces, then GET /v1/{space}/members per space
+	 * (spaces.members.list), deduped by the `users/{id}` resource name. Requires the delegated
+	 * `chat.memberships.readonly` scope. Each human member maps to IProviderMember { externalId: user
+	 * resource name, displayName }. Google Chat memberships do NOT carry an email on the User block, so
+	 * `email` is omitted. Google errors ({error:{code,message,status}}) are surfaced UNSWALLOWED by
+	 * googleGetAll (the spaces.list / first members call); a single later per-space failure is logged
+	 * and skipped so one inaccessible space does not blank the whole roster.
+	 */
+	async listMembers(connection: IProviderConnection): Promise<IProviderMember[]> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+
+		// Dedupe people across spaces by their `users/{id}` resource name (one person is in many spaces).
+		const byUserId = new Map<string, IProviderMember>();
+		let surfacedFirst = false;
+		for (const space of spaces) {
+			if (!space?.name) {
+				continue;
+			}
+			let members: GoogleChatUser[];
+			try {
+				members = await fetchSpaceMembers(space.name, tokens);
+				surfacedFirst = true;
+			} catch (err) {
+				// Surface the FIRST failure unswallowed (likely the chat.memberships.readonly scope not yet
+				// consented) so the caller shows a real error rather than a silently-empty roster. Once we've
+				// read at least one space's members, tolerate a later per-space failure and keep going.
+				if (!surfacedFirst) {
+					throw err;
+				}
+				SystemLogger.debug({ msg: 'Google Chat listMembers member lookup failed for a space', space: space.name, err: String(err) });
+				continue;
+			}
+			for (const m of members) {
+				const externalId = m.name;
+				if (!externalId || byUserId.has(externalId)) {
+					continue;
+				}
+				// Skip non-human principals (Chat apps) from the People roster.
+				if (m.type && m.type !== 'HUMAN') {
+					continue;
+				}
+				byUserId.set(externalId, {
+					externalId,
+					displayName: m.displayName || externalId,
+				});
+			}
+		}
+		return [...byUserId.values()];
 	}
 
 	// ─── sync (read) — REAL ──────────────────────────────────────────────────────────────────────
