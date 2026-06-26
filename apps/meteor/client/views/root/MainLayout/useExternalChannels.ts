@@ -34,6 +34,8 @@ export const useExternalChannels = (
 		enabled: enabled && Boolean(connectionId),
 		// Live provider data; don't hammer it, but let a manual refetch pull fresh channels.
 		staleTime: 15_000,
+		// Poll so unread badges / recency feel live-ish without a manual refetch.
+		refetchInterval: 30_000,
 		retry: false,
 	});
 

@@ -90,6 +90,19 @@ function tokensFromCredentials(credentials: IProviderCredentials): GoogleTokens 
 	};
 }
 
+/**
+ * Convert a space's `lastActiveTime` (RFC-3339 string) to epoch-ms for the contract's optional
+ * `lastActivity` field. Returns undefined when the field is absent or unparseable, so callers can spread
+ * it conditionally (`...(ms !== undefined ? { lastActivity: ms } : {})`) and never emit a NaN.
+ */
+function lastActivityMs(space: GoogleSpace): number | undefined {
+	if (!space?.lastActiveTime) {
+		return undefined;
+	}
+	const ms = Date.parse(space.lastActiveTime);
+	return Number.isNaN(ms) ? undefined : ms;
+}
+
 /** Normalize a space resource name to the `spaces/{id}` form (tolerates a bare id). */
 function toSpaceName(externalId: string): string {
 	if (!externalId) {
@@ -104,13 +117,26 @@ function toSpaceName(externalId: string): string {
  * legacy field (`ROOM`/`DM`) — we tolerate both. spaces.list does NOT inline members, so a DM is named
  * via a separate spaces.members.list call (see fetchSpaceMembers).
  */
-type GoogleSpace = { name?: string; displayName?: string; spaceType?: string; type?: string };
+type GoogleSpace = {
+	name?: string;
+	displayName?: string;
+	spaceType?: string;
+	type?: string;
+	/**
+	 * Timestamp (RFC-3339 string) of the last message in the space. Returned by spaces.list on
+	 * SPACE/GROUP_CHAT/DIRECT_MESSAGE spaces when available; absent on spaces with no activity yet. Used
+	 * (best-effort) to populate the contract's optional `lastActivity` (epoch-ms) for sort/recency.
+	 */
+	lastActiveTime?: string;
+};
 
 /**
  * A `User` (a human or app principal) as it appears inside a membership's `member` block. `name` is the
- * `users/{id}` resource id, `displayName` the human label, `type` is HUMAN vs BOT.
+ * `users/{id}` resource id, `displayName` the human label, `type` is HUMAN vs BOT. The Chat API does NOT
+ * return an avatar/photo on this User block today, so `avatarUrl` is tolerated-if-present but is in
+ * practice always undefined (see the caveat in listMembers/listDirectChats).
  */
-type GoogleChatUser = { name?: string; displayName?: string; type?: string };
+type GoogleChatUser = { name?: string; displayName?: string; type?: string; avatarUrl?: string };
 
 /**
  * A space membership, in the shape spaces.members.list returns under the `memberships` field. Human
@@ -261,6 +287,11 @@ export class GoogleChatProvider implements IChatProvider {
 			if (spaceType !== 'SPACE' && spaceType !== 'ROOM') {
 				continue;
 			}
+			// "Feel-alive" fields (all OPTIONAL on the contract, all best-effort here):
+			//  - lastActivity: from the space's lastActiveTime when present (epoch-ms) — drives recency sort.
+			//  - unreadCount/mentionCount: the Chat REST API does NOT expose per-space unread for an
+			//    app/user token cheaply, so we report 0 (honest; see unreadSummary + the caveats).
+			const lastActivity = lastActivityMs(space);
 			channels.push({
 				// The space resource name is the channel id — passed straight to the messages endpoints.
 				externalId: space.name,
@@ -268,6 +299,9 @@ export class GoogleChatProvider implements IChatProvider {
 				// A named SPACE can still be a private/restricted space; without an extra field on the
 				// list payload we treat named spaces as non-private (matches the channels-section intent).
 				isPrivate: false,
+				unreadCount: 0,
+				mentionCount: 0,
+				...(lastActivity !== undefined ? { lastActivity } : {}),
 			});
 		}
 		return channels;
@@ -327,11 +361,25 @@ export class GoogleChatProvider implements IChatProvider {
 			// displayName; fall back to it, then to the resource id, so the chat always has a label.
 			const name = (memberNames.length ? memberNames.join(', ') : '') || space.displayName || space.name;
 
+			// "Feel-alive" fields (all OPTIONAL, all best-effort):
+			//  - lastActivity: space lastActiveTime → epoch-ms, when present.
+			//  - avatarUrl: the other member's avatar IF the membership User carries one (it does NOT today
+			//    on the Chat API, so this is in practice undefined — see caveats). For a 1:1 we take the
+			//    first human member's avatar; we don't synthesize an avatar for group DMs.
+			//  - presence: the Chat API has NO presence concept, so it's left undefined (see caveats).
+			//  - unreadCount/mentionCount: per-space unread is not exposed cheaply → 0 (honest; see caveats).
+			const lastActivity = lastActivityMs(space);
+			const avatarUrl = !isGroupChat ? members.find((m) => Boolean(m.avatarUrl))?.avatarUrl : undefined;
+
 			out.push({
 				externalId: space.name,
 				name,
 				isGroup: isGroupChat,
 				...(memberExternalIds.length ? { memberExternalIds } : {}),
+				unreadCount: 0,
+				mentionCount: 0,
+				...(lastActivity !== undefined ? { lastActivity } : {}),
+				...(avatarUrl ? { avatarUrl } : {}),
 			});
 		}
 		return out;
@@ -388,6 +436,10 @@ export class GoogleChatProvider implements IChatProvider {
 				byUserId.set(externalId, {
 					externalId,
 					displayName: m.displayName || externalId,
+					// avatarUrl rides through ONLY if the membership User carries one — the Chat API does not
+					// populate a photo on this block today, so in practice this stays undefined (see caveats).
+					...(m.avatarUrl ? { avatarUrl: m.avatarUrl } : {}),
+					// presence: the Chat API has no presence concept — left undefined (see caveats).
 				});
 			}
 		}
@@ -523,5 +575,30 @@ export class GoogleChatProvider implements IChatProvider {
 			throw new Error('google_post_no_message_id');
 		}
 		return { externalId: created.name };
+	}
+
+	// ─── notifications / "feel-alive" — best-effort, HONEST ───────────────────────────────────────
+
+	/**
+	 * Mark a channel OR direct chat read in the external workspace. `externalId` is a `spaces/{id}`
+	 * resource name (channel from listChannels OR direct chat from listDirectChats — both are spaces, so
+	 * no detection branch is needed). NO-OP today: the Google Chat REST API has no cheap per-space
+	 * mark-read for an app/user OAuth token (read state lives behind chat.users.readstate, which is not in
+	 * our delegated scope set), so we resolve void without a call. The mark-read endpoint still acks ok —
+	 * the service layer treats a no-op markRead as success. (See caveats.)
+	 */
+	async markRead(_connection: IProviderConnection, _externalId: string): Promise<void> {
+		// Intentionally a no-op: no cheap Chat REST mark-read for a delegated OAuth token. Best-effort
+		// contract satisfied; the caller's unread badge is driven by unreadSummary (which is honest 0/0).
+	}
+
+	/**
+	 * Roll up this connection's total unread + mention counts. HONEST 0/0: the Google Chat REST API does
+	 * not expose an unread/mention aggregate for an app/user OAuth token cheaply (no equivalent of Slack's
+	 * counts or a per-space unread field on spaces.list), so rather than guess we report zero. Returns
+	 * plain integers per the contract. (See caveats — this is a known Chat API limitation, not a stub bug.)
+	 */
+	async unreadSummary(_connection: IProviderConnection): Promise<{ unreadCount: number; mentionCount: number }> {
+		return { unreadCount: 0, mentionCount: 0 };
 	}
 }

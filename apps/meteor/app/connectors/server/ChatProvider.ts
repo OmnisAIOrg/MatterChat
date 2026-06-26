@@ -39,6 +39,12 @@ export interface IProviderChannel {
 	topic?: string;
 	/** Provider-native ids of the channel members, when cheaply available. */
 	memberExternalIds?: string[];
+	/** Unread message count for this channel, when the provider reports it ("feel-alive" badge). */
+	unreadCount?: number;
+	/** Count of messages that @-mention the connection's user, when the provider reports it. */
+	mentionCount?: number;
+	/** Epoch-ms of the last activity in this channel, when the provider reports it (sort/recency). */
+	lastActivity?: number;
 }
 
 /** A user in the external workspace, in the provider's own vocabulary. */
@@ -66,6 +72,16 @@ export interface IProviderDirectChat {
 	isGroup: boolean;
 	/** Provider-native ids of the chat's members, when cheaply available. */
 	memberExternalIds?: string[];
+	/** Unread message count for this chat, when the provider reports it ("feel-alive" badge). */
+	unreadCount?: number;
+	/** Count of messages that @-mention the connection's user, when the provider reports it. */
+	mentionCount?: number;
+	/** Epoch-ms of the last activity in this chat, when the provider reports it (sort/recency). */
+	lastActivity?: number;
+	/** The other member's (1:1) / chat's avatar URL, when the provider exposes it. */
+	avatarUrl?: string;
+	/** The other member's presence (1:1), when the provider exposes it. */
+	presence?: 'active' | 'away' | 'dnd' | 'offline';
 }
 
 /**
@@ -79,6 +95,10 @@ export interface IProviderMember {
 	displayName: string;
 	/** Email (Teams/Google) or handle (Slack `@…`), when the provider exposes it. */
 	email?: string;
+	/** Profile avatar URL, when the provider exposes it. */
+	avatarUrl?: string;
+	/** Presence/status, when the provider exposes it. */
+	presence?: 'active' | 'away' | 'dnd' | 'offline';
 }
 
 /** A reference to a file/attachment carried by an external message. */
@@ -258,6 +278,27 @@ export interface IChatProvider {
 	 * `listDirectChats`); the provider detects which and posts to the right endpoint.
 	 */
 	postMessage(connection: IProviderConnection, channelExternalId: string, message: IOutboundMessage): Promise<{ externalId: string }>;
+
+	// ─── notifications / "feel-alive" ──────────────────────────────────────────────────────────
+
+	/**
+	 * Mark a channel OR direct chat read in the external workspace (clears its unread badge there). The
+	 * id may be either a channel `externalId` (from `listChannels`) or a direct chat `externalId` (from
+	 * `listDirectChats`); the provider detects which and addresses the right endpoint.
+	 *
+	 * Optional in the contract: a provider with no read-state concept may omit it (callers treat a
+	 * missing implementation as a best-effort no-op — the mark-read endpoint still returns ok).
+	 */
+	markRead?(connection: IProviderConnection, externalId: string): Promise<void>;
+
+	/**
+	 * Roll up this connection's total unread + mention counts for the rail "feel-alive" badge — one
+	 * cheap aggregate call rather than summing per-channel.
+	 *
+	 * Optional in the contract: a provider that can't report unreads may omit it (callers default that
+	 * connection to 0/0 rather than failing the whole summary).
+	 */
+	unreadSummary?(connection: IProviderConnection): Promise<{ unreadCount: number; mentionCount: number }>;
 }
 
 /**

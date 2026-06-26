@@ -35,7 +35,9 @@ import {
 	listMyDirectChats,
 	listMyMembers,
 	listMyMessages,
+	markMyRead,
 	sendMyMessage,
+	unreadSummaryForMyConnections,
 } from '../../../connectors/server/connectionService';
 import { API } from '../api';
 
@@ -233,6 +235,49 @@ API.v1.addRoute(
 				return API.v1.failure('connection-not-found');
 			}
 			return API.v1.success({ disconnected: true });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.unreadSummary',
+	{ authRequired: true },
+	{
+		async get() {
+			// Own-connections-only (enumerated inside unreadSummaryForMyConnections via findByUserId).
+			// Best-effort per connection: a provider that can't report unreads is defaulted to 0/0, never
+			// failing the whole call — so this always rides back as { ok:true, summaries }.
+			const summaries = await unreadSummaryForMyConnections(this.userId);
+			return API.v1.success({ ok: true as const, summaries });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.markRead',
+	{ authRequired: true },
+	{
+		async post() {
+			const { connectionId, externalId } = this.bodyParams as { connectionId?: string; externalId?: string };
+
+			if (!connectionId || typeof connectionId !== 'string') {
+				return API.v1.failure('connectionId is required');
+			}
+			if (!externalId || typeof externalId !== 'string') {
+				return API.v1.failure('externalId is required');
+			}
+
+			// Own-connections-only (enforced inside markMyRead via ownership-scoped model methods).
+			const result = await markMyRead(this.userId, { connectionId, externalId });
+
+			// A real auth/ownership failure is NOT swallowed: it rides back inside a 200 envelope so the
+			// panel can render it plainly (the RC REST client hides 4xx bodies — see api-client send()).
+			if ('error' in result) {
+				return API.v1.success({ ok: false as const, error: result.error, message: result.message, status: result.status });
+			}
+
+			// Best-effort: a provider without read-state support still acks ok (markMyRead no-ops it).
+			return API.v1.success({ ok: true as const });
 		},
 	},
 );
