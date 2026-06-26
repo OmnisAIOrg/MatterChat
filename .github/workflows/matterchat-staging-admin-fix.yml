@@ -87,9 +87,9 @@ jobs:
         run: |
           POD=$(kubectl get pod -n "${K8S_NAMESPACE}" -l app=matterchat -o jsonpath='{.items[0].metadata.name}')
           echo "pod=$POD"
-          echo "===== does the SERVER bundle contain the new message endpoints (this deploy)? ====="
-          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- sendMessage route (NEW) ---'; grep -rl 'external-workspaces.sendMessage' /app/bundle/programs/server 2>/dev/null | head -2; echo '--- messages route (NEW) ---'; grep -rl 'external-workspaces.messages' /app/bundle/programs/server 2>/dev/null | head -2" 2>&1 || echo "server grep failed"
-          echo "===== does the CLIENT bundle contain the V2 workspace code (error boundary + lazy Teams chunks)? ====="
-          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- TeamsErrorBoundary (v2 marker) ---'; ls /app/bundle/programs/web.browser/dynamic/client/views/root/MainLayout/ 2>/dev/null | grep -iE 'TeamsChannelView|TeamsSidebar|TeamsErrorBoundary'; echo '--- TeamsErrorBoundary in bundle ---'; grep -rlE 'TeamsErrorBoundary|TeamsChannelView' /app/bundle/programs/web.browser 2>/dev/null | head -3; echo '--- old overlay TeamsChannelsPanel should be GONE ---'; grep -rl 'TeamsChannelsPanel' /app/bundle/programs/web.browser/dynamic 2>/dev/null | head -2 || echo '(none - good)'" 2>&1 || echo "client grep failed"
+          echo "===== does the SERVER bundle contain the COMPLETE-connectors endpoints (this deploy)? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- directChats route (NEW) ---'; grep -rl 'external-workspaces.directChats' /app/bundle/programs/server 2>/dev/null | head -2; echo '--- members route (NEW) ---'; grep -rl 'external-workspaces.members' /app/bundle/programs/server 2>/dev/null | head -2; echo '--- slack provider real ---'; grep -rl 'oauth.v2.access' /app/bundle/programs/server 2>/dev/null | head -2" 2>&1 || echo "server grep failed"
+          echo "===== does the CLIENT bundle contain the complete-connectors UI (Chats/People hooks, lazy)? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- new client chunks ---'; ls /app/bundle/programs/web.browser/dynamic/client/views/root/MainLayout/ 2>/dev/null | grep -iE 'ExternalSidebar|ExternalChannelView|ExternalErrorBoundary'; echo '--- directChats/members hooks in bundle ---'; grep -rlE 'external-workspaces.directChats|external-workspaces.members' /app/bundle/programs/web.browser 2>/dev/null | head -3" 2>&1 || echo "client grep failed"
           echo "===== image the pod is actually running ====="
           kubectl get pod -n "${K8S_NAMESPACE}" "$POD" -o jsonpath='{.spec.containers[0].image}{"\n"}' 2>&1 || true
