@@ -16,7 +16,7 @@ import { useMemo } from 'react';
  * their CasePro matter snapshots (single board.cards fetch — no extra endpoints).
  */
 
-const BRAND_RED = '#e1140a';
+const BRAND_GREEN = '#1B7A2E';
 
 const timeGreeting = (): string => {
 	const h = new Date().getHours();
@@ -273,7 +273,7 @@ const MyDayHomePage = () => {
 											</Box>
 										</Box>
 										<Box>
-											<Box fontScale='h2' style={{ color: BRAND_RED }}>
+											<Box fontScale='h2' style={{ color: BRAND_GREEN }}>
 												{derived.solRisk}
 											</Box>
 											<Box fontScale='micro' color='hint'>
@@ -286,7 +286,7 @@ const MyDayHomePage = () => {
 								<SectionCard icon='bell' title='Activity'>
 									<Box
 										fontScale='p2'
-										style={{ color: BRAND_RED, cursor: 'pointer' }}
+										style={{ color: BRAND_GREEN, cursor: 'pointer' }}
 										onClick={() => router.navigate('/boards/inbox')}
 									>
 										Open your activity inbox →
