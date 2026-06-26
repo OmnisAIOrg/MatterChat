@@ -25,6 +25,7 @@ import type {
 } from './ChatProvider';
 import { providerRegistry } from './providerRegistry';
 import { isGoogleConfigured } from './providers/google/config';
+import { isSlackConfigured } from './providers/slack/config';
 import { isTeamsConfigured } from './providers/teams/config';
 import { decryptCredentials } from './tokenCrypto';
 
@@ -54,8 +55,10 @@ export async function listMyConnections(userId: string): Promise<ClientConnectio
  * verifier. Returns `authorizeUrl: null, implemented: false` when Teams is disabled or no client
  * secret is configured (standalone-safe), so the UI can show a disabled state.
  *
- * SLACK: still a stub here (per-user Slack OAuth is a later milestone); workspace-level Slack is
- * surfaced separately.
+ * GOOGLE / SLACK (real): return the server-side `/_google/oauth/start` / `/_slack/oauth/start` URL.
+ * Same pattern as Teams — the route binds the flow to the signed-in user and redirects on to the
+ * provider. Returns `authorizeUrl: null, implemented: false` when the connector is disabled or no
+ * client secret is configured (standalone-safe), so the UI can show a disabled state.
  */
 export async function getProviderAuthUrl(
 	// Bound to the user by the OAuth route via the login-token cookie; not needed to build the URL.
@@ -85,7 +88,15 @@ export async function getProviderAuthUrl(
 		return { provider, authorizeUrl: Meteor.absoluteUrl('_google/oauth/start'), implemented: true };
 	}
 
-	// TODO(later): per-user Slack OAuth route. Until then, signal "not implemented".
+	if (provider === 'slack') {
+		if (!isSlackConfigured()) {
+			// Disabled or no client secret pasted yet — signal "not ready" without throwing.
+			return { provider, authorizeUrl: null, implemented: false };
+		}
+		// The route mounts at /_slack/oauth (NOT under /api — RC's REST router shadows /api/*).
+		return { provider, authorizeUrl: Meteor.absoluteUrl('_slack/oauth/start'), implemented: true };
+	}
+
 	return { provider, authorizeUrl: null, implemented: false };
 }
 

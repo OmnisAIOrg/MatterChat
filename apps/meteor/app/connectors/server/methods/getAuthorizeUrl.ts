@@ -21,6 +21,7 @@ import type { ServerMethods } from '@rocket.chat/ddp-client';
 import { Meteor } from 'meteor/meteor';
 
 import { buildGoogleAuthorizeUrl } from '../providers/google/routes';
+import { buildSlackAuthorizeUrl } from '../providers/slack/routes';
 import { buildTeamsAuthorizeUrl } from '../providers/teams/routes';
 
 declare module '@rocket.chat/ddp-client' {
@@ -68,8 +69,22 @@ Meteor.methods<ServerMethods>({
 			}
 		}
 
-		// Per-user Slack OAuth (and any other provider) is a later milestone; the rail surfaces Slack
-		// via the SlackBridge admin deep-link instead.
+		if (provider === 'slack') {
+			try {
+				const { authorizeUrl } = await buildSlackAuthorizeUrl(this.userId);
+				return authorizeUrl;
+			} catch (err) {
+				// Surface the standalone-safe gate as a clean, client-readable error so the UI can tell
+				// the admin to paste the secret + enable Slack.
+				if (err instanceof Error && err.message === 'slack-not-configured') {
+					throw new Meteor.Error('slack-not-configured', 'Slack is not enabled or configured', {
+						method: 'connectors:getAuthorizeUrl',
+					});
+				}
+				throw err;
+			}
+		}
+
 		throw new Meteor.Error('provider-not-implemented', `No authorize URL for provider '${provider}'`, {
 			method: 'connectors:getAuthorizeUrl',
 		});
