@@ -36,6 +36,7 @@ export const useExternalWorkspaces = (): {
 	/** One renderable tile per provider connection (deduped: the best connection per provider). */
 	externalConnections: ConnectedExternalWorkspace[];
 	getConnectionById: (id: string | undefined) => ConnectedExternalWorkspace | undefined;
+	slackConnection: ConnectedExternalWorkspace | undefined;
 	teamsConnection: ConnectedExternalWorkspace | undefined;
 	googleConnection: ConnectedExternalWorkspace | undefined;
 	isLoading: boolean;
@@ -52,15 +53,21 @@ export const useExternalWorkspaces = (): {
 
 	const connections: ConnectedExternalWorkspace[] = data?.connections ?? [];
 
+	const slackConnection = pickConnection(connections, 'slack');
 	const teamsConnection = pickConnection(connections, 'teams');
 	const googleConnection = pickConnection(connections, 'google');
 
-	// The tiles to render: the best connection per external provider, in a stable order (Teams first,
-	// then Google) so the rail is deterministic. Slack is surfaced separately (admin SlackBridge).
-	const externalConnections = [teamsConnection, googleConnection].filter((c): c is ConnectedExternalWorkspace => Boolean(c));
+	// The tiles to render: the best connection per external provider, in a stable order (Slack, Teams,
+	// then Google) so the rail is deterministic. This is the PER-USER connector Slack (a record in
+	// external_workspace_connections from getAuthorizeUrl('slack')) — distinct from the workspace-level
+	// admin SlackBridge tile in useOrgSwitcher, which has no such connection record, so the two never
+	// double up.
+	const externalConnections = [slackConnection, teamsConnection, googleConnection].filter((c): c is ConnectedExternalWorkspace =>
+		Boolean(c),
+	);
 
 	const getConnectionById = (id: string | undefined): ConnectedExternalWorkspace | undefined =>
 		id ? connections.find((c) => c._id === id) : undefined;
 
-	return { connections, externalConnections, getConnectionById, teamsConnection, googleConnection, isLoading };
+	return { connections, externalConnections, getConnectionById, slackConnection, teamsConnection, googleConnection, isLoading };
 };

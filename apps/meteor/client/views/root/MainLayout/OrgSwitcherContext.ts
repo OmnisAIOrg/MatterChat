@@ -1,17 +1,30 @@
 import { createContext, useContext } from 'react';
 
 /**
- * Identity of an external channel as the channels list provides it — passed straight through to the
- * read/post endpoints. `externalId` is the provider-native channel/space id (Teams: the
- * `teamId|channelId` composite; Google Chat: the `spaces/{id}` resource name) and is the ONLY value
- * the backend needs; the rest is for rendering the open channel's header. Provider-agnostic: the same
- * shape carries a Teams channel OR a Google Chat space.
+ * What KIND of external conversation is open. The read/post endpoints are identical for all three (the
+ * provider detects a channel id vs a direct-chat id from the token itself), so this is purely for
+ * rendering the right header icon/label — never branched on for data.
+ *  - `channel` — a channel/space from the "Channels/Spaces" section.
+ *  - `chat`    — a 1:1 or group DM from the "Chats" section.
+ *  - `dm`      — a DM started from the "People" section (a person, not a pre-existing chat).
+ */
+export type SelectedExternalChannelKind = 'channel' | 'chat' | 'dm';
+
+/**
+ * Identity of an open external conversation as the lists provide it — passed straight through to the
+ * read/post endpoints. `externalId` is the provider-native channel/space/chat id (Teams: the
+ * `teamId|channelId` composite for a channel, a bare chat id for a DM; Google Chat: the `spaces/{id}`
+ * resource name) and is the ONLY value the backend needs; the rest is for rendering the open
+ * conversation's header. Provider-agnostic: the same shape carries a Teams channel, a Google Chat
+ * space OR a direct chat.
  */
 export type SelectedExternalChannel = {
 	externalId: string;
 	name: string;
 	teamName: string;
 	isPrivate: boolean;
+	/** Optional render hint (channel vs chat vs DM); defaults to a channel when absent. */
+	kind?: SelectedExternalChannelKind;
 };
 
 export type OrgSwitcherContextValue = {

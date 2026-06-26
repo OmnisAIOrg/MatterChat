@@ -24,6 +24,7 @@ export type ExternalProviderBranding = {
 
 const TEAMS_PURPLE = '#4B53BC';
 const GOOGLE_CHAT_GREEN = '#00897B';
+const SLACK_AUBERGINE = '#4A154B';
 
 // The Microsoft Teams mark (on the purple tile). Rendered, never recoloured.
 const TeamsMark = ({ size }: { size: number }): ReactElement => (
@@ -51,6 +52,23 @@ const GoogleChatMark = ({ size }: { size: number }): ReactElement => (
 	</svg>
 );
 
+// A Slack-style four-rhombus mark (clean-room: the four rounded bars, not Slack's exact logo file).
+// Rendered on the aubergine tile; the four colours read as "Slack" at a glance.
+const SlackMark = ({ size }: { size: number }): ReactElement => (
+	<svg width={size} height={size} viewBox='0 0 24 24' aria-hidden focusable='false'>
+		<rect x='9' y='2.5' width='2.8' height='19' rx='1.4' fill='#36C5F0' />
+		<rect x='12.2' y='2.5' width='2.8' height='19' rx='1.4' fill='#2EB67D' />
+		<rect x='2.5' y='9' width='19' height='2.8' rx='1.4' fill='#ECB22E' />
+		<rect x='2.5' y='12.2' width='19' height='2.8' rx='1.4' fill='#E01E5A' />
+	</svg>
+);
+
+const SLACK_BRANDING: ExternalProviderBranding = {
+	color: SLACK_AUBERGINE,
+	defaultName: 'Slack',
+	Mark: SlackMark,
+};
+
 const TEAMS_BRANDING: ExternalProviderBranding = {
 	color: TEAMS_PURPLE,
 	defaultName: 'Microsoft Teams',
@@ -75,6 +93,7 @@ export const EXTERNAL_PROVIDER_FALLBACK: ExternalProviderBranding = {
 };
 
 const BRANDING_BY_PROVIDER: Partial<Record<ExternalProvider, ExternalProviderBranding>> = {
+	slack: SLACK_BRANDING,
 	teams: TEAMS_BRANDING,
 	google: GOOGLE_BRANDING,
 };

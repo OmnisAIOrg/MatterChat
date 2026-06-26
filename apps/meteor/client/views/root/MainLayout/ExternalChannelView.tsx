@@ -158,6 +158,13 @@ const ExternalChannelView = (): ReactElement => {
 	}, [messages]);
 
 	const channelName = selectedExternalChannel?.name ?? '';
+	// A channel reads with a leading #; a chat/DM is a person/group, so no hash. Drives both the header
+	// icon and the composer placeholder (provider-agnostic — just a render hint, never a data branch).
+	const isDirect = selectedExternalChannel?.kind === 'chat' || selectedExternalChannel?.kind === 'dm';
+	const headerIcon = isDirect ? 'balloons' : selectedExternalChannel?.isPrivate ? 'lock' : 'hash';
+	const composerPlaceholder = isDirect
+		? t('Message_person', { defaultValue: 'Message {{name}}', name: channelName })
+		: t('Message_channel', { defaultValue: 'Message #{{name}}', name: channelName });
 
 	const handleSend = async (): Promise<void> => {
 		const text = draft.trim();
@@ -231,7 +238,7 @@ const ExternalChannelView = (): ReactElement => {
 	return (
 		<Box className={rootClass} role='main' aria-label={t('External_channel_X', { defaultValue: '{{name}} channel', name: channelName })}>
 			<Box className={headerClass}>
-				<Icon name={selectedExternalChannel.isPrivate ? 'lock' : 'hash'} size='x20' color='hint' />
+				<Icon name={headerIcon} size='x20' color='hint' />
 				<Box is='span' fontWeight={700} fontSize={16} withTruncatedText>
 					{channelName}
 				</Box>
@@ -326,8 +333,8 @@ const ExternalChannelView = (): ReactElement => {
 						style={textareaStyle}
 						rows={1}
 						value={draft}
-						placeholder={t('Message_channel', { defaultValue: 'Message #{{name}}', name: channelName })}
-						aria-label={t('Message_channel', { defaultValue: 'Message #{{name}}', name: channelName })}
+						placeholder={composerPlaceholder}
+						aria-label={composerPlaceholder}
 						disabled={isSending}
 						onChange={(e: ChangeEvent<HTMLTextAreaElement>): void => setDraft(e.target.value)}
 						onKeyDown={onComposerKeyDown}
