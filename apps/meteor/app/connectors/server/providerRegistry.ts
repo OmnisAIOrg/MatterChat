@@ -6,8 +6,8 @@
  * against the IChatProvider interface — they NEVER `new SlackProvider()` or branch on provider.
  * Adding a provider later = register one implementation here; no caller changes.
  *
- * Both providers are registered as STUBS today (each throws `not_implemented`); the real
- * implementations drop in behind these same keys.
+ * Slack, Teams, and Google Chat are all registered with REAL implementations behind these keys;
+ * future providers drop in the same way (register one implementation here, no caller changes).
  *
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §1.2.
  */
