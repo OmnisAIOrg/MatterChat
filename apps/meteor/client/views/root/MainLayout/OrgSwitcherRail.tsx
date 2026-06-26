@@ -2,6 +2,7 @@ import { css } from '@rocket.chat/css-in-js';
 import { Box } from '@rocket.chat/fuselage';
 import { GenericMenu } from '@rocket.chat/ui-client';
 import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
+import { useCurrentRoutePath, useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -249,12 +250,28 @@ const OrgSwitcherRail = (): ReactElement | null => {
 	const { t } = useTranslation();
 	const { orgs, switchOrg, connectSlack, connectTeams, connectGoogle, teamsEnabled, googleEnabled } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
+	const router = useRouter();
+	const currentRoutePath = useCurrentRoutePath();
 	// Each connected external workspace surfaces its OWN tile (per-user, from external-workspaces.list)
-	// — Teams and/or Google Chat. Provider-agnostic: the rail maps over the list, it doesn't branch.
+	// — Slack and/or Teams and/or Google Chat. Provider-agnostic: the rail maps over the list, it
+	// doesn't branch on which provider.
 	const { externalConnections } = useExternalWorkspaces();
 
 	// The currently-selected external connection id (if any), parsed from the `ext:<id>` sentinel.
 	const selectedExternalId = externalConnectionIdFromSelection(selectedOrgId);
+
+	// Selecting an external tile enters workspace MODE. If we're currently parked on a native content
+	// route (Boards/LitBox/Admin), that route would otherwise render its real page (ShellBody keeps
+	// those functional in external mode) and the workspace chat view wouldn't show. Bounce to /home so
+	// the just-selected workspace's channels/chats/people are what the user lands on.
+	const selectExternal = (connectionId: string): void => {
+		setSelectedOrgId(externalSelectionId(connectionId));
+		const onNativeContentRoute =
+			currentRoutePath?.startsWith('/boards') || currentRoutePath?.startsWith('/litbox') || currentRoutePath?.startsWith('/admin');
+		if (onNativeContentRoute) {
+			router.navigate('/home');
+		}
+	};
 
 	// The "+" tile opens a menu of the workspaces you can connect: Slack (admin deep-link, always) +
 	// Teams + Google Chat (per-user OAuth, each shown only when its connector is enabled in admin —
@@ -265,7 +282,9 @@ const OrgSwitcherRail = (): ReactElement | null => {
 				id: 'connect-slack',
 				icon: 'hash',
 				content: t('Connect_Slack', { defaultValue: 'Connect Slack' }),
-				onClick: (): void => connectSlack(),
+				onClick: (): void => {
+					void connectSlack();
+				},
 			},
 		];
 		if (teamsEnabled) {
@@ -316,7 +335,7 @@ const OrgSwitcherRail = (): ReactElement | null => {
 						key={connection._id}
 						connection={connection}
 						isSelected={selectedExternalId === connection._id}
-						onClick={(): void => setSelectedOrgId(externalSelectionId(connection._id))}
+						onClick={(): void => selectExternal(connection._id)}
 					/>
 				))}
 				<Box className={dividerClass} />

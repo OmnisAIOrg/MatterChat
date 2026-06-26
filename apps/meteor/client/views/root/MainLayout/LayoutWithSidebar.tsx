@@ -43,13 +43,28 @@ const ExternalSidebarRegion = (): ReactElement => (
 );
 
 /**
+ * Routes whose content stays NATIVE even while an external workspace is selected. Boards + LitBox (and
+ * Admin) remain fully functional in external mode: clicking them in the slim rail routes here and
+ * RENDERS the real page — the external channel-view must NOT hijack these routes, it only occupies the
+ * content on the chat view. So when an external tile is selected AND the current route is one of these,
+ * we render the routed `children` (not ExternalChannelView). The external sidebar is suppressed on
+ * these routes (Boards/LitBox carry their own layout), matching native behavior.
+ */
+const isNativeContentRoute = (routePath: string | undefined): boolean =>
+	Boolean(routePath && (routePath.startsWith('/boards') || routePath.startsWith('/litbox') || routePath.startsWith('/admin')));
+
+/**
  * The inner shell, mounted INSIDE OrgSwitcherProvider so it can read the selected workspace. When a
- * connected EXTERNAL workspace is selected (Teams OR Google Chat — selectedOrgId === `ext:<id>`) we
- * render a self-contained workspace MODE: that connection's channel/space list IS the sidebar and the
- * open channel (messages + composer) IS the main content. The MatterChat sidebar + room are not
- * mounted at all — this resolves the founder's "shouldn't be able to click any tab and go back to
- * MatterChat" gripe (no half-overlay; the M tile / Back is the way back). The branch is PROVIDER-
- * AGNOSTIC: the same two lazy components render whichever provider the selected connection is.
+ * connected EXTERNAL workspace is selected (Teams / Google Chat / Slack — selectedOrgId === `ext:<id>`)
+ * AND the current route is the chat view, we render a self-contained workspace MODE: that connection's
+ * channel/chat/people list IS the sidebar and the open channel/chat (messages + composer) IS the main
+ * content. The MatterChat sidebar + room are not mounted at all — this resolves the founder's
+ * "shouldn't be able to click any tab and go back to MatterChat" gripe (no half-overlay; the M tile /
+ * Back is the way back). The branch is PROVIDER-AGNOSTIC: the same two lazy components render whichever
+ * provider the selected connection is.
+ *
+ * Boards/LitBox/Admin stay functional in external mode: on those routes we render the routed `children`
+ * (the real page) instead of the external channel-view, so the slim rail's Boards + LitBox tiles work.
  *
  * Crash-isolation in workspace mode:
  *  - The OrgSwitcherRail + AppLeftRail render OUTSIDE the boundary, so the way back to MatterChat (the
@@ -58,23 +73,40 @@ const ExternalSidebarRegion = (): ReactElement => (
  *    contained "Couldn't load this workspace" panel and NEVER reaches the app root.
  *  - Suspense covers the lazy chunk load with a Throbber.
  */
-const ShellBody = ({ children, removeSidenav }: { children: ReactNode; removeSidenav: boolean }): ReactElement => {
+const ShellBody = ({
+	children,
+	removeSidenav,
+	currentRoutePath,
+}: {
+	children: ReactNode;
+	removeSidenav: boolean;
+	currentRoutePath: string | undefined;
+}): ReactElement => {
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
-	const inExternalMode = !removeSidenav && isExternalSelection(selectedOrgId);
+	const externalSelected = !removeSidenav && isExternalSelection(selectedOrgId);
+	// On a native content route (Boards/LitBox/Admin) we keep the slim rail but render the routed page,
+	// NOT the external channel-view — so those tiles stay fully functional inside the workspace.
+	const showExternalContent = externalSelected && !isNativeContentRoute(currentRoutePath);
 
-	if (inExternalMode) {
+	if (externalSelected) {
 		return (
 			<>
 				<OrgSwitcherRail />
 				<AppLeftRail />
-				<ExternalErrorBoundary onBack={(): void => setSelectedOrgId('current')}>
-					<Suspense fallback={<Throbber />}>
-						<ExternalSidebarRegion />
-						<MainContent>
-							<ExternalChannelView />
-						</MainContent>
-					</Suspense>
-				</ExternalErrorBoundary>
+				{showExternalContent ? (
+					<ExternalErrorBoundary onBack={(): void => setSelectedOrgId('current')}>
+						<Suspense fallback={<Throbber />}>
+							<ExternalSidebarRegion />
+							<MainContent>
+								<ExternalChannelView />
+							</MainContent>
+						</Suspense>
+					</ExternalErrorBoundary>
+				) : (
+					// Boards / LitBox / Admin: render the real routed page. No MatterChat room sidebar (the
+					// slim rail is the nav here), and the external view is intentionally not mounted.
+					<MainContent>{children}</MainContent>
+				)}
 			</>
 		);
 	}
@@ -147,7 +179,9 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 			>
 				<MainLayoutStyleTags />
 				<OrgSwitcherProvider>
-					<ShellBody removeSidenav={removeSidenav}>{children}</ShellBody>
+					<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
+						{children}
+					</ShellBody>
 				</OrgSwitcherProvider>
 			</Box>
 		</>

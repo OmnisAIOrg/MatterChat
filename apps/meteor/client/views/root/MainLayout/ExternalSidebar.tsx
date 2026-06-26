@@ -1,25 +1,35 @@
 import { css } from '@rocket.chat/css-in-js';
-import { Box, Icon, Throbber, States, StatesIcon, StatesTitle, StatesSubtitle, StatesActions, StatesAction } from '@rocket.chat/fuselage';
-import type { ReactElement } from 'react';
+import { Box, Icon, Throbber } from '@rocket.chat/fuselage';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { externalConnectionIdFromSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
 import { useExternalChannels } from './useExternalChannels';
+import { useExternalDirectChats } from './useExternalDirectChats';
+import { useExternalMembers } from './useExternalMembers';
 import { useExternalWorkspaces } from './useExternalWorkspaces';
 
 /**
  * ExternalSidebar — the LEFT SIDEBAR contents while a connected external workspace is selected.
  *
- * Provider-agnostic (Teams OR Google Chat): it REPLACES the MatterChat room list when an external
- * tile is selected (selectedOrgId === `ext:<connectionId>`) — see LayoutWithSidebar. It resolves the
- * SELECTED connection from the selection (not a hardcoded provider), lists that connection's REAL
- * channels/spaces (external-workspaces.channels -> the provider's listChannels) grouped by team, and
- * clicking a channel opens it in the MAIN content area by setting `selectedExternalChannel`. The
- * header colour + mark + name come from the connection's provider branding, and the header carries
- * the primary way back to MatterChat. Being "in a workspace" is its own mode: the MatterChat nav is
- * not shown alongside this (no half-overlay).
+ * Provider-agnostic (Teams / Google Chat / Slack): it REPLACES the MatterChat room list when an
+ * external tile is selected (selectedOrgId === `ext:<connectionId>`) — see LayoutWithSidebar. It
+ * resolves the SELECTED connection from the selection (not a hardcoded provider) and renders THREE
+ * sections for that connection:
+ *
+ *   • Channels/Spaces — external-workspaces.channels (grouped by team)
+ *   • Chats           — external-workspaces.directChats (1:1 + group DMs)
+ *   • People          — external-workspaces.members (the org directory)
+ *
+ * Clicking a channel OR a chat opens it in the MAIN content area (ExternalChannelView) by setting
+ * `selectedExternalChannel` — both ride the SAME `externalId` token through messages/sendMessage (the
+ * provider detects channel vs chat). Clicking a person attempts to open a DM the same way (passing the
+ * member's `externalId` through); where the provider doesn't accept a member id as a messaging token
+ * the messages endpoint rides back a plain `{ ok:false }` envelope and the channel view shows a clean
+ * error with Retry (no crash) — so People degrades to "just a directory" gracefully. Each section has
+ * its own loading / plain-error / empty state so one section failing never blanks the others.
  *
  * Standalone-safe: only ever mounted when an external connection exists and its tile is selected.
  *
@@ -52,11 +62,11 @@ const bodyClass = css`
 	padding: 8px 8px 24px;
 `;
 
-const teamHeadingClass = css`
+const sectionHeadingClass = css`
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	margin-block: 14px 4px;
+	margin-block: 16px 4px;
 	padding-inline: 8px;
 	font-size: 12px;
 	font-weight: 700;
@@ -69,7 +79,19 @@ const teamHeadingClass = css`
 	}
 `;
 
-const channelRowBaseClass = css`
+const teamHeadingClass = css`
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-block: 10px 2px;
+	padding-inline: 14px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--rcx-color-font-hint, #6c727a);
+`;
+
+const rowBaseClass = css`
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -89,6 +111,99 @@ const channelRowBaseClass = css`
 	}
 `;
 
+const avatarDotClass = css`
+	flex-shrink: 0;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 700;
+	color: #ffffff;
+	line-height: 1;
+	user-select: none;
+`;
+
+const subtleClass = css`
+	padding: 6px 12px 2px;
+	font-size: 13px;
+	color: var(--rcx-color-font-hint, #6c727a);
+`;
+
+const initialsOf = (name: string): string => (name.trim().match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase();
+
+/** A compact section shell with one of: loading / error / empty / children. Keeps each section's
+ * states self-contained so one failing list never blanks the others. */
+const Section = ({
+	icon,
+	title,
+	isLoading,
+	error,
+	isEmpty,
+	emptyLabel,
+	onRetry,
+	children,
+}: {
+	icon: ComponentProps<typeof Icon>['name'];
+	title: string;
+	isLoading: boolean;
+	error: { message: string; status?: number } | undefined;
+	isEmpty: boolean;
+	emptyLabel: string;
+	onRetry: () => void;
+	children: ReactNode;
+}): ReactElement => {
+	const { t } = useTranslation();
+	return (
+		<Box>
+			<Box className={sectionHeadingClass}>
+				<Icon name={icon} size='x14' />
+				<Box is='span' withTruncatedText>
+					{title}
+				</Box>
+			</Box>
+
+			{isLoading && (
+				<Box display='flex' alignItems='center' justifyContent='center' pb={12}>
+					<Throbber size='x12' />
+				</Box>
+			)}
+
+			{!isLoading && error && (
+				<Box pi={12} pb={8}>
+					<Box fontSize={12} color='danger' mbe={4}>
+						{error.message}
+						{error.status ? ` (${error.status})` : ''}
+					</Box>
+					<Box
+						is='button'
+						type='button'
+						onClick={onRetry}
+						className={css`
+							border: 0;
+							background: transparent;
+							padding: 0;
+							color: var(--rcx-color-font-info, #095ad2);
+							font-family: inherit;
+							font-size: 12px;
+							cursor: pointer;
+							text-decoration: underline;
+						`}
+					>
+						{t('Retry', { defaultValue: 'Retry' })}
+					</Box>
+				</Box>
+			)}
+
+			{!isLoading && !error && isEmpty && <Box className={subtleClass}>{emptyLabel}</Box>}
+
+			{!isLoading && !error && !isEmpty && children}
+		</Box>
+	);
+};
+
 const ExternalSidebar = (): ReactElement => {
 	const { t } = useTranslation();
 	const { selectedOrgId, selectedExternalChannel, setSelectedExternalChannel, setSelectedOrgId } = useOrgSwitcherSelection();
@@ -98,15 +213,22 @@ const ExternalSidebar = (): ReactElement => {
 	const connection = getConnectionById(externalConnectionIdFromSelection(selectedOrgId));
 	const branding = externalProviderBranding(connection?.provider);
 	const workspaceName = connection?.externalOrgName || branding.defaultName;
+	const connectionId = connection?._id;
 
-	const { groups, error, isLoading, refetch } = useExternalChannels(connection?._id, true);
+	// All three section hooks run UNCONDITIONALLY (stable order, gated by `enabled`) so hook order can
+	// never change between renders.
+	const channels = useExternalChannels(connectionId, true);
+	const directChats = useExternalDirectChats(connectionId, true);
+	const members = useExternalMembers(connectionId, true);
 
-	// Defensive: `groups` may be undefined (loading / error / unexpected shape); never deref blindly.
-	const safeGroups = Array.isArray(groups) ? groups : [];
+	// Defensive: each list may be undefined (loading / error / unexpected shape); never deref blindly.
+	const safeGroups = Array.isArray(channels.groups) ? channels.groups : [];
 	const channelCount = safeGroups.reduce((sum, g) => sum + (Array.isArray(g?.channels) ? g.channels.length : 0), 0);
+	const safeChats = Array.isArray(directChats.chats) ? directChats.chats : [];
+	const safeMembers = Array.isArray(members.members) ? members.members : [];
 
 	// Provider-coloured selected-row style (kept inline so it tracks the connection's brand colour).
-	const channelRowSelectedClass = css`
+	const rowSelectedClass = css`
 		background: ${branding.color}1f;
 		color: ${branding.color};
 		font-weight: 600;
@@ -115,6 +237,8 @@ const ExternalSidebar = (): ReactElement => {
 			background: ${branding.color}29;
 		}
 	`;
+
+	const isOpen = (externalId: string): boolean => selectedExternalChannel?.externalId === externalId;
 
 	return (
 		<Box className={rootClass} role='navigation' aria-label={t('External_workspace_channels', { defaultValue: 'Workspace channels' })}>
@@ -154,65 +278,34 @@ const ExternalSidebar = (): ReactElement => {
 			</Box>
 
 			<Box className={bodyClass}>
-				{isLoading && (
-					<Box display='flex' flexDirection='column' alignItems='center' justifyContent='center' pbs={48}>
-						<Throbber />
-						<Box mbs={12} color='hint' fontSize={13}>
-							{t('Loading_workspace_channels', { defaultValue: 'Loading your channels…' })}
-						</Box>
-					</Box>
-				)}
-
-				{!isLoading && error && (
-					<States>
-						<StatesIcon name='warning' variation='danger' />
-						<StatesTitle>{t('Couldnt_load_workspace_channels', { defaultValue: 'Couldn’t load your channels' })}</StatesTitle>
-						{/* Surface the REAL provider/auth message plainly (e.g. admin-consent 403). */}
-						<StatesSubtitle>
-							{error.message}
-							{error.status ? ` (${error.status})` : ''}
-						</StatesSubtitle>
-						<StatesActions>
-							<StatesAction onClick={refetch}>{t('Retry', { defaultValue: 'Retry' })}</StatesAction>
-						</StatesActions>
-					</States>
-				)}
-
-				{!isLoading && !error && channelCount === 0 && (
-					<States>
-						<StatesIcon name='team' />
-						<StatesTitle>{t('No_workspace_channels_found', { defaultValue: 'No channels found' })}</StatesTitle>
-						<StatesSubtitle>
-							{t('No_workspace_channels_found_subtitle', {
-								defaultValue: 'You’re connected, but we didn’t find any channels you’re a member of.',
-							})}
-						</StatesSubtitle>
-						<StatesActions>
-							<StatesAction onClick={refetch}>{t('Refresh', { defaultValue: 'Refresh' })}</StatesAction>
-						</StatesActions>
-					</States>
-				)}
-
-				{!isLoading &&
-					!error &&
-					channelCount > 0 &&
-					safeGroups.map((group) => (
+				{/* CHANNELS / SPACES */}
+				<Section
+					icon='hash'
+					title={t('Channels_and_spaces', { defaultValue: 'Channels' })}
+					isLoading={channels.isLoading}
+					error={channels.error}
+					isEmpty={channelCount === 0}
+					emptyLabel={t('No_workspace_channels_found', { defaultValue: 'No channels found' })}
+					onRetry={channels.refetch}
+				>
+					{safeGroups.map((group) => (
 						<Box key={group.teamName}>
-							<Box className={teamHeadingClass}>
-								<Icon name='team' size='x14' />
-								<Box is='span' withTruncatedText>
-									{group.teamName}
+							{group.teamName ? (
+								<Box className={teamHeadingClass}>
+									<Box is='span' withTruncatedText>
+										{group.teamName}
+									</Box>
 								</Box>
-							</Box>
+							) : null}
 							{(Array.isArray(group?.channels) ? group.channels : []).map((channel) => {
-								const isSelected = selectedExternalChannel?.externalId === channel.externalId;
+								const selected = isOpen(channel.externalId);
 								return (
 									<Box
 										is='button'
 										type='button'
 										key={channel.externalId}
-										className={[channelRowBaseClass, isSelected && channelRowSelectedClass].filter(Boolean)}
-										aria-current={isSelected ? 'true' : undefined}
+										className={[rowBaseClass, selected && rowSelectedClass].filter(Boolean)}
+										aria-current={selected ? 'true' : undefined}
 										title={channel.topic || channel.name}
 										onClick={(): void =>
 											setSelectedExternalChannel({
@@ -220,10 +313,11 @@ const ExternalSidebar = (): ReactElement => {
 												name: channel.name,
 												teamName: group.teamName,
 												isPrivate: channel.isPrivate,
+												kind: 'channel',
 											})
 										}
 									>
-										<Icon name={channel.isPrivate ? 'lock' : 'hash'} size='x18' color={isSelected ? undefined : 'hint'} />
+										<Icon name={channel.isPrivate ? 'lock' : 'hash'} size='x18' color={selected ? undefined : 'hint'} />
 										<Box is='span' withTruncatedText>
 											{channel.name}
 										</Box>
@@ -232,6 +326,94 @@ const ExternalSidebar = (): ReactElement => {
 							})}
 						</Box>
 					))}
+				</Section>
+
+				{/* CHATS (direct + group DMs) */}
+				<Section
+					icon='balloons'
+					title={t('Chats', { defaultValue: 'Chats' })}
+					isLoading={directChats.isLoading}
+					error={directChats.error}
+					isEmpty={safeChats.length === 0}
+					emptyLabel={t('No_workspace_chats_found', { defaultValue: 'No direct chats' })}
+					onRetry={directChats.refetch}
+				>
+					{safeChats.map((chat) => {
+						const selected = isOpen(chat.externalId);
+						return (
+							<Box
+								is='button'
+								type='button'
+								key={chat.externalId}
+								className={[rowBaseClass, selected && rowSelectedClass].filter(Boolean)}
+								aria-current={selected ? 'true' : undefined}
+								title={chat.name}
+								onClick={(): void =>
+									setSelectedExternalChannel({
+										externalId: chat.externalId,
+										name: chat.name,
+										teamName: t('Direct_messages', { defaultValue: 'Direct messages' }),
+										isPrivate: true,
+										kind: 'chat',
+									})
+								}
+							>
+								<Icon name={chat.isGroup ? 'team' : 'balloons'} size='x18' color={selected ? undefined : 'hint'} />
+								<Box is='span' withTruncatedText>
+									{chat.name}
+								</Box>
+							</Box>
+						);
+					})}
+				</Section>
+
+				{/* PEOPLE (the org directory; clicking starts/opens a DM with that person) */}
+				<Section
+					icon='team'
+					title={t('People', { defaultValue: 'People' })}
+					isLoading={members.isLoading}
+					error={members.error}
+					isEmpty={safeMembers.length === 0}
+					emptyLabel={t('No_workspace_people_found', { defaultValue: 'No people found' })}
+					onRetry={members.refetch}
+				>
+					{safeMembers.map((member) => {
+						const selected = isOpen(member.externalId);
+						return (
+							<Box
+								is='button'
+								type='button'
+								key={member.externalId}
+								className={[rowBaseClass, selected && rowSelectedClass].filter(Boolean)}
+								aria-current={selected ? 'true' : undefined}
+								title={member.email || member.displayName}
+								onClick={(): void =>
+									setSelectedExternalChannel({
+										externalId: member.externalId,
+										name: member.displayName,
+										teamName: t('Direct_message', { defaultValue: 'Direct message' }),
+										isPrivate: true,
+										kind: 'dm',
+									})
+								}
+							>
+								<Box className={avatarDotClass} style={{ background: branding.color }} aria-hidden>
+									{initialsOf(member.displayName || '?')}
+								</Box>
+								<Box flexGrow={1} minWidth={0}>
+									<Box is='span' withTruncatedText display='block'>
+										{member.displayName}
+									</Box>
+									{member.email ? (
+										<Box is='span' fontSize={11} color='hint' withTruncatedText display='block'>
+											{member.email}
+										</Box>
+									) : null}
+								</Box>
+							</Box>
+						);
+					})}
+				</Section>
 			</Box>
 		</Box>
 	);
