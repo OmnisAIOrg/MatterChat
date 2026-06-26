@@ -35,6 +35,7 @@ import { WebApp } from 'meteor/webapp';
 
 import { getSlackConfig, isSlackConfigured, SLACK_AUTHORIZE_ENDPOINT, SLACK_TOKEN_ENDPOINT, redirectUri, SLACK_USER_SCOPES } from './config';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
+import { finishDesktopConnectorCallback, isDesktopAuthorizeRequest, isDesktopState } from '../../desktopOAuth';
 import { encryptCredentials } from '../../tokenCrypto';
 
 // NOTE: must NOT be under `/api/...` — Rocket.Chat's REST/Apps router owns `/api/*` and shadows
@@ -58,15 +59,24 @@ function clearStateCookie(): string {
  * Bounce back to the app's connectors UI with a result/error flag, clearing the one-time state
  * cookie on the way out.
  */
-function done(res: any, params: Record<string, string>): void {
+function done(res: any, params: Record<string, string>, desktop = false): void {
+	// DESKTOP: hand back to the app via `matterchat://oauth/slack?status=...` (status only, never a
+	// token) with the "Return to MatterChat" interstitial fallback (spec §A.4). Success vs error is the
+	// presence of the `slack_error` param.
+	if (desktop) {
+		const isError = typeof params.slack_error === 'string';
+		return finishDesktopConnectorCallback(res, 'slack', isError ? 'error' : 'ok', params.slack_error, {
+			'Set-Cookie': clearStateCookie(),
+		});
+	}
 	const qs = new URLSearchParams(params).toString();
 	res.writeHead(302, { 'Location': Meteor.absoluteUrl(`home?${qs}`), 'Set-Cookie': clearStateCookie() });
 	res.end();
 }
 
-function fail(res: any, reason: string, extra: Record<string, string> = {}): void {
+function fail(res: any, reason: string, extra: Record<string, string> = {}, desktop = false): void {
 	SystemLogger.warn({ msg: 'Slack OAuth failed', reason });
-	done(res, { slack_error: reason, ...extra });
+	done(res, { slack_error: reason, ...extra }, desktop);
 }
 
 /** Build a `Set-Cookie` header value with the given attributes. */
@@ -118,8 +128,12 @@ async function resolveUserId(req: any): Promise<string | null> {
  *
  * Returns both the ready-to-redirect `authorizeUrl` and the `state`. Throws 'slack-not-configured'
  * when Slack is off/unconfigured.
+ *
+ * `desktop` (optional): when true, the callback hands the result back to the desktop app via the
+ * `matterchat://` scheme. Carried TAMPER-PROOF in the server-side parked state doc, never a query
+ * param (spec §A.4).
  */
-export async function buildSlackAuthorizeUrl(userId: string): Promise<{ authorizeUrl: string; state: string }> {
+export async function buildSlackAuthorizeUrl(userId: string, desktop = false): Promise<{ authorizeUrl: string; state: string }> {
 	if (!isSlackConfigured()) {
 		throw new Error('slack-not-configured');
 	}
@@ -130,10 +144,10 @@ export async function buildSlackAuthorizeUrl(userId: string): Promise<{ authoriz
 	const config = getSlackConfig();
 	const state = Random.id();
 
-	// Park the owner userId server-side, keyed by state (TTL via CredentialTokens). This is what binds
-	// the callback to THIS user without trusting a cookie. (No PKCE verifier — Slack OAuth v2 uses the
-	// client_secret at the token endpoint, not PKCE.)
-	await CredentialTokens.create(stateKey(state), { profile: { userId } });
+	// Park the owner userId (+ the desktop flag) server-side, keyed by state (TTL via CredentialTokens).
+	// This binds the callback to THIS user without trusting a cookie, and makes the desktop flag
+	// tamper-proof. (No PKCE verifier — Slack OAuth v2 uses the client_secret at the token endpoint.)
+	await CredentialTokens.create(stateKey(state), { profile: { userId, desktop } });
 
 	const url = new URL(SLACK_AUTHORIZE_ENDPOINT);
 	url.searchParams.set('client_id', config.clientId);
@@ -148,16 +162,20 @@ export async function buildSlackAuthorizeUrl(userId: string): Promise<{ authoriz
 // ─── /start ──────────────────────────────────────────────────────────────────────────────────
 
 async function handleStart(req: any, res: any): Promise<void> {
+	// Desktop hand-off: the desktop shell opens this in the system browser with `?client=desktop`.
+	// Read it FIRST so even the pre-auth refusals below hand back to the app via `matterchat://`.
+	const desktop = isDesktopAuthorizeRequest(req.url);
+
 	if (!isSlackConfigured()) {
-		return fail(res, 'not_configured');
+		return fail(res, 'not_configured', {}, desktop);
 	}
 
 	const userId = await resolveUserId(req);
 	if (!userId) {
-		return fail(res, 'not_authenticated');
+		return fail(res, 'not_authenticated', {}, desktop);
 	}
 
-	const { authorizeUrl, state } = await buildSlackAuthorizeUrl(userId);
+	const { authorizeUrl, state } = await buildSlackAuthorizeUrl(userId, desktop);
 
 	// One-time HttpOnly state cookie set in the same redirect (CSRF defence — mirrors Teams/Google).
 	// Lax + 10-min Max-Age survives the Slack consent round-trip.
@@ -184,16 +202,21 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// Read the one-time state cookie (cleared on every exit via done()/fail()).
 		const cookieState = readCookie(req, STATE_COOKIE);
 
+		// Peek the parked state doc up-front (read-only; consumed below) to recover the TAMPER-PROOF
+		// desktop flag so even the early error exits hand back via the `matterchat://` scheme.
+		const peekDoc = state ? await CredentialTokens.findOneNotExpiredById(stateKey(state)) : null;
+		const desktop = isDesktopState(peekDoc?.userInfo?.profile?.desktop);
+
 		// Slack returned an error (e.g. the user declined consent → `access_denied`).
 		if (error) {
 			if (state) {
 				await CredentialTokens.removeById(stateKey(state));
 			}
-			return fail(res, `oauth_${error}`);
+			return fail(res, `oauth_${error}`, {}, desktop);
 		}
 
 		if (!code || !state) {
-			return fail(res, 'missing_code_or_state');
+			return fail(res, 'missing_code_or_state', {}, desktop);
 		}
 
 		// Verify state. When a cookie IS present it MUST match (CSRF defence for the cookie `/start`
@@ -201,13 +224,13 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// back to the parked token, which is server-minted, userId-bound, and short-TTL. A
 		// PRESENT-but-mismatched cookie is always rejected.
 		if (cookieState && cookieState !== state) {
-			return fail(res, 'state_cookie_mismatch');
+			return fail(res, 'state_cookie_mismatch', {}, desktop);
 		}
 		const stateDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
 		await CredentialTokens.removeById(stateKey(state));
 		const userId = stateDoc?.userInfo?.profile?.userId;
 		if (!userId) {
-			return fail(res, 'invalid_state');
+			return fail(res, 'invalid_state', {}, desktop);
 		}
 
 		// Exchange the code (+ client secret) for tokens. Slack's oauth.v2.access is
@@ -227,7 +250,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		const tokens: any = await tokenRes.json().catch(() => ({}));
 		// Slack reports failures via `ok:false` (HTTP 200) — surface, don't swallow.
 		if (!tokens?.ok) {
-			return fail(res, `token_exchange_${tokens?.error || tokenRes.status}`);
+			return fail(res, `token_exchange_${tokens?.error || tokenRes.status}`, {}, desktop);
 		}
 
 		// The USER token lives under authed_user.access_token (we requested user_scope). The top-level
@@ -236,7 +259,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		const userAccessToken = authedUser.access_token;
 		if (!userAccessToken) {
 			// No user token means user_scope wasn't granted — the connection would be useless.
-			return fail(res, 'no_user_token');
+			return fail(res, 'no_user_token', {}, desktop);
 		}
 
 		// The workspace (team) is the external org id/name.
@@ -248,7 +271,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			typeof authedUser.scope === 'string' && authedUser.scope ? authedUser.scope.split(',').filter(Boolean) : SLACK_USER_SCOPES;
 
 		if (!externalOrgId) {
-			return fail(res, 'no_team_id');
+			return fail(res, 'no_team_id', {}, desktop);
 		}
 
 		// Encrypt the token and persist the per-user connection (status 'connected'). Slack user tokens
@@ -268,7 +291,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		});
 
 		SystemLogger.info({ msg: 'Slack connection established', userId, connectionId: _id, externalOrgId });
-		return done(res, { slack_connected: '1', connectionId: _id });
+		return done(res, { slack_connected: '1', connectionId: _id }, desktop);
 	} catch (err) {
 		SystemLogger.error({ msg: 'Slack OAuth callback error', err: String(err) });
 		return fail(res, 'callback_exception');
