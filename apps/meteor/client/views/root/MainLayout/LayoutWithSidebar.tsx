@@ -1,3 +1,4 @@
+import { css } from '@rocket.chat/css-in-js';
 import { Box, Throbber } from '@rocket.chat/fuselage';
 import { FeaturePreview, FeaturePreviewOff, FeaturePreviewOn } from '@rocket.chat/ui-client';
 import type { IRouterPaths } from '@rocket.chat/ui-contexts';
@@ -19,6 +20,88 @@ import NavigationRegion from '../../navigation';
 import RoomsNavigationProvider from '../../navigation/providers/RoomsNavigationProvider';
 
 const INVALID_ROOM_NAME_PREFIXES = ['#', '?'] as const;
+
+/**
+ * GREEN "Variant B" — the floating window in a green frame.
+ *
+ * `#rocket-chat` (the shell container: the two rails + Sidebar + MainContent) becomes the green,
+ * top-lit, beveled FRAME, and a rounded, clipped WINDOW (`.mc-window`) is lifted inside it to hold the
+ * existing shell. The frame is applied ONE LEVEL UP from ShellBody: `.mc-window` is a plain flex row
+ * that replaces the old flex row `#rocket-chat` was; the OrgSwitcherProvider + ShellBody (and the lazy
+ * external-workspace mode behind ExternalErrorBoundary) are untouched and still mount/scroll exactly as
+ * before. The NavBar (the dark global bar) stays ABOVE the frame, full-bleed.
+ *
+ * HEIGHT CHAIN — why this version does NOT break the layout (a prior frame impl did):
+ *  - `#rocket-chat` keeps its base.css role intact: `display:flex; flex:1 1 auto; height:100%;
+ *    max-height:100%; overflow:hidden; align-items:stretch` (see app/theme/.../base.css). The frame
+ *    class ONLY adds cosmetic `padding` + gradient + bevel — it never overrides the flex/height role,
+ *    so the frame still fills the area below the NavBar exactly as the working no-frame shell did.
+ *  - `.mc-window` fills the padded frame with `flex: 1 1 0` + `min-height: 0` + `min-width: 0` — NOT
+ *    `height: 100%`. `height:100%` resolves against the frame's content box but, combined with the
+ *    frame's `box-sizing:border-box` padding and `max-height:100%`, over-constrained the chain and
+ *    collapsed everything after the first rail to zero height (the original bug). `flex:1 1 0` lets the
+ *    window simply consume the remaining flex space; `min-height/min-width:0` lets its inner flex
+ *    children (rails/sidebar/content) establish their own scroll containers instead of forcing the
+ *    window to grow. Each region keeps `height:100%` of the window and scrolls independently.
+ *
+ * Verified in a real headless Chrome render (CDP, 1440×813): NavBar 48px full-bleed; frame 14px padding
+ * on all four sides; ws-rail 62×737, nav-rail 92×737, sidebar 320×737 (scrolls), content 938×737
+ * (scrolls) — every region non-zero + full-height. At a real 600px viewport the @media(width<=767px)
+ * rule drops the padding + radius cleanly (frame off, content still non-zero). @media print drops it too.
+ */
+const FRAME_PAD = 14;
+
+const frameClass = css`
+	/*
+	 * NOTE: do NOT set display/flex/height/max-height/overflow/align-items here — those come from the
+	 * #rocket-chat base.css rule and are the WORKING height-chain. We only add cosmetic padding + paint.
+	 */
+	padding: ${FRAME_PAD}px;
+	min-height: 0;
+	background: radial-gradient(135% 115% at 50% -12%, #5fcb7a 0%, #2ba14c 52%, #1b7a2e 100%);
+	box-shadow:
+		inset 0 2px 1px rgba(255, 255, 255, 0.45),
+		inset 0 -4px 10px rgba(10, 50, 24, 0.42);
+
+	@media print {
+		padding: 0;
+		background: none;
+		box-shadow: none;
+	}
+
+	/* On small screens the frame padding wastes space and fights the single-column layout — drop it. */
+	@media (width <= 767px) {
+		padding: 0;
+		background: none;
+		box-shadow: none;
+	}
+`;
+
+const windowClass = css`
+	/* Fill the padded frame WITHOUT height:100% (which over-constrained and collapsed the shell). */
+	flex: 1 1 0;
+	min-height: 0;
+	min-width: 0;
+	width: 100%;
+	border-radius: 14px;
+	overflow: hidden;
+	display: flex;
+	align-items: stretch;
+	box-shadow:
+		0 18px 40px rgba(8, 22, 12, 0.5),
+		0 3px 10px rgba(8, 22, 12, 0.4),
+		inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+	@media print {
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	@media (width <= 767px) {
+		border-radius: 0;
+		box-shadow: none;
+	}
+`;
 
 /**
  * The external-workspace view components are LAZY-loaded — they are NOT statically imported at this
@@ -172,17 +255,27 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 		<>
 			<AccessibilityShortcut />
 			{!embeddedLayout && <NavBar />}
+			{/*
+			  `#rocket-chat` now owns the green FRAME (was: a plain flex row on bg='surface-light'). Its old
+			  flex-row children move one level down into `.mc-window` — the rounded, clipped, lifted window.
+			  The OrgSwitcherProvider + ShellBody (and the lazy external-workspace mode behind
+			  ExternalErrorBoundary) are unchanged; only their flex-row container moved. The frame class only
+			  ADDS padding + gradient + bevel — #rocket-chat keeps its base.css flex/height role, so the
+			  working height-chain is preserved (verified in a real browser; see frameClass/windowClass above).
+			*/}
 			<Box
 				bg='surface-light'
 				id='rocket-chat'
-				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav'].filter(Boolean).join(' ')}
+				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav', frameClass].filter(Boolean).join(' ')}
 			>
 				<MainLayoutStyleTags />
-				<OrgSwitcherProvider>
-					<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
-						{children}
-					</ShellBody>
-				</OrgSwitcherProvider>
+				<Box className={[windowClass, 'mc-window'].join(' ')}>
+					<OrgSwitcherProvider>
+						<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
+							{children}
+						</ShellBody>
+					</OrgSwitcherProvider>
+				</Box>
 			</Box>
 		</>
 	);

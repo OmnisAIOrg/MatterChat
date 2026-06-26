@@ -10,66 +10,85 @@ import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherConte
 import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
 
 /**
- * AppLeftRail — the Slack-style thin vertical navigation rail (Wave 1).
+ * AppLeftRail — the GREEN "Variant B" primary NAVIGATION rail (was the single Slack-style rail).
  *
- * A 76px, always-dark, full-height column pinned to the FAR LEFT of the app shell
- * (left of the rooms Sidebar / `#sidebar-region`). It is purely ADDITIVE: the existing
- * horizontal top `NavBar` is kept as-is. Unlike the NavBar's icon-only `NavBarItem`s,
- * each rail entry is a Slack-style LABELED button — a 24px icon above an 11px label in a
- * generous 60px target — so the primary sections read clearly and align on one baseline.
+ * An 88px, always-dark, full-height column pinned to the LEFT of the app shell, immediately RIGHT of
+ * the OrgSwitcherRail (the workspace switcher). This is the redesign's second of two rails: it carries
+ * the MatterChat mark, a "MENU" section label, then the primary destinations as labeled buttons
+ * (24px icon over a label). It is purely ADDITIVE to the existing horizontal top `NavBar`.
  *
- *  • Workspace mark → red "M" badge (top)
+ *  • MatterChat mark → "Matter" + bright-green "Chat" wordmark (top)
  *  • Chats    → /home          (icon 'balloons')
  *  • Boards   → /boards        (icon 'squares' — 'kanban' is NOT in @rocket.chat/icons)
  *                              — gated by `boards-view`
+ *  • Files    → /litbox        (the LitBox wordmark, recolored for the dark rail)
  *  • Activity → /boards/inbox  (icon 'bell' — the Boards notifications inbox route)
  *  • Search   → focuses the existing NavBar search combobox (icon 'magnifier')
+ *  • Admin    → /admin         (icon 'cog' — admins only)
  *
- * Bottom reuses the existing `UserMenu` (avatar + account menu) from the NavBar.
+ * Bottom reuses the existing `UserMenu` (avatar + account menu) from the NavBar — kept here (not in the
+ * workspace rail) so the account-menu mount that already works is preserved.
  *
- * The rail is intentionally always-dark (independent of the light/dark theme) — the
- * signature Slack/Discord "global nav is dark" treatment — so it reads as the app's
- * outermost chrome regardless of the content theme.
+ * The rail is intentionally always-dark (independent of the light/dark theme) — the signature
+ * "global nav is dark" treatment — so it reads as the app's outermost chrome regardless of the
+ * content theme. The active item is a GREEN PILL (#1B7A2E); the brand color replaced the old red.
  */
 
-const RAIL_WIDTH = 76;
-const RAIL_BG = '#1b1d21';
-const BRAND_RED = '#e1140a';
+// ---- GREEN brand tokens (shared with the OrgSwitcherRail + the LayoutWithSidebar frame) ----
+const BRAND_GREEN = '#1B7A2E';
+const BRAND_GREEN_BRIGHT = '#22B43F';
+const ACCENT_RING = 'rgba(27,122,46,0.5)';
+
+const RAIL_WIDTH = 88;
+const NAV_RAIL_BG = '#1A212C';
+const NAV_RAIL_BORDER = '#2C3644';
+const WS_RAIL_BG = '#0C0F14';
 
 const railClass = css`
 	width: ${RAIL_WIDTH}px;
 	min-width: ${RAIL_WIDTH}px;
 	height: 100%;
 	z-index: 3;
-	background-color: ${RAIL_BG};
+	background-color: ${NAV_RAIL_BG};
+	border-right: 1px solid ${NAV_RAIL_BORDER};
+	box-shadow: inset -1px 0 0 ${WS_RAIL_BG};
+	overflow-y: auto;
 
 	@media print {
 		display: none;
 	}
 `;
 
-const badgeClass = css`
-	width: 42px;
-	height: 42px;
-	border-radius: 11px;
-	background-color: ${BRAND_RED};
-	color: #ffffff;
-	font-size: 22px;
-	font-weight: 600;
-	line-height: 1;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	user-select: none;
+const brandClass = css`
+	font-size: 13px;
+	font-weight: 800;
+	letter-spacing: 0.2px;
+	color: #d2dae6;
+	padding-block-end: 12px;
+`;
+
+const sectionLabelClass = css`
+	font-size: 9px;
+	font-weight: 800;
+	letter-spacing: 1.5px;
+	color: #6b7585;
+	padding-block-end: 9px;
+`;
+
+const dividerClass = css`
+	width: 60px;
+	height: 1px;
+	background-color: #323c4a;
+	margin-block: 12px;
 `;
 
 const itemClass = css`
-	width: 60px;
+	width: 64px;
 	border: 0;
 	background: transparent;
-	color: #9aa0a8;
-	border-radius: 12px;
-	padding-block: 9px 7px;
+	color: #a4aebe;
+	border-radius: 11px;
+	padding-block: 8px 7px;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -86,17 +105,19 @@ const itemClass = css`
 	}
 
 	&:focus-visible {
-		outline: 2px solid ${BRAND_RED};
+		outline: 2px solid ${BRAND_GREEN_BRIGHT};
 		outline-offset: 1px;
 	}
 
 	&[aria-current='page'] {
-		background-color: #2a2d33;
+		background-color: ${BRAND_GREEN};
 		color: #ffffff;
+		box-shadow: 0 1px 4px ${ACCENT_RING};
 	}
 
 	.rail-label {
-		font-size: 11px;
+		font-size: 10.5px;
+		font-weight: 600;
 		line-height: 1;
 	}
 `;
@@ -190,13 +211,19 @@ const AppLeftRail = () => {
 			flexDirection='column'
 			alignItems='center'
 			flexShrink={0}
-			pbs={14}
+			pbs={12}
 			pbe={12}
 		>
-			<Box className={badgeClass} mbe={16}>
-				M
+			{/* MatterChat mark — "Matter" + bright-green "Chat" (replaces the old red M badge). */}
+			<Box className={brandClass}>
+				Matter
+				<Box is='span' style={{ color: BRAND_GREEN_BRIGHT }}>
+					Chat
+				</Box>
 			</Box>
-			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px' }}>
+			<Box className={dividerClass} />
+			<Box className={sectionLabelClass}>MENU</Box>
+			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px', width: '100%' }}>
 				{/* Chats is MatterChat-native — hidden in external-workspace mode (the M tile / workspace header
 				    is the way back to MatterChat). Boards + LitBox stay (they remain meaningful inside it). */}
 				{!inExternalMode && renderItem('balloons', t('Chats'), handleChat, chatActive)}
@@ -206,20 +233,23 @@ const AppLeftRail = () => {
 					type='button'
 					className={itemClass}
 					onClick={handleFiles}
-					title={t('LitBox', { defaultValue: 'LitBox' })}
-					aria-label={t('LitBox', { defaultValue: 'LitBox' })}
+					title={t('Files', { defaultValue: 'Files' })}
+					aria-label={t('Files', { defaultValue: 'Files' })}
 					aria-current={filesActive ? 'page' : undefined}
 				>
-					{/* The LitBox brand wordmark, recolored ('Lit' white) so it reads on the dark rail. Enlarged +
-					    vertically centered; the "Files" text label is intentionally omitted (the wordmark carries it). */}
-					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '38px' }}>
-						<svg width='68' height='17' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
+					{/* The LitBox brand wordmark, recolored ('Lit' white, 'Box' bright-green) so it reads on the
+					    dark rail, with a "Files" label below to match the other nav items. */}
+					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '24px' }}>
+						<svg width='52' height='13' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
 							{/* text-anchor=middle + x at viewBox center so the wordmark is truly centered, not left-hugging. */}
 							<text x='80' y='30' textAnchor='middle' fontFamily='Arial, Helvetica, sans-serif' fontSize='28' fontWeight='bold'>
 								<tspan fill='#ffffff'>Lit</tspan>
-								<tspan fill='#5b7cff'>Box</tspan>
+								<tspan fill={BRAND_GREEN_BRIGHT}>Box</tspan>
 							</text>
 						</svg>
+					</Box>
+					<Box is='span' className='rail-label'>
+						{t('Files', { defaultValue: 'Files' })}
 					</Box>
 				</Box>
 				{/* Activity / Search / Admin are MatterChat-native — hidden in external-workspace mode. */}

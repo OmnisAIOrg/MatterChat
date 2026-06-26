@@ -15,24 +15,25 @@ import type { SwitchableOrg } from './useOrgSwitcher';
 import { useOrgSwitcher } from './useOrgSwitcher';
 
 /**
- * OrgSwitcherRail — the multi-org workspace switcher (Wave 1, slice 1).
+ * OrgSwitcherRail — the GREEN "Variant B" WORKSPACE switcher (the leftmost of the two rails).
  *
- * A narrow folder-tab dock pinned to the FAR LEFT of the app shell, LEFT of AppLeftRail. It lists
- * the workspaces a user belongs to — native MatterChat firms AND connected external Slack
- * workspaces — as switchable tiles, plus a "+" to add one. The active org is lit (white ring); a
+ * A 62px, always-dark column pinned to the FAR LEFT of the app shell, LEFT of AppLeftRail. It lists
+ * the workspaces a user belongs to — native MatterChat firms AND connected external Slack/Teams/Google
+ * workspaces — as switchable tiles, plus a "+" to add one. The active org gets a GREEN accent ring; a
  * Slack-connected org renders the Slack mark + a Slack badge so it reads as external at a glance.
  *
- * Shaped as a folder tab: always-dark, square on the top + inner edge (flush to AppLeftRail),
- * rounded on the OUTER bottom corner, ending right after the +. Slice 1 is the UI on placeholder
- * data; switching/adding are stubbed (see useOrgSwitcher).
+ * Always-dark (`#0C0F14`), the deepest layer of the chrome. Slice 1 is the UI on placeholder data for
+ * native firms; switching/adding are stubbed for those (see useOrgSwitcher) while external tiles are live.
  */
 
-const RAIL_BG = '#141619';
-const BRAND_RED = '#e1140a';
+const RAIL_BG = '#0C0F14';
+const BRAND_GREEN = '#1B7A2E';
+const BRAND_GREEN_BRIGHT = '#22B43F';
+const ACCENT_RING = 'rgba(27,122,46,0.5)';
 
 const columnClass = css`
-	width: 56px;
-	min-width: 56px;
+	width: 62px;
+	min-width: 62px;
 	height: 100%;
 	flex-shrink: 0;
 	z-index: 4;
@@ -43,10 +44,10 @@ const columnClass = css`
 `;
 
 const tabClass = css`
-	width: 56px;
+	width: 62px;
+	height: 100%;
 	background-color: ${RAIL_BG};
-	border-radius: 0 0 0 18px;
-	padding-block: 13px 14px;
+	padding-block: 12px;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -77,7 +78,7 @@ const tileClass = css`
 	}
 
 	&:focus-visible {
-		outline: 2px solid ${BRAND_RED};
+		outline: 2px solid ${BRAND_GREEN_BRIGHT};
 		outline-offset: 2px;
 	}
 `;
@@ -102,7 +103,7 @@ const addClass = css`
 	}
 
 	&:focus-visible {
-		outline: 2px solid ${BRAND_RED};
+		outline: 2px solid ${BRAND_GREEN_BRIGHT};
 		outline-offset: 2px;
 	}
 `;
@@ -155,7 +156,7 @@ const ExternalTile = ({
 			style={{
 				backgroundColor: branding.color,
 				opacity: isSelected ? 1 : 0.82,
-				boxShadow: isSelected ? '0 0 0 2.5px rgba(255, 255, 255, 0.92)' : undefined,
+				boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
 			}}
 		>
 			<branding.Mark size={22} />
@@ -178,7 +179,7 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 			style={{
 				backgroundColor: isSlack ? '#ffffff' : org.color || '#3a3d44',
 				opacity: isSelected ? 1 : org.unread ? 0.9 : 0.78,
-				boxShadow: isSelected ? '0 0 0 2.5px rgba(255, 255, 255, 0.92)' : undefined,
+				boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
 				fontSize: org.initial.length > 1 ? '14px' : '16px',
 			}}
 		>
@@ -213,7 +214,7 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 						minWidth: '17px',
 						height: '17px',
 						borderRadius: '9px',
-						background: BRAND_RED,
+						background: BRAND_GREEN,
 						color: '#ffffff',
 						fontSize: '10px',
 						fontWeight: 600,
