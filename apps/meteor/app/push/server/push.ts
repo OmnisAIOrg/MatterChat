@@ -13,6 +13,7 @@ import type { PushOptions, PendingPushNotification } from './definition';
 import { sendFCM } from './fcm';
 import { logger } from './logger';
 import { settings } from '../../settings/server';
+import { sendWebPushToUser } from '../../web-push/server/send';
 
 export const _matchToken = Match.OneOf({ apn: String }, { gcm: String });
 
@@ -392,6 +393,22 @@ class PushClass {
 			}
 
 			await this.sendNotificationNative(app, notification, countApn, countGcm);
+		}
+
+		// MatterChat: fan the SAME notification out to browser/PWA Web Push
+		// subscriptions (the gateway only knows native FCM/APN tokens). Additive +
+		// non-blocking: a Web Push failure must never affect native delivery. See
+		// app/web-push/server and MATTERCHAT-DESKTOP-PWA-SPEC.md B.4.
+		try {
+			await sendWebPushToUser(notification.userId, {
+				title: notification.title || 'MatterChat',
+				body: notification.text || '',
+				url: (notification.payload as { path?: string } | undefined)?.path || '/',
+				icon: '/images/pwa/icon-192.png',
+				tag: notification.notId ? String(notification.notId) : undefined,
+			});
+		} catch (err) {
+			logger.warn({ msg: 'web-push dispatch failed (native push unaffected)', err });
 		}
 
 		if (settings.get('Log_Level') === '2') {

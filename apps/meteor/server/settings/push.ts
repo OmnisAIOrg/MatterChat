@@ -145,7 +145,7 @@ export const createPushSettings = () =>
 				secret: true,
 			});
 		});
-		return this.section('Privacy', async function () {
+		await this.section('Privacy', async function () {
 			await this.add('Push_show_username_room', true, {
 				type: 'boolean',
 				public: true,
@@ -159,6 +159,29 @@ export const createPushSettings = () =>
 				enterprise: true,
 				invalidValue: false,
 				modules: ['push-privacy'],
+			});
+		});
+
+		// MatterChat Web Push (VAPID) — browser/PWA background push (see spec B.4).
+		// Prefer env (WEB_PUSH_VAPID_*) which take precedence in app/web-push/server;
+		// these settings are the admin-UI fallback. The PUBLIC key is `public` so the
+		// PWA client can read it to subscribe; private key + subject are secret.
+		return this.section('WebPush', async function () {
+			await this.add('WebPush_VAPID_Public', '', {
+				type: 'string',
+				public: true,
+				i18nLabel: 'WebPush_VAPID_Public',
+				i18nDescription: 'WebPush_VAPID_Public_Description',
+			});
+			await this.add('WebPush_VAPID_Private', '', {
+				type: 'string',
+				secret: true,
+				i18nLabel: 'WebPush_VAPID_Private',
+			});
+			return this.add('WebPush_Subject', 'mailto:ops@omnisai.io', {
+				type: 'string',
+				i18nLabel: 'WebPush_Subject',
+				i18nDescription: 'WebPush_Subject_Description',
 			});
 		});
 	});
