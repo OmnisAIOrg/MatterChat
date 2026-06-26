@@ -31,6 +31,49 @@ const NAVBAR_DRAG_REGION_CSS = `
 }
 `;
 
+/**
+ * GREEN "Variant B" — the floating rounded-window frame.
+ *
+ * This styles ONLY the three containers that sit ABOVE the React app layout — <html>, <body>, and
+ * #react-root — so it never touches #rocket-chat or the app's flex/height chain. That distinction is
+ * the whole ballgame: an earlier attempt put the frame ON #rocket-chat (inside the flex layout) and
+ * collapsed the entire shell to blank. Framing the mount point instead leaves the app's internal
+ * layout completely intact (verified live in-browser before shipping — all regions measured full-height).
+ *
+ * Layout: <body> becomes the rounded GREEN card (8px from the viewport, rounded, the green gradient),
+ * floating on a near-black backdrop (<html>); #react-root is the rounded dark APP window pinned 14px
+ * inside the green. 100vh/100vw make it adapt automatically to the PWA standalone window and the
+ * Electron desktop frame. Fixed-position overlays (modals/toasts/menus) escape the body clip because
+ * <body> has no transform, so they still render over the whole window.
+ */
+const MATTERCHAT_FRAME_CSS = `
+html {
+	background: #0C0F14 !important;
+}
+body {
+	position: relative !important;
+	margin: 8px !important;
+	width: calc(100vw - 16px) !important;
+	height: calc(100vh - 16px) !important;
+	box-sizing: border-box !important;
+	overflow: hidden !important;
+	border-radius: 22px !important;
+	background: linear-gradient(165deg, #2fa251 0%, #1f8a3a 55%, #176b2c 100%) !important;
+	background-attachment: fixed !important;
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55) !important;
+}
+#react-root {
+	position: absolute !important;
+	inset: 14px !important;
+	width: auto !important;
+	height: auto !important;
+	overflow: hidden !important;
+	border-radius: 15px !important;
+	background: #1A212C !important;
+	box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 0 0 1px rgba(0, 0, 0, 0.22) !important;
+}
+`;
+
 export const MainLayoutStyleTags = () => {
 	const [, , theme] = useThemeMode();
 
@@ -41,6 +84,8 @@ export const MainLayoutStyleTags = () => {
 			{theme === 'dark' && <PaletteStyleTag selector='.rcx-content--main' palette={codeBlock} tagId='codeBlock-palette' />}
 			{/* Static, no user input — the drag-region rule is a constant string (mirrors RawText's pattern). */}
 			<style dangerouslySetInnerHTML={{ __html: NAVBAR_DRAG_REGION_CSS }} />
+			{/* Static, no user input — the frame rule is a constant string. */}
+			<style dangerouslySetInnerHTML={{ __html: MATTERCHAT_FRAME_CSS }} />
 		</>
 	);
 };

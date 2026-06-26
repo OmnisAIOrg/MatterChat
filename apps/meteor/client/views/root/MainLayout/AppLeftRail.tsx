@@ -38,6 +38,9 @@ import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
 const BRAND_GREEN = '#1B7A2E';
 const BRAND_GREEN_BRIGHT = '#22B43F';
 const ACCENT_RING = 'rgba(27,122,46,0.5)';
+// The MatterChat wordmark keeps its ORIGINAL red — the green redesign recolors the theme
+// (pill, rails, accents) but the brand name itself stays red. LitBox keeps its own original blue.
+const MATTERCHAT_RED = '#e1140a';
 
 const RAIL_WIDTH = 88;
 const NAV_RAIL_BG = '#1A212C';
@@ -214,10 +217,10 @@ const AppLeftRail = () => {
 			pbs={12}
 			pbe={12}
 		>
-			{/* MatterChat mark — "Matter" + bright-green "Chat" (replaces the old red M badge). */}
+			{/* MatterChat mark — "Matter" + the original red "Chat" (brand name stays red on the green theme). */}
 			<Box className={brandClass}>
 				Matter
-				<Box is='span' style={{ color: BRAND_GREEN_BRIGHT }}>
+				<Box is='span' style={{ color: MATTERCHAT_RED }}>
 					Chat
 				</Box>
 			</Box>
@@ -237,14 +240,14 @@ const AppLeftRail = () => {
 					aria-label={t('Files', { defaultValue: 'Files' })}
 					aria-current={filesActive ? 'page' : undefined}
 				>
-					{/* The LitBox brand wordmark, recolored ('Lit' white, 'Box' bright-green) so it reads on the
+					{/* The LitBox brand wordmark, 'Lit' white, 'Box' in LitBox's own original blue (#5b7cff), so it reads on the
 					    dark rail, with a "Files" label below to match the other nav items. */}
 					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '24px' }}>
 						<svg width='52' height='13' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
 							{/* text-anchor=middle + x at viewBox center so the wordmark is truly centered, not left-hugging. */}
 							<text x='80' y='30' textAnchor='middle' fontFamily='Arial, Helvetica, sans-serif' fontSize='28' fontWeight='bold'>
 								<tspan fill='#ffffff'>Lit</tspan>
-								<tspan fill={BRAND_GREEN_BRIGHT}>Box</tspan>
+								<tspan fill='#5b7cff'>Box</tspan>
 							</text>
 						</svg>
 					</Box>
