@@ -2,6 +2,7 @@ import '../lib/rooms/roomTypes';
 import './appRoot';
 import './audit';
 import './callbacks';
+import './desktopDeepLink';
 import './deviceManagement';
 import './incomingMessages';
 import './roles';

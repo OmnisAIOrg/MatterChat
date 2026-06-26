@@ -26,6 +26,12 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { verifyOmnisaiIdToken } from './verifyIdToken';
+import {
+	finishDesktopLoginCallback,
+	finishDesktopLoginError,
+	isDesktopAuthorizeRequest,
+	isDesktopState,
+} from '../../connectors/server/desktopOAuth';
 import { SystemLogger } from '../../../server/lib/logger/system';
 import { settings } from '../../settings/server';
 
@@ -88,14 +94,25 @@ function redirect(res: any, location: string, extraHeaders: Record<string, strin
 	res.end();
 }
 
-function fail(res: any, reason: string, extraHeaders: Record<string, string> = {}): void {
+function fail(res: any, reason: string, extraHeaders: Record<string, string> = {}, desktop = false): void {
 	SystemLogger.warn({ msg: 'OmnisAI OIDC login failed', reason });
+	// DESKTOP: hand the error back to the app via `matterchat://login?status=error&reason=...` (no
+	// token) with the interstitial fallback, instead of dead-ending on an HTTPS page the app window
+	// never sees (spec §A.5). ADDITIVE: web flows keep the home?omnisai_error= landing unchanged.
+	if (desktop) {
+		return finishDesktopLoginError(res, reason, extraHeaders);
+	}
 	redirect(res, Meteor.absoluteUrl(`home?omnisai_error=${encodeURIComponent(reason)}`), extraHeaders);
 }
 
 const clearStateCookie = (): string => `${STATE_COOKIE}=; HttpOnly; Path=/_omnisai; Max-Age=0; SameSite=Lax`;
 
-async function handleAuthorize(res: any): Promise<void> {
+async function handleAuthorize(req: any, res: any): Promise<void> {
+	// Desktop hand-off: the desktop shell opens this in the system browser with `?client=desktop`.
+	// The flag is carried TAMPER-PROOF inside the parked state doc (below) — never echoed as a query
+	// param — and read back at callback time to choose the `matterchat://login` return (spec §A.5).
+	const desktop = isDesktopAuthorizeRequest(req?.url);
+
 	const config = getConfig();
 	if (!config.enabled || !config.issuer || !config.clientId) {
 		// Reveal WHICH field is missing (in the redirect URL) so a misconfig is diagnosable without pod access.
@@ -105,7 +122,7 @@ async function handleAuthorize(res: any): Promise<void> {
 		} else if (!config.issuer) {
 			missing = 'issuer';
 		}
-		return fail(res, `not_configured_${missing}`);
+		return fail(res, `not_configured_${missing}`, {}, desktop);
 	}
 
 	const state = Random.id();
@@ -113,8 +130,9 @@ async function handleAuthorize(res: any): Promise<void> {
 	const codeVerifier = base64url(crypto.randomBytes(32));
 	const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-	// Park the verifier + nonce server-side, keyed by state, for the callback (TTL via CredentialTokens).
-	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, nonce } });
+	// Park the verifier + nonce (+ the desktop flag) server-side, keyed by state, for the callback
+	// (TTL via CredentialTokens). Storing `desktop` here is what makes it tamper-proof.
+	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, nonce, desktop } });
 
 	const url = new URL(authorizeEndpoint(config));
 	url.searchParams.set('response_type', 'code');
@@ -144,12 +162,18 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			return fail(res, 'missing_code_or_state');
 		}
 
+		// Peek the parked state doc up-front (read-only; consumed below) to recover the TAMPER-PROOF
+		// desktop flag — it lives only here, never in a query param — so every exit (incl. errors) hands
+		// back to the desktop app via the `matterchat://login` scheme rather than dead-ending on HTTPS.
+		const peekDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
+		const desktop = isDesktopState(peekDoc?.userInfo?.profile?.desktop);
+
 		// Login-CSRF guard: reject only when a state cookie is PRESENT but doesn't match (real CSRF).
 		// A MISSING cookie is tolerated — some browsers don't send the freshly-set SameSite=Lax cookie
 		// on the first cross-site callback, which would otherwise wrongly fail a valid first login.
 		const cookieState = readCookie(req, STATE_COOKIE);
 		if (cookieState && cookieState !== state) {
-			return fail(res, 'state_mismatch', { 'Set-Cookie': clearStateCookie() });
+			return fail(res, 'state_mismatch', { 'Set-Cookie': clearStateCookie() }, desktop);
 		}
 
 		const stateDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
@@ -157,7 +181,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		const codeVerifier = stateDoc?.userInfo?.profile?.codeVerifier;
 		const nonce = stateDoc?.userInfo?.profile?.nonce;
 		if (!codeVerifier) {
-			return fail(res, 'invalid_state', { 'Set-Cookie': clearStateCookie() });
+			return fail(res, 'invalid_state', { 'Set-Cookie': clearStateCookie() }, desktop);
 		}
 
 		// 1. Exchange the code (+ PKCE verifier) for tokens.
@@ -174,11 +198,11 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			}).toString(),
 		});
 		if (!tokenRes.ok) {
-			return fail(res, `token_exchange_${tokenRes.status}`);
+			return fail(res, `token_exchange_${tokenRes.status}`, {}, desktop);
 		}
 		const tokens = await tokenRes.json();
 		if (!tokens?.access_token) {
-			return fail(res, 'no_access_token');
+			return fail(res, 'no_access_token', {}, desktop);
 		}
 
 		// 2. Resolve identity. Prefer the id_token claims (standard OIDC, present with the `openid`
@@ -191,7 +215,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			try {
 				u = await verifyOmnisaiIdToken(tokens.id_token, { issuer: config.issuer, clientId: config.clientId, nonce });
 			} catch (err: any) {
-				return fail(res, err?.message || 'id_token_invalid', { 'Set-Cookie': clearStateCookie() });
+				return fail(res, err?.message || 'id_token_invalid', { 'Set-Cookie': clearStateCookie() }, desktop);
 			}
 		} else {
 			const infoRes = await fetch(userinfoEndpoint(config), {
@@ -199,14 +223,14 @@ async function handleCallback(req: any, res: any): Promise<void> {
 				headers: { Authorization: `Bearer ${tokens.access_token}` },
 			});
 			if (!infoRes.ok) {
-				return fail(res, `userinfo_${infoRes.status}`);
+				return fail(res, `userinfo_${infoRes.status}`, {}, desktop);
 			}
 			const info = await infoRes.json();
 			u = (info?.user ?? info ?? {}) as Record<string, any>;
 		}
 		const sub = u.sub ?? u.id;
 		if (!sub) {
-			return fail(res, 'no_subject');
+			return fail(res, 'no_subject', {}, desktop);
 		}
 
 		// 3. Stash the identity under a one-time credentialToken for the client login handler.
@@ -229,6 +253,15 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			},
 		});
 
+		// DESKTOP (spec §A.5): redirect to `matterchat://login?token=<credentialToken>` so the desktop
+		// shell can finish login inside the app window (it loads `/omnisai/<token>` there). The token is
+		// RC's single-use, short-lived OAuth credential token — redeemed immediately — so carrying it on
+		// the scheme back into our OWN app is safe (no long-lived secret crosses the wire). The
+		// interstitial "Return to MatterChat" page is the fallback when the OS doesn't auto-hand-off.
+		// WEB/PWA path is unchanged: bounce to the in-app `omnisai/<token>` route.
+		if (desktop) {
+			return finishDesktopLoginCallback(res, credentialToken, { 'Set-Cookie': clearStateCookie() });
+		}
 		redirect(res, Meteor.absoluteUrl(`omnisai/${credentialToken}`), { 'Set-Cookie': clearStateCookie() });
 	} catch (err) {
 		SystemLogger.error({ msg: 'OmnisAI OIDC callback error', err });
@@ -243,7 +276,7 @@ WebApp.connectHandlers.use('/_omnisai', async (req: any, res: any, next: () => v
 	try {
 		const path = new URL(req.url, 'http://localhost').pathname;
 		if (path.endsWith('/authorize')) {
-			return await handleAuthorize(res);
+			return await handleAuthorize(req, res);
 		}
 		if (path.endsWith('/callback')) {
 			return await handleCallback(req, res);

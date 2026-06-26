@@ -1,4 +1,4 @@
-import { useEffect, Suspense, useSyncExternalStore } from 'react';
+import { useEffect, lazy, Suspense, useSyncExternalStore } from 'react';
 
 import DocumentTitleWrapper from './DocumentTitleWrapper';
 import PageLoading from './PageLoading';
@@ -34,6 +34,10 @@ import { useRedirectToSetupWizard } from './hooks/useRedirectToSetupWizard';
 import { useSettingsOnLoadSiteUrl } from './hooks/useSettingsOnLoadSiteUrl';
 import { useStartupEvent } from './hooks/useStartupEvent';
 import { appLayout } from '../../lib/appLayout';
+
+// MatterChat PWA glue (install/update prompts + Web Push). Lazy so it stays out
+// of the initial bundle and never blocks first paint.
+const MatterChatPwa = lazy(() => import('../pwa/MatterChatPwa'));
 
 const AppLayout = () => {
 	useEffect(() => {
@@ -81,6 +85,9 @@ const AppLayout = () => {
 	return (
 		<Suspense fallback={<PageLoading />}>
 			<DocumentTitleWrapper>{layout}</DocumentTitleWrapper>
+			<Suspense fallback={null}>
+				<MatterChatPwa />
+			</Suspense>
 		</Suspense>
 	);
 };

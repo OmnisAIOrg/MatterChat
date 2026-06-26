@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>MatterChat — Offline</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b1220;
+				color: #e6edf6;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+			}
+			.wrap {
+				height: 100%;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				text-align: center;
+				padding: 24px;
+				box-sizing: border-box;
+			}
+			img {
+				width: 96px;
+				height: 96px;
+				margin-bottom: 24px;
+			}
+			h1 {
+				font-size: 20px;
+				font-weight: 600;
+				margin: 0 0 8px;
+			}
+			p {
+				font-size: 14px;
+				color: #9fb0c3;
+				margin: 0 0 24px;
+			}
+			button {
+				background: #2f6fed;
+				color: #fff;
+				border: 0;
+				border-radius: 8px;
+				padding: 10px 20px;
+				font-size: 14px;
+				font-weight: 600;
+				cursor: pointer;
+			}
+			button:hover {
+				background: #2660d8;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<img src="/images/pwa/icon-192.png" alt="MatterChat" />
+			<h1>MatterChat is offline</h1>
+			<p>We can’t reach the server right now. Check your connection — we’ll reconnect automatically.</p>
+			<button onclick="location.reload()">Try again</button>
+		</div>
+		<script>
+			// Auto-retry once the browser reports it is back online.
+			window.addEventListener('online', function () {
+				location.reload();
+			});
+		</script>
+	</body>
+</html>

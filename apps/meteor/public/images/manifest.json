@@ -1,19 +1,35 @@
 {
 	"name": "MatterChat",
 	"short_name": "MatterChat",
-	"background_color": "#fff",
+	"description": "Secure legal team messaging by OmnisAI.",
+	"id": "/?source=pwa",
+	"start_url": "/home?homescreen=1",
+	"scope": "/",
+	"display": "standalone",
+	"display_override": ["window-controls-overlay", "standalone"],
+	"orientation": "any",
+	"background_color": "#0b1220",
+	"theme_color": "#0b1220",
+	"lang": "en-US",
+	"categories": ["business", "productivity"],
 	"icons": [
+		{ "src": "/images/pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+		{ "src": "/images/pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+		{ "src": "/images/pwa/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+		{ "src": "/images/pwa/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+	],
+	"shortcuts": [
 		{
-			"src": "/assets/favicon_192.png",
-			"sizes": "192x192",
-			"type": "image/png"
+			"name": "Chats",
+			"short_name": "Chats",
+			"url": "/home?tab=chats",
+			"icons": [{ "src": "/images/pwa/sc-chats-96.png", "sizes": "96x96", "type": "image/png" }]
 		},
 		{
-			"src": "/assets/favicon_512.png",
-			"sizes": "512x512",
-			"type": "image/png"
+			"name": "Boards",
+			"short_name": "Boards",
+			"url": "/boards",
+			"icons": [{ "src": "/images/pwa/sc-boards-96.png", "sizes": "96x96", "type": "image/png" }]
 		}
-	],
-	"start_url": "/home?homescreen",
-	"display": "standalone"
+	]
 }

@@ -23,6 +23,12 @@ const AppRoot = () => (
 				<meta name='rating' content='general' />
 				<meta name='mobile-web-app-capable' content='yes' />
 				<meta name='apple-mobile-web-app-capable' content='yes' />
+				{/* MatterChat PWA: iOS standalone status bar — translucent so the dark navy theme shows through.
+				    NB: `theme-color` + `apple-mobile-web-app-title` are injected server-side by
+				    app/ui-master/server (from the `theme-color-sidebar-background` and `Site_Name` settings);
+				    do NOT add a second `theme-color` here or the two tags conflict. The manifest carries the
+				    brand navy (#0b1220) for the install splash; set the admin setting to match for the browser chrome. */}
+				<meta name='apple-mobile-web-app-status-bar-style' content='black-translucent' />
 				<meta name='msapplication-TileImage' content='assets/tile_144.png' />
 				<meta name='msapplication-config' content='images/browserconfig.xml' />
 				<meta property='og:image' content='assets/favicon_512.png' />
@@ -30,7 +36,8 @@ const AppRoot = () => (
 				<link rel='manifest' href='images/manifest.json' />
 				<link rel='chrome-webstore-item' href='https://chrome.google.com/webstore/detail/nocfbnnmjnndkbipkabodnheejiegccf' />
 				<link rel='mask-icon' href='assets/safari_pinned.svg' color='#04436a' />
-				<link rel='apple-touch-icon' sizes='180x180' href='assets/touchicon_180.png' />
+				{/* MatterChat-branded iOS home-screen icon (navy-tiled brand mark, served from public/images/pwa). */}
+				<link rel='apple-touch-icon' sizes='180x180' href='images/pwa/apple-touch-icon.png' />
 				<link rel='apple-touch-icon-precomposed' href='assets/touchicon_180_pre.png' />
 			</>,
 			document.head,

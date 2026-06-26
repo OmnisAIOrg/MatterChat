@@ -43,6 +43,7 @@ import {
 	GOOGLE_DELEGATED_SCOPES,
 } from './config';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
+import { finishDesktopConnectorCallback, isDesktopAuthorizeRequest, isDesktopState } from '../../desktopOAuth';
 import { encryptCredentials } from '../../tokenCrypto';
 
 // NOTE: must NOT be under `/api/...` — Rocket.Chat's REST/Apps router owns `/api/*` and shadows
@@ -80,15 +81,24 @@ function clearStateCookie(): string {
  * Bounce back to the app's connectors UI with a result/error flag, clearing the one-time state
  * cookie on the way out.
  */
-function done(res: any, params: Record<string, string>): void {
+function done(res: any, params: Record<string, string>, desktop = false): void {
+	// DESKTOP: hand back via `matterchat://oauth/google?status=...` (status only, never a token) with
+	// the "Return to MatterChat" interstitial fallback (spec §A.4). Success vs error is the presence of
+	// the `google_error` param.
+	if (desktop) {
+		const isError = typeof params.google_error === 'string';
+		return finishDesktopConnectorCallback(res, 'google', isError ? 'error' : 'ok', params.google_error, {
+			'Set-Cookie': clearStateCookie(),
+		});
+	}
 	const qs = new URLSearchParams(params).toString();
 	res.writeHead(302, { 'Location': Meteor.absoluteUrl(`home?${qs}`), 'Set-Cookie': clearStateCookie() });
 	res.end();
 }
 
-function fail(res: any, reason: string, extra: Record<string, string> = {}): void {
+function fail(res: any, reason: string, extra: Record<string, string> = {}, desktop = false): void {
 	SystemLogger.warn({ msg: 'Google Chat OAuth failed', reason });
-	done(res, { google_error: reason, ...extra });
+	done(res, { google_error: reason, ...extra }, desktop);
 }
 
 /** Build a `Set-Cookie` header value with the given attributes. */
@@ -139,8 +149,12 @@ async function resolveUserId(req: any): Promise<string | null> {
  *
  * Returns both the ready-to-redirect `authorizeUrl` and the `state`. Throws 'google-not-configured'
  * when Google Chat is off/unconfigured.
+ *
+ * `desktop` (optional): when true, the callback hands the result back to the desktop app via the
+ * `matterchat://` scheme. Carried TAMPER-PROOF in the server-side parked state doc, never a query
+ * param (spec §A.4).
  */
-export async function buildGoogleAuthorizeUrl(userId: string): Promise<{ authorizeUrl: string; state: string }> {
+export async function buildGoogleAuthorizeUrl(userId: string, desktop = false): Promise<{ authorizeUrl: string; state: string }> {
 	if (!isGoogleConfigured()) {
 		throw new Error('google-not-configured');
 	}
@@ -153,9 +167,10 @@ export async function buildGoogleAuthorizeUrl(userId: string): Promise<{ authori
 	const codeVerifier = base64url(crypto.randomBytes(32));
 	const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-	// Park the verifier + owner userId server-side, keyed by state (TTL via CredentialTokens). This
-	// is what binds the callback to THIS user without trusting a cookie.
-	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, userId } });
+	// Park the verifier + owner userId (+ the desktop flag) server-side, keyed by state (TTL via
+	// CredentialTokens). This binds the callback to THIS user without trusting a cookie, and makes the
+	// desktop flag tamper-proof.
+	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, userId, desktop } });
 
 	const url = new URL(GOOGLE_AUTHORIZE_ENDPOINT);
 	url.searchParams.set('response_type', 'code');
@@ -177,16 +192,20 @@ export async function buildGoogleAuthorizeUrl(userId: string): Promise<{ authori
 // ─── /start ──────────────────────────────────────────────────────────────────────────────────
 
 async function handleStart(req: any, res: any): Promise<void> {
+	// Desktop hand-off: the desktop shell opens this in the system browser with `?client=desktop`.
+	// Read it FIRST so even the pre-auth refusals below hand back to the app via `matterchat://`.
+	const desktop = isDesktopAuthorizeRequest(req.url);
+
 	if (!isGoogleConfigured()) {
-		return fail(res, 'not_configured');
+		return fail(res, 'not_configured', {}, desktop);
 	}
 
 	const userId = await resolveUserId(req);
 	if (!userId) {
-		return fail(res, 'not_authenticated');
+		return fail(res, 'not_authenticated', {}, desktop);
 	}
 
-	const { authorizeUrl, state } = await buildGoogleAuthorizeUrl(userId);
+	const { authorizeUrl, state } = await buildGoogleAuthorizeUrl(userId, desktop);
 
 	// One-time HttpOnly state cookie set in the same redirect (CSRF defence — mirrors Teams). Lax +
 	// 10-min Max-Age survives the Google consent round-trip.
@@ -213,16 +232,21 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// Read the one-time state cookie (cleared on every exit via done()/fail()).
 		const cookieState = readCookie(req, STATE_COOKIE);
 
+		// Peek the parked state doc up-front (read-only; consumed below) to recover the TAMPER-PROOF
+		// desktop flag so even the early error exits hand back via the `matterchat://` scheme.
+		const peekDoc = state ? await CredentialTokens.findOneNotExpiredById(stateKey(state)) : null;
+		const desktop = isDesktopState(peekDoc?.userInfo?.profile?.desktop);
+
 		// Google returned an error (e.g. the user declined consent).
 		if (error) {
 			if (state) {
 				await CredentialTokens.removeById(stateKey(state));
 			}
-			return fail(res, `oauth_${error}`);
+			return fail(res, `oauth_${error}`, {}, desktop);
 		}
 
 		if (!code || !state) {
-			return fail(res, 'missing_code_or_state');
+			return fail(res, 'missing_code_or_state', {}, desktop);
 		}
 
 		// Verify state. When a cookie IS present it MUST match (CSRF defence for the cookie `/start`
@@ -230,14 +254,14 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// back to the parked token, which is server-minted, userId-bound, and short-TTL. A
 		// PRESENT-but-mismatched cookie is always rejected.
 		if (cookieState && cookieState !== state) {
-			return fail(res, 'state_cookie_mismatch');
+			return fail(res, 'state_cookie_mismatch', {}, desktop);
 		}
 		const stateDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
 		await CredentialTokens.removeById(stateKey(state));
 		const codeVerifier = stateDoc?.userInfo?.profile?.codeVerifier;
 		const userId = stateDoc?.userInfo?.profile?.userId;
 		if (!codeVerifier || !userId) {
-			return fail(res, 'invalid_state');
+			return fail(res, 'invalid_state', {}, desktop);
 		}
 
 		// Exchange the code (+ PKCE verifier + client secret) for tokens.
@@ -257,7 +281,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 
 		const tokens: any = await tokenRes.json().catch(() => ({}));
 		if (!tokenRes.ok || !tokens?.access_token) {
-			return fail(res, `token_exchange_${tokenRes.status}`);
+			return fail(res, `token_exchange_${tokenRes.status}`, {}, desktop);
 		}
 
 		// Read identity from the id_token (present via `openid email`). The Workspace domain is the
@@ -286,7 +310,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		});
 
 		SystemLogger.info({ msg: 'Google Chat connection established', userId, connectionId: _id, externalOrgId });
-		return done(res, { google_connected: '1', connectionId: _id });
+		return done(res, { google_connected: '1', connectionId: _id }, desktop);
 	} catch (err) {
 		SystemLogger.error({ msg: 'Google Chat OAuth callback error', err: String(err) });
 		return fail(res, 'callback_exception');

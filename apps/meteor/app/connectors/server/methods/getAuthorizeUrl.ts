@@ -27,19 +27,23 @@ import { buildTeamsAuthorizeUrl } from '../providers/teams/routes';
 declare module '@rocket.chat/ddp-client' {
 	// eslint-disable-next-line @typescript-eslint/naming-convention
 	interface ServerMethods {
-		'connectors:getAuthorizeUrl'(provider: ExternalProvider): Promise<string>;
+		// `desktop` (optional): when true, the provider callback hands the result back to the desktop app
+		// via the `matterchat://` scheme instead of the HTTPS landing. The flag is folded into the
+		// server-side parked OAuth state (tamper-proof) by each build*AuthorizeUrl. ADDITIVE: web callers
+		// omit it and keep the existing behaviour byte-for-byte.
+		'connectors:getAuthorizeUrl'(provider: ExternalProvider, desktop?: boolean): Promise<string>;
 	}
 }
 
 Meteor.methods<ServerMethods>({
-	async 'connectors:getAuthorizeUrl'(provider) {
+	async 'connectors:getAuthorizeUrl'(provider, desktop = false) {
 		if (!this.userId) {
 			throw new Meteor.Error('not-authorized', 'Not authorized', { method: 'connectors:getAuthorizeUrl' });
 		}
 
 		if (provider === 'teams') {
 			try {
-				const { authorizeUrl } = await buildTeamsAuthorizeUrl(this.userId);
+				const { authorizeUrl } = await buildTeamsAuthorizeUrl(this.userId, desktop);
 				return authorizeUrl;
 			} catch (err) {
 				// Surface the standalone-safe gate as a clean, client-readable error so the UI can tell
@@ -55,7 +59,7 @@ Meteor.methods<ServerMethods>({
 
 		if (provider === 'google') {
 			try {
-				const { authorizeUrl } = await buildGoogleAuthorizeUrl(this.userId);
+				const { authorizeUrl } = await buildGoogleAuthorizeUrl(this.userId, desktop);
 				return authorizeUrl;
 			} catch (err) {
 				// Surface the standalone-safe gate as a clean, client-readable error so the UI can tell
@@ -71,7 +75,7 @@ Meteor.methods<ServerMethods>({
 
 		if (provider === 'slack') {
 			try {
-				const { authorizeUrl } = await buildSlackAuthorizeUrl(this.userId);
+				const { authorizeUrl } = await buildSlackAuthorizeUrl(this.userId, desktop);
 				return authorizeUrl;
 			} catch (err) {
 				// Surface the standalone-safe gate as a clean, client-readable error so the UI can tell
