@@ -9,13 +9,19 @@
  *   GET  external-workspaces.list                                   -> the user's connections (no secrets)
  *   GET  external-workspaces.authUrl?provider=slack|teams           -> begin-connect URL (STUB for now)
  *   GET  external-workspaces.channels?connectionId=|provider=teams  -> the connection's REAL channels
- *   GET  external-workspaces.messages?connectionId=&channelExternalId=&since=  -> a channel's REAL messages
+ *   GET  external-workspaces.directChats?connectionId=|provider=    -> the connection's REAL 1:1 + group DMs
+ *   GET  external-workspaces.members?connectionId=|provider=        -> the connection's REAL org people
+ *   GET  external-workspaces.messages?connectionId=&channelExternalId=&since=  -> a channel/chat's REAL messages
  *   POST external-workspaces.sendMessage { connectionId, channelExternalId, text } -> post AS the user
  *   POST external-workspaces.disconnect { connectionId }            -> tear down one of the user's own
  *
- * The channels / messages / sendMessage routes ride a real Graph/auth/config error back inside a 200
- * envelope as { ok:false, error, message, status } (NOT API.v1.failure) — the RC REST client rejects
- * 4xx bodies with the raw Response, which would hide the message. See spec §6.2 (WS-5).
+ * The channels / directChats / members / messages / sendMessage routes ride a real Graph/auth/config
+ * error back inside a 200 envelope as { ok:false, error, message, status } (NOT API.v1.failure) — the
+ * RC REST client rejects 4xx bodies with the raw Response, which would hide the message. See WS-5.
+ *
+ * NOTE: messages/sendMessage take `channelExternalId` for EITHER a channel id (from .channels) OR a
+ * direct-chat id (from .directChats) — the provider detects which (Teams: a `teamId|channelId`
+ * composite is a channel, a bare chat id is a DM). The frontend passes whichever id it has, unchanged.
  *
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §4 / §6.2 (WS-5).
  */
@@ -26,12 +32,14 @@ import {
 	getProviderAuthUrl,
 	listMyChannels,
 	listMyConnections,
+	listMyDirectChats,
+	listMyMembers,
 	listMyMessages,
 	sendMyMessage,
 } from '../../../connectors/server/connectionService';
 import { API } from '../api';
 
-const VALID_PROVIDERS: ExternalProvider[] = ['slack', 'teams'];
+const VALID_PROVIDERS: ExternalProvider[] = ['slack', 'teams', 'google'];
 
 API.v1.addRoute(
 	'external-workspaces.list',
@@ -84,6 +92,62 @@ API.v1.addRoute(
 			}
 
 			return API.v1.success({ ok: true as const, groups: result.groups, connection: result.connection });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.directChats',
+	{ authRequired: true },
+	{
+		async get() {
+			const { connectionId, provider } = this.queryParams as { connectionId?: string; provider?: ExternalProvider };
+
+			if (!connectionId && !provider) {
+				return API.v1.failure('connectionId-or-provider-required');
+			}
+			if (provider && !VALID_PROVIDERS.includes(provider)) {
+				return API.v1.failure('invalid-provider');
+			}
+
+			// Own-connections-only (enforced inside listMyDirectChats via ownership-scoped model methods).
+			const result = await listMyDirectChats(this.userId, { connectionId, provider });
+
+			// Real Graph/auth/config error NOT swallowed: rides back inside a 200 envelope so the panel can
+			// render it plainly (the RC REST client hides 4xx bodies — see api-client send()).
+			if ('error' in result) {
+				return API.v1.success({ ok: false as const, error: result.error, message: result.message, status: result.status });
+			}
+
+			return API.v1.success({ ok: true as const, chats: result.chats, connection: result.connection });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.members',
+	{ authRequired: true },
+	{
+		async get() {
+			const { connectionId, provider } = this.queryParams as { connectionId?: string; provider?: ExternalProvider };
+
+			if (!connectionId && !provider) {
+				return API.v1.failure('connectionId-or-provider-required');
+			}
+			if (provider && !VALID_PROVIDERS.includes(provider)) {
+				return API.v1.failure('invalid-provider');
+			}
+
+			// Own-connections-only (enforced inside listMyMembers via ownership-scoped model methods).
+			const result = await listMyMembers(this.userId, { connectionId, provider });
+
+			// Real Graph/auth/config error NOT swallowed: rides back inside a 200 envelope so the panel can
+			// render it plainly (the RC REST client hides 4xx bodies — see api-client send()).
+			if ('error' in result) {
+				return API.v1.success({ ok: false as const, error: result.error, message: result.message, status: result.status });
+			}
+
+			return API.v1.success({ ok: true as const, members: result.members, connection: result.connection });
 		},
 	},
 );

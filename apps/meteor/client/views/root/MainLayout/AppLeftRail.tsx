@@ -6,6 +6,7 @@ import type { ComponentProps, ReactElement } from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
 
 /**
@@ -112,6 +113,14 @@ const AppLeftRail = () => {
 	// admin affordance, so without it an admin has no visible way into the admin area.
 	const isAdmin = Boolean(user?.roles?.includes('admin'));
 
+	// While a connected external workspace is selected, the rail goes SLIM: it shows only the M tile
+	// (back to MatterChat), Boards and LitBox — the three things that stay meaningful inside a foreign
+	// workspace. Chats/Activity/Search/Admin are MatterChat-native and would yank you out of the
+	// workspace, so they're hidden until you're back on MatterChat. Read defensively: the default
+	// context returns 'current', so this is false in standalone/native mode.
+	const { selectedOrgId } = useOrgSwitcherSelection();
+	const inExternalMode = isExternalSelection(selectedOrgId);
+
 	// Active-section detection. `/boards/inbox` must win for Activity, so Boards
 	// excludes the inbox sub-route to avoid both lighting up at once.
 	const inboxActive = currentRoute?.includes('/boards/inbox');
@@ -188,7 +197,9 @@ const AppLeftRail = () => {
 				M
 			</Box>
 			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px' }}>
-				{renderItem('balloons', t('Chats'), handleChat, chatActive)}
+				{/* Chats is MatterChat-native — hidden in external-workspace mode (the M tile / workspace header
+				    is the way back to MatterChat). Boards + LitBox stay (they remain meaningful inside it). */}
+				{!inExternalMode && renderItem('balloons', t('Chats'), handleChat, chatActive)}
 				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, boardsActive)}
 				<Box
 					is='button'
@@ -211,9 +222,10 @@ const AppLeftRail = () => {
 						</svg>
 					</Box>
 				</Box>
-				{canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
-				{renderItem('magnifier', t('Search'), handleSearch, false)}
-				{isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
+				{/* Activity / Search / Admin are MatterChat-native — hidden in external-workspace mode. */}
+				{!inExternalMode && canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
+				{!inExternalMode && renderItem('magnifier', t('Search'), handleSearch, false)}
+				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
 			{user && (
 				<Box display='flex' flexDirection='column' alignItems='center' mbs={8}>

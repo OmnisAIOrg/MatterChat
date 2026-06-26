@@ -1,0 +1,527 @@
+/**
+ * GoogleChatProvider — Google Chat REST implementation of IChatProvider.
+ *
+ * GREENFIELD on the Google Chat API; clean-room from the Google docs — nothing under
+ * apps/meteor/ee/ was read or copied. Mirrors TeamsProvider, but Google Chat is SIMPLER: a space's
+ * resource name (`spaces/{id}`) IS the channel id, so there is NO composite encode/decode — the
+ * `externalId` is passed straight through to `GET/POST /v1/{space}/messages`.
+ *
+ * WHAT IS REAL:
+ *   - connect            → completes the OAuth auth-code + PKCE exchange (the same exchange the
+ *                          /_google/oauth/callback route runs) and returns usable credentials.
+ *                          DELEGATED scopes; acts AS the signed-in user.
+ *   - verifyCredentials  → lists spaces (cheapest authenticated call) to confirm the token works.
+ *   - listChannels       → GET /v1/spaces (paged via nextPageToken), the SPACE-type spaces mapped to
+ *                          IProviderChannel { externalId: space.name, name, isPrivate }.
+ *   - listDirectChats    → GET /v1/spaces, the DIRECT_MESSAGE + GROUP_CHAT spaces mapped to
+ *                          IProviderDirectChat. A DM is named by the OTHER member(s) via
+ *                          GET /v1/{space}/members (chat.memberships.readonly); falls back to the
+ *                          space displayName/id when the membership lookup yields nothing.
+ *   - listMembers        → GET /v1/{space}/members for one space; for the org-wide People roster,
+ *                          aggregate members across all the user's spaces, deduped by user id.
+ *   - syncMessages       → GET /v1/{space}/messages?pageSize=50 (paged), each mapped to
+ *                          IProviderMessage (author from sender.displayName, text, createdAt). Works
+ *                          for DM-type spaces too — same /v1/{space}/messages path.
+ *   - postMessage        → POST /v1/{space}/messages with { text }, AS the signed-in user. Returns
+ *                          the created message resource name as the externalId. Works for DM-type
+ *                          spaces too — same /v1/{space}/messages path.
+ *
+ * WHAT IS A TODO STUB (the realtime milestone):
+ *   - subscribe          → Google Chat does not push per-space message events to a generic OAuth
+ *                          client; a polling fallback (or a Chat app/Pub-Sub) is the realtime path.
+ *   - resolveIdentity    → from the message `sender` block carried in each payload.
+ *
+ * STANDALONE-SAFE: every live method throws `google_not_configured` when the connector is disabled
+ * or no client secret is set, so a fresh MatterChat with Google Chat off has zero Google behavior.
+ */
+import { serverFetch as fetch } from '@rocket.chat/server-fetch';
+
+import type {
+	IChatProvider,
+	InboundMessageHandler,
+	IOutboundMessage,
+	IProviderChannel,
+	IProviderConnection,
+	IProviderCredentials,
+	IProviderDirectChat,
+	IProviderMember,
+	IProviderMessage,
+	IProviderOAuthInput,
+	IProviderSubscription,
+	IProviderUser,
+	IVerifiedConnection,
+} from '../ChatProvider';
+import {
+	CHAT_BASE,
+	getGoogleConfig,
+	isGoogleConfigured,
+	GOOGLE_TOKEN_ENDPOINT,
+	redirectUri,
+	GOOGLE_DELEGATED_SCOPES,
+} from './google/config';
+import type { GoogleTokens } from './google/googleApi';
+import { googleFetch, googleGetAll } from './google/googleApi';
+import { SystemLogger } from '../../../../server/lib/logger/system';
+
+// Mounting the OAuth routes is a side-effect of importing this provider, so booting the connectors
+// index (which constructs the registry with `new GoogleChatProvider()`) also wires /_google/oauth.
+import './google/routes';
+
+const NEXT_MILESTONE =
+	'GoogleChatProvider: realtime is the next milestone (subscribe/resolveIdentity). Google Chat has no generic per-space push to an OAuth client; polling/Pub-Sub is the path.';
+
+function notConfigured(): never {
+	throw new Error('google_not_configured');
+}
+
+/** How many message pages (×pageSize) to read in one syncMessages call — a reasonable backfill cap. */
+const MAX_MESSAGE_PAGES = 5;
+const MESSAGE_PAGE_SIZE = 50;
+
+/** Build the mutable GoogleTokens bundle the googleApi reads/refreshes from stored credentials. */
+function tokensFromCredentials(credentials: IProviderCredentials): GoogleTokens {
+	if (!credentials?.accessToken) {
+		throw new Error('google_missing_access_token');
+	}
+	return {
+		accessToken: credentials.accessToken,
+		refreshToken: credentials.refreshToken,
+		expiresAt: typeof credentials.expiresAt === 'number' ? credentials.expiresAt : undefined,
+	};
+}
+
+/** Normalize a space resource name to the `spaces/{id}` form (tolerates a bare id). */
+function toSpaceName(externalId: string): string {
+	if (!externalId) {
+		throw new Error('google_invalid_channel_id');
+	}
+	return externalId.startsWith('spaces/') ? externalId : `spaces/${externalId}`;
+}
+
+/**
+ * A Google Chat space, in the shape the spaces.list endpoint returns. `spaceType` is the current field
+ * (`SPACE` = named channel/room, `DIRECT_MESSAGE` = 1:1, `GROUP_CHAT` = group DM); `type` is the
+ * legacy field (`ROOM`/`DM`) — we tolerate both. spaces.list does NOT inline members, so a DM is named
+ * via a separate spaces.members.list call (see fetchSpaceMembers).
+ */
+type GoogleSpace = { name?: string; displayName?: string; spaceType?: string; type?: string };
+
+/**
+ * A `User` (a human or app principal) as it appears inside a membership's `member` block. `name` is the
+ * `users/{id}` resource id, `displayName` the human label, `type` is HUMAN vs BOT.
+ */
+type GoogleChatUser = { name?: string; displayName?: string; type?: string };
+
+/**
+ * A space membership, in the shape spaces.members.list returns under the `memberships` field. Human
+ * members carry a `member` (a User); Google-group members carry `groupMember` (which has no per-person
+ * user id) — we only surface `member` people.
+ */
+type GoogleMembership = { name?: string; member?: GoogleChatUser; groupMember?: { name?: string } };
+
+/** Page size for spaces.members.list — members per space are few, one page usually suffices. */
+const MEMBER_PAGE_SIZE = 100;
+
+/**
+ * List a space's HUMAN members via spaces.members.list: GET /v1/{space}/members?pageSize=100 (paged via
+ * nextPageToken, field `memberships`). Returns the `member` User of each membership (group memberships,
+ * which have no per-person id, are dropped). Requires the delegated `chat.memberships.readonly` scope —
+ * a missing-scope/permission failure rides back UNSWALLOWED via googleGetAll (`google_error:...`).
+ */
+async function fetchSpaceMembers(space: string, tokens: GoogleTokens): Promise<GoogleChatUser[]> {
+	const memberships = await googleGetAll<GoogleMembership>(
+		`${CHAT_BASE}/${space}/members?pageSize=${MEMBER_PAGE_SIZE}`,
+		'memberships',
+		tokens,
+	);
+	const users: GoogleChatUser[] = [];
+	for (const m of memberships) {
+		// Only person ("member") memberships carry a user id; skip Google-group ("groupMember") rows.
+		if (m?.member?.name) {
+			users.push(m.member);
+		}
+	}
+	return users;
+}
+
+export class GoogleChatProvider implements IChatProvider {
+	readonly provider = 'google' as const;
+
+	// ─── auth / lifecycle ──────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Complete the OAuth auth-code + PKCE exchange and return usable credentials. The primary connect
+	 * flow is the browser redirect handled by ./google/routes.ts (which persists the connection
+	 * itself); this method exists so the IChatProvider contract is honored and callers that already
+	 * hold an auth code (+ verifier) can complete the exchange programmatically.
+	 */
+	async connect(input: IProviderOAuthInput): Promise<IProviderCredentials> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const { authCode, codeVerifier } = input;
+		if (!authCode || !codeVerifier) {
+			throw new Error('google_connect_requires_auth_code_and_verifier');
+		}
+		const config = getGoogleConfig();
+
+		const res = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+			ignoreSsrfValidation: true, // Google token host, not user input
+			method: 'POST',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: new URLSearchParams({
+				grant_type: 'authorization_code',
+				code: authCode,
+				code_verifier: codeVerifier,
+				client_id: config.clientId,
+				client_secret: config.clientSecret,
+				redirect_uri: input.redirectUri || redirectUri(),
+			}).toString(),
+		});
+		const tokens: any = await res.json().catch(() => ({}));
+		if (!res.ok || !tokens?.access_token) {
+			throw new Error(`google_token_exchange_failed:${tokens?.error || res.status}`);
+		}
+
+		// Decode the workspace domain from the id_token (present via `openid email`).
+		let externalOrgId = '';
+		if (typeof tokens.id_token === 'string') {
+			try {
+				const payload = tokens.id_token.split('.')[1];
+				const claims = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+				externalOrgId = claims.hd || (typeof claims.email === 'string' ? claims.email.split('@')[1] : '') || '';
+			} catch {
+				// fall through — verifyCredentials can still confirm the token by listing spaces
+			}
+		}
+
+		return {
+			accessToken: tokens.access_token,
+			refreshToken: tokens.refresh_token,
+			expiresAt: tokens.expires_in ? Date.now() + Number(tokens.expires_in) * 1000 : undefined,
+			externalOrgId,
+		};
+	}
+
+	/**
+	 * Sanity-check credentials by listing spaces (the cheapest authenticated Chat call; the googleApi
+	 * refreshes the access token once on a 401). Returns `ok:false` rather than throwing so the caller
+	 * can mark the connection `error`/`needs-reconnect` cleanly.
+	 */
+	async verifyCredentials(credentials: IProviderCredentials): Promise<IVerifiedConnection> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(credentials);
+		try {
+			// A 1-item spaces listing proves the delegated token is valid for Chat.
+			await googleFetch<{ spaces?: unknown[] }>(`${CHAT_BASE}/spaces?pageSize=1`, tokens);
+			const externalOrgId = (typeof credentials.externalOrgId === 'string' && credentials.externalOrgId) || '';
+			const externalOrgName = externalOrgId ? `Google Chat (${externalOrgId})` : 'Google Chat';
+			return { ok: true, externalOrgId, externalOrgName, scopes: GOOGLE_DELEGATED_SCOPES };
+		} catch (err) {
+			return { ok: false, externalOrgId: String(credentials.externalOrgId || ''), externalOrgName: '', scopes: [] };
+		}
+	}
+
+	/**
+	 * Tear down live resources for this connection. No sockets/subscriptions exist yet (realtime is
+	 * the next milestone), so this is a no-op today — disconnect at the record level is handled by
+	 * connectionService.
+	 */
+	async disconnect(_connection: IProviderConnection): Promise<void> {
+		// No live Google subscriptions to delete until the realtime milestone; nothing to release.
+	}
+
+	// ─── discovery ─────────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * List the NAMED-SPACE channels visible to this connection's user: GET /v1/spaces, paged via
+	 * nextPageToken, the `SPACE` (legacy `ROOM`) spaces mapped to IProviderChannel. The space resource
+	 * name (`spaces/{id}`) IS the channel id, passed straight to the messages endpoints. DM-type spaces
+	 * (DIRECT_MESSAGE / GROUP_CHAT) are EXCLUDED here — they surface via listDirectChats instead, so a
+	 * DM never appears both as a "private channel" and as a "Chat".
+	 */
+	async listChannels(connection: IProviderConnection): Promise<IProviderChannel[]> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+
+		const channels: IProviderChannel[] = [];
+		for (const space of spaces) {
+			if (!space?.name) {
+				continue;
+			}
+			// spaceType is the current field; `type` is the legacy field (ROOM/DM) — tolerate both.
+			const spaceType = space.spaceType || space.type || '';
+			// Channels are named spaces only; DMs/group DMs are listDirectChats' job.
+			if (spaceType !== 'SPACE' && spaceType !== 'ROOM') {
+				continue;
+			}
+			channels.push({
+				// The space resource name is the channel id — passed straight to the messages endpoints.
+				externalId: space.name,
+				name: space.displayName || space.name,
+				// A named SPACE can still be a private/restricted space; without an extra field on the
+				// list payload we treat named spaces as non-private (matches the channels-section intent).
+				isPrivate: false,
+			});
+		}
+		return channels;
+	}
+
+	/**
+	 * List the user's direct chats — 1:1 (DIRECT_MESSAGE) and group DMs (GROUP_CHAT) — for the "Chats"
+	 * section: GET /v1/spaces (the same spaces.list listChannels reads), keeping only the DM-type spaces.
+	 * The `externalId` is the space resource name (addressed via /v1/{space}/messages for read/post, same
+	 * as a channel — syncMessages/postMessage accept it unchanged). `isGroup` is true for GROUP_CHAT.
+	 *
+	 * Naming: a Google DM space has no useful displayName, so we name it by its member(s) via
+	 * spaces.members.list (chat.memberships.readonly), joining the human members' display names. (Google
+	 * Chat memberships do not flag which membership is the signed-in user, so we label by all human
+	 * members rather than excluding self.) When the membership lookup yields nothing usable we fall back
+	 * to the space displayName, then the resource id, so the chat always has a label.
+	 *
+	 * The top-level spaces.list call surfaces Google errors ({error:{code,message,status}}) UNSWALLOWED
+	 * via googleGetAll; a single per-space membership failure is logged + tolerated (the DM still lists,
+	 * named by its fallback label) so one inaccessible space does not blank the whole Chats section.
+	 */
+	async listDirectChats(connection: IProviderConnection): Promise<IProviderDirectChat[]> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+
+		const out: IProviderDirectChat[] = [];
+		for (const space of spaces) {
+			if (!space?.name) {
+				continue;
+			}
+			const spaceType = space.spaceType || space.type || '';
+			// Only DM-type spaces: DIRECT_MESSAGE (1:1) and GROUP_CHAT (group DM). Skip SPACE/ROOM.
+			const isDm = spaceType === 'DIRECT_MESSAGE';
+			const isGroupChat = spaceType === 'GROUP_CHAT';
+			if (!isDm && !isGroupChat) {
+				continue;
+			}
+
+			// Name the DM by its members. spaces.list does not inline members, so look them up per space.
+			let members: GoogleChatUser[] = [];
+			try {
+				members = await fetchSpaceMembers(space.name, tokens);
+			} catch (err) {
+				// A per-space membership read can fail (e.g. a space we can no longer enumerate members of);
+				// don't drop the whole DM list for one space — fall back to the space's own label below.
+				SystemLogger.debug({ msg: 'Google Chat listDirectChats member lookup failed for a space', space: space.name, err: String(err) });
+			}
+
+			const memberNames = members.map((m) => m.displayName).filter((n): n is string => Boolean(n));
+			const memberExternalIds = members.map((m) => m.name).filter((id): id is string => Boolean(id));
+
+			// Prefer the joined member display names (the other people in the DM). Group DMs may also carry a
+			// displayName; fall back to it, then to the resource id, so the chat always has a label.
+			const name = (memberNames.length ? memberNames.join(', ') : '') || space.displayName || space.name;
+
+			out.push({
+				externalId: space.name,
+				name,
+				isGroup: isGroupChat,
+				...(memberExternalIds.length ? { memberExternalIds } : {}),
+			});
+		}
+		return out;
+	}
+
+	/**
+	 * List the org/workspace people for the "People" section by aggregating members across ALL the
+	 * spaces the signed-in user can see: GET /v1/spaces, then GET /v1/{space}/members per space
+	 * (spaces.members.list), deduped by the `users/{id}` resource name. Requires the delegated
+	 * `chat.memberships.readonly` scope. Each human member maps to IProviderMember { externalId: user
+	 * resource name, displayName }. Google Chat memberships do NOT carry an email on the User block, so
+	 * `email` is omitted. Google errors ({error:{code,message,status}}) are surfaced UNSWALLOWED by
+	 * googleGetAll (the spaces.list / first members call); a single later per-space failure is logged
+	 * and skipped so one inaccessible space does not blank the whole roster.
+	 */
+	async listMembers(connection: IProviderConnection): Promise<IProviderMember[]> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+
+		// Dedupe people across spaces by their `users/{id}` resource name (one person is in many spaces).
+		const byUserId = new Map<string, IProviderMember>();
+		let surfacedFirst = false;
+		for (const space of spaces) {
+			if (!space?.name) {
+				continue;
+			}
+			let members: GoogleChatUser[];
+			try {
+				members = await fetchSpaceMembers(space.name, tokens);
+				surfacedFirst = true;
+			} catch (err) {
+				// Surface the FIRST failure unswallowed (likely the chat.memberships.readonly scope not yet
+				// consented) so the caller shows a real error rather than a silently-empty roster. Once we've
+				// read at least one space's members, tolerate a later per-space failure and keep going.
+				if (!surfacedFirst) {
+					throw err;
+				}
+				SystemLogger.debug({ msg: 'Google Chat listMembers member lookup failed for a space', space: space.name, err: String(err) });
+				continue;
+			}
+			for (const m of members) {
+				const externalId = m.name;
+				if (!externalId || byUserId.has(externalId)) {
+					continue;
+				}
+				// Skip non-human principals (Chat apps) from the People roster.
+				if (m.type && m.type !== 'HUMAN') {
+					continue;
+				}
+				byUserId.set(externalId, {
+					externalId,
+					displayName: m.displayName || externalId,
+				});
+			}
+		}
+		return [...byUserId.values()];
+	}
+
+	// ─── sync (read) — REAL ──────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Read a space's messages: GET /v1/{space}/messages?pageSize=50, paged via nextPageToken up to
+	 * MAX_MESSAGE_PAGES. Each Google message is mapped to IProviderMessage — author from
+	 * `sender.displayName` (falls back to the sender resource name), text from `text`, `ts` from
+	 * `createTime`. Messages without text (pure attachments/cards) still flow through with empty text.
+	 *
+	 * `channelExternalId` is the `spaces/{id}` resource name listChannels emitted. `since` is an
+	 * optional ISO timestamp; messages at/older than it are skipped client-side (Google's list order
+	 * is ascending by create time, so we filter rather than stop early).
+	 */
+	async *syncMessages(connection: IProviderConnection, channelExternalId: string, since?: string): AsyncIterable<IProviderMessage> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const space = toSpaceName(channelExternalId);
+
+		type GoogleSender = { name?: string; displayName?: string; type?: string };
+		type GoogleMessage = {
+			name?: string;
+			text?: string;
+			createTime?: string;
+			lastUpdateTime?: string;
+			sender?: GoogleSender;
+		};
+
+		const sinceMs = since ? Date.parse(since) : NaN;
+		const hasSince = !Number.isNaN(sinceMs);
+
+		let pageToken: string | undefined;
+		let pages = 0;
+
+		while (pages < MAX_MESSAGE_PAGES) {
+			const url = new URL(`${CHAT_BASE}/${space}/messages`);
+			url.searchParams.set('pageSize', String(MESSAGE_PAGE_SIZE));
+			if (pageToken) {
+				url.searchParams.set('pageToken', pageToken);
+			}
+
+			const page = await googleFetch<{ messages?: GoogleMessage[]; nextPageToken?: string }>(url.toString(), tokens);
+			pages++;
+
+			for (const msg of page.messages || []) {
+				if (!msg?.name) {
+					continue;
+				}
+				const ts = msg.createTime || '';
+				if (hasSince && ts) {
+					const tsMs = Date.parse(ts);
+					if (!Number.isNaN(tsMs) && tsMs <= sinceMs) {
+						continue;
+					}
+				}
+
+				const authorId = msg.sender?.name || '';
+				const authorName = msg.sender?.displayName;
+
+				yield {
+					externalId: msg.name,
+					channelExternalId,
+					authorExternalId: authorId,
+					// Display name rides on the message (`sender.displayName`), so the UI can render a name
+					// without a separate resolveIdentity lookup. Falls back to the sender id at the client.
+					...(authorName ? { authorDisplayName: authorName } : {}),
+					text: msg.text || '',
+					ts,
+					...(msg.lastUpdateTime && msg.lastUpdateTime !== msg.createTime ? { editedTs: msg.lastUpdateTime } : {}),
+				};
+			}
+
+			pageToken = page.nextPageToken;
+			if (!pageToken) {
+				break;
+			}
+		}
+	}
+
+	async subscribe(
+		_connection: IProviderConnection,
+		_channelExternalId: string,
+		_onMessage: InboundMessageHandler,
+	): Promise<IProviderSubscription> {
+		// TODO(next milestone): Google Chat has no generic per-space push to an OAuth client; the
+		// realtime path is either polling on a per-connection toggle or a Chat app + Pub/Sub event sub.
+		throw new Error(NEXT_MILESTONE);
+	}
+
+	// ─── identity — NEXT MILESTONE ───────────────────────────────────────────────────────────────
+
+	async resolveIdentity(_connection: IProviderConnection, _externalUserId: string): Promise<IProviderUser | null> {
+		// TODO(next milestone): resolve from the message `sender` block carried in each payload.
+		throw new Error(NEXT_MILESTONE);
+	}
+
+	// ─── write — REAL ────────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Post a message to a space AS the signed-in user (delegated chat.messages.create):
+	 * POST /v1/{space}/messages with `{ text }`. Returns the created message resource name as the
+	 * externalId. Google API errors ({error:{code,message,status}}) are surfaced unswallowed by
+	 * googleFetch.
+	 *
+	 * `channelExternalId` is the `spaces/{id}` resource name listChannels emitted.
+	 */
+	async postMessage(
+		connection: IProviderConnection,
+		channelExternalId: string,
+		message: IOutboundMessage,
+	): Promise<{ externalId: string }> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		const text = message?.text;
+		if (typeof text !== 'string' || !text.trim()) {
+			throw new Error('google_empty_message');
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const space = toSpaceName(channelExternalId);
+
+		const created = await googleFetch<{ name?: string }>(`${CHAT_BASE}/${space}/messages`, tokens, {
+			method: 'POST',
+			body: { text },
+		});
+		if (!created?.name) {
+			throw new Error('google_post_no_message_id');
+		}
+		return { externalId: created.name };
+	}
+}

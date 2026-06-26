@@ -6,14 +6,15 @@
  * against the IChatProvider interface — they NEVER `new SlackProvider()` or branch on provider.
  * Adding a provider later = register one implementation here; no caller changes.
  *
- * Both providers are registered as STUBS today (each throws `not_implemented`); the real
- * implementations drop in behind these same keys.
+ * Slack, Teams, and Google Chat are all registered with REAL implementations behind these keys;
+ * future providers drop in the same way (register one implementation here, no caller changes).
  *
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §1.2.
  */
 import type { ExternalProvider } from '@rocket.chat/core-typings';
 
 import type { IChatProvider } from './ChatProvider';
+import { GoogleChatProvider } from './providers/GoogleChatProvider';
 import { SlackProvider } from './providers/SlackProvider';
 import { TeamsProvider } from './providers/TeamsProvider';
 
@@ -48,6 +49,7 @@ class ProviderRegistry {
 /** Singleton registry. Import this everywhere; do not instantiate providers directly. */
 export const providerRegistry = new ProviderRegistry();
 
-// Freeze the two providers behind their keys. Real implementations replace these stubs in place.
+// Freeze the providers behind their keys. Real implementations replace any stubs in place.
 providerRegistry.register(new SlackProvider());
 providerRegistry.register(new TeamsProvider());
+providerRegistry.register(new GoogleChatProvider());

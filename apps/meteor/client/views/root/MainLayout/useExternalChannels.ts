@@ -3,17 +3,18 @@ import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 
 /**
- * useTeamsChannels — the REAL Microsoft Teams channels for one of the caller's OWN connections.
+ * useExternalChannels — the REAL channels/spaces for one of the caller's OWN external connections.
  *
- * Calls `external-workspaces.channels`, which loads the connection (ownership-scoped), decrypts the
- * stored credentials, and runs the provider's live `listChannels` (GET /me/joinedTeams ->
- * /teams/{id}/channels via Graph). The result is a discriminated envelope: on a Graph/auth/config
- * error the endpoint returns `{ ok:false, error, message }` (NOT swallowed) so we surface the real
- * message here for the panel to show plainly.
+ * Provider-agnostic: drives the channel list for any external workspace (Teams channels via Graph,
+ * Google Chat spaces via the Chat REST API). Calls `external-workspaces.channels` with the
+ * connection's `_id`; the endpoint loads the connection (ownership-scoped), decrypts the stored
+ * credentials, and runs THAT provider's live `listChannels`. The result is a discriminated envelope:
+ * on a provider/auth/config error it returns `{ ok:false, error, message }` (NOT swallowed) so we
+ * surface the real message here for the panel to show plainly.
  *
- * `enabled` gates the fetch so it only runs while the Teams tile is actually selected.
+ * `enabled` gates the fetch so it only runs while an external tile is actually selected.
  */
-export const useTeamsChannels = (
+export const useExternalChannels = (
 	connectionId: string | undefined,
 	enabled: boolean,
 ): {
@@ -26,10 +27,12 @@ export const useTeamsChannels = (
 	const getChannels = useEndpoint('GET', '/v1/external-workspaces.channels');
 
 	const query = useQuery({
-		queryKey: ['external-workspaces.channels', connectionId ?? 'teams'],
-		queryFn: () => (connectionId ? getChannels({ connectionId }) : getChannels({ provider: 'teams' })),
-		enabled,
-		// Live Graph data; don't hammer it, but let a manual refetch pull fresh channels.
+		queryKey: ['external-workspaces.channels', connectionId ?? 'none'],
+		queryFn: () => getChannels({ connectionId: connectionId as string }),
+		// Only fetch with a real connection id selected (no provider fallback: the rail always selects
+		// a concrete connection tile).
+		enabled: enabled && Boolean(connectionId),
+		// Live provider data; don't hammer it, but let a manual refetch pull fresh channels.
 		staleTime: 15_000,
 		retry: false,
 	});

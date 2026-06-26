@@ -26,7 +26,10 @@ export const TEAMS_DELEGATED_SCOPES = [
 	'Channel.ReadBasic.All',
 	'ChannelMessage.Read.All',
 	'ChannelMessage.Send',
+	// Chat.ReadWrite → read/post 1:1 + group DMs (listDirectChats / chat read+post).
 	'Chat.ReadWrite',
+	// TeamMember.Read.All → list team members across joined teams for the "People" section (listMembers).
+	'TeamMember.Read.All',
 	'offline_access',
 	'openid',
 	'profile',

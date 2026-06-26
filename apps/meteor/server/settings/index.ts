@@ -34,6 +34,8 @@ import { createRetentionSettings } from './retention-policy';
 import { createSetupWSettings } from './setup-wizard';
 import { createSlackBridgeSettings } from './slackbridge';
 import { createSmarshSettings } from './smarsh';
+import { createGoogleSettings } from './google';
+import { createSlackSettings } from './slack';
 import { createTeamsSettings } from './teams';
 import { createThreadSettings } from './threads';
 import { createTroubleshootSettings } from './troubleshoot';
@@ -78,6 +80,8 @@ await Promise.all([
 	createSetupWSettings(),
 	createSlackBridgeSettings(),
 	createSmarshSettings(),
+	createGoogleSettings(),
+	createSlackSettings(),
 	createTeamsSettings(),
 	createThreadSettings(),
 	createTroubleshootSettings(),

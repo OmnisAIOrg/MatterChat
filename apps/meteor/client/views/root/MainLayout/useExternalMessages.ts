@@ -4,41 +4,43 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 /**
- * useTeamsMessages — REAL read + post for one Teams channel of the caller's OWN connection.
+ * useExternalMessages — REAL read + post for one channel/space of the caller's OWN external connection.
  *
- * READ: `external-workspaces.messages` runs the provider's live `syncMessages` (Microsoft Graph
- * GET /teams/{teamId}/channels/{channelId}/messages, newest-first) for the caller's own connection.
- * The endpoint resolves a discriminated 200 envelope: on a Graph/auth/config error (e.g. the
- * admin-consent 403) it returns `{ ok:false, error, message, status }` (NOT swallowed) so the view
- * can show the real message plainly.
+ * Provider-agnostic via `connectionId` (Teams channels through Graph, Google Chat spaces through the
+ * Chat REST API — the endpoint dispatches on the connection's provider).
+ *
+ * READ: `external-workspaces.messages` runs the provider's live `syncMessages` (newest-first) for the
+ * caller's own connection. The endpoint resolves a discriminated 200 envelope: on a provider/auth/
+ * config error (e.g. an admin-consent 403) it returns `{ ok:false, error, message, status }` (NOT
+ * swallowed) so the view can show the real message plainly.
  *
  * POST: `external-workspaces.sendMessage` posts AS the user (delegated token) via the provider's
  * `postMessage`. After a successful send we refetch so the new message appears.
  *
- * The channel identity is whatever the channels list provided (`externalId`, the provider-native
- * `teamId|channelId` composite) — passed straight through as `channelExternalId`.
+ * The channel identity is whatever the channels list provided (`channelExternalId`, the provider-
+ * native id — Teams `teamId|channelId`, Google `spaces/{id}`) — passed straight through.
  *
  * The provider returns messages newest-first; we present them newest-AT-BOTTOM like a chat, so the
  * view reverses them for display.
  *
  * Crash-safety: BOTH args are optional and the query/mutation are gated by `enabled`. Every hook
  * runs unconditionally and in a stable order regardless of whether a channel is selected, so this
- * hook can be called from the top of TeamsChannelView before any early return.
+ * hook can be called from the top of the channel view before any early return.
  */
-export type TeamsEnvelopeError = { error: string; message: string; status?: number };
+export type ExternalEnvelopeError = { error: string; message: string; status?: number };
 
-export const useTeamsMessages = (
+export const useExternalMessages = (
 	connectionId: string | undefined,
 	channelExternalId: string | undefined,
 ): {
 	messages: ExternalWorkspaceMessage[] | undefined;
-	error: TeamsEnvelopeError | undefined;
+	error: ExternalEnvelopeError | undefined;
 	isLoading: boolean;
 	isFetching: boolean;
 	refetch: () => void;
 	send: (text: string) => Promise<void>;
 	isSending: boolean;
-	sendError: TeamsEnvelopeError | undefined;
+	sendError: ExternalEnvelopeError | undefined;
 } => {
 	const queryClient = useQueryClient();
 	const getMessages = useEndpoint('GET', '/v1/external-workspaces.messages');
@@ -51,15 +53,15 @@ export const useTeamsMessages = (
 		queryKey,
 		queryFn: () => getMessages({ connectionId: connectionId as string, channelExternalId: channelExternalId as string }),
 		enabled,
-		// Live Graph data; a short stale time keeps it fresh on channel switch without hammering Graph.
+		// Live provider data; a short stale time keeps it fresh on channel switch without hammering.
 		staleTime: 10_000,
 		retry: false,
 	});
 
 	const { data } = query;
-	const providerError: TeamsEnvelopeError | undefined =
+	const providerError: ExternalEnvelopeError | undefined =
 		data?.ok === false ? { error: data.error, message: data.message, status: data.status } : undefined;
-	const transportError: TeamsEnvelopeError | undefined = query.isError
+	const transportError: ExternalEnvelopeError | undefined = query.isError
 		? { error: 'request_failed', message: query.error instanceof Error ? query.error.message : 'Could not reach the server.' }
 		: undefined;
 
@@ -75,7 +77,7 @@ export const useTeamsMessages = (
 			}
 			const result = await sendMutation.mutateAsync(text);
 			// The send endpoint also rides errors back in a 200 envelope (ok:false) — throw so the caller
-			// keeps the typed text and we surface the real Graph/consent message.
+			// keeps the typed text and we surface the real provider/consent message.
 			if (result?.ok === false) {
 				const err = new Error(result.message) as Error & { status?: number; providerError?: string };
 				err.status = result.status;
@@ -90,7 +92,7 @@ export const useTeamsMessages = (
 		[enabled, sendMutation, queryClient, connectionId, channelExternalId],
 	);
 
-	const sendError: TeamsEnvelopeError | undefined = sendMutation.isError
+	const sendError: ExternalEnvelopeError | undefined = sendMutation.isError
 		? {
 				error: (sendMutation.error as { providerError?: string })?.providerError ?? 'send_failed',
 				message: sendMutation.error instanceof Error ? sendMutation.error.message : 'Could not send your message.',

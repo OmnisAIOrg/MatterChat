@@ -1,33 +1,38 @@
 import type { ReactElement, ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
-import type { SelectedTeamsChannel } from './OrgSwitcherContext';
+import type { SelectedExternalChannel } from './OrgSwitcherContext';
 import OrgSwitcherContext from './OrgSwitcherContext';
 
 /**
  * Holds the selected-workspace state shared between the OrgSwitcherRail (writer), the sidebar (which
- * swaps the room list for the Teams channel list) and the main content (which renders the open Teams
- * channel). Mounted once in LayoutWithSidebar, wrapping the rail + sidebar(s) + content.
+ * swaps the room list for the external channel list) and the main content (which renders the open
+ * external channel). Mounted once in LayoutWithSidebar, wrapping the rail + sidebar(s) + content.
  *
- * Leaving Teams (selecting any non-'teams' workspace) clears the open channel so returning to the
- * native workspace is a clean reset — no stale Teams channel lingering behind the MatterChat view.
+ * Leaving an external workspace (selecting the native 'current' tile, or any non-external selection)
+ * clears the open channel so returning to the native workspace is a clean reset — no stale external
+ * channel lingering behind the MatterChat view. SWITCHING between two external tiles (Teams <-> Google
+ * Chat) also clears the open channel, because a channel id from one connection is meaningless in the
+ * other.
  */
 const OrgSwitcherProvider = ({ children }: { children: ReactNode }): ReactElement => {
 	const [selectedOrgId, setSelectedOrgIdState] = useState('current');
-	const [selectedTeamsChannel, setSelectedTeamsChannel] = useState<SelectedTeamsChannel | undefined>(undefined);
+	const [selectedExternalChannel, setSelectedExternalChannel] = useState<SelectedExternalChannel | undefined>(undefined);
 
 	const setSelectedOrgId = useCallback((id: string) => {
-		setSelectedOrgIdState(id);
-		// Switching away from Teams (e.g. clicking the M tile) drops the open channel so the Teams view
-		// never bleeds into the MatterChat view.
-		if (id !== 'teams') {
-			setSelectedTeamsChannel(undefined);
-		}
+		setSelectedOrgIdState((prev) => {
+			// Switching away from the CURRENT external tile (back to MatterChat, or to a DIFFERENT
+			// external tile) drops the open channel so it never bleeds across connections/views.
+			if (id !== prev) {
+				setSelectedExternalChannel(undefined);
+			}
+			return id;
+		});
 	}, []);
 
 	const value = useMemo(
-		() => ({ selectedOrgId, setSelectedOrgId, selectedTeamsChannel, setSelectedTeamsChannel }),
-		[selectedOrgId, setSelectedOrgId, selectedTeamsChannel],
+		() => ({ selectedOrgId, setSelectedOrgId, selectedExternalChannel, setSelectedExternalChannel }),
+		[selectedOrgId, setSelectedOrgId, selectedExternalChannel],
 	);
 
 	return <OrgSwitcherContext.Provider value={value}>{children}</OrgSwitcherContext.Provider>;
