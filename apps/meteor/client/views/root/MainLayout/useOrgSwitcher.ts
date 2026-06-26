@@ -1,6 +1,8 @@
 import { useMethod, usePermission, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useCallback, useMemo } from 'react';
 
+import { isDesktopApp, openAuthorizeUrl } from '../../../lib/desktop/desktopBridge';
+
 /**
  * A workspace shown in the switcher — this MatterChat workspace OR a connected external Slack.
  */
@@ -103,8 +105,11 @@ export const useOrgSwitcher = (): {
 			return;
 		}
 		try {
-			const url = await getAuthorizeUrl('slack');
-			window.location.href = url;
+			// DESKTOP: pass the desktop flag so the server returns via the `matterchat://` scheme, and
+			// open the authorize URL in the SYSTEM browser (embedded-webview OAuth is blocked by the
+			// providers — spec §A.4). WEB/PWA: full-page nav, unchanged.
+			const url = await getAuthorizeUrl('slack', isDesktopApp());
+			openAuthorizeUrl(url);
 		} catch (error) {
 			const reason = error instanceof Error ? error.message : String(error);
 			const code = (error as { error?: string })?.error;
@@ -133,8 +138,9 @@ export const useOrgSwitcher = (): {
 	// tell the admin to paste the secret + enable Teams. Any user can connect their OWN Teams.
 	const connectTeams = useCallback(async () => {
 		try {
-			const url = await getAuthorizeUrl('teams');
-			window.location.href = url;
+			// DESKTOP: desktop flag + system-browser hand-off (spec §A.4). WEB/PWA: full-page nav.
+			const url = await getAuthorizeUrl('teams', isDesktopApp());
+			openAuthorizeUrl(url);
 		} catch (error) {
 			const reason = error instanceof Error ? error.message : String(error);
 			if (reason === 'teams-not-configured' || (error as { error?: string })?.error === 'teams-not-configured') {
@@ -155,8 +161,9 @@ export const useOrgSwitcher = (): {
 	// paste the secret + enable Google Chat. Any user can connect their OWN Google identity.
 	const connectGoogle = useCallback(async () => {
 		try {
-			const url = await getAuthorizeUrl('google');
-			window.location.href = url;
+			// DESKTOP: desktop flag + system-browser hand-off (spec §A.4). WEB/PWA: full-page nav.
+			const url = await getAuthorizeUrl('google', isDesktopApp());
+			openAuthorizeUrl(url);
 		} catch (error) {
 			const reason = error instanceof Error ? error.message : String(error);
 			if (reason === 'google-not-configured' || (error as { error?: string })?.error === 'google-not-configured') {

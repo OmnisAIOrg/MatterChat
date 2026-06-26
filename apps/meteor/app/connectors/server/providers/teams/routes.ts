@@ -38,6 +38,7 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { SystemLogger } from '../../../../../server/lib/logger/system';
+import { finishDesktopConnectorCallback, isDesktopAuthorizeRequest, isDesktopState } from '../../desktopOAuth';
 import { encryptCredentials } from '../../tokenCrypto';
 import {
 	getTeamsConfig,
@@ -85,7 +86,16 @@ function clearStateCookie(): string {
  * Bounce back to the app's connectors UI with a result/error flag (the rail reads it), clearing
  * the one-time state cookie on the way out.
  */
-function done(res: any, params: Record<string, string>): void {
+function done(res: any, params: Record<string, string>, desktop = false): void {
+	// DESKTOP: hand the result back to the app via the `matterchat://` scheme (status only, never a
+	// token) with an HTML "Return to MatterChat" interstitial fallback (spec §A.4). The success vs
+	// error distinction is the presence of the `teams_error` param.
+	if (desktop) {
+		const isError = typeof params.teams_error === 'string';
+		return finishDesktopConnectorCallback(res, 'teams', isError ? 'error' : 'ok', params.teams_error, {
+			'Set-Cookie': clearStateCookie(),
+		});
+	}
 	const qs = new URLSearchParams(params).toString();
 	// Land on a page that EXISTS. The dedicated /admin/external-workspaces UI is the next milestone;
 	// until then bounce to home with the teams_connected=1 / teams_error=<reason> result in the URL.
@@ -93,9 +103,9 @@ function done(res: any, params: Record<string, string>): void {
 	res.end();
 }
 
-function fail(res: any, reason: string, extra: Record<string, string> = {}): void {
+function fail(res: any, reason: string, extra: Record<string, string> = {}, desktop = false): void {
 	SystemLogger.warn({ msg: 'Teams OAuth failed', reason });
-	done(res, { teams_error: reason, ...extra });
+	done(res, { teams_error: reason, ...extra }, desktop);
 }
 
 /** Build a `Set-Cookie` header value with the given attributes. */
@@ -141,8 +151,12 @@ async function resolveUserId(req: any): Promise<string | null> {
  *
  * Returns both the ready-to-redirect `authorizeUrl` and the `state` (so the cookie-based `/start`
  * can set its one-time state cookie). Throws 'teams-not-configured' when Teams is off/unconfigured.
+ *
+ * `desktop` (optional): when true, the callback will hand the result back to the desktop app via the
+ * `matterchat://` scheme instead of the HTTPS landing. The flag is carried TAMPER-PROOF — stored in
+ * the server-side parked state doc here, never echoed as a query param (spec §A.4).
  */
-export async function buildTeamsAuthorizeUrl(userId: string): Promise<{ authorizeUrl: string; state: string }> {
+export async function buildTeamsAuthorizeUrl(userId: string, desktop = false): Promise<{ authorizeUrl: string; state: string }> {
 	if (!isTeamsConfigured()) {
 		throw new Error('teams-not-configured');
 	}
@@ -155,9 +169,10 @@ export async function buildTeamsAuthorizeUrl(userId: string): Promise<{ authoriz
 	const codeVerifier = base64url(crypto.randomBytes(32));
 	const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-	// Park the verifier + owner userId server-side, keyed by state (TTL via CredentialTokens). This
-	// is what binds the callback to THIS user without trusting a cookie.
-	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, userId } });
+	// Park the verifier + owner userId (+ the desktop flag) server-side, keyed by state (TTL via
+	// CredentialTokens). This is what binds the callback to THIS user without trusting a cookie, and
+	// what makes the desktop flag tamper-proof (it lives only in this server-side doc).
+	await CredentialTokens.create(stateKey(state), { profile: { codeVerifier, userId, desktop } });
 
 	const url = new URL(authorizeEndpoint(config));
 	url.searchParams.set('response_type', 'code');
@@ -175,16 +190,21 @@ export async function buildTeamsAuthorizeUrl(userId: string): Promise<{ authoriz
 // ─── /start ──────────────────────────────────────────────────────────────────────────────────
 
 async function handleStart(req: any, res: any): Promise<void> {
+	// Desktop hand-off: the desktop shell opens this in the system browser with `?client=desktop`.
+	// Read it FIRST so even the pre-auth refusals below hand back to the app via `matterchat://`
+	// instead of stranding the desktop user on an HTTPS error page in the system browser.
+	const desktop = isDesktopAuthorizeRequest(req.url);
+
 	if (!isTeamsConfigured()) {
-		return fail(res, 'not_configured');
+		return fail(res, 'not_configured', {}, desktop);
 	}
 
 	const userId = await resolveUserId(req);
 	if (!userId) {
-		return fail(res, 'not_authenticated');
+		return fail(res, 'not_authenticated', {}, desktop);
 	}
 
-	const { authorizeUrl, state } = await buildTeamsAuthorizeUrl(userId);
+	const { authorizeUrl, state } = await buildTeamsAuthorizeUrl(userId, desktop);
 
 	// One-time HttpOnly state cookie set in the same redirect: the callback must present a state
 	// matching BOTH this cookie and the parked token (CSRF defence — mirrors the spec's "bind to
@@ -212,23 +232,28 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// Read the one-time state cookie (cleared on every exit via done()/fail()).
 		const cookieState = readCookie(req, STATE_COOKIE);
 
+		// Peek the parked state doc up-front (read-only; consumed later) to recover the TAMPER-PROOF
+		// desktop flag — it lives only here, never in a query param — so even the early error exits hand
+		// back to the desktop app via the `matterchat://` scheme rather than dead-ending on HTTPS.
+		const peekDoc = state ? await CredentialTokens.findOneNotExpiredById(stateKey(state)) : null;
+		const desktop = isDesktopState(peekDoc?.userInfo?.profile?.desktop);
+
 		// Microsoft returned an error (e.g. the user/admin declined consent).
 		if (error) {
 			// Resolve the owner (from the still-valid parked token) so we can record consent_required.
-			const errStateDoc = state ? await CredentialTokens.findOneNotExpiredById(stateKey(state)) : null;
+			const ownerId = peekDoc?.userInfo?.profile?.userId;
 			if (state) {
 				await CredentialTokens.removeById(stateKey(state));
 			}
-			const ownerId = errStateDoc?.userInfo?.profile?.userId;
 			// "consent_required" / "interaction_required" → admin hasn't granted the read scopes.
 			if ((error === 'consent_required' || error === 'interaction_required' || error === 'access_denied') && ownerId) {
-				return fail(res, 'consent_required', { admin_consent_url: adminConsentUrl(config) });
+				return fail(res, 'consent_required', { admin_consent_url: adminConsentUrl(config) }, desktop);
 			}
-			return fail(res, `oauth_${error}`);
+			return fail(res, `oauth_${error}`, {}, desktop);
 		}
 
 		if (!code || !state) {
-			return fail(res, 'missing_code_or_state');
+			return fail(res, 'missing_code_or_state', {}, desktop);
 		}
 
 		// Verify state. The cookie-based `/start` flow sets a one-time state cookie, so when a cookie
@@ -238,14 +263,14 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		// keyed by a server-minted random state and bound to a specific userId with a short TTL. A
 		// PRESENT-but-mismatched cookie is always rejected.
 		if (cookieState && cookieState !== state) {
-			return fail(res, 'state_cookie_mismatch');
+			return fail(res, 'state_cookie_mismatch', {}, desktop);
 		}
 		const stateDoc = await CredentialTokens.findOneNotExpiredById(stateKey(state));
 		await CredentialTokens.removeById(stateKey(state));
 		const codeVerifier = stateDoc?.userInfo?.profile?.codeVerifier;
 		const userId = stateDoc?.userInfo?.profile?.userId;
 		if (!codeVerifier || !userId) {
-			return fail(res, 'invalid_state');
+			return fail(res, 'invalid_state', {}, desktop);
 		}
 
 		// Exchange the code (+ PKCE verifier + client secret) for tokens.
@@ -270,9 +295,9 @@ async function handleCallback(req: any, res: any): Promise<void> {
 			const aad = String(tokens?.error || '');
 			if (aad === 'consent_required' || aad === 'interaction_required') {
 				await persistConnection(userId, '', 'Microsoft Teams', 'consent_required', [], undefined);
-				return fail(res, 'consent_required', { admin_consent_url: adminConsentUrl(config) });
+				return fail(res, 'consent_required', { admin_consent_url: adminConsentUrl(config) }, desktop);
 			}
-			return fail(res, `token_exchange_${tokenRes.status}`);
+			return fail(res, `token_exchange_${tokenRes.status}`, {}, desktop);
 		}
 
 		// Read the external tenant (`tid`) + subject (`sub`) from the id_token (present via `openid`).
@@ -283,7 +308,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		const grantedScopes = typeof tokens.scope === 'string' ? tokens.scope.split(' ').filter(Boolean) : TEAMS_DELEGATED_SCOPES;
 
 		if (!tid) {
-			return fail(res, 'no_tenant_id');
+			return fail(res, 'no_tenant_id', {}, desktop);
 		}
 
 		// Encrypt the tokens and persist the per-user connection (status 'connected').
@@ -304,7 +329,7 @@ async function handleCallback(req: any, res: any): Promise<void> {
 		});
 
 		SystemLogger.info({ msg: 'Teams connection established', userId, connectionId: _id, tid });
-		return done(res, { teams_connected: '1', connectionId: _id });
+		return done(res, { teams_connected: '1', connectionId: _id }, desktop);
 	} catch (err) {
 		SystemLogger.error({ msg: 'Teams OAuth callback error', err: String(err) });
 		return fail(res, 'callback_exception');
