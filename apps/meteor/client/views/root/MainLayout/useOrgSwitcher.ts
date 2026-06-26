@@ -64,7 +64,7 @@ export const useOrgSwitcher = (): {
 
 	const orgs = useMemo<SwitchableOrg[]>(() => {
 		const initial = (siteName.trim().match(/\b\w/g) || ['M']).slice(0, 2).join('').toUpperCase();
-		const list: SwitchableOrg[] = [{ id: 'current', name: siteName, initial, color: '#1B7A2E', type: 'matterchat', active: true }];
+		const list: SwitchableOrg[] = [{ id: 'current', name: siteName, initial, color: '#e1140a', type: 'matterchat', active: true }];
 		if (slackConnected) {
 			list.push({ id: 'slack', name: 'Slack', initial: 'SL', type: 'slack' });
 		}

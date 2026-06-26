@@ -1,4 +1,3 @@
-import { css } from '@rocket.chat/css-in-js';
 import { Box, Throbber } from '@rocket.chat/fuselage';
 import { FeaturePreview, FeaturePreviewOff, FeaturePreviewOn } from '@rocket.chat/ui-client';
 import type { IRouterPaths } from '@rocket.chat/ui-contexts';
@@ -20,75 +19,6 @@ import NavigationRegion from '../../navigation';
 import RoomsNavigationProvider from '../../navigation/providers/RoomsNavigationProvider';
 
 const INVALID_ROOM_NAME_PREFIXES = ['#', '?'] as const;
-
-/**
- * GREEN "Variant B" — the floating window in a green frame.
- *
- * The app shell (`#rocket-chat`: the two rails + Sidebar + MainContent) is the "window". We turn
- * `#rocket-chat` into the green, top-lit, beveled FRAME and lift a rounded, clipped WINDOW inside it
- * that holds the existing shell. The frame is applied ONE LEVEL UP from ShellBody — `.mc-window` is a
- * plain flex row that simply replaces the old flex row `#rocket-chat` was; the OrgSwitcherProvider +
- * ShellBody (and therefore the lazy external-workspace mode behind ExternalErrorBoundary) are untouched
- * and still mount/scroll exactly as before. The window is `overflow: hidden` so its rounded corners clip
- * the rails/sidebar/content, while each inner region keeps its own height + independent scroll.
- *
- *   frameClass  → the colored frame: padding + radial green gradient + inset bevel.
- *   windowClass → the rounded, shadowed, clipped window; a flex row holding the existing shell.
- *
- * The NavBar (the dark global bar) stays ABOVE the frame, full-bleed, exactly as today. Print and
- * mobile (<768px) drop the frame so neither wastes the padding / fights the single-column layout.
- */
-const FRAME_PAD = 14;
-
-const frameClass = css`
-	display: flex;
-	flex-grow: 1;
-	min-height: 0;
-	padding: ${FRAME_PAD}px;
-	background: radial-gradient(135% 115% at 50% -12%, #5fcb7a 0%, #2ba14c 52%, #1b7a2e 100%);
-	box-shadow:
-		inset 0 2px 1px rgba(255, 255, 255, 0.45),
-		inset 0 -4px 10px rgba(10, 50, 24, 0.42);
-
-	@media print {
-		padding: 0;
-		background: none;
-		box-shadow: none;
-	}
-
-	/* On small screens the frame padding wastes space and fights the single-column layout — drop it. */
-	@media (width <= 767px) {
-		padding: 0;
-		background: none;
-		box-shadow: none;
-	}
-`;
-
-const windowClass = css`
-	flex: 1 1 auto;
-	width: 100%;
-	height: 100%;
-	min-height: 0;
-	min-width: 0;
-	border-radius: 14px;
-	overflow: hidden;
-	display: flex;
-	align-items: stretch;
-	box-shadow:
-		0 18px 40px rgba(8, 22, 12, 0.5),
-		0 3px 10px rgba(8, 22, 12, 0.4),
-		inset 0 1px 0 rgba(255, 255, 255, 0.06);
-
-	@media print {
-		border-radius: 0;
-		box-shadow: none;
-	}
-
-	@media (width <= 767px) {
-		border-radius: 0;
-		box-shadow: none;
-	}
-`;
 
 /**
  * The external-workspace view components are LAZY-loaded — they are NOT statically imported at this
@@ -242,25 +172,17 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 		<>
 			<AccessibilityShortcut />
 			{!embeddedLayout && <NavBar />}
-			{/*
-			  `#rocket-chat` now owns the green FRAME (was: a plain flex row on bg='surface-light'). Its old
-			  flex-row children move one level down into `.mc-window` — the rounded, clipped, lifted window.
-			  The OrgSwitcherProvider + ShellBody (and the lazy external-workspace mode behind
-			  ExternalErrorBoundary) are unchanged; only their flex-row container moved.
-			*/}
 			<Box
 				bg='surface-light'
 				id='rocket-chat'
-				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav', frameClass].filter(Boolean).join(' ')}
+				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav'].filter(Boolean).join(' ')}
 			>
 				<MainLayoutStyleTags />
-				<Box className={[windowClass, 'mc-window'].join(' ')}>
-					<OrgSwitcherProvider>
-						<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
-							{children}
-						</ShellBody>
-					</OrgSwitcherProvider>
-				</Box>
+				<OrgSwitcherProvider>
+					<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
+						{children}
+					</ShellBody>
+				</OrgSwitcherProvider>
 			</Box>
 		</>
 	);
