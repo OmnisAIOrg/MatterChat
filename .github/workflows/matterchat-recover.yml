@@ -1,0 +1,21 @@
+name: MatterChat — Recover (ECR rollback)
+on: { workflow_dispatch: { inputs: { retag_digest: { description: 'digest to re-tag as staging-latest (blank = list only)', required: false, default: '' } } } }
+env: { AWS_REGION: us-west-2, CLUSTER_NAME: stg-omnisai-cluster, K8S_NAMESPACE: staging }
+jobs:
+  recover:
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { aws-access-key-id: "${{ secrets.AWS_ACCESS_KEY_ID }}", aws-secret-access-key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}", aws-region: us-west-2 }
+      - name: List newest matterchat images (pushed-at | digest | tags)
+        run: |
+          aws ecr describe-images --repository-name matterchat \
+            --query 'reverse(sort_by(imageDetails,&imagePushedAt))[:6].[imagePushedAt,imageDigest,imageTags]' --output text
+      - name: Re-tag chosen digest as staging-latest (if provided) + roll pod
+        if: ${{ inputs.retag_digest != '' }}
+        run: |
+          MAN=$(aws ecr batch-get-image --repository-name matterchat --image-ids imageDigest="${{ inputs.retag_digest }}" --query 'images[0].imageManifest' --output text)
+          aws ecr put-image --repository-name matterchat --image-tag staging-latest --image-manifest "$MAN" && echo "re-tagged staging-latest -> ${{ inputs.retag_digest }}"
+          which kubectl || { curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"; chmod +x kubectl; sudo mv kubectl /usr/local/bin/; }
+          aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+          kubectl delete pod -n "${K8S_NAMESPACE}" -l app=matterchat --force --grace-period=0 || true
