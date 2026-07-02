@@ -145,7 +145,9 @@ Implications:
 - **Screening (ethical wall):** a firm can screen specific lawyers/staff off a matter — enforced technically
   (no access, hidden from member lists + search) **and logged with timing** (provable, timely screen).
 - **Conflict-check hooks:** adding an attorney triggers a check against the firm's **conflict registry**
-  (integration point with **CasePro**/matter system) → flag or block conflicted additions.
+  (integration point with **CasePro**/matter system) → flag or block conflicted additions. *(Design only —
+  no cross-org conflict/represented-party registry exists in CasePro today; its data model is org-scoped.
+  This is a future CFCS/ethics-gate build, not a wired path.)*
 
 ---
 
@@ -156,7 +158,9 @@ Implications:
   rooms (the "through MatterChat" delivery). No RC multi-tenancy or federation needed.
 - **CasePro** — matters are the organizing unit: a CFCS matter room links to a CasePro matter
   (`linked_casepro_matter_id`); conflict registry + matter metadata flow from CasePro. (Reuses the
-  channel↔matter linking concept from PR #3.)
+  channel↔matter linking concept from PR #3.) *(Design only: the cross-firm code is deliberately
+  CasePro-free today — `linked_casepro_matter_id` and the conflict-registry flow are not implemented;
+  the shipped CasePro wire is the intra-firm boards/matters integration, not this cross-org path.)*
 - **Standalone principle preserved:** MatterChat works without CFCS; CFCS enriches it. CasePro/Depo integrations
   are additive.
 

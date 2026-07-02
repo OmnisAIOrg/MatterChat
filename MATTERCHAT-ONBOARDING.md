@@ -183,7 +183,7 @@ Mirror an existing example rather than inventing patterns: a form modal → copy
 
 ## 9. CasePro integration (the legal layer)
 
-Matters/Leads mirror CasePro: a read-through **`MatterSnapshot`** cache on matter cards + write-through sync for intake (work leads in MatterChat's kanban, it syncs back to CasePro). CasePro is the system of record; the board is a synced working view. The full CasePro schema discovery (13 matter stages, 8 intake stages, 12 practice areas, field mappings) is documented in the design assets. Live CasePro auth (confirming the OIDC `sub` maps to CasePro `users.id` via CentralizedAuth) is the open integration step.
+Matters/Leads mirror CasePro: a read-through **`MatterSnapshot`** cache on matter cards + write-through sync for intake (work leads in MatterChat's kanban, and — **once enabled** — it syncs back to CasePro). CasePro is the system of record; the board is a synced working view. **Status (2026-07-02):** the live wire (JSON-RPC over the casepro-mcp-v2 gateway) and the write-through paths are built, merged, and deployed **dark** on staging — they run against a built-in stub and stay dark until `CasePro_Enabled` + the `CASEPRO_*` env are set and a real MCP key is provisioned. The full CasePro schema discovery (13 matter stages, 8 intake stages, 12 practice areas, field mappings) is documented in the design assets. See `docs/features/casepro-integration.md` for the honest stub-vs-live breakdown and the enablement checklist.
 
 ---
 
