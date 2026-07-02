@@ -259,6 +259,9 @@ export const permissions = [
 	{ _id: 'boards-casepro-sync', roles: ['admin', 'partner'] },
 	{ _id: 'boards-manage-casepro-settings', roles: ['admin', 'partner'] },
 	{ _id: 'boards-casepro-write', roles: ['admin', 'partner'] },
+	// CHI AI assistant (/chi) — seeded to every member ('user') by default; admins can
+	// tighten it to the legal roles (admin/partner/attorney/paralegal stay seeded).
+	{ _id: 'chi-use', roles: ['admin', 'user', 'partner', 'attorney', 'paralegal'] },
 	// Boards M7 (automation engine) — manage rules/buttons/scheduled/sequences, run buttons,
 	// gate CasePro write-back actions, and the broad read on the run-log/audit view.
 	{ _id: 'boards-manage-automations', roles: ['admin', 'attorney', 'case-manager', 'intake-manager'] },

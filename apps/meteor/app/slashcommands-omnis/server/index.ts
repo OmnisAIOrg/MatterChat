@@ -4,6 +4,7 @@ import type { SlashCommandCallbackParams } from '@rocket.chat/core-typings';
 import { createLead } from '../../../server/lib/boards/leads/service';
 import { ensureMattersBoard, bindMatterCard } from '../../../server/lib/boards/matters/service';
 import { createCard } from '../../../server/lib/boards/service';
+import { handleChiQuestion } from '../../../server/lib/chi/service';
 import { setRoomFolderMethod } from '../../../server/methods/setRoomFolder';
 import { slashCommands } from '../../utils/server/slashCommand';
 
@@ -12,6 +13,8 @@ import { slashCommands } from '../../utils/server/slashCommand';
  *   /task <title>     → create a task card on the user's Matters board
  *   /lead <name>      → create a lead (CasePro intake)
  *   /matter <id>      → add a CasePro matter to the user's Matters board
+ *   /chi <question>   → ask the CHI AI assistant (answers in-channel as the "Chi" bot,
+ *                       with the room's CasePro matter as context — server/lib/chi/)
  *
  * All feedback is an ephemeral message to the caller (plain strings — descriptions
  * are typed `string`, so no i18n-key build dependency). Each handler is fail-safe:
@@ -92,16 +95,27 @@ slashCommands.add({
 });
 
 slashCommands.add({
+	command: 'chi',
+	callback: async ({ params, message, userId }: SlashCommandCallbackParams<'chi'>): Promise<void> => {
+		// Fire-and-return: the agent round-trip can take many seconds; the handler posts a
+		// "Chi is thinking…" placeholder immediately and edits it with the answer. All
+		// validation/config misses surface as ephemeral notes inside the handler, and the
+		// handler itself never rejects — the catch is a final guard for the command bus.
+		void handleChiQuestion(userId, message.rid, params).catch(() => undefined);
+	},
+	options: {
+		description: 'Ask Chi (AI assistant) about this channel or its CasePro matter',
+		params: 'question',
+	},
+});
+
+slashCommands.add({
 	command: 'folder',
 	callback: async ({ params, message, userId }: SlashCommandCallbackParams<'folder'>): Promise<void> => {
 		const folder = params.trim();
 		try {
 			await setRoomFolderMethod(userId, message.rid, folder || undefined);
-			notify(
-				userId,
-				message.rid,
-				folder ? `📁 Filed this channel under "${folder}".` : '🗂️ Removed this channel from its sidebar folder.',
-			);
+			notify(userId, message.rid, folder ? `📁 Filed this channel under "${folder}".` : '🗂️ Removed this channel from its sidebar folder.');
 		} catch (err: any) {
 			notify(userId, message.rid, `Could not set the folder: ${err?.message || 'unknown error'}`);
 		}
