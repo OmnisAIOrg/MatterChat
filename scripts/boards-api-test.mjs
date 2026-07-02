@@ -515,6 +515,23 @@ async function main() {
   ok(typeof l0.json?.total === 'number' && l0.json?.leads?.length === Math.min(l0.json?.total, 50),
     'leads.list without params returns the default-capped page + total', `rows=${l0.json?.leads?.length} total=${l0.json?.total}`);
 
+  // --- reports family smoke (regression: requireUid() threw in the typed REST
+  // router — these endpoints 500'd on every call until switched to this.userId) ---
+  const rptOv = await api('GET', '/boards.reports.overview');
+  ok(rptOv.status === 200 && rptOv.json?.success === true && typeof rptOv.json?.report === 'object',
+    'reports.overview answers 200 + report (uid fix)', `http=${rptOv.status}`);
+  const rptS2S = await api('GET', '/boards.reports.sourceToSettlement');
+  ok(rptS2S.status === 200 && rptS2S.json?.success === true && typeof rptS2S.json?.report === 'object',
+    'reports.sourceToSettlement answers 200 + report (uid fix)', `http=${rptS2S.status}`);
+
+  // --- matters family smoke (same requireUid regression class) ---
+  const mpb = await api('GET', '/boards.matters.playbooks.list');
+  ok(mpb.status === 200 && Array.isArray(mpb.json?.playbooks),
+    'matters.playbooks.list answers 200 + playbooks[] (uid fix)', `http=${mpb.status} n=${mpb.json?.playbooks?.length}`);
+  const mdl = await api('GET', `/boards.matters.deadlines.list?boardId=${pgBoardId}`);
+  ok(mdl.status === 200 && Array.isArray(mdl.json?.deadlines),
+    'matters.deadlines.list answers 200 + deadlines[] (uid fix)', `http=${mdl.status} n=${mdl.json?.deadlines?.length}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }

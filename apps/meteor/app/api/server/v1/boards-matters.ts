@@ -40,7 +40,6 @@ import {
 	financial,
 	caseload,
 } from '../../../../server/lib/boards/matters';
-import { requireUid } from '../../../../server/lib/boards';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 
@@ -196,8 +195,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		// auth gate only; the client owns CasePro org-scoping.
-		requireUid('boards.casepro.matterSnapshot');
+		// authRequired covers the auth gate; the client owns CasePro org-scoping.
 		const { matterId } = this.queryParams;
 		const snapshot = await caseProClient.matterSnapshot(matterId);
 		return API.v1.success({ snapshot });
@@ -216,7 +214,6 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		requireUid('boards.casepro.listMatters');
 		const { stageId, caseTypeId, query, limit, offset } = this.queryParams;
 		const { matters, total } = await caseProClient.listMatters({ stageId, caseTypeId, query, limit, offset });
 		return API.v1.success({ matters, total });
@@ -235,7 +232,6 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		requireUid('boards.casepro.listStages');
 		const stages = await caseProClient.listStages();
 		return API.v1.success({ stages });
 	},
@@ -258,7 +254,7 @@ API.v1.get(
 	},
 	async function action() {
 		// reads are gated by the matters-view permission (mirrors the board reads).
-		const uid = requireUid('boards.matters.playbooks.list');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -279,7 +275,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.playbooks.seed');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-playbooks-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -300,7 +296,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.playbooks.apply');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-playbooks-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -326,7 +322,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.list');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -348,7 +344,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.create');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-deadlines-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -377,7 +373,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.acknowledge');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-deadlines-acknowledge'))) {
 			return API.v1.unauthorized();
 		}
@@ -399,7 +395,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.setStatus');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-deadlines-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -425,7 +421,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.reports.aging');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-reports-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -446,7 +442,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.reports.financial');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-reports-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -467,7 +463,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.caseload');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		if (!(await hasPermissionAsync(uid, 'boards-matters-reports-view'))) {
 			return API.v1.unauthorized();
 		}

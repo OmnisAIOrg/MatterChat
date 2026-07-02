@@ -1,9 +1,17 @@
 # HANDOFF.md — current state (read after CLAUDE.md)
 > Live state for resuming. **"checkpoint matterchat" updates this before a session ends.** Decisions + reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
-**Last updated:** 2026-06-25 · **Branch:** `staging` (deploy is now BUILD-ONLY — ArgoCD owns the cluster; see below)
+**Last updated:** 2026-07-02 · **Branch:** `staging` (deploy is now BUILD-ONLY — ArgoCD owns the cluster; see below)
 
-## 🧪 2026-07-01 — E2E regression net exists (branch `auto/playwright-gate`, unmerged)
+## ✅ 2026-07-02 — Integration pass 4 SHIPPED to staging (verification + ship of pass 3's merges)
+Pass 3 merged 4 branches (`staging-typecheck-debt`, `boards-pagination-2`, `legal-hold-admin`, `teams-message-bridge`+`teams-oauth-connect`) but was cut off pre-verification. Pass 4 verified + fixed + shipped everything, plus merged **`auto/playwright-gate`** (PR #32 — the e2e gate + staging smoke workflows are now armed on `staging`):
+- **requireUid purge**: `boards-reports.ts` (2), `boards-matters.ts` (12, 3 effect-only deleted) **and `boards-views.ts` (5 — missed by the pass-3 notes, found because the harness views-family 500'd)** all switched to `this.userId`. The typed REST router CANNOT run `Meteor.userId()` — any future boards endpoint must use `this.userId` (see boards-forms.ts line-60 comment).
+- **Typecheck: 0 errors** (fixed teams-bridge fallout: `isEditedMessage()` guard in bridgeCore; explicit variable annotation for the TS7022 `page`/`next` control-flow cycle in TeamsProvider.syncMessages — the generic alone does NOT fix it). `@rocket.chat/ui-contexts` dist ALSO needed a rebuild (stale `SubscriptionWithRoom`), on top of the 4 usual typings/models packages.
+- **Tests**: jest server suite 173/173 (legal-hold specs incl., legalHold.ts 100% cov); connector mocha suite 41/41 (`npx mocha --config ./.mocharc.base.json 'tests/unit/app/connectors/**/*.spec.ts'` — they are NOT in jest's testMatch).
+- **Runtime on :3100**: boards harness **115/115** (incl. 4 new uid-fix smoke cases for reports/matters); legal-hold REST smoke green (set → `rooms.cleanHistory` refuses `error-room-under-legal-hold` → clear → allowed); Teams smokes green (validation handshake is **POST**-only and echoes token; fake notification with no `TEAMS_WEBHOOK_CLIENT_STATE_SECRET` → 202 accepted-and-dropped, zero ingest — fail-closed; `external-workspaces.bridges` 401 unauth / `{ok:true,bridges:[]}` with auth). Boot warns `EXTERNAL_TOKEN_ENC_KEY is not set` (plaintext credentials at rest — set it on the deployment).
+- **Harness gotcha**: `boards-api-test.mjs` does not clean up after itself — leftover boards from a prior run double the `boards.cards.search` hit counts. Purge `boards_boards` titles `^(Copy of )?(API Test Board|Pagination Board|Reorder Board)` + children + `^PagLead` leads before a run.
+
+## 🧪 2026-07-01 — E2E regression net exists (branch `auto/playwright-gate`, unmerged — MERGED 2026-07-02, see above)
 Curated the upstream Playwright suite for our MIT fork + wired two gates (see **`docs/E2E-GATE.md`** for everything):
 - **`e2e-gate.yml`** — on PR into `staging`: builds the PR image (Dockerfile.alpha + ECR cache), boots app+Mongo in CI, runs a 26-test **smoke** tier; `workflow_dispatch` can run the full **mit-core** suite (592 tests; 136 EE-only tests excluded, never deleted). Check shows on the PR, deliberately NOT required.
 - **`staging-smoke.yml`** — 4 read-only checks against live staging, chained after every staging deploy (verified green against the live site 2026-07-01).

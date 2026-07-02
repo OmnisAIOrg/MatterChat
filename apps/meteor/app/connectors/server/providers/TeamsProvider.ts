@@ -478,9 +478,10 @@ export class TeamsProvider implements IChatProvider {
 		let pages = 0;
 
 		while (next && pages < MAX_MESSAGE_PAGES) {
-			// Explicit generic (not inferred) — breaks the `page` -> `next` -> `page`
-			// inference cycle tsc reports as TS7022.
-			const page = await graphFetch<{ 'value'?: GraphChatMessage[]; '@odata.nextLink'?: string }>(next, tokens, {}, onRefreshed);
+			// Explicit variable annotation (not inference) — breaks the `page` -> `next` -> `page`
+			// control-flow cycle tsc reports as TS7022 (the generic alone doesn't, because the
+			// narrowed type of the `next` argument still depends on `page`).
+			const page: { 'value'?: GraphChatMessage[]; '@odata.nextLink'?: string } = await graphFetch(next, tokens, {}, onRefreshed);
 			pages++;
 
 			for (const msg of page.value || []) {

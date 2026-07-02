@@ -26,6 +26,7 @@
  *    display name; the owner's own native external posts carry no alias (they're genuinely theirs).
  */
 import type { IExternalWorkspaceConnection, IBridgedChannel, IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
+import { isEditedMessage } from '@rocket.chat/core-typings';
 import { ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 
@@ -192,7 +193,7 @@ async function onMessageSaved(message: IMessage, room: IRoom | undefined): Promi
 			return message;
 		}
 		// v1 scope: new user text only — no edits, no system messages, no file-only messages.
-		if (message.editedAt || message.t || !message.msg?.trim()) {
+		if (isEditedMessage(message) || message.t || !message.msg?.trim()) {
 			return message;
 		}
 
