@@ -92,6 +92,11 @@ const ALLOWED_ROUTES: Array<{ method: string; re: RegExp }> = [
 	{ method: 'GET', re: /^\/firms\/[^/]+\/conflicts$/ },
 	{ method: 'GET', re: /^\/audit$/ },
 	{ method: 'GET', re: /^\/audit\/verify$/ },
+	// Self-service bar-verification re-run. Safe through the proxy: CFCS binds byAttorneyId
+	// to the verified x-cfcs-caller and requires actor.id === target.id (self-only), with
+	// per-attorney cooldown + a global concurrency cap server-side. The operator routes
+	// (/verification/queue, /verification/:id/decision) stay deliberately absent.
+	{ method: 'POST', re: /^\/attorneys\/[^/]+\/verify$/ },
 ];
 
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'host', 'cookie', 'origin']);
