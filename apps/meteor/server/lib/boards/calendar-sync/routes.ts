@@ -39,6 +39,7 @@ import {
 	OUTLOOK_CALENDAR_SCOPES,
 	outlookTokenEndpoint,
 } from './config';
+import { ensurePushSubscription } from './pushSubscriptions';
 import { getCalendarProvider } from './registry';
 import { encryptCredentials } from '../../../../app/connectors/server/tokenCrypto';
 import { SystemLogger } from '../../logger/system';
@@ -242,6 +243,19 @@ async function handleCallback(provider: CalendarProvider, req: any, res: any): P
 		});
 
 		SystemLogger.info({ msg: 'Boards calendar connection established', provider, userId, connectionId: _id });
+
+		// Best-effort: create a real-time PUSH (webhook) subscription so inbound changes reconcile
+		// instantly instead of waiting for the 15-min poll. A failure (or push being unconfigured)
+		// leaves the connection poll-only — connect NEVER fails on this. STANDALONE path only.
+		try {
+			const conn = await BoardCalendarConnections.findOneByIdAndUserId(_id, userId);
+			if (conn) {
+				await ensurePushSubscription(conn);
+			}
+		} catch (err) {
+			SystemLogger.warn({ msg: 'Boards calendar push subscription on connect failed (poll fallback)', connectionId: _id, err: String(err) });
+		}
+
 		return done(res, provider, { boards_calendar_connected: '1', provider, connectionId: _id });
 	} catch (err) {
 		SystemLogger.error({ msg: 'Boards calendar OAuth callback error', provider, err: String(err) });

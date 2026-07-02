@@ -105,6 +105,57 @@ export function getEmailWebhookSecret(): string {
 	return String(settings.get('Boards_Email_To_Task_Webhook_Secret') || '').trim();
 }
 
+// ─── Real-time PUSH (webhook) subscriptions — the parity follow-up to the 15-min inbound POLL ──────
+// Mounted OUTSIDE /api (same reason as the OAuth routes). Google POSTs events.watch notifications and
+// Graph POSTs /subscriptions change-notifications to a per-provider path under this prefix.
+
+export const PUSH_ROUTE_PREFIX = '/_boards_calendar/push';
+export const googlePushPath = (): string => `${PUSH_ROUTE_PREFIX}/google`;
+export const outlookPushPath = (): string => `${PUSH_ROUTE_PREFIX}/outlook`;
+
+/**
+ * The PUBLIC base URL Google/Microsoft must be able to reach to deliver notifications (validation
+ * handshake + change POSTs). Mirrors the Teams connector: admin setting first, env fallback, then the
+ * instance Site_Url — a deploy behind an ingress alias sets one of the first two. HTTPS is required by
+ * both providers for a webhook receiver; a non-https base means push simply won't be created.
+ *
+ *   Boards_Calendar_Push_Public_Base_Url  ||  BOARDS_CALENDAR_PUSH_PUBLIC_BASE_URL  ||  Site_Url
+ */
+export function pushPublicBaseUrl(): string {
+	const fromSetting = String(settings.get('Boards_Calendar_Push_Public_Base_Url') || '').trim();
+	const fromEnv = String(process.env.BOARDS_CALENDAR_PUSH_PUBLIC_BASE_URL || '').trim();
+	const base = fromSetting || fromEnv || Meteor.absoluteUrl();
+	return base.replace(/\/+$/, '');
+}
+
+/** Absolute HTTPS URL Google/Graph POST notifications to, per provider. */
+export const googlePushNotificationUrl = (): string => `${pushPublicBaseUrl()}${googlePushPath()}`;
+export const outlookPushNotificationUrl = (): string => `${pushPublicBaseUrl()}${outlookPushPath()}`;
+
+/**
+ * The deploy-level secret that keys the per-subscription channel-token / clientState HMAC. ENV ONLY —
+ * never a committed default, never an admin setting (it authenticates an UNAUTHENTICATED public
+ * endpoint, so it stays out of Mongo — same posture as TEAMS_WEBHOOK_CLIENT_STATE_SECRET). Empty ⇒
+ * the receiver is FAIL-CLOSED (drops every notification) AND no subscription is ever created, so the
+ * system silently keeps polling as the fallback.
+ */
+export function getCalendarPushSecret(): string {
+	return String(process.env.BOARDS_CALENDAR_PUSH_SECRET || '').trim();
+}
+
+/**
+ * FAIL-CLOSED push gate for a provider: the provider must be configured (enabled + client id/secret)
+ * AND the push secret set AND the public base URL be https. Without ALL THREE, NO subscription is
+ * created and NO webhook payload is processed — the connection simply stays on the poll. Best-effort
+ * enhancement, never required.
+ */
+export function isCalendarPushConfigured(provider: CalendarProvider): boolean {
+	if (!isProviderConfigured(provider) || !getCalendarPushSecret()) {
+		return false;
+	}
+	return pushPublicBaseUrl().startsWith('https://');
+}
+
 // ─── OAuth redirect URIs (must match the registered app EXACTLY) ──────────────────────────────────
 // NOT under /api — Rocket.Chat's REST/Apps router owns /api/* and 404s custom routes there (mirrors
 // the connector /_google + /_teams routes). Built from the instance Site_Url so prod/staging/dev each

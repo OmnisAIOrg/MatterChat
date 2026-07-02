@@ -7,8 +7,15 @@
  */
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
-import type { ICalendarChangeSet, ICalendarEvent, ICalendarProviderImpl } from '../CalendarProvider';
+import type { ICalendarChangeSet, ICalendarEvent, ICalendarProviderImpl, IPushSubscriptionResult } from '../CalendarProvider';
 import { GOOGLE_CALENDAR_BASE } from '../config';
+
+/**
+ * Google `events.watch` channel lifetime. Google caps calendar push channels at ~1 week (604,800s);
+ * we ask for ~6.5 days and the renewal sweep re-creates before then (channels are NOT renewable in
+ * place — renewal = stop the old channel + open a new one).
+ */
+const GOOGLE_CHANNEL_TTL_SECONDS = 6.5 * 24 * 60 * 60;
 
 async function gfetch<T = any>(accessToken: string, url: string, init?: { method?: string; body?: unknown }): Promise<T> {
 	const res = await fetch(url, {
@@ -139,5 +146,57 @@ export const googleCalendarProvider: ICalendarProviderImpl = {
 		}
 
 		return { events, nextCursor: nextSyncToken };
+	},
+
+	async createPushSubscription(accessToken, calendarId, params): Promise<IPushSubscriptionResult> {
+		// POST /calendars/{id}/events/watch — open a web_hook channel. `id` is OUR client-supplied UUID
+		// (echoed as X-Goog-Channel-ID); `token` is our HMAC channel token (echoed as X-Goog-Channel-Token);
+		// `params.ttl` bounds the channel lifetime. Google returns `resourceId` — needed to stop it later.
+		const url = `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(calendarId)}/events/watch`;
+		const res = await gfetch<{ resourceId?: string; expiration?: string }>(accessToken, url, {
+			method: 'POST',
+			body: {
+				id: params.subscriptionId,
+				type: 'web_hook',
+				address: params.notificationUrl,
+				token: params.channelToken,
+				params: { ttl: String(Math.floor(GOOGLE_CHANNEL_TTL_SECONDS)) },
+			},
+		});
+		// `expiration` is epoch MILLISECONDS as a string; fall back to our requested TTL if absent.
+		const expiresAt = res?.expiration
+			? new Date(Number(res.expiration))
+			: new Date(Date.now() + GOOGLE_CHANNEL_TTL_SECONDS * 1000);
+		return { subscriptionId: params.subscriptionId, ...(res?.resourceId ? { resourceId: res.resourceId } : {}), expiresAt };
+	},
+
+	async renewPushSubscription(accessToken, calendarId, current, params): Promise<IPushSubscriptionResult> {
+		// Google channels can't be extended in place → stop the old one (best-effort) and open a fresh
+		// channel (the caller supplies a NEW subscriptionId in params so ids don't collide).
+		if (current.resourceId) {
+			try {
+				await this.deletePushSubscription(accessToken, current);
+			} catch {
+				// old channel may already be gone/expired — proceed to open the new one regardless
+			}
+		}
+		return this.createPushSubscription(accessToken, calendarId, params);
+	},
+
+	async deletePushSubscription(accessToken, current): Promise<void> {
+		// POST /channels/stop — requires BOTH the channel id and the opaque resourceId.
+		if (!current.resourceId) {
+			return; // nothing addressable to stop
+		}
+		const url = `${GOOGLE_CALENDAR_BASE}/channels/stop`;
+		try {
+			await gfetch(accessToken, url, { method: 'POST', body: { id: current.subscriptionId, resourceId: current.resourceId } });
+		} catch (err) {
+			const status = (err as { status?: number })?.status;
+			if (status === 404 || status === 410) {
+				return; // already gone — idempotent
+			}
+			throw err;
+		}
 	},
 };

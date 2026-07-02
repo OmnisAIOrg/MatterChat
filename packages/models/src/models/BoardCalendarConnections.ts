@@ -1,4 +1,10 @@
-import type { CalendarProvider, IBoardCalendarConnection, IEncryptedTokenRef, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
+import type {
+	CalendarProvider,
+	IBoardCalendarConnection,
+	IBoardCalendarPushSubscription,
+	IEncryptedTokenRef,
+	RocketChatRecordDeleted,
+} from '@rocket.chat/core-typings';
 import type { IBoardCalendarConnectionsModel, UpsertBoardCalendarConnection } from '@rocket.chat/model-typings';
 import type { Collection, DeleteResult, Db, FindCursor, IndexDescription, UpdateResult } from 'mongodb';
 
@@ -23,6 +29,9 @@ export class BoardCalendarConnectionsRaw extends BaseRaw<IBoardCalendarConnectio
 			{ key: { userId: 1, provider: 1 }, unique: true },
 			// Sync jobs scan all connected connections.
 			{ key: { status: 1 } },
+			// Webhook receiver resolves a connection by the provider push subscription id it echoes back.
+			// Sparse: only connections with a real-time push subscription carry the field.
+			{ key: { 'push.subscriptionId': 1 }, sparse: true },
 		];
 	}
 
@@ -110,5 +119,19 @@ export class BoardCalendarConnectionsRaw extends BaseRaw<IBoardCalendarConnectio
 
 	setLastPollAtById(id: string, when: Date): Promise<UpdateResult> {
 		return this.updateOne({ _id: id }, { $set: { lastPollAt: when } });
+	}
+
+	setPushSubscriptionById(id: string, push: IBoardCalendarPushSubscription | undefined): Promise<UpdateResult> {
+		return push ? this.updateOne({ _id: id }, { $set: { push } }) : this.updateOne({ _id: id }, { $unset: { push: 1 } });
+	}
+
+	findConnectedWithPushExpiringBefore(before: Date): FindCursor<IBoardCalendarConnection> {
+		// Only connections that HAVE a push subscription due for renewal — a poll-only connection has no
+		// `push` field and is never enumerated here (zero push traffic when push is unconfigured).
+		return this.find({ status: 'connected', 'push.expiresAt': { $lte: before } });
+	}
+
+	findOneByPushSubscriptionId(subscriptionId: string): Promise<IBoardCalendarConnection | null> {
+		return this.findOne({ 'push.subscriptionId': subscriptionId });
 	}
 }

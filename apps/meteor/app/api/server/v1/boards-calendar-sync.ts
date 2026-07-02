@@ -5,6 +5,7 @@ import { ajv, validateBadRequestErrorResponse, validateUnauthorizedErrorResponse
 import { getCaseProBridgeForUser, isCaseProCalendarActive } from '../../../../server/lib/boards/calendar-sync/caseproBridge';
 import { pollCasePro, pushUserCardsThroughCasePro } from '../../../../server/lib/boards/calendar-sync/caseproSync';
 import { isCalendarSyncEnabled, isProviderConfigured } from '../../../../server/lib/boards/calendar-sync/config';
+import { teardownPushSubscription } from '../../../../server/lib/boards/calendar-sync/pushSubscriptions';
 import { buildAuthorizeUrl } from '../../../../server/lib/boards/calendar-sync/routes';
 import { pollConnection, pushUserCards, teardownConnectionMirrors } from '../../../../server/lib/boards/calendar-sync/service';
 import { API } from '../api';
@@ -120,6 +121,12 @@ API.v1.post(
 		const doc = await BoardCalendarConnections.findOneByIdAndUserId(connectionId, this.userId);
 		if (!doc) {
 			return API.v1.success({ removed: false });
+		}
+		try {
+			// Tear down the real-time push subscription first (best-effort), then the mirror events.
+			await teardownPushSubscription(doc);
+		} catch {
+			// best-effort — proceed regardless
 		}
 		try {
 			await teardownConnectionMirrors(doc);

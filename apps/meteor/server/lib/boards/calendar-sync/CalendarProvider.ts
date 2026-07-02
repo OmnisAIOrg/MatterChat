@@ -35,6 +35,26 @@ export interface ICalendarChangeSet {
 	nextCursor?: string;
 }
 
+/** Parameters a provider needs to create/renew a real-time push (webhook) subscription. */
+export interface IPushSubscriptionParams {
+	/** The HTTPS URL the provider POSTs notifications to (our receiver). */
+	notificationUrl: string;
+	/** The per-subscription channel token / clientState the provider echoes back (HMAC — see pushSecurity). */
+	channelToken: string;
+	/** The channel/subscription id WE mint (Google requires a client-supplied UUID; Graph mints its own). */
+	subscriptionId: string;
+}
+
+/** The subscription a provider created — what we persist on the connection to renew/verify/delete it. */
+export interface IPushSubscriptionResult {
+	/** The id echoed on every notification (Graph mints this; for Google it's the id we supplied). */
+	subscriptionId: string;
+	/** Google's opaque resource id (required to stop the channel); absent for Graph. */
+	resourceId?: string;
+	/** When the subscription expires and must be renewed by. */
+	expiresAt: Date;
+}
+
 export interface ICalendarProviderImpl {
 	/** Which provider this implements. */
 	readonly kind: IBoardCalendarConnection['provider'];
@@ -56,4 +76,27 @@ export interface ICalendarProviderImpl {
 	 * bounds the full-sync lookback so a first sync doesn't pull the user's entire history.
 	 */
 	listChanges(accessToken: string, calendarId: string, cursor: string | undefined, windowStart: Date): Promise<ICalendarChangeSet>;
+
+	// ─── real-time PUSH (webhook) subscription lifecycle — best-effort enhancement over the poll ────
+
+	/**
+	 * Create a change-notification subscription/channel for `calendarId`. Returns the ids + expiry to
+	 * persist. Throws on failure so the caller falls back to poll-only. The webhook, on a notification,
+	 * runs the SAME inbound reconcile the poll does (it does NOT trust the payload for content).
+	 */
+	createPushSubscription(accessToken: string, calendarId: string, params: IPushSubscriptionParams): Promise<IPushSubscriptionResult>;
+
+	/**
+	 * Renew an existing subscription before it expires. Google channels are NOT renewable in place → a
+	 * provider may re-create (stop old + watch new); Graph PATCHes the expiry. Returns the new state.
+	 */
+	renewPushSubscription(
+		accessToken: string,
+		calendarId: string,
+		current: { subscriptionId: string; resourceId?: string },
+		params: IPushSubscriptionParams,
+	): Promise<IPushSubscriptionResult>;
+
+	/** Tear down a subscription/channel (idempotent — a 404/410 is treated as already-gone). */
+	deletePushSubscription(accessToken: string, current: { subscriptionId: string; resourceId?: string }): Promise<void>;
 }

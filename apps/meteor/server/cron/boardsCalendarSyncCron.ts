@@ -4,6 +4,7 @@ import { BoardCalendarConnections, BoardsCards } from '@rocket.chat/models';
 import { getCaseProBridgeForUser } from '../lib/boards/calendar-sync/caseproBridge';
 import { pollCasePro, pushUserCardsThroughCasePro } from '../lib/boards/calendar-sync/caseproSync';
 import { isCalendarSyncEnabled } from '../lib/boards/calendar-sync/config';
+import { ensurePushSubscription, renewExpiringPushSubscriptions } from '../lib/boards/calendar-sync/pushSubscriptions';
 import { pollConnection, pushUserCards } from '../lib/boards/calendar-sync/service';
 import { SystemLogger } from '../lib/logger/system';
 
@@ -69,10 +70,25 @@ async function runCalendarSyncTick(): Promise<void> {
 			}
 			const pushed = await pushUserCards(conn);
 			const polled = await pollConnection(conn);
+			// Best-effort: make sure this standalone connection has a live real-time push subscription
+			// (create if missing / newly-configured). Renewal of near-expiry ones is the sweep below.
+			// The poll above ALWAYS runs first, so push is a pure enhancement — sync never depends on it.
+			await ensurePushSubscription(conn).catch(() => undefined);
 			SystemLogger.debug({ msg: 'boards.calendar.sync.tick', connectionId: conn._id, ...pushed, ...polled });
 		} catch (err) {
 			SystemLogger.warn({ msg: 'boards.calendar.sync.tick.failed', connectionId: conn._id, err: String(err) });
 		}
+	}
+
+	// 3. Renew any real-time push subscriptions nearing expiry (Google ~7d / Graph ~3d → renew early).
+	//    No-op when push is unconfigured (the query only matches connections that already have a push).
+	try {
+		const swept = await renewExpiringPushSubscriptions();
+		if (swept.renewed || swept.failed) {
+			SystemLogger.debug({ msg: 'boards.calendar.push.sweep', ...swept });
+		}
+	} catch (err) {
+		SystemLogger.warn({ msg: 'boards.calendar.push.sweep.failed', err: String(err) });
 	}
 }
 

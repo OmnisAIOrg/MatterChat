@@ -10,8 +10,14 @@
  */
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
-import type { ICalendarChangeSet, ICalendarEvent, ICalendarProviderImpl } from '../CalendarProvider';
+import type { ICalendarChangeSet, ICalendarEvent, ICalendarProviderImpl, IPushSubscriptionResult } from '../CalendarProvider';
 import { GRAPH_BASE } from '../config';
+
+/**
+ * Graph subscription lifetime for `/me/events`. Graph caps event subscriptions at 4,230 minutes
+ * (~2.94 days); we ask for ~2.8 days and the renewal sweep PATCHes the expiry before then.
+ */
+const GRAPH_SUBSCRIPTION_LIFETIME_MS = 4030 * 60 * 1000;
 
 async function gfetch<T = any>(
 	accessToken: string,
@@ -143,5 +149,56 @@ export const outlookCalendarProvider: ICalendarProviderImpl = {
 		}
 
 		return { events, nextCursor: deltaLink };
+	},
+
+	async createPushSubscription(accessToken, _calendarId, params): Promise<IPushSubscriptionResult> {
+		// POST /subscriptions on the user's events. Graph MINTS the subscription id (we ignore the
+		// client-supplied one) and echoes our `clientState` (the HMAC channel token) on each notification.
+		// changeType covers create/update/delete so a moved OR cancelled event reconciles.
+		const created = await gfetch<{ id?: string; expirationDateTime?: string }>(accessToken, `${GRAPH_BASE}/subscriptions`, {
+			method: 'POST',
+			body: {
+				changeType: 'created,updated,deleted',
+				notificationUrl: params.notificationUrl,
+				resource: '/me/events',
+				clientState: params.channelToken,
+				includeResourceData: false,
+				expirationDateTime: new Date(Date.now() + GRAPH_SUBSCRIPTION_LIFETIME_MS).toISOString(),
+			},
+		});
+		if (!created?.id) {
+			throw new Error('outlook_calendar_subscription_no_id');
+		}
+		const expiresAt = created.expirationDateTime
+			? new Date(created.expirationDateTime)
+			: new Date(Date.now() + GRAPH_SUBSCRIPTION_LIFETIME_MS);
+		return { subscriptionId: created.id, expiresAt };
+	},
+
+	async renewPushSubscription(accessToken, _calendarId, current, _params): Promise<IPushSubscriptionResult> {
+		// Graph renews IN PLACE: PATCH a new expirationDateTime. Keeps the same subscription id.
+		const expirationDateTime = new Date(Date.now() + GRAPH_SUBSCRIPTION_LIFETIME_MS).toISOString();
+		const renewed = await gfetch<{ expirationDateTime?: string }>(
+			accessToken,
+			`${GRAPH_BASE}/subscriptions/${encodeURIComponent(current.subscriptionId)}`,
+			{ method: 'PATCH', body: { expirationDateTime } },
+		);
+		return {
+			subscriptionId: current.subscriptionId,
+			expiresAt: renewed?.expirationDateTime ? new Date(renewed.expirationDateTime) : new Date(expirationDateTime),
+		};
+	},
+
+	async deletePushSubscription(accessToken, current): Promise<void> {
+		const url = `${GRAPH_BASE}/subscriptions/${encodeURIComponent(current.subscriptionId)}`;
+		try {
+			await gfetch(accessToken, url, { method: 'DELETE' });
+		} catch (err) {
+			const status = (err as { status?: number })?.status;
+			if (status === 404 || status === 410) {
+				return; // already gone — idempotent
+			}
+			throw err;
+		}
 	},
 };

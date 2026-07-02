@@ -91,6 +91,19 @@ export const createBoardsCalendarSyncSettings = () =>
 			i18nDescription: 'Boards_Calendar_Outlook_Authority_Description',
 		});
 
+		// Real-time PUSH (webhook) subscriptions: the PUBLIC https base URL Google/Microsoft must reach
+		// to deliver change notifications. Empty default falls back to env BOARDS_CALENDAR_PUSH_PUBLIC_BASE_URL,
+		// then Site_Url. Push is a best-effort ENHANCEMENT over the 15-min poll: it only activates when
+		// this resolves to an https URL AND the deploy sets the env secret BOARDS_CALENDAR_PUSH_SECRET
+		// (env-only, never a setting - it authenticates an unauthenticated public endpoint). Else poll-only.
+		await this.add('Boards_Calendar_Push_Public_Base_Url', '', {
+			type: 'string',
+			public: false,
+			enableQuery: { _id: 'Boards_Calendar_Sync_Enabled', value: true },
+			i18nLabel: 'Boards_Calendar_Push_Public_Base_Url',
+			i18nDescription: 'Boards_Calendar_Push_Public_Base_Url_Description',
+		});
+
 		// ─── Email-to-task ─────────────────────────────────────────────────────────────────────────
 		// Shared secret the mail provider (SES inbound / a forwarding webhook) signs POSTs with. Empty
 		// default → the receiver is FAIL-CLOSED (drops every request) until a firm sets it. Env-var

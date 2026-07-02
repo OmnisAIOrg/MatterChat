@@ -1,4 +1,4 @@
-import type { CalendarProvider, IBoardCalendarConnection, IEncryptedTokenRef } from '@rocket.chat/core-typings';
+import type { CalendarProvider, IBoardCalendarConnection, IBoardCalendarPushSubscription, IEncryptedTokenRef } from '@rocket.chat/core-typings';
 import type { DeleteResult, FindCursor, UpdateResult } from 'mongodb';
 
 import type { IBaseModel } from './IBaseModel';
@@ -51,4 +51,13 @@ export interface IBoardCalendarConnectionsModel extends IBaseModel<IBoardCalenda
 	/** Stamp last successful push/poll times. */
 	setLastPushAtById(id: string, when: Date): Promise<UpdateResult>;
 	setLastPollAtById(id: string, when: Date): Promise<UpdateResult>;
+	/**
+	 * Record (or clear) the real-time PUSH subscription on a connection. Setting it enables webhook
+	 * fast-path reconciles; clearing it (undefined) reverts to poll-only. Touches ONLY the `push` field.
+	 */
+	setPushSubscriptionById(id: string, push: IBoardCalendarPushSubscription | undefined): Promise<UpdateResult>;
+	/** Every connected connection whose push subscription expires before `before` (renewal sweep). */
+	findConnectedWithPushExpiringBefore(before: Date): FindCursor<IBoardCalendarConnection>;
+	/** Resolve the connection that owns a provider push subscription id (webhook correlation). */
+	findOneByPushSubscriptionId(subscriptionId: string): Promise<IBoardCalendarConnection | null>;
 }

@@ -75,4 +75,35 @@ export interface IBoardCalendarConnection extends IRocketChatRecord {
 	lastPushAt?: Date;
 	/** Last successful inbound reconcile against the calendar, if any. */
 	lastPollAt?: Date;
+	/**
+	 * Real-time PUSH (webhook) subscription state — the parity follow-up to the 15-min inbound POLL.
+	 * Best-effort ENHANCEMENT over polling: when present + live, a provider change-notification triggers
+	 * an immediate inbound reconcile; the poll remains the belt-and-suspenders fallback and never stops.
+	 * Absent = poll-only (push unconfigured or its setup failed). STANDALONE provider path only — the
+	 * CasePro-preferred path owns its own calendar refresh and never gets a push subscription.
+	 */
+	push?: IBoardCalendarPushSubscription;
+}
+
+/**
+ * A provider-side change-notification channel/subscription for the STANDALONE calendar path.
+ *
+ * - Google: an `events.watch` push channel. `subscriptionId` is our self-minted channel UUID (the
+ *   `X-Goog-Channel-ID` Google echoes on every notification); `resourceId` is the opaque id Google
+ *   returns (needed to `channels.stop`). Channels last ~7 days max → renewed before `expiresAt`.
+ * - Outlook/Graph: a `/subscriptions` resource on `/me/events`. `subscriptionId` is Graph's
+ *   subscription id echoed on each notification; `resourceId` is unused. Max ~3 days → renewed early.
+ *
+ * The clientState/channel-token secret is NEVER stored here — it is DERIVED per subscription from the
+ * deploy secret (env `BOARDS_CALENDAR_PUSH_SECRET`) so the webhook verifies statelessly + fail-closed.
+ */
+export interface IBoardCalendarPushSubscription {
+	/** Provider subscription/channel id echoed back on every notification (the primary correlation key). */
+	subscriptionId: string;
+	/** Google's opaque resource id (required to stop the channel); absent for Graph. */
+	resourceId?: string;
+	/** When this subscription expires and MUST be renewed by (epoch-backed Date). */
+	expiresAt: Date;
+	/** When we created (or last renewed) it. */
+	createdAt: Date;
 }
