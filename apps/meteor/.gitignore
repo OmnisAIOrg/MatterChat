@@ -78,6 +78,7 @@ tests/end-to-end/temporary_staged_test
 /private/livechat
 /storybook-static
 /tests/e2e/.playwright
+/tests/e2e/.playwright-html
 coverage
 .nyc_output
 /data
