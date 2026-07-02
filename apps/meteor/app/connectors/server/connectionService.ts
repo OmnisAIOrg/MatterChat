@@ -27,7 +27,23 @@ import { providerRegistry } from './providerRegistry';
 import { isGoogleConfigured } from './providers/google/config';
 import { isSlackConfigured } from './providers/slack/config';
 import { isTeamsConfigured } from './providers/teams/config';
-import { decryptCredentials } from './tokenCrypto';
+import { decryptCredentials, isEncryptionConfigured } from './tokenCrypto';
+import { SystemLogger } from '../../../server/lib/logger/system';
+
+// Boot-time key visibility (ops) — mirrors the LITBOX_TOKEN_ENC_KEY check in
+// omnisai-oauth/server/litboxProxy.ts. Loud so a deploy without the secret is caught in the
+// logs instead of silently persisting plaintext connector credentials.
+if (!isEncryptionConfigured()) {
+	if ((process.env.EXTERNAL_TOKEN_ENC_KEY || '').trim()) {
+		SystemLogger.error({
+			msg: 'EXTERNAL_TOKEN_ENC_KEY is set but INVALID (must be base64-encoded 32 bytes) — connector credential encryption is DISABLED: new connections will be stored in PLAINTEXT and previously encrypted ones will fail to decrypt (users must reconnect) until the key is fixed.',
+		});
+	} else {
+		SystemLogger.warn({
+			msg: 'EXTERNAL_TOKEN_ENC_KEY is not set — external-workspace connector credentials (Slack/Teams/Google) are stored in PLAINTEXT at rest. Set EXTERNAL_TOKEN_ENC_KEY (base64-encoded 32 bytes) on this deployment to enable encryption.',
+		});
+	}
+}
 
 /**
  * Client-safe projection of a connection — everything EXCEPT the encrypted credential blob.

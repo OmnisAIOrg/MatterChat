@@ -29,6 +29,21 @@ function getKey(): Buffer | null {
 	}
 }
 
+/** How LITBOX_TOKEN_ENC_KEY currently parses. Consumers (litboxProxy) log loudly at boot on non-'configured'. */
+export type LitboxEncKeyStatus = 'configured' | 'unset' | 'invalid';
+
+export function getKeyStatus(): LitboxEncKeyStatus {
+	if (!(process.env.LITBOX_TOKEN_ENC_KEY || '').trim()) {
+		return 'unset';
+	}
+	return getKey() ? 'configured' : 'invalid';
+}
+
+/** True when a stored value carries the versioned encryption prefix (vs legacy plaintext). */
+export function isEncryptedValue(value: string | undefined): value is string {
+	return !!value && value.startsWith(ENC_PREFIX);
+}
+
 /** Encrypt a token for storage. Returns the plaintext unchanged when no key is configured. */
 export function encryptToken(plain: string | undefined): string | undefined {
 	if (!plain) {
@@ -51,7 +66,7 @@ export function encryptToken(plain: string | undefined): string | undefined {
  * the proxy then 401s and the user re-auths, rather than forwarding a garbage credential).
  */
 export function decryptToken(stored: string | undefined): string | undefined {
-	if (!stored || !stored.startsWith(ENC_PREFIX)) {
+	if (!stored?.startsWith(ENC_PREFIX)) {
 		return stored;
 	}
 	const key = getKey();
