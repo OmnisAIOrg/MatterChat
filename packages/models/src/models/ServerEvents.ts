@@ -17,7 +17,16 @@ export class ServerEventsRaw extends BaseRaw<IServerEvent> implements IServerEve
 	}
 
 	protected override modelIndexes(): IndexDescription[] {
-		return [{ key: { t: 1, ip: 1, ts: -1 } }, { key: { 't': 1, 'u.username': 1, 'ts': -1 } }];
+		return [
+			{ key: { t: 1, ip: 1, ts: -1 } },
+			{ key: { 't': 1, 'u.username': 1, 'ts': -1 } },
+			// Firm-grade audit: query the trail by event type / actor / date.
+			{ key: { t: 1, ts: -1 } },
+			{ key: { 'actor._id': 1, ts: -1 } },
+			// Audit-record retention: auto-expire events after the firm-grade default (~7 years). Audit
+			// events are not subject to legal hold (that protects room messages), so a TTL index is safe.
+			{ key: { ts: 1 }, expireAfterSeconds: 60 * 60 * 24 * 365 * 7 },
+		];
 	}
 
 	async findLastFailedAttemptByIp(ip: string): Promise<IServerEvent | null> {

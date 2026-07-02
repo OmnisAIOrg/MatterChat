@@ -1,5 +1,7 @@
 import type { IRocketChatRecord } from './IRocketChatRecord';
 import type { IUser } from './IUser';
+import type { IServerEventPermissionChanged } from './ServerAudit/IAuditPermissionChangedEvent';
+import type { IServerEventRoleChanged } from './ServerAudit/IAuditRoleChangedEvent';
 import type {
 	IServerEventAbacActionPerformed,
 	IServerEventAbacAttributeChanged,
@@ -76,6 +78,8 @@ export interface IServerEvents {
 	'abac.attribute.store.switched': IServerEventAbacAttributeStoreSwitched;
 	'settings.changed': IServerEventSettingsChanged;
 	'user.changed': IServerEventUserChanged;
+	'role.changed': IServerEventRoleChanged;
+	'permission.changed': IServerEventPermissionChanged;
 }
 
 type KeyValuePair = { key: string; value: any };

@@ -3,6 +3,7 @@ import type { IRole, IUser } from '@rocket.chat/core-typings';
 import { Roles, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { auditRoleChanged } from '../../../../server/lib/auditServerEvents/auditAuthorizationChanges';
 import { removeUserFromRolesAsync } from '../../../../server/lib/roles/removeUserFromRoles';
 import { settings } from '../../../settings/server';
 import { hasPermissionAsync } from '../functions/hasPermission';
@@ -59,6 +60,9 @@ export const removeUserFromRole = async (userId: string, roleId: string, usernam
 	}
 
 	const remove = await removeUserFromRolesAsync(user._id, [role._id], scope);
+
+	void auditRoleChanged(userId, 'removed', role._id, { _id: user._id, username }, scope).catch(() => undefined);
+
 	const event = {
 		type: 'removed',
 		_id: role._id,

@@ -3,6 +3,7 @@ import type { IRole, IUser } from '@rocket.chat/core-typings';
 import { Roles, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { auditRoleChanged } from '../../../../server/lib/auditServerEvents/auditAuthorizationChanges';
 import { addUserRolesAsync } from '../../../../server/lib/roles/addUserRoles';
 import { settings } from '../../../settings/server';
 import { hasPermissionAsync } from '../functions/hasPermission';
@@ -56,6 +57,8 @@ export const addUserToRole = async (userId: string, roleId: string, username: IU
 	}
 
 	const add = await addUserRolesAsync(user._id, [role._id], scope);
+
+	void auditRoleChanged(userId, 'added', role._id, { _id: user._id, username }, scope).catch(() => undefined);
 
 	if (settings.get('UI_DisplayRoles')) {
 		void api.broadcast('user.roleUpdate', {

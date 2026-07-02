@@ -1911,6 +1911,30 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 		return this.updateOne(query, update);
 	}
 
+	saveLegalHoldById(
+		_id: IRoom['_id'],
+		hold: { setBy?: { _id: string; username?: string }; caseId?: string; reason?: string } = {},
+	): Promise<UpdateResult> {
+		return this.updateOne(
+			{ _id },
+			{
+				$set: {
+					'retention.legalHold': {
+						enabled: true,
+						setAt: new Date(),
+						...(hold.setBy && { setBy: hold.setBy }),
+						...(hold.caseId && { caseId: hold.caseId }),
+						...(hold.reason && { reason: hold.reason }),
+					},
+				},
+			},
+		);
+	}
+
+	clearLegalHoldById(_id: IRoom['_id']): Promise<UpdateResult> {
+		return this.updateOne({ _id }, { $set: { 'retention.legalHold.enabled': false } });
+	}
+
 	saveRetentionMaxAgeById(_id: IRoom['_id'], value = 30): Promise<UpdateResult> {
 		const query: Filter<IRoom> = { _id };
 

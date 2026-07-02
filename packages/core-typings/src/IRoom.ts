@@ -405,6 +405,15 @@ export interface IRoomWithRetentionPolicy extends IRoom {
 		excludePinned: boolean;
 		ignoreThreads: boolean;
 		overrideGlobal?: boolean;
+		// Litigation hold: when enabled, this room's messages are NEVER auto-pruned (global or
+		// per-room retention) and manual purge is refused. Set/cleared via the legal-hold admin path.
+		legalHold?: {
+			enabled: boolean;
+			setAt?: Date;
+			setBy?: { _id: string; username?: string };
+			caseId?: string;
+			reason?: string;
+		};
 	};
 }
 
