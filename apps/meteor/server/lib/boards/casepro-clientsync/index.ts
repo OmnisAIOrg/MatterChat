@@ -86,7 +86,7 @@ async function ingestInbound(room: IRoom, matterId: string, msg: CaseProClientMe
 		rid: room._id,
 		msg: msg.body,
 		ts: new Date(msg.sentAt),
-		u: { _id: bot._id, username: bot.username },
+		u: { _id: bot._id, username: bot.username || 'client-sync.bot' },
 		// Render as the CLIENT via the alias mechanism — never a ghost RC account (same pattern
 		// as the connectors bridge).
 		alias: msg.author || 'Client',

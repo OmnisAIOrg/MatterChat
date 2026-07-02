@@ -190,6 +190,7 @@ describe('handleCaseproWriteback', () => {
 				listSchema: jest.fn(),
 				create: jest.fn().mockRejectedValue(new Error('boom')),
 				update: jest.fn().mockRejectedValue(new Error('boom')),
+				ingest: jest.fn().mockResolvedValue({ ok: true }),
 			};
 			caseProClient.setTransport(failing);
 			const failed = await handleCaseproWriteback(advanceStage(), buildCtx(), 0);

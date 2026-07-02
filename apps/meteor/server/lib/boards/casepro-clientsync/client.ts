@@ -1,3 +1,4 @@
+import type { SettingValue } from '@rocket.chat/core-typings';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
 import { settings } from '../../../../app/settings/server';
@@ -64,9 +65,9 @@ function str(value: unknown): string | undefined {
 }
 
 /** settings.get throws if a setting is not yet registered (early boot / tests). */
-function safeGetSetting<T>(id: string): T | undefined {
+function safeGetSetting<T extends SettingValue>(id: string): T | undefined {
 	try {
-		return settings.get<T>(id) as T;
+		return settings.get<T>(id);
 	} catch {
 		return undefined;
 	}

@@ -449,14 +449,6 @@ export class StubTransport implements ICaseProTransport {
 		this.ingested.push({ path, payload });
 		return { ok: true, stub: true };
 	}
-
-	/** Stub ingest: record the payload (tests inspect it) and pretend CasePro accepted everything. */
-	public readonly ingested: { path: string; payload: Record<string, unknown> }[] = [];
-
-	async ingest(path: string, payload: Record<string, unknown>): Promise<unknown> {
-		this.ingested.push({ path, payload });
-		return { ok: true, stub: true };
-	}
 }
 
 // ---------------------------------------------------------------------------
