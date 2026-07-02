@@ -257,7 +257,7 @@ Effort key (roadmap): **S** ≈ ≤2 days, **M** ≈ 3–7 days, **L** ≈ 1.5+ 
 |---|---|---|---|
 | Q1 | **Power-Up framework** (pluggable add-ons) | **MISSING** | No extension framework; Omnis composes via automation actions instead. |
 | Q2 | **Slack / Teams** | **PARTIAL** | Native to Rocket.Chat channel binding (`rid`) for chat; no Slack/Teams card-share. |
-| Q3 | **CasePro** (CRM) | **HAVE** (beyond both) | Deep read+write-back integration. |
+| Q3 | **CasePro** (CRM) | **BUILT** (beyond both) | Deep read + write-back integration is built and merged, deployed **dark** on staging; live pending enablement + first-run verification (needs a provisioned MCP key). Not carrying live traffic yet. |
 | Q4 | **LitBox** (files) | **HAVE** | Attachment source `litbox`. |
 | Q5 | **Google Drive / Dropbox / OneDrive / Box** | **MISSING** | Only litbox/local/url attachment sources. |
 | Q6 | **Jira / GitHub / GitLab / Bitbucket** (dev tools) | **MISSING** | — |
