@@ -1,0 +1,52 @@
+name: Staging Smoke
+
+# Tiny READ-ONLY smoke against the live staging site (e2e-staging-smoke/).
+# - Called automatically by matterchat-staging-deploy.yaml after every staging image roll.
+# - Also runnable by hand (workflow_dispatch), e.g. to check staging health at any time.
+# Runs 4 non-destructive checks: /api/info, /livez, /api/v1/settings.public, and the login
+# screen rendering. Never creates users, rooms, or messages.
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging-url:
+        description: 'Base URL to smoke (defaults to staging)'
+        required: false
+        default: 'https://matterchat.stg-omnisai.io'
+  workflow_call: {}
+
+jobs:
+  smoke:
+    name: Read-only staging smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # standalone mini-project, outside the yarn workspaces on purpose — installs in
+      # seconds instead of the monorepo's minutes
+      - name: Install smoke deps
+        working-directory: e2e-staging-smoke
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Run smoke
+        working-directory: e2e-staging-smoke
+        env:
+          STAGING_URL: ${{ inputs.staging-url || 'https://matterchat.stg-omnisai.io' }}
+        run: npx playwright test
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-smoke-report
+          path: |
+            e2e-staging-smoke/html-report
+            e2e-staging-smoke/test-results
+          retention-days: 14

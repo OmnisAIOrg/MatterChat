@@ -112,3 +112,10 @@ jobs:
           echo "===== current container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=140 2>&1 || true
           echo "===== previous (crashed) container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --previous --tail=140 2>&1 || true
           echo "===== recent namespace events ====="; kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.lastTimestamp 2>&1 | tail -30 || true
+
+  # Post-deploy regression net: read-only Playwright smoke against the freshly rolled
+  # staging site (login screen renders, /api/info + /livez + settings.public respond).
+  # Reuses .github/workflows/staging-smoke.yml (also runnable by hand via dispatch).
+  staging-smoke:
+    needs: build-and-deploy
+    uses: ./.github/workflows/staging-smoke.yml

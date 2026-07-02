@@ -3,6 +3,12 @@
 
 **Last updated:** 2026-06-25 · **Branch:** `staging` (deploy is now BUILD-ONLY — ArgoCD owns the cluster; see below)
 
+## 🧪 2026-07-01 — E2E regression net exists (branch `auto/playwright-gate`, unmerged)
+Curated the upstream Playwright suite for our MIT fork + wired two gates (see **`docs/E2E-GATE.md`** for everything):
+- **`e2e-gate.yml`** — on PR into `staging`: builds the PR image (Dockerfile.alpha + ECR cache), boots app+Mongo in CI, runs a 26-test **smoke** tier; `workflow_dispatch` can run the full **mit-core** suite (592 tests; 136 EE-only tests excluded, never deleted). Check shows on the PR, deliberately NOT required.
+- **`staging-smoke.yml`** — 4 read-only checks against live staging, chained after every staging deploy (verified green against the live site 2026-07-01).
+Suite lists live in `apps/meteor/tests/e2e/matterchat-suites.ts`. Fork features (Boards UI, OIDC, cross-firm) still have NO e2e specs — that's the next tier to grow.
+
 ## 🔴 READ FIRST (2026-06-25) — staging is ArgoCD-owned; deploy is BUILD-ONLY; OmnisAI login works E2E
 - **Staging is deployed by ArgoCD** (app `matterchat-staging`, syncs from repo **`MatterChat-New`** `kubernetes/staging/`, automated+prune+selfHeal — owns Deployment/Service/**Ingress**). THIS repo only BUILDS the image (→ ECR `matterchat:staging-latest`); its `kubernetes/staging/*.yaml` is **DEAD** (ArgoCD reverts it). The GHA deploy (PR #16) is now **build-only** → builds image + `kubectl delete pod` to roll it. So merging to `staging` is **safe again** (it no longer `kubectl apply`s the conflicting manifests that flipped the Ingress to the wrong ALB and 404'd the site). Full story in `DECISIONS.md` (2026-06-25) + memory `matterchat-staging-argocd-truth`.
 - **OmnisAI login works end-to-end.** Fixes: ingress rebound to the frontend ALB; OIDC issuer/clientId seeded as **persisted Mongo settings** (`getConfig` reads settings-first) — survive ArgoCD; Setup Wizard held at `completed`; `verifyIdToken` accepts a missing `iss`/`aud`. **Still fail-soft (production TODO):** Ed25519 signature verify + nonce; CentralizedAuth should emit standard iss/aud/nonce, then re-enable strict.

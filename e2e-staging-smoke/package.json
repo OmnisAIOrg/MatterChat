@@ -1,0 +1,11 @@
+{
+	"name": "matterchat-e2e-staging-smoke",
+	"private": true,
+	"description": "Standalone read-only post-deploy smoke against the live MatterChat staging site. Deliberately OUTSIDE the yarn workspaces so CI can `npm install` it in seconds without the monorepo.",
+	"scripts": {
+		"test": "playwright test"
+	},
+	"devDependencies": {
+		"@playwright/test": "~1.52.0"
+	}
+}
