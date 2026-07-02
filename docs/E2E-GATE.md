@@ -48,6 +48,70 @@ so those assertions go through a stable API contract or are `@skip`-annotated ra
 through pointer physics / EE-only UI. Everything else is deterministic API-seed + role/testid
 assertions with explicit `expect`/`poll` waits (no `sleep`).
 
+## First actual run of the `fork` project (2026-07-02)
+
+Until now the fork specs were only `--list`-verified. First real execution against a booted
+MatterChat: **Route B (local boot)** — docker was unavailable, so instead of the gate's
+`docker-compose-e2e-gate.yml` we built the same production bundle the gate's `Dockerfile.alpha`
+produces (`meteor build --server-only`) and ran it as `node main.js` on a dedicated port against a
+dedicated single-node Mongo replica set. (An initial attempt with the Meteor **dev** server —
+`meteor run` — was abandoned: its dev HTTP proxy crashed mid-run with `ERR_STREAM_WRITE_AFTER_END`
+on the board's asset requests. The compiled prod bundle — what CI actually runs — has no dev proxy
+and was rock-solid across repeated runs.)
+
+**Result: 10 passed / 4 skipped / 0 failed**, stable across two consecutive runs.
+
+| Spec | Result |
+| --- | --- |
+| `boards.spec.ts` (render / add / move / drawer) | 5 ✓ |
+| `boards-pagination.spec.ts` (105-card render) | 1 ✓ |
+| `forms.spec.ts` (public intake) | 1 ✓ |
+| `legal-hold.spec.ts` (prune refusal) | 1 ✓ |
+| `read-receipts.spec.ts` (menu-off + settings API) | 2 ✓ / 1 `@skip !IS_EE` (receipt indicator) |
+| `oidc-login.spec.ts` (gating-off) | 1 ✓ / 2 `@skip` (need mock IdP + `OMNISAI_OIDC_*`) |
+| `matter-link.spec.ts` (Matters sidebar) | self-skipped (see below) |
+
+Fixes made to get green (all in the specs/fixtures — no product code changed):
+
+1. **`fixtures/boards-api.ts` `getCards()` now paginates.** `boards.cards` honours
+   `API_Upper_Count_Limit` (default **100**), so `getCards(boardId, 500)` could never return more
+   than one page — the pagination spec's own `beforeAll` sanity check (`expect(all.length).toBe(105)`)
+   failed with `Received: 100`. The helper now loops on `offset` until `total` is reached, mirroring
+   the client's `fetchNextPage` contract. (Not a product bug — the 100-cap is standard REST behaviour;
+   it's exactly *why* the board view paginates.)
+2. **`exact: true` on every card-tile `getByRole('button', { name })`.** dnd-kit's
+   `sortableAttributes` stamp `role="button"` on the **whole column** element; with no `aria-label`
+   its accessible name is computed from contents, so it *contains* every card title (and "Add card").
+   A non-exact name match therefore resolved to 2 elements (tile + column) → strict-mode violation.
+   `exact: true` targets only the tile, whose accessible name IS the title. (Product observation, not
+   fixed here: the column being exposed as a giant button named after all its cards is an a11y smell
+   worth a follow-up — the drag affordance should be a labelled inner handle, not the column root.)
+3. **Generous (`30s`) `toBeVisible` timeout on the first list-title render** in both board specs. The
+   board view is data-driven (board → lists → first card page) and on a cold server the first column
+   took >5s (the default) to hydrate; the 105-card board is the slowest. No `sleep` — just a longer
+   `expect` wait.
+
+Boot notes (environment, not spec/product — CI's fresh-DB prod boot avoids both):
+
+- **`AUTO_ACCEPT_FINGERPRINT=true`** was required. The DB's stored deployment fingerprint
+  mismatched, so the app raised the blocking **"Unique ID change detected"** modal over `<main>` —
+  which failed the board renders and the read-receipts click (backdrop intercepts pointer events).
+  A truly fresh gate DB never has a prior fingerprint, so this is local-boot-only; the env var also
+  makes it a no-op on a clean boot.
+- Default **roles** had to be seeded once before the *dev*-server boot (`rocketchat_roles` was empty
+  and `rocket.cat` role assignment threw `error-invalid-role`); the compiled prod boot ordered
+  `upsertPermissions` before `initialData` and did not need this.
+
+`matter-link.spec.ts` **self-skip is justified — and revealed a spec/product assumption mismatch.**
+The chain traces as: `boards.matters.ensureBoard` → **200 ok** (board + 2 lists), but
+`boards.matters.bind` with a stub `matterId` → **400 `error-matter-not-found` ("Matter not found in
+CasePro")**. The spec header claims bind "binds a card to a stub matter id; no CasePro needed,
+snapshot resolution degrades" — in fact `bind` calls `refreshMatterSnapshot`, which **hard-fails**
+when CasePro can't resolve the matter rather than degrading. On a bare CE gate (no CasePro backend)
+the chain can't complete, so the defensive self-skip fires correctly. Follow-up options: (a) make
+`bind` degrade gracefully for an unresolvable/offline matter (bind with an empty snapshot), or
+(b) point the gate at a CasePro stub so the Matters sidebar assertion can actually run.
+
 ## Suite inventory (measured 2026-07-01 via `--list`)
 
 - Upstream suite (base config, federation already ignored): **728 tests / 158 files**
@@ -108,11 +172,15 @@ that's too slow for PR feedback, the next lever is a bundle-reuse build (upstrea
 
 ## Known gaps / next steps
 
-1. **Fork-feature specs landed** (`auto/fork-e2e-specs`) — Boards (render/add/move/drawer),
-   pagination regression, public Forms intake, legal hold, matter-link sidebar, read receipts,
-   OIDC gating — see "Fork-feature coverage" above. Still uncovered: LitBox Files panel, the
-   cross-firm (CFCS) panel, and the Slack/Teams connectors — the next specs to grow under
-   `tests/e2e/matterchat/`.
+1. **Fork-feature specs landed AND executed for real** (`auto/fork-e2e-specs` →
+   `auto/fork-e2e-firstrun`) — Boards (render/add/move/drawer), pagination regression, public Forms
+   intake, legal hold, matter-link sidebar, read receipts, OIDC gating. First run: **10/14 pass,
+   4 justified skips, 0 real failures** (see "First actual run" above for the spec fixes and boot
+   notes). Two product follow-ups surfaced but were NOT patched here (test-only branch): the board
+   **column** is exposed as one giant `role=button` named after all its cards (a11y smell from
+   dnd-kit's `sortableAttributes`), and `boards.matters.bind` **hard-fails** on an unresolvable
+   stub matter instead of degrading. Still uncovered: LitBox Files panel, the cross-firm (CFCS)
+   panel, and the Slack/Teams connectors — the next specs to grow under `tests/e2e/matterchat/`.
 2. `workflow_dispatch` for **E2E Gate** / **Staging Smoke** becomes visible in the Actions UI
    once the workflow files reach the repo's default branch (`develop`); the PR-trigger and the
    deploy-chained smoke work from `staging` alone.

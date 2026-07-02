@@ -40,10 +40,13 @@ test.describe.serial('@matterchat boards pagination', () => {
 
 	test('renders all cards on a board with >100 cards (no page-1 truncation)', async ({ page }) => {
 		await page.goto(`/boards/board/${boardId}/board`);
-		await expect(page.getByText('Backlog', { exact: true })).toBeVisible();
+		// data-driven board load on a cold server; a 105-card board is the slowest to hydrate
+		await expect(page.getByText('Backlog', { exact: true })).toBeVisible({ timeout: 30_000 });
 
-		// the last-seeded card lives on page 2 (index 100); if it renders, the second page loaded
-		await expect(page.getByRole('button', { name: `Card ${CARD_COUNT}` })).toBeVisible({ timeout: 30_000 });
+		// the last-seeded card lives on page 2 (index 100); if it renders, the second page loaded.
+		// `exact: true`: the column also carries role=button (dnd-kit) with a name that CONTAINS
+		// every card title, so a non-exact "Card 105" match would also hit the column button.
+		await expect(page.getByRole('button', { name: `Card ${CARD_COUNT}`, exact: true })).toBeVisible({ timeout: 30_000 });
 
 		// hard count: every seeded tile is present. Card tiles are role=button with the card
 		// title as aria-label; "Card N" names are unique, so the exact-name filter is precise.

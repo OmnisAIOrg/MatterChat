@@ -41,24 +41,29 @@ test.describe.serial('@matterchat boards', () => {
 	test('renders the board with its lists and seeded cards', async ({ page }) => {
 		await page.goto(`/boards/board/${boardId}/board`);
 
-		// lists (columns) render by title
-		await expect(page.getByText('To do', { exact: true })).toBeVisible();
+		// lists (columns) render by title. The board view is data-driven (board → lists → first
+		// card page), so give the first column a generous wait on a cold server before asserting.
+		await expect(page.getByText('To do', { exact: true })).toBeVisible({ timeout: 30_000 });
 		await expect(page.getByText('Doing', { exact: true })).toBeVisible();
 
-		// each seeded card renders as a role=button tile with its title as the aria-label
+		// Each seeded card renders as a role=button tile whose accessible name IS the card title.
+		// `exact: true` is required: dnd-kit stamps role=button on the whole column too, and that
+		// button's computed name CONTAINS every card title (accessible-name-from-contents), so a
+		// non-exact name match would also hit the column and violate strict mode.
 		for (const title of seedCardTitles) {
-			await expect(page.getByRole('button', { name: title })).toBeVisible();
+			await expect(page.getByRole('button', { name: title, exact: true })).toBeVisible();
 		}
 	});
 
 	test('adds a card through the QuickAddCard composer', async ({ page }) => {
 		await page.goto(`/boards/board/${boardId}/board`);
-		await expect(page.getByText('To do', { exact: true })).toBeVisible();
+		await expect(page.getByText('To do', { exact: true })).toBeVisible({ timeout: 30_000 });
 
 		const newCardTitle = `Serve defendant ${faker.string.alpha(6)}`;
 
-		// the collapsed "Add card" buttons (one per column) — click the first list's opener
-		await page.getByRole('button', { name: 'Add card' }).first().click();
+		// the collapsed "Add card" buttons (one per column) — click the first list's opener.
+		// `exact: true` avoids matching the column drag button, whose name also contains "Add card".
+		await page.getByRole('button', { name: 'Add card', exact: true }).first().click();
 
 		// the composer textarea shares the "Add card" accessible name (placeholder)
 		const composer = page.getByPlaceholder('Add card').first();
@@ -66,14 +71,14 @@ test.describe.serial('@matterchat boards', () => {
 		await composer.press('Enter');
 
 		// the new tile appears on the board
-		await expect(page.getByRole('button', { name: newCardTitle })).toBeVisible();
+		await expect(page.getByRole('button', { name: newCardTitle, exact: true })).toBeVisible();
 	});
 
 	test('moves a card between lists and re-renders it under the new column', async ({ page, api }) => {
 		await page.goto(`/boards/board/${boardId}/board`);
 		const movingTitle = seedCardTitles[0];
-		const tile = page.getByRole('button', { name: movingTitle });
-		await expect(tile).toBeVisible();
+		const tile = page.getByRole('button', { name: movingTitle, exact: true });
+		await expect(tile).toBeVisible({ timeout: 30_000 });
 
 		// resolve the card id from the API, then invoke the same move contract the drag handler uses
 		const cardsBefore = await getCards(api, boardId);
@@ -90,14 +95,14 @@ test.describe.serial('@matterchat boards', () => {
 
 		// …and after a reload the tile still renders (now under "Doing")
 		await page.reload();
-		await expect(page.getByRole('button', { name: movingTitle })).toBeVisible();
+		await expect(page.getByRole('button', { name: movingTitle, exact: true })).toBeVisible({ timeout: 30_000 });
 	});
 
 	test('opens the card detail drawer when a tile is clicked', async ({ page }) => {
 		await page.goto(`/boards/board/${boardId}/board`);
 		const title = seedCardTitles[1];
-		const tile = page.getByRole('button', { name: title });
-		await expect(tile).toBeVisible();
+		const tile = page.getByRole('button', { name: title, exact: true });
+		await expect(tile).toBeVisible({ timeout: 30_000 });
 
 		await tile.click();
 

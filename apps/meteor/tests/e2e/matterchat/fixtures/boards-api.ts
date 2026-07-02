@@ -80,15 +80,36 @@ export async function seedManyCards(api: BaseTest['api'], boardId: string, listI
 	return created;
 }
 
-/** Read a board's cards back (single page, up to `count`). */
+/**
+ * Read ALL of a board's cards back, following the server's pagination.
+ *
+ * `boards.cards` honours the REST `API_Upper_Count_Limit` (default 100), so a single request
+ * can never return more than one page regardless of the `count` asked for — the same reason the
+ * board view itself pages with `fetchNextPage`. We therefore loop on `offset` until we've read
+ * `total` cards (or a page comes back short), mirroring the client contract. `count` caps the
+ * per-request page size (kept at 100 so we never exceed the server's upper limit in one call).
+ */
 export async function getCards(
 	api: BaseTest['api'],
 	boardId: string,
-	count = 200,
+	count = 100,
 ): Promise<{ _id: string; title: string; listId: string }[]> {
-	const res = await api.get('/boards.cards', { boardId, count });
-	const json = await res.json();
-	return json?.cards ?? [];
+	const pageSize = Math.min(count, 100);
+	const cards: { _id: string; title: string; listId: string }[] = [];
+	let offset = 0;
+	// hard stop so a mis-behaving `total` can never loop forever
+	for (let guard = 0; guard < 1000; guard++) {
+		const res = await api.get('/boards.cards', { boardId, count: pageSize, offset });
+		const json = await res.json();
+		const page: { _id: string; title: string; listId: string }[] = json?.cards ?? [];
+		cards.push(...page);
+		const total: number = typeof json?.total === 'number' ? json.total : cards.length;
+		if (page.length === 0 || cards.length >= total) {
+			break;
+		}
+		offset += page.length;
+	}
+	return cards;
 }
 
 /** Archive a board so a spec cleans up after itself. */
