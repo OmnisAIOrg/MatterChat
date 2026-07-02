@@ -5,16 +5,25 @@
  * issuer's JWKS, match the signing key by `kid`, verify the JWT signature with node:crypto,
  * then check the standard OIDC claims (exp, iss, aud) and the nonce we issued.
  *
- * CentralizedAuth (better-auth) signs with EdDSA / Ed25519 (OKP keys); we also accept RSA as
- * a fallback so the same path works if the issuer's key type changes. The JWKS is served at
- * `${issuer}/api/auth/jwks`.
+ * CentralizedAuth (better-auth) signs with EdDSA / Ed25519 (OKP keys) when its JWT plugin is on; we
+ * also accept RSA as a fallback so the same path works if the issuer's key type changes. The JWKS is
+ * served at `${issuer}/api/auth/jwks`.
+ *
+ * ALG-AWARE: better-auth's DEFAULT id_token is signed with HS256 (HMAC over the app secret), NOT the
+ * Ed25519 JWKS key — so verifying an HMAC signature against the OKP public key always returns false
+ * (this was the root cause of the "signature did not verify" fail-soft). We branch on header.alg:
+ *   - HS256  : verify the HMAC with opts.clientSecret (the shared app secret). If a secret is
+ *              configured we THROW on mismatch (strict); if no secret is configured we keep the
+ *              historical fail-soft (warn + continue) so live logins are not blocked. JWKS is skipped.
+ *   - EdDSA / RS256 / absent : the JWKS path (unchanged), kept FAIL-SOFT for now.
+ *   - none   : rejected outright (an unsigned token is never acceptable).
  *
  * Why this exists: the original keystone decoded the id_token WITHOUT verifying it. In the
  * authorization-code flow the token arrives over a direct TLS call to the token endpoint, so
  * it is not attacker-supplied — but skipping signature/iss/aud/nonce checks is below the bar
  * for production auth (token substitution, mix-up, replay). This closes that gap.
  */
-import { createPublicKey, verify } from 'node:crypto';
+import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
@@ -96,12 +105,24 @@ function verifySignature(jwk: Jwk, signingInput: string, signature: Buffer): boo
 }
 
 /**
+ * HS256 verification: recompute HMAC-SHA256(secret, signingInput) and compare constant-time.
+ * Length-guard first because timingSafeEqual throws on differing buffer lengths.
+ */
+function verifyHs256(secret: string, signingInput: string, sigBuf: Buffer): boolean {
+	const expected = createHmac('sha256', secret).update(signingInput).digest();
+	if (expected.length !== sigBuf.length) {
+		return false;
+	}
+	return timingSafeEqual(expected, sigBuf);
+}
+
+/**
  * Verify a CentralizedAuth id_token and return its claims. Throws (with a short, log-safe
  * reason) on any failure so the caller can fail the login closed.
  */
 export async function verifyOmnisaiIdToken(
 	idToken: string,
-	opts: { issuer: string; clientId: string; nonce?: string },
+	opts: { issuer: string; clientId: string; nonce?: string; clientSecret?: string },
 ): Promise<OmnisAIIdTokenClaims> {
 	const parts = idToken.split('.');
 	if (parts.length !== 3) {
@@ -111,29 +132,55 @@ export async function verifyOmnisaiIdToken(
 	const header = decodeSegment<{ kid?: string; alg?: string }>(headerB64);
 	const claims = decodeSegment<OmnisAIIdTokenClaims>(payloadB64);
 
-	// 1. Signature — match by kid (fall back to the sole key), refresh the JWKS once on a miss.
+	// 1. Signature — alg-aware. better-auth's default id_token is HS256 (HMAC over the app secret),
+	//    so the EdDSA/JWKS path can never verify it. Branch on the JOSE header alg.
 	const signingInput = `${headerB64}.${payloadB64}`;
 	const signature = Buffer.from(signatureB64, 'base64url');
-	const pickKey = (keys: Jwk[]): Jwk | undefined => keys.find((k) => k.kid === header.kid) ?? (keys.length === 1 ? keys[0] : undefined);
+	const alg = header.alg;
 
-	let keys = await getJwks(opts.issuer);
-	let jwk = pickKey(keys);
-	if (!jwk) {
-		keys = await getJwks(opts.issuer, true);
-		jwk = pickKey(keys);
+	// An unsigned token ("alg":"none") is never acceptable — reject before any other branch.
+	if (alg === 'none') {
+		throw new Error('id_token_alg_none_rejected');
 	}
-	if (!jwk) {
-		throw new Error('id_token_kid_not_found');
-	}
-	if (!verifySignature(jwk, signingInput, signature)) {
-		// FAIL-SOFT (interim): the Ed25519 verify rejects valid CentralizedAuth tokens despite the JWKS
-		// key being correct — a JWS/alg detail to pin down with a live token. Log + continue so logins
-		// are not blocked; the iss/aud/exp checks below still run. Restore this to throw once fixed.
-		SystemLogger.warn({
-			msg: 'OmnisAI id_token signature did not verify (fail-soft, under investigation)',
-			alg: header.alg,
-			kid: header.kid,
-		});
+
+	if (alg === 'HS256') {
+		// HMAC path. Skip the JWKS entirely — the OKP/RSA public key is irrelevant to HS256.
+		if (opts.clientSecret) {
+			// STRICT: a shared secret is configured, so we can actually verify. Fail closed on mismatch.
+			if (!verifyHs256(opts.clientSecret, signingInput, signature)) {
+				throw new Error('id_token_bad_signature_hs256');
+			}
+		} else {
+			// FAIL-SOFT (current live behavior): no secret configured, so we cannot verify the HMAC.
+			// Log + continue exactly as before; iss/aud/exp below still run. Configure
+			// OmnisAI_OIDC_Client_Secret to make this strict (see DECISIONS.md 2026-06-25).
+			SystemLogger.warn({
+				msg: 'OmnisAI id_token is HS256 but no client secret configured (fail-soft) — set OmnisAI_OIDC_Client_Secret to verify',
+				alg,
+			});
+		}
+	} else {
+		// EdDSA / RS256 / absent → JWKS path. Match by kid (fall back to the sole key), refresh once on a miss.
+		const pickKey = (keys: Jwk[]): Jwk | undefined => keys.find((k) => k.kid === header.kid) ?? (keys.length === 1 ? keys[0] : undefined);
+
+		let keys = await getJwks(opts.issuer);
+		let jwk = pickKey(keys);
+		if (!jwk) {
+			keys = await getJwks(opts.issuer, true);
+			jwk = pickKey(keys);
+		}
+		if (!jwk) {
+			throw new Error('id_token_kid_not_found');
+		}
+		if (!verifySignature(jwk, signingInput, signature)) {
+			// FAIL-SOFT (interim): kept non-fatal for the JWKS-signed case until a live EdDSA token is
+			// confirmed end-to-end. Log + continue so logins are not blocked; iss/aud/exp below still run.
+			SystemLogger.warn({
+				msg: 'OmnisAI id_token signature did not verify (fail-soft, under investigation)',
+				alg,
+				kid: header.kid,
+			});
+		}
 	}
 
 	// 2. Standard OIDC claim checks.

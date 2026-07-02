@@ -151,3 +151,16 @@
 ### earlier — Cross‑firm chat lives inside the matter
 **Chose:** fold cross‑firm (opposing‑counsel) messaging into the matter surface; removed the standalone cross‑firm view.
 **Why:** keeps the feature in context and additive; CFCS trust core is channel‑hosted and CasePro‑free so it stands alone.
+
+### 2026-06-25 — OIDC signature: better-auth signs id_token HS256 by default — alg-aware verify; strict-enable gated
+**Root cause (diagnosed + reproduced):** the "signature did not verify (fail-soft)" warning was not a JWS encoding subtlety — better-auth signs the OIDC `id_token` with **HS256** (HMAC over the app secret) **by default**, NOT with the Ed25519 / OKP key published in the JWKS. The old verifier always took the JWKS path and checked an HMAC signature against the OKP public key, which can only ever return false. So the signature check was effectively dead (fail-soft), and only iss/aud/exp guarded the token.
+**Chose:** make `verifyOmnisaiIdToken` **alg-aware**, branching on the JOSE header `alg` (`app/omnisai-oauth/server/verifyIdToken.ts`):
+- `HS256` → recompute `HMAC-SHA256(clientSecret, signingInput)` and compare constant-time (`verifyHs256`, length-guarded `timingSafeEqual`), skipping the JWKS entirely. If `OmnisAI_OIDC_Client_Secret` is configured we **throw** `id_token_bad_signature_hs256` on mismatch (strict); if it is empty we keep the historical **fail-soft** (warn + continue).
+- `EdDSA` / `RS256` / absent → the existing JWKS path, **kept fail-soft** (not flipped to throw) until a live EdDSA token is confirmed end-to-end.
+- `none` → **rejected** outright (`id_token_alg_none_rejected`); an unsigned token is never acceptable.
+**Additive / no live-behavior change:** with no secret configured (the live state), every path stays fail-soft exactly as before. The new `OmnisAI_OIDC_Client_Secret` setting (server-only, `secret: true`, empty default) and the `OMNISAI_OIDC_CLIENT_SECRET` env fallback are the only switches that turn on enforcement.
+**To actually enforce a strict signature, pick ONE:**
+- **Set `OmnisAI_OIDC_Client_Secret`** to the better-auth app secret and verify against a **live token** end-to-end first (the HS256 secret is the issuer's app secret; once set, a bad signature fails the login closed); OR
+- **Route A — `useJWTPlugin: true`** in CentralizedAuthBackend so the issuer signs the id_token with **EdDSA** (the published JWKS key); then the JWKS path can be flipped from fail-soft to throw.
+**Note:** strict **iss / aud / nonce** enforcement is a *separate* gap — it needs CentralizedAuth to actually **emit** those claims (the current MCP id_token omits iss/aud and does not echo the nonce); until then those stay accept-when-absent / non-fatal as documented above.
+**Rejected:** flipping the existing JWKS verify to throw (it would block every live login, since the live token is HS256, not EdDSA — the JWKS path never sees a verifiable signature today).
