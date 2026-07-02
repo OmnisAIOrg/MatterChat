@@ -37,6 +37,7 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
+import { settings } from '../../settings/server';
 import { encryptToken, decryptToken } from './litboxCrypto';
 
 // Parsed once at boot. Must be an absolute https URL; the proxy pins outbound calls to this origin.
@@ -117,8 +118,20 @@ function badRequest(res: any): void {
 /** Resolve the MatterChat user from the raw resume/login token (bearer), standard hashed lookup. */
 async function resolveUser(rawToken: string): Promise<{ _id: string; litbox?: any } | null> {
 	const hashedToken = Accounts._hashLoginToken(rawToken);
-	const user = await Users.findOne({ 'services.resume.loginTokens.hashedToken': hashedToken }, { projection: { _id: 1, omnisaiLitbox: 1 } });
+	const user = await Users.findOne(
+		{ 'services.resume.loginTokens.hashedToken': hashedToken },
+		{ projection: { _id: 1, omnisaiLitbox: 1, 'services.resume.loginTokens.$': 1 } },
+	);
 	if (!user) {
+		return null;
+	}
+	// M3 (ported from crossFirmProxy): this proxy re-implements the token lookup, so it must also
+	// enforce EXPIRY (RC's normal resume path does). The positional projection returns ONLY the
+	// matched token; reject if it is past expiry.
+	const tokenEntry = (user as any)?.services?.resume?.loginTokens?.[0];
+	const when = tokenEntry?.when ? new Date(tokenEntry.when).getTime() : 0;
+	const expDays = Number(settings.get('Accounts_LoginExpiration')) || 90;
+	if (!when || Date.now() > when + expDays * 24 * 60 * 60 * 1000) {
 		return null;
 	}
 	// Decrypt the stored credential (no-op for legacy plaintext; see litboxCrypto).
