@@ -46,6 +46,8 @@ import '../app/push-notifications/server';
 import '../app/retention-policy/server';
 import '../app/slackbridge/server';
 import '../app/connectors/server';
+// CasePro CLIENT-message two-way sync — outbound leg (afterSaveMessage hook, gated OFF by default).
+import './lib/boards/casepro-clientsync/startup';
 import '../app/slashcommands-archiveroom/server';
 import '../app/slashcommand-asciiarts/server';
 import '../app/slashcommands-ban/server';

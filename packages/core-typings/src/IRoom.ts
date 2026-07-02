@@ -30,6 +30,16 @@ export interface IRoom extends IRocketChatRecord {
 	// Omnis Boards — channel↔matter link: a private channel bound to a Matter card.
 	matterCardId?: string; // boards_cards._id this channel is bound to
 	matterId?: string; // CasePro matters.id (mirrors the card's link.matterId)
+	// CasePro Client-sync: the per-matter CLIENT channel — the client↔firm thread mirrored from the
+	// CasePro portal, DELIBERATELY DISTINCT from the internal (privileged, staff-only) matter channel
+	// (which carries `matterId` WITHOUT this flag). Staff-only membership on the MatterChat side; the
+	// client is represented by the sync, not by a MatterChat account. Find-or-create keys on
+	// `{ matterId, clientChannel: true }` so the two channels for one matter never collide.
+	clientChannel?: boolean;
+	// CasePro Client-sync cursor: the `sentAt` (ISO) of the newest client message ingested into
+	// this Client channel. The inbound poll reads `> clientSyncCursor` and advances it. Present
+	// only on rooms where `clientChannel` is true.
+	clientSyncCursor?: string;
 	importIds?: string[]; // Slack channel ids when this room is bridged via SlackBridge
 	// CasePro comms-log — auto-log this channel's messages onto the linked matter's
 	// communication history (only meaningful when `matterId` is set).

@@ -5,6 +5,7 @@ import { automationEngineCron } from './automationEngine';
 import { boardsCaseProSyncCron } from './boardsCaseProSyncCron';
 import { boardsDigestCron } from './boardsDigestCron';
 import { boardsMattersCron } from './boardsMattersCron';
+import { caseproClientSyncCron } from './caseproClientSyncCron';
 
 export const startCron = async () => {
 	const started = await cronJobs.start((MongoInternals.defaultRemoteCollectionDriver().mongo as any).client.db());
@@ -20,5 +21,9 @@ export const startCron = async () => {
 	// CasePro live wire: periodic leads pull from CasePro intake (gated on
 	// CasePro_Enabled + a LIVE transport) + the boot-time misconfig warning.
 	await boardsCaseProSyncCron();
+	// CasePro CLIENT-message two-way sync: inbound poll of client→firm portal messages into the
+	// per-matter "Client" channel — gated by CasePro_Enabled + CasePro_Client_Sync_Enabled,
+	// schedule from CasePro_Client_Sync_Poll_Schedule. (Outbound leg is the afterSaveMessage hook.)
+	await caseproClientSyncCron();
 	return started;
 };
