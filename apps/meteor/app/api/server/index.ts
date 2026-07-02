@@ -16,6 +16,7 @@ import './v1/boards-notifications';
 import './v1/boards-reports';
 import './v1/boards-views';
 import './v1/boards-ai';
+import './v1/boards-forms';
 import './v1/call-history';
 import './v1/cross-firm';
 import './v1/webpush';

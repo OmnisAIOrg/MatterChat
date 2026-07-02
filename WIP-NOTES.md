@@ -1,3 +1,21 @@
+# Boards Forms/intake builder (auto/boards-forms-builder) — BUILT, needs runtime verification
+
+STATUS 2026-07-01: all server + client + harness code from the blueprint below is IMPLEMENTED
+on this branch. Packages typecheck/build clean (core-typings, model-typings, models,
+rest-typings, ui-contexts); app-side forms files show zero TS errors (remaining tsc noise is
+pre-existing unbuilt-workspace-package resolution in the fresh worktree, e.g. @rocket.chat/logger).
+
+REMAINING (integration lane):
+1. `yarn turbo run build --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings`
+   in the running checkout (dist gotcha) + bounce the dev server.
+2. Run `scripts/boards-api-test.mjs` — 15 new forms cases appended at the end.
+3. Browser-check /boards/board/:id (new "Forms" header button) → forms manager, and /form/:slug
+   logged-out (public fill page).
+4. After verification: move Forms out of roadmap in docs/current-status.md + FEATURES entry
+   (standing document-every-feature rule).
+
+Original blueprint (all executed) follows.
+
 ---
 name: matterchat-boards-forms-blueprint
 description: RESCUED full build blueprint for Boards Forms/intake builder (auto/boards-forms-builder) — implement then DELETE this memory

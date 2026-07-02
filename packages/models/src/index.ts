@@ -101,6 +101,7 @@ import type {
 	IBoardsSubscriptionsModel,
 	IBoardsNotificationsModel,
 	IBoardsSavedViewsModel,
+	IBoardsFormsModel,
 } from '@rocket.chat/model-typings';
 import type { Collection, Db } from 'mongodb';
 
@@ -240,6 +241,7 @@ export const BoardsAutomationRuns = proxify<IBoardsAutomationRunsModel>('IBoards
 export const BoardsSubscriptions = proxify<IBoardsSubscriptionsModel>('IBoardsSubscriptionsModel');
 export const BoardsNotifications = proxify<IBoardsNotificationsModel>('IBoardsNotificationsModel');
 export const BoardsSavedViews = proxify<IBoardsSavedViewsModel>('IBoardsSavedViewsModel');
+export const BoardsForms = proxify<IBoardsFormsModel>('IBoardsFormsModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
 	'IOmnichannelServiceLevelAgreementsModel',
 );

@@ -21,6 +21,7 @@ import {
 	BoardsNotificationsRaw,
 	BoardsPlaybooksRaw,
 	BoardsReferralsOutRaw,
+	BoardsFormsRaw,
 	BoardsReferralSourcesRaw,
 	BoardsSavedViewsRaw,
 	BoardsSequenceEnrollmentsRaw,
@@ -130,6 +131,7 @@ registerModel('IBoardsAutomationRunsModel', new BoardsAutomationRunsRaw(db));
 registerModel('IBoardsSubscriptionsModel', new BoardsSubscriptionsRaw(db, trashCollection));
 registerModel('IBoardsNotificationsModel', new BoardsNotificationsRaw(db, trashCollection));
 registerModel('IBoardsSavedViewsModel', new BoardsSavedViewsRaw(db, trashCollection));
+registerModel('IBoardsFormsModel', new BoardsFormsRaw(db, trashCollection));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));
 registerModel('ICredentialTokensModel', new CredentialTokensRaw(db));
 registerModel('IExternalWorkspaceConnectionsModel', new ExternalWorkspaceConnectionsRaw(db));
