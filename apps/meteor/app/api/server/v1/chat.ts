@@ -1,5 +1,5 @@
 import { Message } from '@rocket.chat/core-services';
-import type { IMessage, IThreadMainMessage } from '@rocket.chat/core-typings';
+import type { IMessage, IReadReceiptWithUser, IThreadMainMessage } from '@rocket.chat/core-typings';
 import { MessageTypes } from '@rocket.chat/message-types';
 import { Messages, Users, Rooms, Subscriptions } from '@rocket.chat/models';
 import {
@@ -24,6 +24,7 @@ import {
 	isChatSyncThreadMessagesProps,
 	isChatGetStarredMessagesProps,
 	isChatGetDiscussionsProps,
+	isChatGetMessageReadReceiptsProps,
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
@@ -31,6 +32,7 @@ import { escapeRegExp } from '@rocket.chat/string-helpers';
 import { Meteor } from 'meteor/meteor';
 
 import { reportMessage } from '../../../../server/lib/moderation/reportMessage';
+import { getReadReceipts } from '../../../../server/methods/getReadReceipts';
 import { ignoreUser } from '../../../../server/methods/ignoreUser';
 import { messageSearch } from '../../../../server/methods/messageSearch';
 import { getMessageHistory } from '../../../../server/publications/messages';
@@ -1351,6 +1353,33 @@ const chatEndpoints = API.v1
 				},
 			});
 			return API.v1.success(messages);
+		},
+	)
+	.get(
+		'chat.getMessageReadReceipts',
+		{
+			authRequired: true,
+			query: isChatGetMessageReadReceiptsProps,
+			response: {
+				200: ajv.compile<{ receipts: IReadReceiptWithUser[] }>({
+					type: 'object',
+					properties: {
+						receipts: { type: 'array', items: { type: 'object' } }, // relaxed: receipts carry hydrated user data,
+						success: { type: 'boolean', enum: [true] },
+					},
+					required: ['receipts', 'success'],
+					additionalProperties: false,
+				}),
+				400: validateBadRequestErrorResponse,
+				401: validateUnauthorizedErrorResponse,
+			},
+		},
+		async function action() {
+			const { messageId } = this.queryParams;
+
+			return API.v1.success({
+				receipts: await getReadReceipts(messageId, this.userId),
+			});
 		},
 	)
 	.get(

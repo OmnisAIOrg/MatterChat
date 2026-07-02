@@ -52,16 +52,10 @@ export const createMessageSettings = () =>
 		await this.section('Read_Receipts', async function () {
 			await this.add('Message_Read_Receipt_Enabled', false, {
 				type: 'boolean',
-				enterprise: true,
-				invalidValue: false,
-				modules: ['message-read-receipt'],
 				public: true,
 			});
 			await this.add('Message_Read_Receipt_Store_Users', false, {
 				type: 'boolean',
-				enterprise: true,
-				invalidValue: false,
-				modules: ['message-read-receipt'],
 				public: true,
 				enableQuery: { _id: 'Message_Read_Receipt_Enabled', value: true },
 			});

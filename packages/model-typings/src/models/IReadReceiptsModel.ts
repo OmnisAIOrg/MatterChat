@@ -1,5 +1,5 @@
 import type { IReadReceipt } from '@rocket.chat/core-typings';
-import type { FindCursor, DeleteResult } from 'mongodb';
+import type { BulkWriteResult, FindCursor, DeleteResult } from 'mongodb';
 
 import type { IBaseModel } from './IBaseModel';
 
@@ -11,4 +11,5 @@ export interface IReadReceiptsModel extends IBaseModel<IReadReceipt> {
 	removeByMessageId(messageId: string): Promise<DeleteResult>;
 	removeByMessageIds(messageIds: string[]): Promise<DeleteResult>;
 	findOlderThan(date: Date): FindCursor<IReadReceipt>;
+	saveReceipts(receipts: Omit<IReadReceipt, '_updatedAt'>[]): Promise<BulkWriteResult>;
 }

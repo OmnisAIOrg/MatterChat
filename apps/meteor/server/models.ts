@@ -75,7 +75,7 @@ import {
 	OEmbedCacheRaw,
 	PermissionsRaw,
 	PushTokenRaw,
-	ReadReceiptsDummy,
+	ReadReceiptsRaw,
 	registerModel,
 	ReportsRaw,
 	RolesRaw,
@@ -183,7 +183,7 @@ registerModel('IOAuthRefreshTokensModel', new OAuthRefreshTokensRaw(db));
 registerModel('IOEmbedCacheModel', new OEmbedCacheRaw(db));
 registerModel('IPermissionsModel', new PermissionsRaw(db, trashCollection));
 registerModel('IPushTokenModel', new PushTokenRaw(db));
-registerModel('IReadReceiptsModel', new ReadReceiptsDummy(), false);
+registerModel('IReadReceiptsModel', new ReadReceiptsRaw(db));
 registerModel('IReportsModel', new ReportsRaw(db));
 registerModel('IRolesModel', new RolesRaw(db, trashCollection));
 registerModel('IRoomsModel', new RoomsRaw(db, trashCollection));
