@@ -25,6 +25,17 @@ export const upsertPermissions = async (): Promise<void> => {
 		{ name: 'anonymous', scope: 'Users', description: '' },
 		{ name: 'livechat-agent', scope: 'Users', description: 'Livechat Agent' },
 		{ name: 'livechat-manager', scope: 'Users', description: 'Livechat Manager' },
+		// MatterChat legal roles (protected, firm-level). `attorney`/`paralegal` and the intake/
+		// marketing set were already referenced by the Boards grants in constant/permissions.ts but
+		// never seeded as role records, so they could not be assigned; seeding here (idempotent,
+		// runs every start) makes them assignable and self-heals existing installs.
+		{ name: 'partner', scope: 'Users', description: 'Law firm partner' },
+		{ name: 'attorney', scope: 'Users', description: 'Associate attorney' },
+		{ name: 'paralegal', scope: 'Users', description: 'Paralegal / case support' },
+		{ name: 'case-manager', scope: 'Users', description: 'Case manager' },
+		{ name: 'intake-specialist', scope: 'Users', description: 'Intake specialist' },
+		{ name: 'intake-manager', scope: 'Users', description: 'Intake manager' },
+		{ name: 'marketing', scope: 'Users', description: 'Marketing' },
 	] as const;
 
 	for (const role of defaultRoles) {
