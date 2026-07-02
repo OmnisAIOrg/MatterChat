@@ -419,6 +419,7 @@ const DeadlinesSection = ({ cardId }: { cardId: string }): ReactElement => {
 const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 	const { t } = useTranslation();
 	const caseProEnabled = useSetting('CasePro_Enabled', false);
+	const caseProWebUrl = useSetting('CasePro_Web_URL', '');
 
 	const matterId = card.link?.kind === 'matter' ? card.link.matterId : undefined;
 
@@ -454,10 +455,12 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 		return t('Boards_Matters_SOL_In_Days', { date: datePart, days: solDays, defaultValue: '{{date}} ({{days}}d)' });
 	})();
 
-	// "Open in" deep links. CasePro/LitBox/MedChron live behind their own apps;
-	// we link by the snapshot handles. These are intentionally relative/handle
-	// based so they resolve against whichever host the suite is deployed under.
-	const caseProHref = `/admin/casepro/matters/${matterId}`;
+	// "Open in" deep links. CasePro links resolve against the admin-configured
+	// CasePro_Web_URL (the human web app, not the MCP gateway) — when it is not
+	// configured the button is HIDDEN rather than rendered as a dead href.
+	// LitBox/MedChron stay handle-based/relative for now.
+	const caseProWebBase = (typeof caseProWebUrl === 'string' ? caseProWebUrl : '').trim().replace(/\/+$/, '');
+	const caseProHref = caseProWebBase ? `${caseProWebBase}/matters/${matterId}` : undefined;
 	const litboxHref = snapshot?.litboxWorkspaceId ? `/admin/litbox/workspaces/${snapshot.litboxWorkspaceId}` : undefined;
 	const medchronHref = snapshot?.medchronMatterId ? `/admin/medchron/matters/${snapshot.medchronMatterId}` : undefined;
 
@@ -594,10 +597,12 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 
 					{/* Open-in deep links */}
 					<Box display='flex' flexWrap='wrap' mbs={16} style={{ gap: '8px' }}>
-						<Button small is='a' href={caseProHref} target='_blank' rel='noopener noreferrer'>
-							<Icon name='new-window' size='x16' mie={4} />
-							{t('Boards_Matters_Open_In_CasePro', { defaultValue: 'Open in CasePro' })}
-						</Button>
+						{caseProHref && (
+							<Button small is='a' href={caseProHref} target='_blank' rel='noopener noreferrer'>
+								<Icon name='new-window' size='x16' mie={4} />
+								{t('Boards_Matters_Open_In_CasePro', { defaultValue: 'Open in CasePro' })}
+							</Button>
+						)}
 						{litboxHref && (
 							<Button small is='a' href={litboxHref} target='_blank' rel='noopener noreferrer'>
 								<Icon name='clip' size='x16' mie={4} />

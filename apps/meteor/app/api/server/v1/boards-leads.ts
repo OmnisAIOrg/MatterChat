@@ -350,6 +350,10 @@ API.v1.post(
 	},
 	async function action() {
 		const { userId } = this;
+		// boards-casepro-sync gates every "pull rows out of CasePro" surface.
+		if (!(await hasPermissionAsync(userId, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
 		if (!isCaseProEnabled()) {
 			return API.v1.failure('CasePro is not enabled; nothing to sync');
 		}
@@ -373,6 +377,12 @@ API.v1.post(
 	},
 	async function action() {
 		const { userId } = this;
+		// converting creates a live `matters` row upstream — that's a CasePro WRITE, so it
+		// requires boards-casepro-write on top of the service-level conversion guards.
+		// (Live writes are pilot-scoped: they also require CasePro_Enabled inside the service.)
+		if (isCaseProEnabled() && !(await hasPermissionAsync(userId, 'boards-casepro-write'))) {
+			return API.v1.unauthorized();
+		}
 		const { leadId } = this.bodyParams;
 
 		const { lead, matterId, matterCard, mattersBoardId } = await convertToMatter(userId, leadId);

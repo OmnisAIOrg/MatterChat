@@ -42,10 +42,16 @@ export {
 } from './mapping-intake';
 export {
 	StubTransport,
-	RestTransport,
+	McpGatewayTransport,
 	resolveTransportFromConfig,
+	caseProTransportDiagnostics,
+	deriveMcpEndpoint,
+	buildMcpFilters,
 	type ICaseProTransport,
 	type CaseProRow,
 	type CaseProQuery,
 	type CaseProQueryResult,
+	type CaseProCallContext,
+	type CaseProTransportDiagnostics,
+	type McpGatewayTransportConfig,
 } from './transport';

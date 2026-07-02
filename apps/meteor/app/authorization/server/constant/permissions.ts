@@ -253,10 +253,12 @@ export const permissions = [
 	{ _id: 'boards-leads-view', roles: ['admin', 'intake-specialist', 'attorney'] },
 	{ _id: 'boards-leads-edit', roles: ['admin', 'intake-specialist'] },
 	{ _id: 'boards-convert-lead', roles: ['admin', 'attorney', 'intake-specialist'] },
-	{ _id: 'boards-casepro-view', roles: ['admin', 'attorney', 'case-manager'] },
-	{ _id: 'boards-casepro-sync', roles: ['admin'] },
-	{ _id: 'boards-manage-casepro-settings', roles: ['admin'] },
-	{ _id: 'boards-casepro-write', roles: ['admin'] },
+	// CasePro integration (enforced on boards.casepro.* + leads sync/convert + the status
+	// surface; grants backfilled for existing installs by migration v338).
+	{ _id: 'boards-casepro-view', roles: ['admin', 'partner', 'attorney', 'case-manager'] },
+	{ _id: 'boards-casepro-sync', roles: ['admin', 'partner'] },
+	{ _id: 'boards-manage-casepro-settings', roles: ['admin', 'partner'] },
+	{ _id: 'boards-casepro-write', roles: ['admin', 'partner'] },
 	// Boards M7 (automation engine) — manage rules/buttons/scheduled/sequences, run buttons,
 	// gate CasePro write-back actions, and the broad read on the run-log/audit view.
 	{ _id: 'boards-manage-automations', roles: ['admin', 'attorney', 'case-manager', 'intake-manager'] },
