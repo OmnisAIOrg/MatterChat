@@ -50,6 +50,7 @@
  */
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
+import { SystemLogger } from '../../../../server/lib/logger/system';
 import type {
 	IChatProvider,
 	InboundMessageHandler,
@@ -167,6 +168,78 @@ function tokensFromCredentials(credentials: IProviderCredentials): GraphTokens {
 		refreshToken: credentials.refreshToken,
 		expiresAt: typeof credentials.expiresAt === 'number' ? credentials.expiresAt : undefined,
 	};
+}
+
+/** The presence enum the IProviderDirectChat/IProviderMember contract carries (frontend renders a dot). */
+type ProviderPresence = 'active' | 'away' | 'dnd' | 'offline';
+
+/**
+ * Map a Microsoft Graph presence `availability` to the IChatProvider presence enum. Graph's richer
+ * availability vocabulary (Available, Away, BeRightBack, Busy, DoNotDisturb, Offline, …) collapses to
+ * the four-state dot the UI renders. Anything unrecognized → undefined (the field degrades to absent).
+ */
+function mapGraphPresence(availability?: string): ProviderPresence | undefined {
+	switch (availability) {
+		case 'Available':
+		case 'AvailableIdle':
+			return 'active';
+		case 'Away':
+		case 'BeRightBack':
+			return 'away';
+		case 'DoNotDisturb':
+		case 'Busy':
+		case 'BusyIdle':
+			return 'dnd';
+		case 'Offline':
+		case 'PresenceUnknown':
+			return 'offline';
+		default:
+			return undefined;
+	}
+}
+
+/** Graph caps getPresencesByUserId at 650 ids/call; batch well under that to stay polite. */
+const PRESENCE_BATCH_SIZE = 100;
+
+/**
+ * Best-effort presence lookup for a set of Entra user ids via POST /communications/getPresencesByUserId
+ * (delegated Presence.Read). Returns a Map<userId, ProviderPresence> with only the ids Graph resolved
+ * to a recognized availability. ANY error (missing Presence.Read scope, throttling, a malformed batch)
+ * resolves to an EMPTY map — presence is purely additive, so a failure simply leaves it undefined on
+ * every chat/member rather than breaking the list. Batched to respect the endpoint's id-count cap.
+ */
+async function fetchPresences(tokens: GraphTokens, userIds: string[]): Promise<Map<string, ProviderPresence>> {
+	const out = new Map<string, ProviderPresence>();
+	// Dedupe + drop empties so a batch is never wasted on a blank/duplicate id.
+	const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+	if (!ids.length) {
+		return out;
+	}
+
+	type GraphPresence = { id?: string; availability?: string };
+	try {
+		for (let i = 0; i < ids.length; i += PRESENCE_BATCH_SIZE) {
+			const batch = ids.slice(i, i + PRESENCE_BATCH_SIZE);
+			const res = await graphFetch<{ value?: GraphPresence[] }>(`${GRAPH_BASE}/communications/getPresencesByUserId`, tokens, {
+				method: 'POST',
+				body: { ids: batch },
+			});
+			for (const p of res.value || []) {
+				if (!p?.id) {
+					continue;
+				}
+				const mapped = mapGraphPresence(p.availability);
+				if (mapped) {
+					out.set(p.id, mapped);
+				}
+			}
+		}
+	} catch (err) {
+		// Presence.Read may not be consented, or the endpoint throttled — degrade to no presence.
+		SystemLogger.debug({ msg: 'Teams fetchPresences failed (presence left undefined)', err: String(err) });
+		return new Map();
+	}
+	return out;
 }
 
 export class TeamsProvider implements IChatProvider {
@@ -492,16 +565,25 @@ export class TeamsProvider implements IChatProvider {
 			userId?: string;
 			displayName?: string;
 		};
+		// The "feel-alive" signals Graph carries on a chat resource (no extra call needed):
+		//  - lastMessagePreview.createdDateTime → when the chat last had activity (sort + "x ago").
+		//  - viewpoint.lastMessageReadDateTime  → how far this user has read; if the last message is
+		//    newer than that, the chat "has unread". Graph gives no exact per-chat unread number cheaply,
+		//    so unreadCount is 1 = "has unread" (see caveats), never an exact count.
 		type GraphChat = {
 			id?: string;
 			topic?: string | null;
 			chatType?: string;
 			members?: GraphChatMember[];
+			lastMessagePreview?: { createdDateTime?: string } | null;
+			viewpoint?: { lastMessageReadDateTime?: string } | null;
 		};
 
-		const chats = await graphGetAll<GraphChat>(`${GRAPH_BASE}/me/chats?$expand=members`, tokens);
+		const chats = await graphGetAll<GraphChat>(`${GRAPH_BASE}/me/chats?$expand=members,lastMessagePreview`, tokens);
 
 		const out: IProviderDirectChat[] = [];
+		// Collect the 1:1 counterpart ids so we can resolve presence in ONE batched call after the loop.
+		const oneOnOneOtherIds: string[] = [];
 		for (const chat of chats) {
 			if (!chat?.id) {
 				continue;
@@ -528,13 +610,67 @@ export class TeamsProvider implements IChatProvider {
 				name = otherNames[0] || chat.id;
 			}
 
+			// lastActivity (epoch-ms) from the last message preview's createdDateTime; absent → undefined.
+			const lastMsgIso = chat.lastMessagePreview?.createdDateTime;
+			const lastMsgMs = lastMsgIso ? Date.parse(lastMsgIso) : NaN;
+			const lastActivity = Number.isNaN(lastMsgMs) ? undefined : lastMsgMs;
+
+			// "has unread": the last message is newer than this user's lastMessageReadDateTime viewpoint.
+			// Graph has no cheap exact count, so 1 = has-unread, 0/undefined = caught up (see caveats).
+			let unreadCount: number | undefined;
+			if (typeof lastMsgMs === 'number' && !Number.isNaN(lastMsgMs)) {
+				const readIso = chat.viewpoint?.lastMessageReadDateTime;
+				const readMs = readIso ? Date.parse(readIso) : NaN;
+				// Unread when we have a read cursor and the last message beats it. If the cursor is
+				// missing/unparseable we can't be sure, so leave unreadCount undefined (don't guess unread).
+				if (!Number.isNaN(readMs)) {
+					unreadCount = lastMsgMs > readMs ? 1 : 0;
+				}
+			}
+
+			if (!isGroup && others.length === 1 && others[0]?.userId) {
+				oneOnOneOtherIds.push(others[0].userId);
+			}
+
 			out.push({
 				externalId: chat.id,
 				name,
 				isGroup,
 				...(memberExternalIds.length ? { memberExternalIds } : {}),
+				...(lastActivity !== undefined ? { lastActivity } : {}),
+				...(unreadCount !== undefined ? { unreadCount } : {}),
+				// Graph doesn't give a per-chat mention count cheaply — always 0 (see caveats).
+				mentionCount: 0,
+				// avatarUrl: a user photo requires a heavy binary GET (/users/{id}/photo/$value); we don't
+				// fetch binaries here, and Graph exposes no cheap photo URL — so it's left undefined and the
+				// frontend falls back to initials (see caveats).
 			});
 		}
+
+		// Presence (1:1 only): one batched POST /communications/getPresencesByUserId for all counterpart
+		// ids. Best-effort — if Presence.Read isn't consented (or it throttles) this returns an empty map
+		// and presence stays undefined on every chat. Matched back onto the 1:1 rows by counterpart id.
+		if (oneOnOneOtherIds.length) {
+			const presences = await fetchPresences(tokens, oneOnOneOtherIds);
+			if (presences.size) {
+				for (const chat of chats) {
+					if (!chat?.id || chat.chatType !== 'oneOnOne') {
+						continue;
+					}
+					const others = (Array.isArray(chat.members) ? chat.members : []).filter((m) => (m?.userId || '') !== myId);
+					const otherId = others.length === 1 ? others[0]?.userId : undefined;
+					const presence = otherId ? presences.get(otherId) : undefined;
+					if (!presence) {
+						continue;
+					}
+					const row = out.find((r) => r.externalId === chat.id);
+					if (row) {
+						row.presence = presence;
+					}
+				}
+			}
+		}
+
 		return out;
 	}
 
@@ -579,9 +715,120 @@ export class TeamsProvider implements IChatProvider {
 					externalId,
 					displayName: m.displayName || externalId,
 					...(m.email ? { email: m.email } : {}),
+					// avatarUrl: a user photo needs a heavy binary GET (/users/{id}/photo/$value); we don't
+					// fetch binaries here and Graph exposes no cheap photo URL, so it's left undefined and the
+					// frontend falls back to initials (see caveats).
 				});
 			}
 		}
+
+		// Presence (best-effort): one batched POST /communications/getPresencesByUserId for every person.
+		// If Presence.Read isn't consented (or it throttles) this returns an empty map and presence stays
+		// undefined on every member — purely additive, never breaks the list.
+		const memberIds = [...byUserId.keys()];
+		if (memberIds.length) {
+			const presences = await fetchPresences(tokens, memberIds);
+			for (const [id, presence] of presences) {
+				const member = byUserId.get(id);
+				if (member) {
+					member.presence = presence;
+				}
+			}
+		}
+
 		return [...byUserId.values()];
+	}
+
+	// ─── read-state (notifications / feel-alive) — REAL ────────────────────────────────────────────
+
+	/**
+	 * Mark a chat OR channel read in Teams, AS the signed-in user. Best-effort and resolves void —
+	 * the service layer swallows any throw and still acks ok to the client, so this never needs to
+	 * signal a hard failure.
+	 *
+	 * Graph exposes a cheap markChatReadForUser ONLY for chats (1:1/group DMs):
+	 *   POST /chats/{chatId}/markChatReadForUser  with `{ user: { id } }`
+	 * There is no equivalent cheap "mark channel read" on Graph (channel read-state isn't a delegated
+	 * write), so a CHANNEL composite (`teamId|channelId`) is a deliberate no-op here. `externalId` is
+	 * EITHER a channel composite OR a bare chat id — detected exactly like syncMessages/postMessage.
+	 */
+	async markRead(connection: IProviderConnection, externalId: string): Promise<void> {
+		if (!isTeamsConfigured()) {
+			return notConfigured();
+		}
+		if (!externalId) {
+			return;
+		}
+		// No cheap delegated "mark channel read" in Graph — channel ids are a no-op (see doc above).
+		if (isChannelComposite(externalId)) {
+			return;
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		// markChatReadForUser needs the acting user's Entra id in the body.
+		const me = await graphFetch<{ id?: string }>(`${GRAPH_BASE}/me?$select=id`, tokens);
+		const myId = me?.id;
+		if (!myId) {
+			return;
+		}
+		await graphFetch(`${GRAPH_BASE}/chats/${encodeURIComponent(externalId)}/markChatReadForUser`, tokens, {
+			method: 'POST',
+			body: { user: { id: myId } },
+		});
+	}
+
+	/**
+	 * Roll up this ONE connection's total unread for the badge: a single GET /me/chats (the same data
+	 * listDirectChats reads) and count chats whose last message is newer than this user's read viewpoint
+	 * (the "has unread" comparison). Returns plain non-negative integers.
+	 *
+	 *   - unreadCount  = number of chats with at least one unread message (each counts once — Graph gives
+	 *                    no cheap exact per-chat count, see caveats; this is a "chats-with-unread" total).
+	 *   - mentionCount = 0 — Graph exposes no cheap per-chat mention count (see caveats).
+	 *
+	 * Channels are NOT included (Graph has no cheap delegated channel unread signal), so this is DM unread
+	 * only — same /me/chats source as listDirectChats, no extra calls.
+	 */
+	async unreadSummary(connection: IProviderConnection): Promise<{ unreadCount: number; mentionCount: number }> {
+		if (!isTeamsConfigured()) {
+			return notConfigured();
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		type GraphChat = {
+			id?: string;
+			chatType?: string;
+			lastMessagePreview?: { createdDateTime?: string } | null;
+			viewpoint?: { lastMessageReadDateTime?: string } | null;
+		};
+
+		// $select keeps the payload tiny — we only need the read-state signals, not members/topic.
+		const chats = await graphGetAll<GraphChat>(
+			`${GRAPH_BASE}/me/chats?$select=id,chatType,lastMessagePreview,viewpoint`,
+			tokens,
+		);
+
+		let unreadCount = 0;
+		for (const chat of chats) {
+			if (!chat?.id) {
+				continue;
+			}
+			const chatType = chat.chatType || '';
+			if (chatType !== 'oneOnOne' && chatType !== 'group') {
+				continue;
+			}
+			const lastIso = chat.lastMessagePreview?.createdDateTime;
+			const lastMs = lastIso ? Date.parse(lastIso) : NaN;
+			if (Number.isNaN(lastMs)) {
+				continue;
+			}
+			const readIso = chat.viewpoint?.lastMessageReadDateTime;
+			const readMs = readIso ? Date.parse(readIso) : NaN;
+			// Only count as unread when we have a read cursor AND the last message beats it (don't guess).
+			if (!Number.isNaN(readMs) && lastMs > readMs) {
+				unreadCount++;
+			}
+		}
+
+		return { unreadCount, mentionCount: 0 };
 	}
 }

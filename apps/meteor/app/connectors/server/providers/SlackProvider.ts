@@ -75,6 +75,34 @@ const MESSAGE_PAGE_SIZE = 50;
 /** Page size for the conversations/users list endpoints (Slack caps conversations.list at 1000). */
 const LIST_PAGE_SIZE = 200;
 
+/**
+ * Cap on the number of per-user profile/presence lookups (users.info + users.getPresence) done while
+ * enriching a list — so a huge workspace roster or DM list doesn't fan out into hundreds of extra
+ * Slack calls and trip rate limits. Past the cap, name/avatar/presence simply stay at whatever was
+ * already resolved (name still falls back to the user id; avatar/presence stay undefined).
+ */
+const MAX_PROFILE_LOOKUPS = 60;
+
+/** Slack `ts` ("seconds.micros") → epoch ms, or undefined when absent/unparseable. */
+function tsToEpochMs(ts?: string): number | undefined {
+	if (!ts) {
+		return undefined;
+	}
+	const seconds = parseFloat(ts);
+	return Number.isNaN(seconds) ? undefined : Math.round(seconds * 1000);
+}
+
+/** Map a Slack `users.getPresence` presence string onto the contract enum. */
+function mapPresence(presence?: string): 'active' | 'away' | 'dnd' | 'offline' | undefined {
+	if (presence === 'active') {
+		return 'active';
+	}
+	if (presence === 'away') {
+		return 'away';
+	}
+	return undefined;
+}
+
 /** Build the SlackTokens bundle the slackApi reads from stored credentials. */
 function tokensFromCredentials(credentials: IProviderCredentials): SlackTokens {
 	if (!credentials?.accessToken) {
@@ -188,6 +216,10 @@ export class SlackProvider implements IChatProvider {
 			is_private?: boolean;
 			is_archived?: boolean;
 			topic?: { value?: string };
+			/** Per-conversation unread count (only present with the right scope / on member channels). */
+			unread_count_display?: number;
+			/** The conversation's most-recent message, when Slack includes it. */
+			latest?: { ts?: string };
 		};
 
 		const channels = await slackGetAll<SlackChannel>('conversations.list', 'channels', tokens, {
@@ -201,12 +233,18 @@ export class SlackProvider implements IChatProvider {
 			if (!ch?.id) {
 				continue;
 			}
+			// "Feel-alive" fields are additive and best-effort: a missing scope just leaves them absent.
+			const lastActivity = tsToEpochMs(ch.latest?.ts);
 			out.push({
 				// The Slack conversation id is the channel id — passed straight to the messages endpoints.
 				externalId: ch.id,
 				name: ch.name || ch.id,
 				isPrivate: Boolean(ch.is_private),
 				...(ch.topic?.value ? { topic: ch.topic.value } : {}),
+				...(typeof ch.unread_count_display === 'number' ? { unreadCount: ch.unread_count_display } : {}),
+				// mentionCount intentionally left unset (defaults to 0 client-side) — Slack has no cheap
+				// per-conversation mention count.
+				...(lastActivity !== undefined ? { lastActivity } : {}),
 			});
 		}
 		return out;
@@ -220,7 +258,7 @@ export class SlackProvider implements IChatProvider {
 	 * conversations.history / chat.postMessage — same endpoints as channels). For a 1:1 (im), Slack only
 	 * carries the OTHER user's id on the `user` field, so we resolve the display name via users.info
 	 * (cached per call so a user appearing in several DMs costs one lookup). For a group DM (mpim), the
-	 * channel `name` is the joined-handles label Slack already provides. Slack `ok:false` (e.g.
+	 * participant display names are resolved (conversations.members + users.info) into "A, B, C". Slack `ok:false` (e.g.
 	 * missing im:read/mpim:read scope) is surfaced UNswallowed by slackApi.
 	 */
 	async listDirectChats(connection: IProviderConnection): Promise<IProviderDirectChat[]> {
@@ -238,6 +276,10 @@ export class SlackProvider implements IChatProvider {
 			user?: string;
 			/** group DM (mpim): Slack's joined-handles label, e.g. `mpdm-alice--bob--carol-1`. */
 			name?: string;
+			/** Per-conversation unread count for this DM ("feel-alive" badge), when scope allows. */
+			unread_count_display?: number;
+			/** The DM's most-recent message, when Slack includes it. */
+			latest?: { ts?: string };
 		};
 
 		const conversations = await slackGetAll<SlackConversation>('conversations.list', 'channels', tokens, {
@@ -246,26 +288,139 @@ export class SlackProvider implements IChatProvider {
 			limit: LIST_PAGE_SIZE,
 		});
 
-		// Resolve 1:1 peer display names via users.info, cached so repeated peers cost one lookup.
-		const nameCache = new Map<string, string>();
-		const resolveUserName = async (userId: string): Promise<string> => {
-			if (nameCache.has(userId)) {
-				return nameCache.get(userId) as string;
+		// Richer per-user cache: name+avatar+presence for one user costs one users.info + one
+		// users.getPresence, regardless of how many DMs/groups they appear in.
+		const profileCache = new Map<string, { name: string; avatarUrl?: string }>();
+		const presenceCache = new Map<string, 'active' | 'away' | 'dnd' | 'offline' | undefined>();
+		let profileLookups = 0;
+
+		// Resolve (and cache) a user's display name + avatar via users.info. Capped so a giant DM list
+		// can't fan out into hundreds of calls — past the cap the name falls back to the id and the
+		// avatar stays undefined. Cache hits never count against the cap.
+		const resolveProfile = async (userId: string): Promise<{ name: string; avatarUrl?: string }> => {
+			const cached = profileCache.get(userId);
+			if (cached) {
+				return cached;
 			}
+			if (profileLookups >= MAX_PROFILE_LOOKUPS) {
+				const fallback = { name: userId };
+				profileCache.set(userId, fallback);
+				return fallback;
+			}
+			profileLookups++;
 			try {
-				const info = await slackFetch<{ user?: { real_name?: string; profile?: { display_name?: string; real_name?: string }; name?: string } }>(
-					'users.info',
-					tokens,
-					{ method: 'GET', params: { user: userId } },
-				);
+				const info = await slackFetch<{
+					user?: { real_name?: string; profile?: { display_name?: string; real_name?: string; image_72?: string; image_48?: string }; name?: string };
+				}>('users.info', tokens, { method: 'GET', params: { user: userId } });
 				const u = info.user || {};
 				const name = u.profile?.display_name || u.real_name || u.profile?.real_name || u.name || userId;
-				nameCache.set(userId, name);
-				return name;
+				const avatarUrl = u.profile?.image_72 || u.profile?.image_48 || undefined;
+				const entry = { name, ...(avatarUrl ? { avatarUrl } : {}) };
+				profileCache.set(userId, entry);
+				return entry;
 			} catch (err) {
 				// A single unresolved peer must not fail the whole list — fall back to the id.
-				nameCache.set(userId, userId);
-				return userId;
+				const fallback = { name: userId };
+				profileCache.set(userId, fallback);
+				return fallback;
+			}
+		};
+
+		// Name-only resolver kept for group-DM membership (where avatars/presence aren't surfaced).
+		const resolveUserName = async (userId: string): Promise<string> => (await resolveProfile(userId)).name;
+
+		// Resolve (and cache) a user's presence via users.getPresence. Capped (shares MAX with profile
+		// lookups conceptually but tracked separately so presence still resolves for the first N peers).
+		// A missing presence scope just leaves presence undefined — never throws the list.
+		let presenceLookups = 0;
+		const resolvePresence = async (userId: string): Promise<'active' | 'away' | 'dnd' | 'offline' | undefined> => {
+			if (presenceCache.has(userId)) {
+				return presenceCache.get(userId);
+			}
+			if (presenceLookups >= MAX_PROFILE_LOOKUPS) {
+				presenceCache.set(userId, undefined);
+				return undefined;
+			}
+			presenceLookups++;
+			try {
+				const res = await slackFetch<{ presence?: string }>('users.getPresence', tokens, {
+					method: 'GET',
+					params: { user: userId },
+				});
+				const presence = mapPresence(res.presence);
+				presenceCache.set(userId, presence);
+				return presence;
+			} catch (err) {
+				presenceCache.set(userId, undefined);
+				return undefined;
+			}
+		};
+
+		// conversations.list does NOT carry unread_count_display or `latest` — those need conversations.info
+		// PER conversation. Fetch it (capped + cached) so DM unread badges + recency sort actually populate.
+		// VERIFY LIVE: a USER token returns unread_count_display on conversations.info for the caller's own
+		// DMs; Tier-3 rate limits bound how many we enrich per call (MAX_PROFILE_LOOKUPS), past which the
+		// row simply has no badge rather than erroring.
+		const infoCache = new Map<string, { unreadCount?: number; lastActivity?: number }>();
+		let infoLookups = 0;
+		const enrichUnread = async (channelId: string): Promise<{ unreadCount?: number; lastActivity?: number }> => {
+			const cached = infoCache.get(channelId);
+			if (cached) {
+				return cached;
+			}
+			if (infoLookups >= MAX_PROFILE_LOOKUPS) {
+				return {};
+			}
+			infoLookups++;
+			try {
+				const res = await slackFetch<{ channel?: { unread_count_display?: number; latest?: { ts?: string } } }>(
+					'conversations.info',
+					tokens,
+					{ method: 'GET', params: { channel: channelId } },
+				);
+				const ch = res.channel || {};
+				const entry: { unreadCount?: number; lastActivity?: number } = {};
+				if (typeof ch.unread_count_display === 'number') {
+					entry.unreadCount = ch.unread_count_display;
+				}
+				const ms = tsToEpochMs(ch.latest?.ts);
+				if (ms !== undefined) {
+					entry.lastActivity = ms;
+				}
+				infoCache.set(channelId, entry);
+				return entry;
+			} catch {
+				return {};
+			}
+		};
+
+		// The current user's id, so a group DM reads by the OTHER members (like Slack) — best-effort.
+		let selfId: string | undefined;
+		try {
+			const auth = await slackFetch<{ user_id?: string }>('auth.test', tokens, { method: 'GET' });
+			selfId = auth.user_id;
+		} catch {
+			selfId = undefined;
+		}
+
+		// Group-DM (mpim) name = the other participants' display names, e.g. "Gunit, Jaimin Vaghani" —
+		// resolved from conversations.members + users.info (cached above). Falls back to Slack's raw
+		// joined-handles label ONLY if membership can't be read (e.g. a scope gap), so a row is never blank.
+		const resolveGroupName = async (channelId: string, fallback: string): Promise<{ name: string; memberIds: string[] }> => {
+			try {
+				const res = await slackFetch<{ members?: string[] }>('conversations.members', tokens, {
+					method: 'GET',
+					params: { channel: channelId, limit: 100 },
+				});
+				const ids = (res.members || []).filter((id) => Boolean(id) && id !== selfId);
+				if (ids.length === 0) {
+					return { name: fallback, memberIds: [] };
+				}
+				const names = await Promise.all(ids.map((id) => resolveUserName(id)));
+				const shown = names.slice(0, 4).join(', ');
+				return { name: names.length > 4 ? `${shown} +${names.length - 4}` : shown, memberIds: ids };
+			} catch {
+				return { name: fallback, memberIds: [] };
 			}
 		};
 
@@ -275,23 +430,39 @@ export class SlackProvider implements IChatProvider {
 				continue;
 			}
 			const isGroup = Boolean(conv.is_mpim);
-			let name: string;
+			// Shared "feel-alive" fields — additive, best-effort. conversations.list omits unread/latest, so
+			// conversations.info (capped, cached) supplies them; a missing scope/cap just leaves them absent.
+			const enriched = await enrichUnread(conv.id);
+			const unread = enriched.unreadCount !== undefined ? { unreadCount: enriched.unreadCount } : {};
+			const lastActivity = enriched.lastActivity !== undefined ? { lastActivity: enriched.lastActivity } : {};
 			if (isGroup) {
-				// mpim: Slack's own joined-handles label is the most legible thing available cheaply.
-				name = conv.name || conv.id;
+				// mpim: real participant names ("Gunit, Jaimin Vaghani"), not Slack's raw mpdm-… label.
+				const { name, memberIds } = await resolveGroupName(conv.id, conv.name || conv.id);
+				out.push({
+					externalId: conv.id,
+					name,
+					isGroup,
+					...(memberIds.length ? { memberExternalIds: memberIds } : {}),
+					...unread,
+					...lastActivity,
+				});
 			} else if (conv.user) {
-				// 1:1 im: name by the OTHER member (resolved via users.info).
-				name = await resolveUserName(conv.user);
+				// 1:1 im: name + avatar + presence by the OTHER member (resolved via users.info / getPresence).
+				const profile = await resolveProfile(conv.user);
+				const presence = await resolvePresence(conv.user);
+				out.push({
+					externalId: conv.id,
+					name: profile.name,
+					isGroup,
+					memberExternalIds: [conv.user],
+					...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
+					...(presence ? { presence } : {}),
+					...unread,
+					...lastActivity,
+				});
 			} else {
-				name = conv.id;
+				out.push({ externalId: conv.id, name: conv.id, isGroup, ...unread, ...lastActivity });
 			}
-
-			out.push({
-				externalId: conv.id,
-				name,
-				isGroup,
-				...(conv.user ? { memberExternalIds: [conv.user] } : {}),
-			});
 		}
 		return out;
 	}
@@ -317,10 +488,31 @@ export class SlackProvider implements IChatProvider {
 			deleted?: boolean;
 			is_bot?: boolean;
 			is_app_user?: boolean;
-			profile?: { display_name?: string; real_name?: string; email?: string };
+			profile?: { display_name?: string; real_name?: string; email?: string; image_72?: string; image_48?: string };
 		};
 
 		const users = await slackGetAll<SlackUser>('users.list', 'members', tokens, { limit: LIST_PAGE_SIZE });
+
+		// Presence requires a per-user users.getPresence call (users.list doesn't carry it), so it's
+		// capped — past MAX_PROFILE_LOOKUPS members, presence stays undefined to avoid a rate-limit
+		// storm on a large roster. avatarUrl rides along on users.list for free (no extra call).
+		let presenceLookups = 0;
+		const resolvePresence = async (userId: string): Promise<'active' | 'away' | 'dnd' | 'offline' | undefined> => {
+			if (presenceLookups >= MAX_PROFILE_LOOKUPS) {
+				return undefined;
+			}
+			presenceLookups++;
+			try {
+				const res = await slackFetch<{ presence?: string }>('users.getPresence', tokens, {
+					method: 'GET',
+					params: { user: userId },
+				});
+				return mapPresence(res.presence);
+			} catch (err) {
+				// A missing presence scope (or a single failed lookup) just leaves presence undefined.
+				return undefined;
+			}
+		};
 
 		const out: IProviderMember[] = [];
 		for (const u of users) {
@@ -333,10 +525,14 @@ export class SlackProvider implements IChatProvider {
 			}
 			const displayName = u.profile?.display_name || u.real_name || u.profile?.real_name || u.name || u.id;
 			const email = u.profile?.email;
+			const avatarUrl = u.profile?.image_72 || u.profile?.image_48 || undefined;
+			const presence = await resolvePresence(u.id);
 			out.push({
 				externalId: u.id,
 				displayName,
 				...(email ? { email } : {}),
+				...(avatarUrl ? { avatarUrl } : {}),
+				...(presence ? { presence } : {}),
 			});
 		}
 		return out;
@@ -490,5 +686,95 @@ export class SlackProvider implements IChatProvider {
 			throw new Error('slack_post_no_message_ts');
 		}
 		return { externalId: created.ts };
+	}
+
+	// ─── read state — REAL (best-effort) ──────────────────────────────────────────────────────────
+
+	/**
+	 * Mark a channel OR direct chat read in Slack: conversations.mark with `channel=externalId` and
+	 * `ts=` the conversation's latest message ts. `externalId` is the conversation id from listChannels
+	 * OR listDirectChats — Slack marks both the same way (a conversation id IS the channel id).
+	 *
+	 * Best-effort: we first read the conversation's most-recent message ts (conversations.history
+	 * limit=1), then mark up to it. Any failure (missing scope, no messages, channel_not_found) is
+	 * SWALLOWED and resolves void — the service swallows throws anyway and still acks ok:true, so a
+	 * failed mark must never surface as a hard error to the client.
+	 */
+	async markRead(connection: IProviderConnection, externalId: string): Promise<void> {
+		if (!isSlackConfigured() || !externalId) {
+			return;
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		try {
+			// Newest message ts to mark up to. limit=1 keeps this cheap.
+			const page = await slackFetch<{ messages?: Array<{ ts?: string }> }>('conversations.history', tokens, {
+				method: 'GET',
+				params: { channel: externalId, limit: 1 },
+			});
+			const latestTs = page.messages?.[0]?.ts;
+			if (!latestTs) {
+				// Nothing to mark (empty conversation or no read access) — best-effort, just return.
+				return;
+			}
+			await slackFetch('conversations.mark', tokens, {
+				method: 'POST',
+				params: { channel: externalId, ts: latestTs },
+			});
+		} catch (err) {
+			// Best-effort: swallow (missing scope, channel_not_found, etc.) and resolve void.
+		}
+	}
+
+	/**
+	 * Roll up THIS connection's unread count for the org-tile badge. conversations.list does NOT carry
+	 * unread, so the only documented source is conversations.info PER conversation — far too many to scan
+	 * every channel on a 30s poll across every org. So we bound it to the user's DMs (im,mpim — "new
+	 * chats", the primary at-a-glance signal) and CAP the info fan-out. APPROXIMATE by design (channel
+	 * unread isn't included) and rate-limit-bounded. mentionCount stays 0 (Slack exposes no cheap per-
+	 * conversation mention count). VERIFY LIVE: at this poll cadence the conversations.info fan-out sits
+	 * near Slack's Tier-3 budget — lower SUMMARY_INFO_CAP or raise the poll interval if 429s appear.
+	 *
+	 * Returns plain integers (>=0). A hard list failure throws (slackGetAll) and the service's
+	 * per-connection try/catch defaults that connection to 0/0; a per-conversation info failure is
+	 * swallowed so one bad DM never zeroes the rest.
+	 */
+	async unreadSummary(connection: IProviderConnection): Promise<{ unreadCount: number; mentionCount: number }> {
+		if (!isSlackConfigured()) {
+			return { unreadCount: 0, mentionCount: 0 };
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+
+		const dms = await slackGetAll<{ id?: string }>('conversations.list', 'channels', tokens, {
+			types: 'im,mpim',
+			exclude_archived: true,
+			limit: LIST_PAGE_SIZE,
+		});
+
+		const SUMMARY_INFO_CAP = 20;
+		let unreadCount = 0;
+		let lookups = 0;
+		for (const conv of dms) {
+			if (lookups >= SUMMARY_INFO_CAP) {
+				break;
+			}
+			if (!conv?.id) {
+				continue;
+			}
+			lookups++;
+			try {
+				const res = await slackFetch<{ channel?: { unread_count_display?: number } }>('conversations.info', tokens, {
+					method: 'GET',
+					params: { channel: conv.id },
+				});
+				const n = res.channel?.unread_count_display;
+				if (typeof n === 'number' && n > 0) {
+					unreadCount += n;
+				}
+			} catch {
+				// best-effort per conversation — one bad DM doesn't zero the rest.
+			}
+		}
+		// mentionCount: Slack has no cheap per-conversation mention count — leave 0 (see caveats).
+		return { unreadCount, mentionCount: 0 };
 	}
 }

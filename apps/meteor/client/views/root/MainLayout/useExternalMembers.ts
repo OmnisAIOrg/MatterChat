@@ -33,6 +33,8 @@ export const useExternalMembers = (
 		enabled: enabled && Boolean(connectionId),
 		// The directory changes rarely; keep it fresh-enough without hammering the provider.
 		staleTime: 30_000,
+		// Poll so presence/avatars feel live-ish without a manual refetch.
+		refetchInterval: 30_000,
 		retry: false,
 	});
 

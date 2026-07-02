@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 
 import { externalConnectionIdFromSelection, externalSelectionId, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
+import type { ExternalUnreadCounts } from './useExternalUnreadSummary';
+import { useExternalUnreadSummary } from './useExternalUnreadSummary';
 import type { ConnectedExternalWorkspace } from './useExternalWorkspaces';
 import { useExternalWorkspaces } from './useExternalWorkspaces';
 import type { SwitchableOrg } from './useOrgSwitcher';
@@ -30,6 +32,11 @@ const RAIL_BG = '#0C0F14';
 const BRAND_GREEN = '#1B7A2E';
 const BRAND_GREEN_BRIGHT = '#22B43F';
 const ACCENT_RING = 'rgba(27,122,46,0.5)';
+// Native-app-style unread badge colour (Slack red). Used on external tiles that have unread activity.
+const UNREAD_BADGE = '#e01e5a';
+
+/** Cap a count for the badge so a 4-figure unread doesn't blow out the tile corner. */
+const formatBadgeCount = (count: number): string => (count > 99 ? '99+' : String(count));
 
 const columnClass = css`
 	width: 62px;
@@ -136,14 +143,25 @@ const SlackMark = ({ size }: { size: number }): ReactElement => (
 const ExternalTile = ({
 	connection,
 	isSelected,
+	unread,
 	onClick,
 }: {
 	connection: ConnectedExternalWorkspace;
 	isSelected: boolean;
+	unread: ExternalUnreadCounts;
 	onClick: () => void;
 }): ReactElement => {
 	const branding = externalProviderBranding(connection.provider);
 	const name = connection.externalOrgName || branding.defaultName;
+
+	// Native-app-style unread badge: only when this connection has unread activity. Mention-aware —
+	// when there are mentions, show the mention count (the "you specifically" signal) rather than the
+	// raw unread total. The tile (tileClass) is already position:relative, so the absolute badge anchors
+	// to the tile corner and overlaps it like an iOS app icon badge.
+	const hasUnread = unread.unreadCount > 0;
+	const showMentions = unread.mentionCount > 0;
+	const badgeValue = showMentions ? unread.mentionCount : unread.unreadCount;
+
 	return (
 		<Box
 			is='button'
@@ -160,6 +178,38 @@ const ExternalTile = ({
 			}}
 		>
 			<branding.Mark size={22} />
+
+			{hasUnread && (
+				<Box
+					aria-label={
+						showMentions
+							? `${unread.mentionCount} mentions, ${unread.unreadCount} unread`
+							: `${unread.unreadCount} unread`
+					}
+					style={{
+						position: 'absolute',
+						top: '-4px',
+						right: '-4px',
+						minWidth: '17px',
+						height: '17px',
+						borderRadius: '9px',
+						background: UNREAD_BADGE,
+						color: '#ffffff',
+						fontSize: '10px',
+						fontWeight: 600,
+						lineHeight: 1,
+						display: 'flex',
+						alignItems: 'center',
+						justifyContent: 'center',
+						border: `2px solid ${RAIL_BG}`,
+						padding: '0 4px',
+						boxSizing: 'border-box',
+						pointerEvents: 'none',
+					}}
+				>
+					{formatBadgeCount(badgeValue)}
+				</Box>
+			)}
 		</Box>
 	);
 };
@@ -257,6 +307,8 @@ const OrgSwitcherRail = (): ReactElement | null => {
 	// — Slack and/or Teams and/or Google Chat. Provider-agnostic: the rail maps over the list, it
 	// doesn't branch on which provider.
 	const { externalConnections } = useExternalWorkspaces();
+	// Rolled-up unread/mention counts per external connection (polled 30s) — drives the rail badges.
+	const { getCountsForConnection } = useExternalUnreadSummary();
 
 	// The currently-selected external connection id (if any), parsed from the `ext:<id>` sentinel.
 	const selectedExternalId = externalConnectionIdFromSelection(selectedOrgId);
@@ -336,6 +388,7 @@ const OrgSwitcherRail = (): ReactElement | null => {
 						key={connection._id}
 						connection={connection}
 						isSelected={selectedExternalId === connection._id}
+						unread={getCountsForConnection(connection._id)}
 						onClick={(): void => selectExternal(connection._id)}
 					/>
 				))}

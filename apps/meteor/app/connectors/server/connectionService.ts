@@ -143,6 +143,10 @@ export type ClientChannel = {
 	teamName: string;
 	isPrivate: boolean;
 	topic?: string;
+	/** Feel-alive fields (optional; only set by providers that report them). lastActivity is epoch-ms. */
+	unreadCount?: number;
+	mentionCount?: number;
+	lastActivity?: number;
 };
 
 /** Channels grouped by their team, for the "connected channels" panel. */
@@ -267,7 +271,16 @@ export async function listMyChannels(
 		const byTeam = new Map<string, ClientChannel[]>();
 		for (const ch of channels) {
 			const { teamName, name } = splitChannelLabel(ch, doc.externalOrgName || 'Microsoft Teams');
-			const entry: ClientChannel = { externalId: ch.externalId, name, teamName, isPrivate: ch.isPrivate, topic: ch.topic };
+			const entry: ClientChannel = {
+				externalId: ch.externalId,
+				name,
+				teamName,
+				isPrivate: ch.isPrivate,
+				topic: ch.topic,
+				...(ch.unreadCount !== undefined ? { unreadCount: ch.unreadCount } : {}),
+				...(ch.mentionCount !== undefined ? { mentionCount: ch.mentionCount } : {}),
+				...(ch.lastActivity !== undefined ? { lastActivity: ch.lastActivity } : {}),
+			};
 			const list = byTeam.get(teamName);
 			if (list) {
 				list.push(entry);
@@ -297,6 +310,12 @@ export type ClientDirectChat = {
 	name: string;
 	/** True for a group DM (3+ people), false for a 1:1. */
 	isGroup: boolean;
+	/** Feel-alive fields (optional; only set by providers that report them). lastActivity is epoch-ms. */
+	unreadCount?: number;
+	mentionCount?: number;
+	lastActivity?: number;
+	avatarUrl?: string;
+	presence?: 'active' | 'away' | 'dnd' | 'offline';
 };
 
 /** A person in the org/workspace directory, as returned to the client for the "People" section. */
@@ -306,6 +325,9 @@ export type ClientMember = {
 	displayName: string;
 	/** Email (Teams/Google) or handle (Slack), when the provider exposes it. */
 	email?: string;
+	/** Feel-alive fields (optional; only set by providers that report them). */
+	avatarUrl?: string;
+	presence?: 'active' | 'away' | 'dnd' | 'offline';
 };
 
 /**
@@ -340,6 +362,11 @@ export async function listMyDirectChats(
 			externalId: c.externalId,
 			name: c.name,
 			isGroup: c.isGroup,
+			...(c.unreadCount !== undefined ? { unreadCount: c.unreadCount } : {}),
+			...(c.mentionCount !== undefined ? { mentionCount: c.mentionCount } : {}),
+			...(c.lastActivity !== undefined ? { lastActivity: c.lastActivity } : {}),
+			...(c.avatarUrl ? { avatarUrl: c.avatarUrl } : {}),
+			...(c.presence ? { presence: c.presence } : {}),
 		}));
 		return { chats: clientChats, connection: toClientConnection(doc) };
 	} catch (err) {
@@ -379,6 +406,8 @@ export async function listMyMembers(
 			externalId: m.externalId,
 			displayName: m.displayName,
 			...(m.email ? { email: m.email } : {}),
+			...(m.avatarUrl ? { avatarUrl: m.avatarUrl } : {}),
+			...(m.presence ? { presence: m.presence } : {}),
 		}));
 		return { members: clientMembers, connection: toClientConnection(doc) };
 	} catch (err) {
@@ -513,4 +542,67 @@ export async function sendMyMessage(
 	} catch (err) {
 		return providerError(err, 'send_message_failed');
 	}
+}
+
+/** One connection's rolled-up unread/mention counts, as returned to the rail "feel-alive" badges. */
+export type UnreadSummary = { connectionId: string; unreadCount: number; mentionCount: number };
+
+/**
+ * Roll up unread + mention counts across ALL of the caller's OWN connections, for the rail badges.
+ *
+ * Enumerates the caller's connections (ownership-scoped via findByUserId), and for each `connected`
+ * one calls the provider's optional `unreadSummary`. Best-effort PER connection: a connection whose
+ * provider lacks the method, whose creds won't decrypt, or that isn't `connected`, or that throws, is
+ * defaulted to 0/0 — one bad connection never fails the whole summary.
+ */
+export async function unreadSummaryForMyConnections(userId: string): Promise<UnreadSummary[]> {
+	const docs = await ExternalWorkspaceConnections.findByUserId(userId).toArray();
+	const summaries: UnreadSummary[] = [];
+
+	for (const doc of docs) {
+		// Default every connection to 0/0; only an actual provider report raises it.
+		let unreadCount = 0;
+		let mentionCount = 0;
+		try {
+			if (doc.status === 'connected') {
+				const connection = toProviderConnection(doc);
+				if (connection) {
+					const provider = providerRegistry.get(doc.provider);
+					const summary = await provider.unreadSummary?.(connection);
+					if (summary) {
+						unreadCount = summary.unreadCount;
+						mentionCount = summary.mentionCount;
+					}
+				}
+			}
+		} catch {
+			// Provider can't report unreads (not implemented / Graph error) — keep this connection at 0/0.
+		}
+		summaries.push({ connectionId: doc._id, unreadCount, mentionCount });
+	}
+
+	return summaries;
+}
+
+/**
+ * Mark a channel/chat read in ONE of the caller's OWN connections (best-effort).
+ *
+ * Ownership-scoped (loadOwnedConnection — so a real not-found / wrong-status / undecryptable-creds
+ * failure rides back as a structured ProviderError), then calls the provider's optional `markRead`.
+ * A provider that hasn't implemented it is a no-op success; only an ownership/auth failure surfaces.
+ */
+export async function markMyRead(userId: string, opts: { connectionId: string; externalId: string }): Promise<{ ok: true } | ProviderError> {
+	const loaded = await loadOwnedConnection(userId, opts.connectionId);
+	if ('error' in loaded) {
+		return loaded;
+	}
+
+	try {
+		const provider = providerRegistry.get(loaded.doc.provider);
+		// Best-effort: providers without read-state support omit the method, leaving this a clean no-op.
+		await provider.markRead?.(loaded.connection, opts.externalId);
+	} catch {
+		// Provider couldn't mark read (not implemented / Graph error) — still ack ok (best-effort).
+	}
+	return { ok: true };
 }

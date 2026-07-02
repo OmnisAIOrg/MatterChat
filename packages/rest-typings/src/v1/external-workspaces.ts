@@ -20,6 +20,12 @@ export type ExternalWorkspaceChannel = {
 	teamName: string;
 	isPrivate: boolean;
 	topic?: string;
+	/** Unread message count for this channel, when the provider reports it ("feel-alive" badge). */
+	unreadCount?: number;
+	/** Count of messages that @-mention the connection's user, when the provider reports it. */
+	mentionCount?: number;
+	/** Epoch-ms of the last activity in this channel, when the provider reports it (sort/recency). */
+	lastActivity?: number;
 };
 
 /** Channels grouped by their team. */
@@ -48,6 +54,16 @@ export type ExternalWorkspaceDirectChat = {
 	name: string;
 	/** True for a group DM (3+ people), false for a 1:1. */
 	isGroup: boolean;
+	/** Unread message count for this chat, when the provider reports it ("feel-alive" badge). */
+	unreadCount?: number;
+	/** Count of messages that @-mention the connection's user, when the provider reports it. */
+	mentionCount?: number;
+	/** Epoch-ms of the last activity in this chat, when the provider reports it (sort/recency). */
+	lastActivity?: number;
+	/** The other member's (1:1) / chat's avatar URL, when the provider exposes it. */
+	avatarUrl?: string;
+	/** The other member's presence (1:1), when the provider exposes it. */
+	presence?: 'active' | 'away' | 'dnd' | 'offline';
 };
 
 /**
@@ -64,6 +80,10 @@ export type ExternalWorkspaceMember = {
 	displayName: string;
 	/** Email (Teams/Google) or handle (Slack), when the provider exposes it. */
 	email?: string;
+	/** Profile avatar URL, when the provider exposes it. */
+	avatarUrl?: string;
+	/** Presence/status, when the provider exposes it. */
+	presence?: 'active' | 'away' | 'dnd' | 'offline';
 };
 
 /**
@@ -97,6 +117,18 @@ export type ExternalWorkspaceSendMessageResult =
 	| { ok: true; externalId: string; connection: ExternalWorkspaceClientConnection }
 	| { ok: false; error: string; message: string; status?: number };
 
+/**
+ * The "unread summary" result — one rolled-up unread/mention count per connection, for the rail
+ * "feel-alive" badges. A connection whose provider can't report unreads (or throws) is defaulted to
+ * 0/0 rather than failing the whole call. Same 200-envelope discriminated union as the other views.
+ */
+export type ExternalWorkspaceUnreadSummaryResult =
+	| { ok: true; summaries: Array<{ connectionId: string; unreadCount: number; mentionCount: number }> }
+	| { ok: false; error: string; message: string; status?: number };
+
+/** The "mark read" result. Best-effort acknowledgement in the same 200 envelope. */
+export type ExternalWorkspaceMarkReadResult = { ok: true } | { ok: false; error: string; message: string; status?: number };
+
 export type ExternalWorkspacesEndpoints = {
 	'/v1/external-workspaces.list': {
 		GET: () => { connections: ExternalWorkspaceClientConnection[] };
@@ -123,5 +155,15 @@ export type ExternalWorkspacesEndpoints = {
 	};
 	'/v1/external-workspaces.disconnect': {
 		POST: (params: { connectionId: string }) => { disconnected: boolean };
+	};
+	// Rolled-up unread/mention counts for ALL of the caller's connections — drives the rail badges.
+	// No params: it enumerates the caller's own connections server-side.
+	'/v1/external-workspaces.unreadSummary': {
+		GET: () => ExternalWorkspaceUnreadSummaryResult;
+	};
+	// Mark a channel/chat read in the external workspace (best-effort). `externalId` is EITHER a channel
+	// id (from .channels) OR a direct-chat id (from .directChats) — the provider detects which.
+	'/v1/external-workspaces.markRead': {
+		POST: (params: { connectionId: string; externalId: string }) => ExternalWorkspaceMarkReadResult;
 	};
 };
