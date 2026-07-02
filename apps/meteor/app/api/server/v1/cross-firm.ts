@@ -12,12 +12,16 @@ API.v1.addRoute(
 	{ authRequired: true },
 	{
 		async get() {
-			const user = await Users.findOneById(this.userId, { projection: { 'services.omnisai': 1, name: 1, username: 1 } });
+			// This route name is not in rest-typings, so `this` types as `Operations<never>` (no
+			// `userId` member) — widen locally. Type-level only: `userId` is present at runtime
+			// because the route is authRequired.
+			const { userId } = this as unknown as { userId: string };
+			const user = await Users.findOneById(userId, { projection: { 'services.omnisai': 1, name: 1, username: 1 } });
 			const omnisai = (user as any)?.services?.omnisai || {};
 			return API.v1.success({
-				userId: this.userId,
+				userId,
 				omnisaiId: omnisai.id || null,
-				name: user?.name || user?.username || this.userId,
+				name: user?.name || user?.username || userId,
 			});
 		},
 	},

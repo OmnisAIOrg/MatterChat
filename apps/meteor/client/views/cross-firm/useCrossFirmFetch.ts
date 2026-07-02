@@ -17,7 +17,7 @@ export const useCrossFirmFetch = () => {
 	const cfEnabled = Boolean(useSetting('CrossFirm_Enabled'));
 	const firmName = String(useSetting('CrossFirm_Firm_Name', '') || '');
 
-	const getIdentity = useEndpoint('GET', '/v1/cross-firm.identity' as any);
+	const getIdentity = useEndpoint('GET', '/v1/cross-firm.identity' as any, undefined as never);
 	const { data: identity } = useQuery({
 		queryKey: ['cf', 'identity', user?._id],
 		queryFn: () => getIdentity(),

@@ -23,10 +23,18 @@ const SubscribeCalendarModal = ({ onClose }: { onClose: () => void }) => {
 
 	const getToken = useEndpoint('POST', '/v1/boards.cards.ical.token');
 
-	const { mutate, data, isLoading, isError } = useMutation({
-		mutationFn: () => getToken({}),
+	const mutation = useMutation({
+		// This endpoint takes no params (`undefined`); keep passing the same `{}` at runtime,
+		// widened type-level only.
+		mutationFn: () => getToken({} as unknown as undefined),
 		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
 	});
+	const { mutate, data, isError } = mutation;
+	// react-query v5 renamed mutation `isLoading` -> `isPending`, so `isLoading` no longer exists
+	// on the result type (and is `undefined` at runtime). Type-level shim preserving today's exact
+	// behavior — switching this read to `isPending` would CHANGE behavior (the throbber would start
+	// rendering while the token mints) and belongs to a feature lane, not this typecheck cleanup.
+	const { isLoading } = mutation as unknown as { isLoading?: boolean };
 
 	// Mint the token as soon as the modal opens.
 	useEffect(() => {

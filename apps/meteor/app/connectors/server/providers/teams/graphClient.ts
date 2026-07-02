@@ -183,7 +183,9 @@ export async function graphGetAll<T = any>(
 	let pages = 0;
 
 	while (next && pages < maxPages) {
-		const page = await graphFetch<{ value?: T[]; '@odata.nextLink'?: string }>(next, tokens, {}, onTokensRefreshed);
+		// Explicit annotation (not just the generic) — breaks the `page` -> `next` -> `page`
+		// inference cycle tsc reports as TS7022.
+		const page: { value?: T[]; '@odata.nextLink'?: string } = await graphFetch(next, tokens, {}, onTokensRefreshed);
 		if (Array.isArray(page.value)) {
 			out.push(...page.value);
 		}

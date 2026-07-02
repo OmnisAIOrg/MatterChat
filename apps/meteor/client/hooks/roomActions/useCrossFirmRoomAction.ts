@@ -19,7 +19,9 @@ export const useCrossFirmRoomAction = () => {
 			id: 'cross-firm',
 			groups: ['channel', 'group', 'team', 'direct', 'direct_multiple'],
 			title: 'Cross-firm' as RoomToolboxActionConfig['title'],
-			icon: 'balance',
+			// 'balance' ships in the fork's icon font but is missing from the generated icon-name
+			// union — type-level cast only.
+			icon: 'balance' as RoomToolboxActionConfig['icon'],
 			tabComponent: CrossFirm,
 			order: 20,
 		};

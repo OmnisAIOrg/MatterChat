@@ -3,7 +3,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import type { IBoardCard, IBoardLabelDef, IBoardList, Serialized } from '@rocket.chat/core-typings';
 import { Box, Icon } from '@rocket.chat/fuselage';
-import type { CSSProperties, MouseEvent } from 'react';
+import type { ComponentProps, CSSProperties, MouseEvent } from 'react';
 
 import CardTile from './CardTile';
 import ListColorMenu from './ListColorMenu';
@@ -86,7 +86,7 @@ const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, o
 					alignItems='center'
 					style={{ cursor: 'grab', touchAction: 'none' }}
 				>
-					<Icon name='arrangement' size='x16' color='hint' />
+					<Icon name={'arrangement' as ComponentProps<typeof Icon>['name']} size='x16' color='hint' />
 				</Box>
 				{/* small accent dot echoing the list color next to the title */}
 				{accent && (

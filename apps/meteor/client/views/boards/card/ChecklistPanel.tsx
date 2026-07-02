@@ -1,4 +1,4 @@
-import type { IBoardCard, IChecklist, Serialized } from '@rocket.chat/core-typings';
+import type { IChecklist, Serialized } from '@rocket.chat/core-typings';
 import { Box, Button, CheckBox, IconButton, ProgressBar, TextInput, Throbber } from '@rocket.chat/fuselage';
 import { useEndpoint, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
