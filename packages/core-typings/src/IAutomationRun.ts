@@ -22,11 +22,21 @@ export interface IAutomationActionResult {
 	status: AutomationActionStatus;
 	detail?: string; // human summary, e.g. "moved Intake → Treating"
 	error?: string;
-	skippedReason?: 'loop-depth' | 'per-card-budget' | 'writeback-disabled' | 'disabled' | 'condition' | 'unsupported';
+	skippedReason?:
+		| 'loop-depth'
+		| 'per-card-budget'
+		| 'writeback-disabled'
+		| 'disabled'
+		| 'condition'
+		| 'unsupported'
+		| 'no-live-transport' // gates passed but no live CasePro transport configured — validated + audited, not executed
+		| 'duplicate-op'; // idempotency guard: same card+field op already executed within the TTL
 	// integration audit (CasePro write-backs)
 	validated?: boolean; // validate_operation passed
 	executed?: boolean; // execute_operation ran
 	caseproRef?: { entity: string; id?: string; op: string };
+	/** raw row the executed write returned (audit; absent unless executed). */
+	caseproResponse?: Record<string, unknown>;
 }
 
 export interface IAutomationRun extends IRocketChatRecord {

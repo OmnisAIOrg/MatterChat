@@ -114,8 +114,25 @@ function asTriggerEvent(event: BoardEventName): BoardAutomationTriggerEvent | un
 	return NON_TRIGGER_EVENTS.has(event) ? undefined : (event as BoardAutomationTriggerEvent);
 }
 
+/** Card events that can change the pushed CasePro-task projection (mirrors TASK_SYNC_EVENTS). */
+const CASEPRO_TASK_SYNC_EVENTS = new Set<BoardEventName>(['card.created', 'card.updated', 'due.set', 'due.completed']);
+
 export function emitBoardEvent(event: BoardEventName, payload: BoardEventPayload): void {
 	SystemLogger.debug({ msg: 'boards.event', event, payload });
+
+	// Second fan-out: card → CasePro task PUSH sync (opt-in per board — see
+	// casepro/task-sync.ts). Same fire-and-forget + dynamic-import + swallowed-catch
+	// discipline as the automation dispatch below: it must never slow or break the
+	// emitting mutation, and this low-level lib must not pull the sync module (and
+	// its models/settings imports) at module-eval time.
+	if (CASEPRO_TASK_SYNC_EVENTS.has(event) && typeof payload.cardId === 'string') {
+		const { boardId, cardId, actor } = payload;
+		void import('./casepro/task-sync')
+			.then(({ syncCardEvent }) => syncCardEvent(event, { boardId, cardId, actor }))
+			.catch((err) => {
+				SystemLogger.debug({ msg: 'boards.event.taskSyncFailed', event, err });
+			});
+	}
 
 	const triggerEvent = asTriggerEvent(event);
 	if (!triggerEvent) {

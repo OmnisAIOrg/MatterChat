@@ -9,6 +9,7 @@ import {
 	isBoardsCaseProMatterSnapshotProps,
 	isBoardsCaseProListMattersProps,
 	isBoardsCaseProListStagesProps,
+	isBoardsCaseProTaskSyncSetProps,
 	isBoardsMattersPlaybooksListProps,
 	isBoardsMattersPlaybooksSeedProps,
 	isBoardsMattersPlaybooksApplyProps,
@@ -40,6 +41,8 @@ import {
 	financial,
 	caseload,
 } from '../../../../server/lib/boards/matters';
+import { setTaskSyncEnabled } from '../../../../server/lib/boards/casepro';
+import { assertBoardRole } from '../../../../server/lib/boards/permissions';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 
@@ -234,6 +237,29 @@ API.v1.get(
 	async function action() {
 		const stages = await caseProClient.listStages();
 		return API.v1.success({ stages });
+	},
+);
+
+// Per-board opt-in for the card→CasePro-task PUSH sync (board-admin only). The
+// flag lives at board.caseproSync.taskSyncEnabled; the push itself additionally
+// honors the global CasePro_Enabled master switch. Push-only — CasePro emits no
+// task events, so there is deliberately no pull/import counterpart.
+API.v1.post(
+	'boards.casepro.taskSync.set',
+	{
+		authRequired: true,
+		body: isBoardsCaseProTaskSyncSetProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { boardId, enabled } = this.bodyParams;
+		await assertBoardRole(boardId, this.userId, 'admin', 'boards.casepro.taskSync.set');
+		const board = await setTaskSyncEnabled(this.userId, boardId, enabled);
+		return API.v1.success({ board });
 	},
 );
 

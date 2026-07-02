@@ -49,3 +49,5 @@ export {
 	type CaseProQuery,
 	type CaseProQueryResult,
 } from './transport';
+export { isLiveTransportConfigured, __forceLiveTransportForTests } from './live';
+export { syncCardEvent, setTaskSyncEnabled, isTaskSyncEnabledForBoard, TASK_SYNC_EVENTS, __resetTaskSyncStateForTests } from './task-sync';

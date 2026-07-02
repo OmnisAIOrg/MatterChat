@@ -54,6 +54,13 @@ export interface IBoardBackground {
 export interface IBoardCaseProSync {
 	matterStageMap?: Record<string, string>; // listId -> matter_stages.id
 	intakeStageMap?: Record<string, string>; // listId -> intake_stages.id
+	/**
+	 * Opt-in per-board card→CasePro-task PUSH sync (default off). When true,
+	 * card create/retitle/due-date/complete on this board upserts a CasePro
+	 * `tasks` row (source:'MatterChat', external_ref = card _id). Push-only:
+	 * CasePro emits no task events, so there is no pull direction.
+	 */
+	taskSyncEnabled?: boolean;
 }
 
 export interface IBoard extends IRocketChatRecord {

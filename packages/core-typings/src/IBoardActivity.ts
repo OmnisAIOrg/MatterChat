@@ -33,7 +33,8 @@ export type BoardsActivityVerb =
 	| 'automation.ran'
 	| 'automation.notified'
 	| 'casepro.snapshot.refreshed'
-	| 'casepro.stage.pushed';
+	| 'casepro.stage.pushed'
+	| 'casepro.task.pushed';
 
 /**
  * Append-only audit feed. Every mutation across the Boards feature writes one
