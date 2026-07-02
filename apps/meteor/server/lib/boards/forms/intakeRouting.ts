@@ -204,6 +204,23 @@ export async function deliverToCaseProCapture(form: IBoardForm, values: Map<stri
 	};
 
 	const allowHost = url.port ? `${url.hostname}:${url.port}` : url.hostname;
+
+	/**
+	 * Scrub an error message before it reaches the audit trail: node-fetch et al
+	 * embed the FULL request URL (query string included) in failure messages, which
+	 * would leak the source token. Censor the per-form secrets explicitly and strip
+	 * every URL query string as belt-and-braces.
+	 */
+	const scrubReason = (message: string): string => {
+		let out = message;
+		for (const secret of [form.caseproSourceToken, form.caseproOrgId]) {
+			if (secret) {
+				out = out.split(secret).join('***');
+			}
+		}
+		return out.replace(/\?\S*/g, '?…').slice(0, 300);
+	};
+
 	try {
 		const res = await fetch(url.toString(), {
 			method: 'POST',
@@ -220,6 +237,7 @@ export async function deliverToCaseProCapture(form: IBoardForm, values: Map<stri
 			await audit(form, 'form.intake.failed', { mode: 'casepro-direct', status: res.status }, cardId);
 		}
 	} catch (e: unknown) {
-		await audit(form, 'form.intake.failed', { mode: 'casepro-direct', reason: e instanceof Error ? e.message : 'capture-post-failed' }, cardId);
+		const reason = e instanceof Error ? scrubReason(e.message) : 'capture-post-failed';
+		await audit(form, 'form.intake.failed', { mode: 'casepro-direct', reason }, cardId);
 	}
 }
