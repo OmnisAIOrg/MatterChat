@@ -99,3 +99,38 @@ export const SMOKE_SPECS = [
 	'administration-settings.spec.ts',
 	'admin-users.spec.ts',
 ] as const;
+
+/**
+ * FORK tier — e2e coverage for the FORK's own features (Boards, Forms, legal hold, matter link,
+ * read receipts, OIDC), the "next tier" the gate's author + reviewer flagged as missing. These
+ * live under `tests/e2e/matterchat/` and every top-level describe is tagged `@matterchat` (grep
+ * with `--grep @matterchat`). Unlike the upstream specs these are OURS, so — no upstream merge
+ * conflicts — they can be deleted/renamed freely.
+ *
+ * Setup is API-seeded via the `boards.*` / `rooms.*` REST surface (fixtures/boards-api.ts); the
+ * UI is driven only for the assertion itself. Robustness notes:
+ *   - boards.spec.ts        (5)  create/render board, add card (UI), move card (API contract), drawer
+ *   - boards-pagination.spec.ts (1) >100 cards all render (page-1 truncation regression)
+ *   - forms.spec.ts         (1)  logged-out public /form/<slug> submit → card on target list
+ *   - legal-hold.spec.ts    (1)  hold refuses rooms.cleanHistory; clear re-allows it
+ *   - matter-link.spec.ts   (1)  matter-linked channel groups under the "Matters" sidebar section
+ *                                (self-skips if the matters chain is unavailable on a bare CE gate)
+ *   - read-receipts.spec.ts (3)  1 EE-only receipt indicator (@skip !IS_EE), 2 CE-valid (menu-off, settings API)
+ *   - oidc-login.spec.ts    (4)  2 @skip (need mock IdP + OMNISAI_OIDC_* env), 2 CE gating checks
+ */
+export const FORK_SPECS = [
+	'matterchat/boards.spec.ts',
+	'matterchat/boards-pagination.spec.ts',
+	'matterchat/forms.spec.ts',
+	'matterchat/legal-hold.spec.ts',
+	'matterchat/matter-link.spec.ts',
+	'matterchat/read-receipts.spec.ts',
+	'matterchat/oidc-login.spec.ts',
+] as const;
+
+/**
+ * The 3-4 most stable fork specs, promoted into the SMOKE tier (all API-seeded, all CE-valid,
+ * no EE/IdP/drag dependency): boards render+add+move+drawer, the pagination regression, and the
+ * public-form intake. Legal hold is API-only (fast + deterministic) so it rides along too.
+ */
+export const FORK_SMOKE_SPECS = ['matterchat/boards.spec.ts', 'matterchat/boards-pagination.spec.ts', 'matterchat/forms.spec.ts', 'matterchat/legal-hold.spec.ts'] as const;

@@ -1,14 +1,17 @@
 import type { PlaywrightTestConfig } from '@playwright/test';
 
 import baseConfig from './playwright.config';
-import { EE_ONLY_SPECS, EXTERNAL_DEPENDENCY_SPECS, SMOKE_SPECS } from './tests/e2e/matterchat-suites';
+import { EE_ONLY_SPECS, EXTERNAL_DEPENDENCY_SPECS, FORK_SPECS, FORK_SMOKE_SPECS, SMOKE_SPECS } from './tests/e2e/matterchat-suites';
 
 /**
  * MatterChat fork config for the e2e regression net (.github/workflows/e2e-gate.yml).
  *
- * Two projects over the upstream suite (spec lists live in tests/e2e/matterchat-suites.ts):
- *   --project=smoke     fast pre-merge tier (every PR to `staging`)
- *   --project=mit-core  full curated suite valid on the MIT/CE fork (workflow_dispatch)
+ * Three projects over the suite (spec lists live in tests/e2e/matterchat-suites.ts):
+ *   --project=smoke     fast pre-merge tier (every PR to `staging`) — core CE flows + the most
+ *                       stable fork specs (FORK_SMOKE_SPECS)
+ *   --project=mit-core  full curated suite valid on the MIT/CE fork, INCLUDING all fork specs
+ *                       (they live under tests/e2e/, so the testIgnore-based project picks them up)
+ *   --project=fork      just the fork-feature specs (tests/e2e/matterchat/**, tag @matterchat)
  *
  * Everything else (globalSetup, timeouts, tracing, browser flags) is inherited from the
  * upstream playwright.config.ts. Reporters are overridden: the upstream Qase/Jira/Rocket.Chat
@@ -35,11 +38,19 @@ export default {
 	projects: [
 		{
 			name: 'mit-core',
+			// runs everything under tests/e2e/ except the ignored globs — the fork specs under
+			// tests/e2e/matterchat/** are therefore included automatically.
 			testIgnore: ignoreGlobs,
 		},
 		{
 			name: 'smoke',
-			testMatch: SMOKE_SPECS.map((spec) => `**/${spec}`),
+			// core CE flows + the most stable fork specs, matched by (sub)path.
+			testMatch: [...SMOKE_SPECS, ...FORK_SMOKE_SPECS].map((spec) => `**/${spec}`),
+		},
+		{
+			name: 'fork',
+			// only the fork-feature specs (tests/e2e/matterchat/**).
+			testMatch: FORK_SPECS.map((spec) => `**/${spec}`),
 		},
 	],
 } as PlaywrightTestConfig;
