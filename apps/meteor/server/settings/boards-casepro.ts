@@ -12,6 +12,15 @@ import { settingsRegistry } from '../../app/settings/server';
  * - CasePro_Org_ID    : the X-Organization-ID scope; env CASEPRO_ORG_ID overrides.
  * - CasePro_Web_URL   : the CasePro WEB APP base URL for "Open in CasePro" deep links
  *                       (empty = links hidden). This is the human UI, not the gateway.
+ * - CasePro_Comms_Log_* : matter-channel message auto-log (comms-log lane) — a direct
+ *                       authenticated POST to the CRM ingest REST controller.
+ * - CasePro_Intake_Capture_Base : the CasePro CRM base URL for the PUBLIC intake
+ *   capture endpoint (`{base}/api/v1/intake-questionnaires/capture?org=&source=`)
+ *   used by boards forms with `intakeRouting:'casepro-direct'`. DISTINCT from
+ *   CasePro_Base_URL (the MCP connector base) — the capture lane is auth-less and
+ *   points at the CRM backend itself. Must be https; the outbound POST is host-pinned
+ *   to this base. Independent of CasePro_Enabled/CasePro_Transport by design: a firm
+ *   can route public forms into CasePro without turning on the full board sync.
  *
  * SECRETS ARE NEVER SETTINGS: the MCP API key comes exclusively from env
  * `CASEPRO_MCP_API_KEY` (sealed secret in the deploy). With transport = rest and no
@@ -116,5 +125,13 @@ export const createBoardsCaseProSettings = () =>
 				_id: 'CasePro_Comms_Log_Enabled',
 				value: true,
 			},
+		});
+
+		await this.add('CasePro_Intake_Capture_Base', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'CasePro_Intake_Capture_Base',
+			i18nDescription: 'CasePro_Intake_Capture_Base_Description',
+			placeholder: 'https://crm.stg-omnisai.io',
 		});
 	});
