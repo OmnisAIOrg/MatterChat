@@ -277,6 +277,79 @@ async function main() {
   const noTokRes = await fetch(`${BASE}/boards.cards.ical.public`, { method: 'GET', headers: { Accept: 'text/calendar' } });
   ok(noTokRes.status === 400 || noTokRes.status === 401, 'public ical rejects missing token', `http=${noTokRes.status}`);
 
+  // --- server-side pagination (offset/count/total envelope) ---
+  // Fresh board + list with 7 cards, then walk it in pages of 3 and assert the
+  // pages are disjoint, ordered, and union to the full set.
+  const pb = await api('POST', '/boards.create', { title: 'Pagination Board', pipelineType: 'general' });
+  const pgBoardId = pb.json?.board?._id;
+  const pl = await api('POST', '/boards.list.create', { boardId: pgBoardId, title: 'Paged list' });
+  const pgListId = pl.json?.list?._id;
+  const pgIds = [];
+  for (let i = 1; i <= 7; i++) {
+    const pc = await api('POST', '/boards.card.create', { boardId: pgBoardId, listId: pgListId, title: `Paged card ${i}` });
+    pgIds.push(pc.json?.card?._id);
+  }
+  ok(pgIds.every(Boolean), 'create 7 cards for pagination', `${pgIds.length} cards`);
+
+  const pg1 = await api('GET', `/boards.cards?boardId=${pgBoardId}&listId=${pgListId}&count=3`);
+  ok(pg1.json?.cards?.length === 3 && pg1.json?.total === 7 && pg1.json?.offset === 0,
+    'cards page 1: 3 rows, total=7, offset=0', `rows=${pg1.json?.cards?.length} total=${pg1.json?.total} offset=${pg1.json?.offset}`);
+
+  const pg2 = await api('GET', `/boards.cards?boardId=${pgBoardId}&listId=${pgListId}&count=3&offset=3`);
+  ok(pg2.json?.cards?.length === 3 && pg2.json?.offset === 3, 'cards page 2: 3 rows at offset=3', `rows=${pg2.json?.cards?.length}`);
+
+  const pg3 = await api('GET', `/boards.cards?boardId=${pgBoardId}&listId=${pgListId}&count=3&offset=6`);
+  ok(pg3.json?.cards?.length === 1 && pg3.json?.total === 7, 'cards page 3: 1 remaining row', `rows=${pg3.json?.cards?.length}`);
+
+  const pagedIds = [...(pg1.json?.cards || []), ...(pg2.json?.cards || []), ...(pg3.json?.cards || [])].map((x) => x._id);
+  const disjoint = new Set(pagedIds).size === 7;
+  const complete = pgIds.every((id) => pagedIds.includes(id));
+  ok(disjoint && complete, 'pages are disjoint and union to all 7 cards', `unique=${new Set(pagedIds).size} complete=${complete}`);
+
+  // position-ordered pages: creation order == position order for sequentially created cards
+  ok(JSON.stringify(pagedIds) === JSON.stringify(pgIds), 'pages come back in stable position order');
+
+  // board-wide (no listId) call still honors the envelope
+  const pgBoardWide = await api('GET', `/boards.cards?boardId=${pgBoardId}&count=5`);
+  ok(pgBoardWide.json?.cards?.length === 5 && pgBoardWide.json?.total === 7, 'board-wide cards page (no listId)', `rows=${pgBoardWide.json?.cards?.length} total=${pgBoardWide.json?.total}`);
+
+  // no-params call keeps working (default page size >= 7 here, so the full set + total)
+  const pgDefault = await api('GET', `/boards.cards?boardId=${pgBoardId}`);
+  ok(pgDefault.json?.cards?.length === 7 && pgDefault.json?.total === 7, 'cards without paging params returns full set + total', `rows=${pgDefault.json?.cards?.length}`);
+
+  // a cross-board listId must page to an empty set, not leak another board's cards
+  const pgCross = await api('GET', `/boards.cards?boardId=${boardId}&listId=${pgListId}&count=3`);
+  ok(pgCross.json?.cards?.length === 0 && pgCross.json?.total === 0, 'cross-board listId pages to empty set', `rows=${pgCross.json?.cards?.length}`);
+
+  // --- boards.list pagination ---
+  const bl1 = await api('GET', '/boards.list?count=1');
+  ok(bl1.json?.boards?.length === 1 && bl1.json?.total >= 2, 'boards.list count=1 returns 1 board + total', `total=${bl1.json?.total}`);
+  const bl2 = await api('GET', `/boards.list?count=1&offset=1`);
+  ok(bl2.json?.boards?.length === 1 && bl2.json?.boards?.[0]?._id !== bl1.json?.boards?.[0]?._id, 'boards.list offset=1 returns a different board');
+
+  // --- boards.activities pagination (7 card creations logged above) ---
+  const act1 = await api('GET', `/boards.activities?boardId=${pgBoardId}&count=2`);
+  ok(act1.json?.activities?.length === 2 && act1.json?.total >= 7, 'activities page: 2 rows + total', `total=${act1.json?.total}`);
+  const act2 = await api('GET', `/boards.activities?boardId=${pgBoardId}&count=2&offset=2`);
+  const actOverlap = (act1.json?.activities || []).some((a) => (act2.json?.activities || []).some((b) => b._id === a._id));
+  ok(act2.json?.activities?.length === 2 && !actOverlap, 'activities offset page is disjoint', `overlap=${actOverlap}`);
+
+  // --- myDay pagination (opt-in; no params keeps the full set) ---
+  const due = new Date(); due.setHours(16, 0, 0, 0);
+  await api('POST', '/boards.card.update', { cardId: pgIds[0], patch: { assignees: [USER], dueDate: due.toISOString() } });
+  await api('POST', '/boards.card.update', { cardId: pgIds[1], patch: { assignees: [USER], dueDate: due.toISOString() } });
+  const mdFull = await api('GET', '/boards.cards.myDay');
+  ok(typeof mdFull.json?.total === 'number' && mdFull.json?.cards?.length === mdFull.json?.total,
+    'myDay without params returns full set + total', `rows=${mdFull.json?.cards?.length} total=${mdFull.json?.total}`);
+  const mdPage = await api('GET', '/boards.cards.myDay?count=1');
+  ok(mdPage.json?.cards?.length === 1 && mdPage.json?.total === mdFull.json?.total, 'myDay count=1 pages to 1 row, same total', `total=${mdPage.json?.total}`);
+
+  // --- search pagination (opt-in; no params keeps the 50-hit cap) ---
+  const s1 = await api('GET', `/boards.cards.search?text=${encodeURIComponent('Paged card')}`);
+  ok(s1.json?.cards?.length === 7 && s1.json?.total === 7, 'search without params returns hits + total', `hits=${s1.json?.cards?.length}`);
+  const s2 = await api('GET', `/boards.cards.search?text=${encodeURIComponent('Paged card')}&count=3&offset=3`);
+  ok(s2.json?.cards?.length === 3 && s2.json?.total === 7 && s2.json?.offset === 3, 'search count=3 offset=3 pages hits', `hits=${s2.json?.cards?.length} total=${s2.json?.total}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }

@@ -405,6 +405,11 @@ API.v1.get(
 );
 
 // "My Day": every card assigned to me with a due date, across all my boards (CasePro-free).
+//
+// PAGINATION (opt-in): pass offset/count for a standard RC page (dueDate asc, `total` in the
+// envelope). Callers that pass NEITHER param keep the historical full result set — the planner,
+// calendar and CHI clients bucket the whole feed client-side, so a silent default page size
+// would truncate them. `total` is returned either way.
 API.v1.get(
 	'boards.cards.myDay',
 	{
@@ -415,12 +420,24 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const { cards } = await getMyDayCards(this.userId);
-		return API.v1.success({ cards, count: cards.length });
+		// no ajv query validator on this route, so queryParams types to `never` — cast for the reads
+		const queryParams = this.queryParams as { offset?: string; count?: string };
+		const wantsPaging = queryParams.offset !== undefined || queryParams.count !== undefined;
+		if (wantsPaging) {
+			const { offset, count } = await getPaginationItems(queryParams);
+			const { cards, total } = await getMyDayCards(this.userId, { offset, count });
+			return API.v1.success({ cards, count: cards.length, offset, total });
+		}
+		const { cards, total } = await getMyDayCards(this.userId);
+		return API.v1.success({ cards, count: cards.length, offset: 0, total });
 	},
 );
 
 // Global cross-board card search (title + description).
+//
+// PAGINATION (opt-in): pass offset/count for a standard RC page. Without params the historical
+// 50-hit cap stays (now enforced by the query's limit instead of an in-memory slice); `total`
+// (full match count) is returned either way.
 API.v1.get(
 	'boards.cards.search',
 	{
@@ -431,9 +448,17 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const text = typeof this.queryParams.text === 'string' ? this.queryParams.text : '';
-		const { cards } = await searchCards(this.userId, text);
-		return API.v1.success({ cards, count: cards.length });
+		// no ajv query validator on this route, so queryParams types to `never` — cast for the reads
+		const queryParams = this.queryParams as { text?: string; offset?: string; count?: string };
+		const text = typeof queryParams.text === 'string' ? queryParams.text : '';
+		const wantsPaging = queryParams.offset !== undefined || queryParams.count !== undefined;
+		if (wantsPaging) {
+			const { offset, count } = await getPaginationItems(queryParams);
+			const { cards, total } = await searchCards(this.userId, text, { offset, count });
+			return API.v1.success({ cards, count: cards.length, offset, total });
+		}
+		const { cards, total } = await searchCards(this.userId, text);
+		return API.v1.success({ cards, count: cards.length, offset: 0, total });
 	},
 );
 

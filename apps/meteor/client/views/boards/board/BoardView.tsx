@@ -5,9 +5,10 @@ import type { IBoard, IBoardCard, IBoardList, Serialized } from '@rocket.chat/co
 import { Box, Throbber } from '@rocket.chat/fuselage';
 import { PageScrollableContent } from '@rocket.chat/ui-client';
 import { useEndpoint, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { MouseEvent } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import BulkActionBar from './BulkActionBar';
 import CardTile from './CardTile';
@@ -23,7 +24,14 @@ type BoardViewProps = {
 };
 
 type CardsResponse = { cards: SerializedCard[]; count: number; offset: number; total: number };
-type MoveContext = { previous: CardsResponse | undefined };
+// The cards cache is an infinite query (pages of CardsResponse), so the optimistic
+// move snapshot/rollback works on the whole InfiniteData envelope.
+type CardsCache = InfiniteData<CardsResponse, number>;
+type MoveContext = { previous: CardsCache | undefined };
+
+// Server page size. Stays at/below the API's hard upper count limit
+// (API_Upper_Count_Limit, default 100) so every page request is honored in full.
+const CARDS_PAGE_SIZE = 100;
 
 const BoardView = ({ board, lists }: BoardViewProps) => {
 	const router = useRouter();
@@ -37,10 +45,25 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 
 	const cardsQueryKey = useMemo(() => ['boards', 'cards', board._id], [board._id]);
 
-	const { data, isLoading } = useQuery({
+	// Server-side pagination: fetch cards in pages of CARDS_PAGE_SIZE (offset/count/total
+	// envelope) instead of one unbounded request. The first page paints the board immediately;
+	// the effect below streams the remaining pages in until the whole board is loaded (drag &
+	// drop and multi-select operate on the full card set, so we always page to the end).
+	const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
 		queryKey: cardsQueryKey,
-		queryFn: () => getCards({ boardId: board._id, count: 1000 }),
+		queryFn: ({ pageParam }) => getCards({ boardId: board._id, offset: pageParam, count: CARDS_PAGE_SIZE }),
+		initialPageParam: 0,
+		getNextPageParam: (lastPage) => {
+			const next = lastPage.offset + lastPage.count;
+			return next < lastPage.total ? next : undefined;
+		},
 	});
+
+	useEffect(() => {
+		if (hasNextPage && !isFetchingNextPage) {
+			void fetchNextPage();
+		}
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
 	const [activeCard, setActiveCard] = useState<SerializedCard | null>(null);
 	// The list (column) currently being dragged by its header handle, if any. Drives the
@@ -57,7 +80,7 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
 	);
 
-	const cards = useMemo(() => data?.cards ?? [], [data]);
+	const cards = useMemo(() => data?.pages.flatMap((page) => page.cards) ?? [], [data]);
 	const cardsByList = useMemo(() => groupCardsByList(cards), [cards]);
 	const sortedLists = useMemo(() => [...lists].filter((l) => !l.archived).sort((a, b) => a.position - b.position), [lists]);
 
@@ -124,17 +147,22 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 		onError: (error, _vars, context) => {
 			// rollback to the snapshot captured in onMutate
 			if (context?.previous) {
-				queryClient.setQueryData<CardsResponse>(cardsQueryKey, context.previous);
+				queryClient.setQueryData<CardsCache>(cardsQueryKey, context.previous);
 			}
 			dispatchToastMessage({ type: 'error', message: error });
 		},
 		onMutate: async ({ cardId, toListId, position }): Promise<MoveContext> => {
 			await queryClient.cancelQueries({ queryKey: cardsQueryKey });
-			const previous = queryClient.getQueryData<CardsResponse>(cardsQueryKey);
+			const previous = queryClient.getQueryData<CardsCache>(cardsQueryKey);
 			if (previous) {
-				queryClient.setQueryData<CardsResponse>(cardsQueryKey, {
+				// the moved card lives in exactly one page; patching every page in place
+				// keeps the InfiniteData envelope (pageParams) intact for the rollback
+				queryClient.setQueryData<CardsCache>(cardsQueryKey, {
 					...previous,
-					cards: applyOptimisticMove(previous.cards, cardId, toListId, position),
+					pages: previous.pages.map((page) => ({
+						...page,
+						cards: applyOptimisticMove(page.cards, cardId, toListId, position),
+					})),
 				});
 			}
 			return { previous };
@@ -145,8 +173,7 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 	});
 
 	const createMutation = useMutation({
-		mutationFn: ({ listId, title }: { listId: string; title: string }) =>
-			cardCreate({ boardId: board._id, listId, title }),
+		mutationFn: ({ listId, title }: { listId: string; title: string }) => cardCreate({ boardId: board._id, listId, title }),
 		onError: (error) => {
 			dispatchToastMessage({ type: 'error', message: error });
 		},
