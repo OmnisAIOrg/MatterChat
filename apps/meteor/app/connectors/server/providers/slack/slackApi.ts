@@ -138,11 +138,11 @@ function buildRequest(
  * channel, rate-limit overflow, invalid_auth). We THROW those as `slack_error:<error>` so callers
  * never silently treat a logical failure as an empty success.
  */
-export async function slackFetch<T extends SlackResponse = SlackResponse>(
+export async function slackFetch<T extends Partial<SlackResponse> = SlackResponse>(
 	method: string,
 	tokens: SlackTokens,
 	options: SlackFetchOptions = {},
-): Promise<T> {
+): Promise<T & SlackResponse> {
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
 		const { url, init } = buildRequest(method, tokens, options);
 		const res = await fetch(url, {
@@ -157,9 +157,9 @@ export async function slackFetch<T extends SlackResponse = SlackResponse>(
 		}
 
 		const text = await res.text();
-		let json: T;
+		let json: T & SlackResponse;
 		try {
-			json = (text ? JSON.parse(text) : {}) as T;
+			json = (text ? JSON.parse(text) : {}) as T & SlackResponse;
 		} catch {
 			throw new Error(`slack_error:invalid_json:http_${res.status}`);
 		}
