@@ -19,7 +19,6 @@ import {
 	getPublicFormBySlug,
 	submitPublicForm,
 } from '../../../../server/lib/boards/forms/service';
-import { requireUid } from '../../../../server/lib/boards';
 import { API } from '../api';
 
 /**
@@ -58,7 +57,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.forms.create');
+		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
 		const { boardId, targetListId, title, description, fields, titleTemplate, enabled } = this.bodyParams;
 		const form = await createForm(uid, {
 			boardId,
@@ -85,7 +84,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.forms.update');
+		const uid = this.userId;
 		const { formId, targetListId, title, description, fields, titleTemplate, enabled } = this.bodyParams;
 		const form = await updateForm(uid, formId, {
 			...(targetListId !== undefined ? { targetListId } : {}),
@@ -111,7 +110,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.forms.delete');
+		const uid = this.userId;
 		const result = await deleteForm(uid, this.bodyParams.formId);
 		return API.v1.success(result);
 	},
@@ -129,7 +128,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.forms.list');
+		const uid = this.userId;
 		const forms = await listForms(uid, this.queryParams.boardId);
 		return API.v1.success({ forms });
 	},

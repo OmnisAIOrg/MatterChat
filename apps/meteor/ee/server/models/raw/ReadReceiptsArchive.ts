@@ -1,7 +1,7 @@
 import type { IReadReceipt } from '@rocket.chat/core-typings';
 import type { IReadReceiptsModel } from '@rocket.chat/model-typings';
 import { BaseRaw, readSecondaryPreferred } from '@rocket.chat/models';
-import type { FindCursor, Db, IndexDescription, DeleteResult } from 'mongodb';
+import type { BulkWriteResult, FindCursor, Db, IndexDescription, DeleteResult } from 'mongodb';
 
 export class ReadReceiptsArchiveRaw extends BaseRaw<IReadReceipt> implements IReadReceiptsModel {
 	constructor(db: Db) {
@@ -42,5 +42,20 @@ export class ReadReceiptsArchiveRaw extends BaseRaw<IReadReceipt> implements IRe
 	findOlderThan(date: Date): FindCursor<IReadReceipt> {
 		// Pass read preference directly to the find query to prefer reading from secondary replicas
 		return this.find({ ts: { $lt: date } }, { readPreference: readSecondaryPreferred() });
+	}
+
+	saveReceipts(receipts: Omit<IReadReceipt, '_updatedAt'>[]): Promise<BulkWriteResult> {
+		return this.col.bulkWrite(
+			receipts.map(({ _id, ...receipt }) => ({
+				updateOne: {
+					filter: { _id },
+					update: {
+						$setOnInsert: { ...receipt, _updatedAt: new Date() },
+					},
+					upsert: true,
+				},
+			})),
+			{ ordered: false },
+		);
 	}
 }
