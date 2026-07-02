@@ -88,6 +88,11 @@ const EditRoomInfo = ({ room, onClickClose, onClickBack }: EditRoomInfoProps) =>
 
 	const retentionPolicy = useRetentionPolicy(room);
 	const retentionMaxAgeDefault = msToTimeUnit(TIMEUNIT.days, useSetting(getRetentionSetting(room.t), 2592000000)) ?? 30;
+	// CasePro comms-log: the "Log to CasePro" toggle shows only on matter-linked
+	// channels while the global switches are on.
+	const caseProEnabledSetting = useSetting('CasePro_Enabled', false);
+	const caseProCommsLogSetting = useSetting('CasePro_Comms_Log_Enabled', true);
+	const caseProCommsLogAvailable = Boolean(room.matterId) && caseProEnabledSetting && caseProCommsLogSetting;
 	const defaultValues = useEditRoomInitialValues(room);
 	const namesValidation = useSetting('UTF8_Channel_Names_Validation');
 	const allowSpecialNames = useSetting('UI_Allow_room_names_with_special_chars');
@@ -126,6 +131,7 @@ const EditRoomInfo = ({ room, onClickClose, onClickBack }: EditRoomInfoProps) =>
 		retentionOverrideGlobal,
 		roomType: roomTypeP,
 		reactWhenReadOnly,
+		caseProCommsLogEnabled,
 	} = watch();
 
 	const {
@@ -230,6 +236,7 @@ const EditRoomInfo = ({ room, onClickClose, onClickBack }: EditRoomInfoProps) =>
 	const retentionExcludePinnedField = useId();
 	const retentionFilesOnlyField = useId();
 	const retentionIgnoreThreads = useId();
+	const caseProCommsLogField = useId();
 
 	const showAdvancedSettings = canViewReadOnly || readOnly || canViewArchived || canViewJoinCode || canViewHideSysMes;
 	const showRetentionPolicy = canEditRoomRetentionPolicy && retentionPolicy?.enabled;
@@ -356,6 +363,30 @@ const EditRoomInfo = ({ room, onClickClose, onClickBack }: EditRoomInfoProps) =>
 								<FieldRow>
 									<FieldHint id={`${roomTypeField}-hint`}>
 										{roomTypeP === 'p' ? t('Only_invited_people') : t('Anyone_can_access')}
+									</FieldHint>
+								</FieldRow>
+							</Field>
+						)}
+						{caseProCommsLogAvailable && (
+							<Field>
+								<FieldRow>
+									<FieldLabel htmlFor={caseProCommsLogField}>{t('CasePro_Log_To_CasePro')}</FieldLabel>
+									<Controller
+										control={control}
+										name='caseProCommsLogEnabled'
+										render={({ field: { value, ...field } }) => (
+											<ToggleSwitch
+												id={caseProCommsLogField}
+												{...field}
+												checked={value}
+												aria-describedby={`${caseProCommsLogField}-hint`}
+											/>
+										)}
+									/>
+								</FieldRow>
+								<FieldRow>
+									<FieldHint id={`${caseProCommsLogField}-hint`}>
+										{caseProCommsLogEnabled ? t('CasePro_Log_To_CasePro_Hint_On') : t('CasePro_Log_To_CasePro_Hint_Off')}
 									</FieldHint>
 								</FieldRow>
 							</Field>

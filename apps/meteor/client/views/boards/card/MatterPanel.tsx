@@ -138,6 +138,21 @@ const ChannelSection = ({ cardId, link }: { cardId: string; link: Serialized<IBo
 
 	const roomId = link?.kind === 'matter' ? link.roomId : undefined;
 
+	// Comms-log status: linked channels log to CasePro by default; the per-channel
+	// opt-out lives in the channel's Edit panel ("Log to CasePro").
+	const caseProEnabled = useSetting('CasePro_Enabled', false);
+	const commsLogEnabledGlobally = useSetting('CasePro_Comms_Log_Enabled', true);
+	const getRoomInfo = useEndpoint('GET', '/v1/rooms.info');
+	const { data: roomInfoData } = useQuery({
+		queryKey: ['boards', 'matter-channel-info', roomId],
+		queryFn: () => getRoomInfo({ roomId: roomId as string }),
+		enabled: Boolean(roomId),
+	});
+	const linkedRoom = roomInfoData?.room as ({ caseProCommsLog?: { enabled?: boolean } } & Record<string, unknown>) | undefined;
+	const commsLogOn = Boolean(
+		caseProEnabled && commsLogEnabledGlobally && linkedRoom && linkedRoom.caseProCommsLog?.enabled !== false,
+	);
+
 	return (
 		<Box>
 			<SectionTitle>Channel</SectionTitle>
@@ -146,6 +161,7 @@ const ChannelSection = ({ cardId, link }: { cardId: string; link: Serialized<IBo
 					<Tag>
 						<Icon name='hash' size='x16' /> Channel linked
 					</Tag>
+					{linkedRoom && <Tag variant={commsLogOn ? 'primary' : undefined}>{commsLogOn ? 'Logging to CasePro: On' : 'Logging to CasePro: Off'}</Tag>}
 					<Button small onClick={() => unlinkMutation.mutate()} disabled={unlinkMutation.isPending}>
 						{unlinkMutation.isPending ? <Throbber inheritColor size='x12' /> : 'Unlink'}
 					</Button>

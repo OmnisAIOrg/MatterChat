@@ -29,6 +29,7 @@ export type EditRoomInfoFormData = {
 	showDiscussions: boolean;
 	joinCode: string;
 	systemMessages: MessageTypesValues[];
+	caseProCommsLogEnabled: boolean;
 };
 
 export const useEditRoomInitialValues = (room: IRoomWithRetentionPolicy): Partial<EditRoomInfoFormData> => {
@@ -53,6 +54,9 @@ export const useEditRoomInitialValues = (room: IRoomWithRetentionPolicy): Partia
 			systemMessages: Array.isArray(sysMes) ? sysMes : [],
 			hideSysMes: Array.isArray(sysMes) ? !!sysMes?.length : !!sysMes,
 			encrypted,
+			// Matter-linked channels log to CasePro by default; `enabled` is only
+			// ever written by the "Log to CasePro" toggle.
+			...(room.matterId && { caseProCommsLogEnabled: room.caseProCommsLog?.enabled !== false }),
 			...(canEditRoomRetentionPolicy &&
 				retentionPolicy?.enabled && {
 					retentionEnabled: retention?.enabled ?? retentionPolicy.isActive,

@@ -31,6 +31,16 @@ export interface IRoom extends IRocketChatRecord {
 	matterCardId?: string; // boards_cards._id this channel is bound to
 	matterId?: string; // CasePro matters.id (mirrors the card's link.matterId)
 	importIds?: string[]; // Slack channel ids when this room is bridged via SlackBridge
+	// CasePro comms-log — auto-log this channel's messages onto the linked matter's
+	// communication history (only meaningful when `matterId` is set).
+	caseProCommsLog?: {
+		/** Per-channel toggle. `undefined` ⇒ ON by default for matter-linked channels. */
+		enabled?: boolean;
+		/** Cursor: `ts` of the last message successfully logged to CasePro (restart resume). */
+		lastLoggedTs?: Date;
+		/** `_id` of the last message successfully logged (diagnostics). */
+		lastLoggedId?: string;
+	};
 
 	reactWhenReadOnly?: boolean;
 

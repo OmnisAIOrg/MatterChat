@@ -58,6 +58,17 @@ export interface ICaseProTransport {
 	create(entity: string, data: CaseProRow): Promise<CaseProRow>;
 	/** Patch a row by id; returns the full updated row. */
 	update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow>;
+	/**
+	 * Narrow custom-path POST for CasePro ingest endpoints that don't speak the
+	 * entity verbs (first consumer: `matterchat-messages/ingest`, the comms-log
+	 * digest filing). `path` is relative to the configured base URL.
+	 *
+	 * TODO(auth) — LIVE-WIRE LANE: this verb must ride the SAME auth handshake as
+	 * the entity verbs (see {@link RestTransport.authHeaders}). It intentionally
+	 * calls authHeaders() so wiring auth there covers ingest automatically —
+	 * please keep it that way (do not give ingest its own header path).
+	 */
+	ingest(path: string, payload: Record<string, unknown>): Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +416,14 @@ export class StubTransport implements ICaseProTransport {
 		rows[idx] = next;
 		return { ...next };
 	}
+
+	/** Stub ingest: record the payload (tests inspect it) and pretend CasePro accepted everything. */
+	public readonly ingested: { path: string; payload: Record<string, unknown> }[] = [];
+
+	async ingest(path: string, payload: Record<string, unknown>): Promise<unknown> {
+		this.ingested.push({ path, payload });
+		return { ok: true, stub: true };
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +519,28 @@ export class RestTransport implements ICaseProTransport {
 			throw new Error(`CasePro create(${entity}) returned no row`);
 		}
 		return json.data;
+	}
+
+	/**
+	 * Custom-path POST (comms-log ingest). Rides {@link authHeaders} on purpose —
+	 * when the live-wire lane lands the KeyGate/OIDC handshake there, ingest is
+	 * covered automatically. Do NOT fork a separate header path for ingest.
+	 */
+	async ingest(path: string, payload: Record<string, unknown>): Promise<unknown> {
+		// `path` may be absolute: the comms-log ingest lives on the CasePro CRM
+		// backend, which can be a different host than the MCP connector base URL.
+		const target = /^https?:\/\//i.test(path) ? path : this.url(path);
+		const res = await fetch(target, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(payload),
+			// TODO(auth): once a per-org allow-list exists, prefer `allowList` over disabling SSRF checks.
+			ignoreSsrfValidation: true,
+		});
+		if (!res.ok) {
+			throw new Error(`CasePro ingest(${path}) failed: ${res.status}`);
+		}
+		return res.json();
 	}
 
 	async update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow> {

@@ -30,7 +30,7 @@ export const useTeamsChannelList = ({ teamId, type, text }: TeamsChannelListOpti
 
 			return {
 				items: rooms.map(
-					({ _updatedAt, lastMessage, lm, ts, webRtcCallStartTime, usersWaitingForE2EKeys, ...room }): IRoom => ({
+					({ _updatedAt, lastMessage, lm, ts, webRtcCallStartTime, usersWaitingForE2EKeys, caseProCommsLog, ...room }): IRoom => ({
 						...(lm && { lm: new Date(lm) }),
 						...(ts && { ts: new Date(ts) }),
 						_updatedAt: new Date(_updatedAt),
@@ -38,6 +38,13 @@ export const useTeamsChannelList = ({ teamId, type, text }: TeamsChannelListOpti
 						...(webRtcCallStartTime && { webRtcCallStartTime: new Date(webRtcCallStartTime) }),
 						...(usersWaitingForE2EKeys && {
 							usersWaitingForE2EKeys: usersWaitingForE2EKeys?.map(({ userId, ts }) => ({ userId, ts: new Date(ts) })),
+						}),
+						// CasePro comms-log cursor carries a Date — revive it like the other date fields.
+						...(caseProCommsLog && {
+							caseProCommsLog: {
+								...caseProCommsLog,
+								lastLoggedTs: caseProCommsLog.lastLoggedTs ? new Date(caseProCommsLog.lastLoggedTs) : undefined,
+							},
 						}),
 						...room,
 					}),
