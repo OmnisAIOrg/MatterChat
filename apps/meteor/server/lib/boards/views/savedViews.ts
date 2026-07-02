@@ -196,7 +196,10 @@ export async function setDefaultSavedView(uid: string, viewId: string): Promise<
 	}
 
 	await clearSiblingDefaults(uid, view);
-	const updated = await BoardsSavedViews.upsert({ userId: uid, name: view.name, viewType: view.viewType, scope: view.scope, config: view.config, isDefault: true }, viewId);
+	const updated = await BoardsSavedViews.upsert(
+		{ userId: uid, name: view.name, viewType: view.viewType, scope: view.scope, config: view.config, isDefault: true },
+		viewId,
+	);
 	await logViewActivity(uid, updated, 'set-default');
 	return { view: updated };
 }
@@ -225,7 +228,15 @@ async function clearSiblingDefaults(uid: string, view: Pick<ISavedView, '_id' | 
 // queryBoardCards — apply a saved view's config over boards_cards
 // ---------------------------------------------------------------------------
 
-export type BoardCardGroup = { key: string; label: string; cards: IBoardCard[] };
+export type BoardCardGroup = {
+	key: string;
+	label: string;
+	cards: IBoardCard[];
+	/** full bucket size — `cards` may be capped to `groupLimit`, this never is. */
+	total: number;
+	/** true when `groupLimit` cut this bucket (cards.length < total). */
+	hasMore: boolean;
+};
 
 export type QueryBoardCardsResult = {
 	boardId: string;
@@ -234,8 +245,17 @@ export type QueryBoardCardsResult = {
 	/** present when `config.groupBy` is set: cards bucketed by the group key, ordered. */
 	groups?: BoardCardGroup[];
 	total: number;
+	/** echoed when the caller opted into flat paging (offset/count). */
+	offset?: number;
 	/** the date field the Timeline/Calendar view should plot, echoed for the client. */
 	dateField?: string;
+};
+
+export type QueryBoardCardsPaging = {
+	/** flat paging over the sorted `cards` array (standard RC offset/count). */
+	paging?: { offset: number; count: number };
+	/** cap each group's `cards` at N rows; per-group `total`/`hasMore` stay exact. */
+	groupLimit?: number;
 };
 
 /**
@@ -248,12 +268,29 @@ export type QueryBoardCardsResult = {
  * `config.filters` is a typed-but-open struct; recognised keys map to the query, and
  * anything unknown is ignored (forward-compatible, mirroring the automation-condition
  * convention). The `me` assignee token resolves to the calling user.
+ *
+ * PAGINATION (opt-in — the no-params response is unchanged): every shipped client
+ * (TableView / TimelineView / DashboardView / Gantt) consumes the FULL set and
+ * buckets/rolls it up client-side, so nothing is paged unless asked.
+ *  - `paging` (offset/count) pages the flat `cards` array; `total` stays the full
+ *    match count (standard RC envelope semantics).
+ *  - `groupLimit` caps each group's `cards` at N; each group carries its exact
+ *    `total` + `hasMore` so grouped tables can render "first N (+K more)" and
+ *    dashboards keep exact distribution counts.
+ *  The two are orthogonal: groups always bucket the FULL sorted match set (per-group
+ *  totals/membership stay correct even when the flat array is paged).
+ *
+ * NOTE the sort (`field:<id>`, undated-last) and groupBy (multi-membership per
+ * assignee/label) run in JS, so the server still scans the full filtered set to
+ * build correct group totals — paging here bounds the RESPONSE. Pushing sort+group
+ * into an aggregation is the follow-up if board sizes ever make the scan hurt.
  */
 export async function queryBoardCards(
 	uid: string,
 	boardId: string,
 	config: ISavedViewConfig | undefined,
 	viewType: SavedViewType = 'table',
+	{ paging, groupLimit }: QueryBoardCardsPaging = {},
 ): Promise<QueryBoardCardsResult> {
 	if (!(await hasPermissionAsync(uid, 'boards-view'))) {
 		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: METHOD.cards });
@@ -263,23 +300,27 @@ export async function queryBoardCards(
 	const query = toCardQuery(uid, config?.filters);
 	let cards = await BoardsCards.search(boardId, query).toArray();
 
-	if (config?.sort) {
-		cards = sortCards(cards, config.sort);
-	}
+	// always sort (default = position, matching the search cursor) — sortCards
+	// tie-breaks on _id, which Mongo's bare {position:1} does not, and offset
+	// pages are only disjoint across requests under a deterministic total order.
+	cards = sortCards(cards, config?.sort ?? 'position');
 
-	const result: QueryBoardCardsResult = {
+	const total = cards.length;
+	// groups bucket the full sorted set BEFORE any flat paging, so per-group
+	// totals and membership are exact regardless of the requested page.
+	const groups = config?.groupBy ? groupCards(cards, config.groupBy, groupLimit) : undefined;
+
+	const page = paging ? cards.slice(paging.offset, paging.offset + (paging.count || total)) : cards;
+
+	return {
 		boardId,
 		viewType,
-		cards,
-		total: cards.length,
+		cards: page,
+		total,
+		...(paging ? { offset: paging.offset } : {}),
+		...(groups ? { groups } : {}),
 		...(config?.dateField ? { dateField: config.dateField } : {}),
 	};
-
-	if (config?.groupBy) {
-		result.groups = groupCards(cards, config.groupBy);
-	}
-
-	return result;
 }
 
 /**
@@ -341,6 +382,7 @@ function asStringArray(value: unknown): string[] {
  * Sort cards by a saved-view sort key. Recognised: `position` (default), `dueDate`,
  * `startDate`, `cardNumber`, `title`, `createdAt`, and `field:<id>`. A leading `-`
  * reverses the direction. Unknown keys leave the search order (position) intact.
+ * Ties break on `_id` so the order is total — a requirement for disjoint offset pages.
  */
 function sortCards(cards: IBoardCard[], sortKey: string): IBoardCard[] {
 	const desc = sortKey.startsWith('-');
@@ -373,13 +415,15 @@ function sortCards(cards: IBoardCard[], sortKey: string): IBoardCard[] {
 		}
 	};
 
+	const tieBreak = (a: IBoardCard, b: IBoardCard): number => (a._id < b._id ? -1 : 1);
+
 	return [...cards].sort((a, b) => {
 		const av = valueOf(a);
 		const bv = valueOf(b);
 		if (typeof av === 'number' && typeof bv === 'number') {
-			return (av - bv) * dir;
+			return (av - bv) * dir || tieBreak(a, b);
 		}
-		return String(av).localeCompare(String(bv)) * dir;
+		return String(av).localeCompare(String(bv)) * dir || tieBreak(a, b);
 	});
 }
 
@@ -388,8 +432,10 @@ function sortCards(cards: IBoardCard[], sortKey: string): IBoardCard[] {
  * `list` (listId), `assignee` (one bucket per assignee + Unassigned), `label` (one
  * bucket per label + Unlabeled), `cardType`, `dueComplete`, and `field:<id>`. The
  * label is the raw key id — the client resolves human names from the board's defs.
+ * `groupLimit` (positive) caps each bucket's returned cards; `total`/`hasMore`
+ * always reflect the uncapped bucket.
  */
-function groupCards(cards: IBoardCard[], groupBy: string): BoardCardGroup[] {
+function groupCards(cards: IBoardCard[], groupBy: string, groupLimit?: number): BoardCardGroup[] {
 	const buckets = new Map<string, IBoardCard[]>();
 	const order: string[] = [];
 	const add = (key: string, card: IBoardCard): void => {
@@ -442,5 +488,15 @@ function groupCards(cards: IBoardCard[], groupBy: string): BoardCardGroup[] {
 		}
 	};
 
-	return order.map((key) => ({ key, label: labelFor(key), cards: buckets.get(key) ?? [] }));
+	const cap = groupLimit && groupLimit > 0 ? groupLimit : undefined;
+	return order.map((key) => {
+		const bucket = buckets.get(key) ?? [];
+		return {
+			key,
+			label: labelFor(key),
+			cards: cap ? bucket.slice(0, cap) : bucket,
+			total: bucket.length,
+			hasMore: cap ? bucket.length > cap : false,
+		};
+	});
 }
