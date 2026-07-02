@@ -329,7 +329,7 @@ const Avatar = ({
 	return (
 		<Box className={avatarWrapClass}>
 			{showImg ? (
-				<img className={avatarImgClass} src={avatarUrl} alt='' onError={(): void => setImgFailed(true)} />
+				<img className={String(avatarImgClass)} src={avatarUrl} alt='' onError={(): void => setImgFailed(true)} />
 			) : (
 				<Box className={avatarDotClass} style={{ background: color }} aria-hidden>
 					{initialsOf(name || '?')}

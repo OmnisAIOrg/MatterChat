@@ -230,7 +230,7 @@ const AppLeftRail = () => {
 				{/* Chats is MatterChat-native — hidden in external-workspace mode (the M tile / workspace header
 				    is the way back to MatterChat). Boards + LitBox stay (they remain meaningful inside it). */}
 				{!inExternalMode && renderItem('balloons', t('Chats'), handleChat, chatActive)}
-				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, boardsActive)}
+				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, Boolean(boardsActive))}
 				<Box
 					is='button'
 					type='button'
