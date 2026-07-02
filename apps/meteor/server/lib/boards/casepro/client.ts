@@ -57,6 +57,16 @@ export class CaseProClient {
 		this.transport = transport;
 	}
 
+	/**
+	 * Comms-log: file a batch of channel messages onto a matter's communication
+	 * history (CasePro `POST /matterchat-messages/ingest`, idempotent per message
+	 * id upstream). `ingestPath` may be absolute when the CRM backend lives on a
+	 * different host than the MCP connector base URL.
+	 */
+	async logMatterChannelMessages(ingestPath: string, payload: Record<string, unknown>): Promise<unknown> {
+		return this.tx.ingest(ingestPath, payload);
+	}
+
 	/** Page an entity fully (CasePro caps page size; we accumulate then reduce in JS). */
 	private async queryAll(entity: string, filter?: Record<string, unknown>): Promise<CaseProRow[]> {
 		const out: CaseProRow[] = [];

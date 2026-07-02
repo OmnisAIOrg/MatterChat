@@ -49,6 +49,8 @@ type RoomSettings = {
 		favorite: boolean;
 		defaultValue: boolean;
 	};
+	// CasePro comms-log per-channel toggle (only meaningful on matter-linked rooms).
+	caseProCommsLogEnabled: boolean;
 };
 
 type RoomSettingsValidators = {
@@ -88,6 +90,14 @@ const guardABACManagedField = (room: IRoom, value: string | undefined, current: 
 };
 
 const validators: RoomSettingsValidators = {
+	caseProCommsLogEnabled({ room }) {
+		if (!room.matterId) {
+			throw new Meteor.Error('error-action-not-allowed', 'CasePro logging can only be toggled on matter-linked channels', {
+				method: 'saveRoomSettings',
+				action: 'Editing_room',
+			});
+		}
+	},
 	async default({ userId, room, value }) {
 		if (!(await hasPermissionAsync(userId, 'view-room-administration'))) {
 			throw new Meteor.Error('error-action-not-allowed', 'Viewing room administration is not allowed', {
@@ -363,6 +373,11 @@ const settingSavers: RoomSettingsSavers = {
 	async retentionOverrideGlobal({ value, rid }) {
 		await Rooms.saveRetentionOverrideGlobalById(rid, value);
 	},
+	async caseProCommsLogEnabled({ value, rid }) {
+		// Per-channel "Log to CasePro" toggle; the flush loop re-reads it, so
+		// turning it off stops traffic even for already-queued messages.
+		await Rooms.updateOne({ _id: rid }, { $set: { 'caseProCommsLog.enabled': Boolean(value) } });
+	},
 	async encrypted({ value, room, rid, user }) {
 		await saveRoomEncrypted(rid, value, user, Boolean(room.encrypted) !== Boolean(value));
 	},
@@ -408,6 +423,7 @@ const fields: (keyof RoomSettings)[] = [
 	'retentionOverrideGlobal',
 	'encrypted',
 	'favorite',
+	'caseProCommsLogEnabled',
 ];
 
 const validate = <TRoomSetting extends keyof RoomSettings>(

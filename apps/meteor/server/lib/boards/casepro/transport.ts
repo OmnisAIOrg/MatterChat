@@ -80,6 +80,20 @@ export interface ICaseProTransport {
 	create(entity: string, data: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow>;
 	/** Patch a row by id; returns the full updated row. */
 	update(entity: string, id: string, patch: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow>;
+	/**
+	 * Narrow custom-path POST for CasePro CRM endpoints that are plain REST
+	 * controllers, NOT MCP entity tools (first consumer: `matterchat-messages/ingest`,
+	 * the comms-log digest filing — CasePro PR #1234 exposes it as a REST controller,
+	 * so it does NOT go through the JSON-RPC `tools/call` transport). `path` may be
+	 * relative to the configured base host, or an absolute https URL when the CRM
+	 * backend lives on a different host than the MCP gateway.
+	 *
+	 * RECONCILED onto live-wire: the live implementation ({@link McpGatewayTransport})
+	 * issues a direct authenticated POST reusing the SAME auth headers the entity
+	 * verbs build (X-MCP-API-Key + X-Organization-ID) and the SAME egress posture
+	 * (https-only, refuse-without-key). It never rides `tools/call`.
+	 */
+	ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +441,22 @@ export class StubTransport implements ICaseProTransport {
 		rows[idx] = next;
 		return { ...next };
 	}
+
+	/** Stub ingest: record the payload (tests inspect it) and pretend CasePro accepted everything. */
+	public readonly ingested: { path: string; payload: Record<string, unknown> }[] = [];
+
+	async ingest(path: string, payload: Record<string, unknown>, _ctx?: CaseProCallContext): Promise<unknown> {
+		this.ingested.push({ path, payload });
+		return { ok: true, stub: true };
+	}
+
+	/** Stub ingest: record the payload (tests inspect it) and pretend CasePro accepted everything. */
+	public readonly ingested: { path: string; payload: Record<string, unknown> }[] = [];
+
+	async ingest(path: string, payload: Record<string, unknown>): Promise<unknown> {
+		this.ingested.push({ path, payload });
+		return { ok: true, stub: true };
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -650,6 +680,64 @@ export class McpGatewayTransport implements ICaseProTransport {
 			throw new Error(`CasePro update(${entity}, ${id}) returned no updated row`);
 		}
 		return row;
+	}
+
+	/**
+	 * Direct authenticated POST to a plain CasePro CRM REST controller (comms-log
+	 * ingest — `POST /matterchat-messages/ingest`, CasePro PR #1234). This is NOT
+	 * an MCP entity tool, so it deliberately does NOT ride `tools/call`. It reuses
+	 * the SAME auth headers the entity verbs build (X-MCP-API-Key + X-Organization-ID,
+	 * plus the advisory X-Acting-User) and the SAME strict egress posture: https-only,
+	 * a single-host SSRF allow-list, and no redirect-following (a redirect would
+	 * re-send the key elsewhere). Refuses without a key by construction (the whole
+	 * transport does).
+	 *
+	 * `path` resolution:
+	 *  - absolute https URL  → used as-is; the allow-list is pinned to that URL's host
+	 *    (the CRM backend may live on a different host than the MCP gateway).
+	 *  - relative path       → resolved against the gateway origin; allow-list = gateway host.
+	 * A non-https absolute URL is refused (never send the key over http).
+	 */
+	async ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown> {
+		let target: string;
+		let allowHost: string;
+		if (/^https?:\/\//i.test(path)) {
+			const url = new URL(path);
+			if (url.protocol !== 'https:') {
+				throw new Error(`CasePro ingest: endpoint must be https (got ${url.protocol}//)`);
+			}
+			if (url.username || url.password) {
+				throw new Error('CasePro ingest: endpoint must not embed credentials');
+			}
+			target = url.toString();
+			allowHost = url.hostname;
+		} else {
+			// Resolve a relative ingest path against the gateway origin (strip the
+			// JSON-RPC path segment). Same host ⇒ same allow-list entry.
+			const origin = new URL(this.endpoint).origin;
+			target = `${origin}/${path.replace(/^\/+/, '')}`;
+			allowHost = this.host;
+		}
+		const res = await this.fetchFn(target, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-MCP-API-Key': this.apiKey,
+				...(this.orgId ? { 'X-Organization-ID': this.orgId } : {}),
+				...(ctx?.actingUserId ? { 'X-Acting-User': ctx.actingUserId } : {}),
+			},
+			body: JSON.stringify(payload),
+			ignoreSsrfValidation: false,
+			allowList: allowHost,
+			followRedirects: false,
+		});
+		if (res.status >= 300 && res.status < 400) {
+			throw new Error(`CasePro ingest(${path}): gateway redirected (${res.status}) — refusing to follow`);
+		}
+		if (!res.ok) {
+			throw new Error(`CasePro ingest(${path}) failed: HTTP ${res.status}`);
+		}
+		return res.json();
 	}
 }
 

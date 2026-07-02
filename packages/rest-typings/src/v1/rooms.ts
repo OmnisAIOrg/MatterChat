@@ -383,6 +383,7 @@ type RoomsSaveRoomSettingsProps = {
 	retentionFilesOnly?: boolean;
 	retentionIgnoreThreads?: boolean;
 	retentionOverrideGlobal?: boolean;
+	caseProCommsLogEnabled?: boolean;
 };
 
 const RoomsSaveRoomSettingsSchema = {
@@ -467,6 +468,7 @@ const RoomsSaveRoomSettingsSchema = {
 		retentionFilesOnly: { type: 'boolean', nullable: true },
 		retentionIgnoreThreads: { type: 'boolean', nullable: true },
 		retentionOverrideGlobal: { type: 'boolean', nullable: true },
+		caseProCommsLogEnabled: { type: 'boolean', nullable: true },
 	},
 	required: ['rid'],
 	additionalProperties: false,
