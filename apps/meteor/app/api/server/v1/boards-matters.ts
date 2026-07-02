@@ -100,8 +100,17 @@ API.v1.post(
 	},
 	async function action() {
 		const { boardId, listId, matterId } = this.bodyParams;
+		// GRACEFUL: bindMatterCard always succeeds locally (stores the matterId link) even when
+		// CasePro is disabled/unreachable or the matter id doesn't resolve — the snapshot is then
+		// left PENDING (resolved:false) rather than hard-failing with a 400. Surface that state so
+		// the UI can say "linked, but couldn't load matter details" and offer a manual refresh.
 		const card = await bindMatterCard(this.userId, boardId, listId, matterId);
-		return API.v1.success({ card });
+		const resolved = card.link?.kind === 'matter' ? card.link.snapshot?.resolved !== false : true;
+		return API.v1.success({
+			card,
+			resolved,
+			...(resolved ? {} : { warning: 'Linked, but the matter could not be loaded from CasePro yet. Details will fill in on the next refresh.' }),
+		});
 	},
 );
 
