@@ -5,7 +5,8 @@ import { License } from '@rocket.chat/license';
 // No functionality will be imported tho, just the service registration
 import('./OmnichannelServiceLevelAgreements');
 import('./AuditLog');
-import('./ReadReceipts');
+// MatterChat: IReadReceiptsModel is registered by the MIT core (apps/meteor/server/models.ts)
+// with the core ReadReceiptsRaw — do not overwrite it with the ee model.
 import('./ReadReceiptsArchive');
 
 void License.onLicense('livechat-enterprise', () => {

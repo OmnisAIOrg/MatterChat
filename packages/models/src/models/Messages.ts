@@ -1518,12 +1518,13 @@ export class MessagesRaw extends BaseRaw<IMessage> implements IMessagesModel {
 		return this.findOne(query, options);
 	}
 
-	setVisibleMessagesAsRead(rid: string, until: Date): Promise<UpdateResult | Document> {
+	setVisibleMessagesAsRead(rid: string, until: Date, exceptUserId?: string): Promise<UpdateResult | Document> {
 		return this.updateMany(
 			{
 				rid,
 				unread: true,
 				ts: { $lt: until },
+				...(exceptUserId && { 'u._id': { $ne: exceptUserId } }),
 				$or: [
 					{
 						tmid: { $exists: false },

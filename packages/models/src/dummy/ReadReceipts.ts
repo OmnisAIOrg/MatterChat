@@ -1,6 +1,6 @@
 import type { IReadReceipt } from '@rocket.chat/core-typings';
 import type { IReadReceiptsModel } from '@rocket.chat/model-typings';
-import type { FindCursor, DeleteResult } from 'mongodb';
+import type { BulkWriteResult, FindCursor, DeleteResult } from 'mongodb';
 
 import { BaseDummy } from './BaseDummy';
 
@@ -35,5 +35,9 @@ export class ReadReceiptsDummy extends BaseDummy<IReadReceipt> implements IReadR
 
 	findOlderThan(_date: Date): FindCursor<IReadReceipt> {
 		return this.find({});
+	}
+
+	async saveReceipts(_receipts: Omit<IReadReceipt, '_updatedAt'>[]): Promise<BulkWriteResult> {
+		return {} as unknown as BulkWriteResult;
 	}
 }

@@ -85,6 +85,7 @@ export * from './models/WebdavAccounts';
 export * from './models/CredentialTokens';
 export * from './models/ExternalWorkspaceConnections';
 export * from './models/MessageReads';
+export * from './models/ReadReceipts';
 export * from './models/CronHistoryModel';
 export * from './models/Migrations';
 export * from './models/ModerationReports';
