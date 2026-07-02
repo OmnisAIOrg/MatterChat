@@ -34,6 +34,38 @@ export interface IEncryptedTokenRef {
 }
 
 /**
+ * A LIVE-BRIDGED channel on a connection: one external channel (or direct chat) mirrored into one
+ * MatterChat room. Lives as a subdocument array on the connection — the "bridged-channel model" is
+ * the ExternalConnection itself, not a parallel collection. The RC room is additionally tagged
+ * `importIds: ['ext:<connectionId>:<channelExternalId>']` (the spec §4.3 namespaced value) so the
+ * room side is discoverable via the existing `Rooms.findOneByImportId` primitive.
+ */
+export interface IBridgedChannel {
+	/**
+	 * Provider-native channel token — the SAME opaque id the discovery endpoints emit
+	 * (Teams: the `teamId|channelId` composite from listChannels, or a bare chat id).
+	 */
+	channelExternalId: string;
+	/** Display label captured at bridge time (e.g. `Team / Channel`). */
+	name: string;
+	/** The MatterChat room this channel is mirrored into. */
+	rid: string;
+	/**
+	 * Graph change-notification subscription id, when webhook realtime is live for this bridge.
+	 * Absent when the webhook prerequisites (public base URL + client-state secret) are missing, or
+	 * when this bridge shares another connection's subscription for the same external channel
+	 * (Graph allows ONE subscription per app+channel — inbound fan-out covers the sharers).
+	 */
+	subscriptionId?: string;
+	/** When the Graph subscription expires (max ~3 days; renewed at ~T-12h by the renewal timer). */
+	subscriptionExpiresAt?: Date;
+	/** Creation time of the newest inbound message ingested — the catch-up cursor for `missed` backfill. */
+	lastInboundAt?: Date;
+	/** When this bridge was activated. */
+	createdAt: Date;
+}
+
+/**
  * PER-USER external-workspace connection record. One document per (MatterChat user, external
  * workspace) pair. This is the durable store the org-switcher rail reads to show each user's
  * own connected Slack/Teams workspaces, and the bridge reads to know which credentials to use.
@@ -70,4 +102,6 @@ export interface IExternalWorkspaceConnection extends IRocketChatRecord {
 	createdAt: Date;
 	/** Last successful sync against the external workspace, if any. */
 	lastSyncAt?: Date;
+	/** Channels of this connection live-bridged into MatterChat rooms (absent = nothing bridged). */
+	bridgedChannels?: IBridgedChannel[];
 }

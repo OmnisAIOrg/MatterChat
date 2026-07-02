@@ -1,0 +1,256 @@
+/**
+ * bridgeCore — the RC side of the live message bridge (the generalized RocketAdapter of the spec).
+ *
+ * OWNS ALL Rocket.Chat vocabulary: room creation/tagging, message insertion, the outbound
+ * afterSaveMessage callback. Providers stay external-vocabulary-only; this module translates via
+ * the connection doc + the deterministic id schemes in ./bridgeIds. Mirrors the shape of MIT
+ * apps/meteor/app/slackbridge/server/RocketAdapter.ts (callback registration, importIds tagging,
+ * alias rendering, the `slack-` → `ext-` id guard), parameterized by provider through the
+ * providerRegistry instead of a hard-coded SlackAdapter. Nothing under apps/meteor/ee/ was read.
+ *
+ * DATA FLOW
+ *  OUTBOUND: user types in a bridged room → afterSaveMessage fires → cheap gate on
+ *    room.importIds (`ext:` prefix — no Mongo hit for normal rooms) → look up the bridging
+ *    connection → post to the external channel AS THE CONNECTION OWNER (delegated token) →
+ *    remember the returned external id (echo suppression) + stamp it on the RC message
+ *    (persistent echo guard).
+ *  INBOUND: webhook/backfill hands an IProviderMessage → dedupe (echo set → persistent stamp →
+ *    deterministic _id) → insert into the bridged room, attributed to the external sender via the
+ *    ALIAS mechanism (spec §4.3: user-scope connections never auto-create RC ghost accounts).
+ *
+ * ATTRIBUTION MODEL (per-user, delegated):
+ *  - Outbound: ONLY messages authored by the connection owner are mirrored out — Graph cannot
+ *    post as an arbitrary user (spec §3.4), and the bridged room belongs to the owner. Other RC
+ *    users' messages in the room are skipped (logged).
+ *  - Inbound: messages ride under the owner's account with `alias` = the external sender's
+ *    display name; the owner's own native external posts carry no alias (they're genuinely theirs).
+ */
+import type { IExternalWorkspaceConnection, IBridgedChannel, IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
+import { ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
+import { Random } from '@rocket.chat/random';
+
+import { callbacks } from '../../../../server/lib/callbacks';
+import { SystemLogger } from '../../../../server/lib/logger/system';
+import { createRoom } from '../../../lib/server/functions/createRoom';
+import { sendMessage } from '../../../lib/server/functions/sendMessage';
+import type { IProviderMessage } from '../ChatProvider';
+import { providerRegistry } from '../providerRegistry';
+import { toProviderConnection } from '../runtimeConnection';
+import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } from './bridgeIds';
+import { echoSuppression } from './echoSuppression';
+
+const CALLBACK_ID = 'ConnectorBridge_Out';
+
+/** Slug a channel label into a valid RC room name (default validation is `[0-9a-zA-Z-_.]+`). */
+function roomNameFor(label: string): string {
+	const slug = label
+		.toLowerCase()
+		.replace(/[^0-9a-z]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 40);
+	// Random suffix dodges collisions with existing rooms (and repeated bridge/unbridge cycles).
+	return `${slug || 'bridged'}-${Random.id(4).toLowerCase()}`;
+}
+
+/**
+ * Create the private MatterChat room mirroring one external channel, owned by (and containing
+ * only) the connection owner, and tag it:
+ *  - `importIds: ['ext:<connectionId>:<channelExternalId>']` — the spec §4.3 namespaced tag; the
+ *    outbound callback's cheap gate and the existing `Rooms.findOneByImportId` primitive.
+ *  - `customFields.connectorBridge` — the client-readable tag (provider + connection) the UI can
+ *    badge without parsing importIds.
+ */
+export async function createBridgedRoom(
+	owner: IUser,
+	connection: IExternalWorkspaceConnection,
+	channelExternalId: string,
+	label: string,
+): Promise<IRoom> {
+	const { rid } = await createRoom('p', roomNameFor(label), owner, [], false, false, {
+		description: `Bridged from ${connection.externalOrgName || connection.provider}: ${label}`,
+		customFields: {
+			connectorBridge: {
+				provider: connection.provider,
+				connectionId: connection._id,
+				channelExternalId,
+			},
+		},
+	});
+	await Rooms.addImportIds(rid, [roomImportId(connection._id, channelExternalId)]);
+	const room = await Rooms.findOneById(rid);
+	if (!room) {
+		throw new Error('bridge_room_create_failed');
+	}
+	return room;
+}
+
+/**
+ * Ingest ONE external message into a bridged room (called by the webhook and by backfill).
+ * Idempotent + loop-safe:
+ *  1. echo set — the bridge itself posted this external id moments ago → drop;
+ *  2. persistent stamp — an RC message in this room already carries this external id in
+ *     `customFields.connectorBridge.externalId` (our own outbound post, surviving restarts) → drop;
+ *  3. deterministic `_id` — the message was already ingested (re-delivery/double-processing) → drop.
+ *
+ * Returns true when a message was actually inserted (callers advance lastInboundAt on truth).
+ */
+export async function ingestExternalMessage(
+	doc: IExternalWorkspaceConnection,
+	bridge: IBridgedChannel,
+	message: IProviderMessage,
+	ownerExternalId?: string,
+): Promise<boolean> {
+	if (!message.externalId || !message.text?.trim()) {
+		return false;
+	}
+
+	// Guard 1 — in-memory echo set (fast path for the webhook echo of our own outbound post).
+	if (echoSuppression.has(doc._id, message.externalId)) {
+		return false;
+	}
+
+	// Guard 3 — deterministic _id: already ingested (Graph re-delivery / duplicate processing).
+	const rcMessageId = extMessageId(doc._id, bridge.channelExternalId, message.externalId);
+	if (await Messages.findOneById(rcMessageId, { projection: { _id: 1 } })) {
+		// NOTE (documented v1 gap): `updated` notifications for an already-ingested message (edits,
+		// reactions) are not re-applied yet — first ingest wins.
+		return false;
+	}
+
+	// Guard 2 — persistent echo stamp: our own outbound RC message carries this external id.
+	if (
+		await Messages.findOne({ 'rid': bridge.rid, 'customFields.connectorBridge.externalId': message.externalId }, { projection: { _id: 1 } })
+	) {
+		return false;
+	}
+
+	const owner = await Users.findOneById(doc.userId, { projection: { username: 1, name: 1 } });
+	if (!owner?.username) {
+		SystemLogger.warn({ msg: 'Connector bridge inbound: owner user missing', connectionId: doc._id, userId: doc.userId });
+		return false;
+	}
+	const room = await Rooms.findOneById(bridge.rid);
+	if (!room) {
+		SystemLogger.warn({ msg: 'Connector bridge inbound: bridged room missing', connectionId: doc._id, rid: bridge.rid });
+		return false;
+	}
+
+	const tsMs = Date.parse(message.ts);
+	const senderIsOwner = Boolean(ownerExternalId) && message.authorExternalId === ownerExternalId;
+
+	// Threading: link a reply to its already-ingested thread root (same deterministic id scheme).
+	let tmid: string | undefined;
+	if (message.threadExternalId) {
+		const rootId = extMessageId(doc._id, bridge.channelExternalId, message.threadExternalId);
+		if (await Messages.findOneById(rootId, { projection: { _id: 1 } })) {
+			tmid = rootId;
+		}
+	}
+
+	const rcMessage: Partial<IMessage> & { _id: string; rid: string; msg: string } = {
+		_id: rcMessageId,
+		rid: bridge.rid,
+		msg: message.text,
+		ts: Number.isNaN(tsMs) ? new Date() : new Date(tsMs),
+		u: { _id: owner._id, username: owner.username },
+		// External senders render via the ALIAS mechanism — never ghost RC accounts (spec §4.3).
+		...(senderIsOwner ? {} : { alias: message.authorDisplayName || message.authorExternalId }),
+		...(tmid ? { tmid } : {}),
+		customFields: {
+			connectorBridge: {
+				provider: doc.provider,
+				connectionId: doc._id,
+				externalId: message.externalId,
+				authorExternalId: message.authorExternalId,
+				inbound: true,
+			},
+		},
+	};
+
+	await sendMessage(owner, rcMessage, room, { upsert: true });
+	return true;
+}
+
+/** Resolve the bridge entry for a room on a loaded connection doc. */
+function bridgeForRoom(doc: IExternalWorkspaceConnection, rid: string): IBridgedChannel | undefined {
+	return doc.bridgedChannels?.find((b) => b.rid === rid);
+}
+
+/**
+ * The OUTBOUND leg: mirror messages typed in a bridged room to the external channel.
+ * Registered once at boot (see registerBridgeOutbound). NEVER throws — a bridge failure must not
+ * break message saving; failures are logged and the message stays local.
+ */
+async function onMessageSaved(message: IMessage, room: IRoom | undefined): Promise<IMessage> {
+	try {
+		// Cheap gate: bridged rooms carry the `ext:` importIds tag — normal rooms exit with zero I/O.
+		if (!room || !Array.isArray(room.importIds) || !room.importIds.some(isBridgeRoomImportId)) {
+			return message;
+		}
+		// Loop guard: the bridge's own inbound inserts (deterministic `ext-` ids) never go back out.
+		if (isBridgeMessageId(message._id)) {
+			return message;
+		}
+		// v1 scope: new user text only — no edits, no system messages, no file-only messages.
+		if (message.editedAt || message.t || !message.msg?.trim()) {
+			return message;
+		}
+
+		const doc = await ExternalWorkspaceConnections.findOneByBridgedRoomId(room._id);
+		const bridge = doc && bridgeForRoom(doc, room._id);
+		if (!doc || !bridge) {
+			return message;
+		}
+		if (doc.status !== 'connected') {
+			SystemLogger.debug({ msg: 'Connector bridge outbound skipped: connection not active', connectionId: doc._id, status: doc.status });
+			return message;
+		}
+
+		// DELEGATED model: only the connection owner can post as themselves (Graph cannot post as an
+		// arbitrary user — spec §3.4). Anyone else's message stays local.
+		if (message.u?._id !== doc.userId) {
+			SystemLogger.debug({ msg: 'Connector bridge outbound skipped: author is not the connection owner', rid: room._id });
+			return message;
+		}
+
+		const connection = toProviderConnection(doc);
+		if (!connection) {
+			SystemLogger.warn({ msg: 'Connector bridge outbound skipped: credentials unavailable', connectionId: doc._id });
+			return message;
+		}
+
+		const provider = providerRegistry.get(doc.provider);
+		const { externalId } = await provider.postMessage(connection, bridge.channelExternalId, { text: message.msg });
+
+		// LOOP PREVENTION for the coming webhook echo of this very post:
+		// leg 1 — remember the external id in-memory (fast path)…
+		echoSuppression.add(doc._id, externalId);
+		// …and leg 3 — stamp it on the RC message (persistent guard, survives restarts).
+		await Messages.updateOne(
+			{ _id: message._id },
+			{
+				$set: {
+					'customFields.connectorBridge': {
+						provider: doc.provider,
+						connectionId: doc._id,
+						externalId,
+						inbound: false,
+					},
+				},
+			},
+		);
+	} catch (err) {
+		SystemLogger.error({ msg: 'Connector bridge outbound failed (message stays local)', rid: room?._id, err: String(err) });
+	}
+	return message;
+}
+
+/** Register the outbound afterSaveMessage callback (idempotent; called once from the server entry). */
+export function registerBridgeOutbound(): void {
+	callbacks.add(
+		'afterSaveMessage',
+		(message: IMessage, { room }: { room: IRoom }) => onMessageSaved(message, room),
+		callbacks.priority.LOW,
+		CALLBACK_ID,
+	);
+}

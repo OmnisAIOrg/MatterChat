@@ -15,20 +15,13 @@ import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.cha
 import { ExternalWorkspaceConnections } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { SystemLogger } from '../../../server/lib/logger/system';
-import type {
-	IProviderChannel,
-	IProviderConnection,
-	IProviderCredentials,
-	IProviderDirectChat,
-	IProviderMember,
-	IProviderMessage,
-} from './ChatProvider';
+import type { IProviderChannel, IProviderConnection, IProviderDirectChat, IProviderMember, IProviderMessage } from './ChatProvider';
 import { providerRegistry } from './providerRegistry';
 import { isGoogleConfigured } from './providers/google/config';
 import { isSlackConfigured } from './providers/slack/config';
 import { isTeamsConfigured } from './providers/teams/config';
-import { decryptCredentials, encryptCredentials } from './tokenCrypto';
+import { toProviderConnection } from './runtimeConnection';
+import { SystemLogger } from '../../../server/lib/logger/system';
 
 /**
  * Client-safe projection of a connection — everything EXCEPT the encrypted credential blob.
@@ -113,16 +106,18 @@ export async function disconnectMyConnection(userId: string, connectionId: strin
 		return false;
 	}
 
-	// Best-effort provider teardown. Providers are stubs today (throw not_implemented), so we
+	// Best-effort provider teardown — with REAL decrypted credentials when available, so Teams can
+	// delete its Graph change-notification subscriptions (the live-bridge inbound transport). We
 	// swallow errors here — the record removal below is what the user asked for and must succeed.
 	try {
 		const provider = providerRegistry.get(doc.provider);
-		await provider.disconnect({
+		const connection = toProviderConnection(doc) ?? {
 			connectionId: doc._id,
 			ownerUserId: doc.userId,
 			externalOrgId: doc.externalOrgId,
 			credentials: {},
-		});
+		};
+		await provider.disconnect(connection);
 	} catch {
 		// Provider not implemented yet, or live teardown failed — proceed to remove the record.
 	}
@@ -166,46 +161,11 @@ export type ListChannelsError = {
 	status?: number;
 };
 
-/**
- * Rebuild the runtime IProviderConnection (decrypted credentials) from a stored connection doc.
- * Returns null when the credential blob can't be decrypted (missing/wrong key) so the caller forces
- * a reconnect rather than calling the provider with a garbage token.
- *
- * TOKEN-REFRESH PERSISTENCE: the connection carries an `onCredentialsRefreshed` hook. When the
- * provider's HTTP client refreshes the access token mid-call (proactively before expiry, or on a
- * live 401), it forwards the refreshed fields here; we merge them over the ORIGINAL decrypted blob
- * (preserving provider-specific extras like homeAccountId/externalAadUserId — but NOT the
- * runtime-spliced externalOrgId, which lives on the doc), re-encrypt, and persist. Without this,
- * every call after access-token expiry would re-run the refresh grant, and a ROTATED refresh token
- * would be silently dropped.
- */
-function toProviderConnection(doc: IExternalWorkspaceConnection): IProviderConnection | null {
-	const credentials = decryptCredentials<IProviderCredentials>(doc.credentials);
-	if (!credentials?.accessToken) {
-		return null;
-	}
-	return {
-		connectionId: doc._id,
-		ownerUserId: doc.userId,
-		externalOrgId: doc.externalOrgId,
-		credentials: { ...credentials, externalOrgId: doc.externalOrgId },
-		onCredentialsRefreshed: async (refreshed: IProviderCredentials): Promise<void> => {
-			// Merge over the ORIGINAL blob (pre-splice) so nothing provider-specific is lost, and only
-			// fields the refresh actually produced are overwritten (a response may omit a rotated token).
-			const merged: IProviderCredentials = { ...credentials };
-			if (refreshed.accessToken) {
-				merged.accessToken = refreshed.accessToken;
-			}
-			if (refreshed.refreshToken) {
-				merged.refreshToken = refreshed.refreshToken;
-			}
-			if (refreshed.expiresAt !== undefined) {
-				merged.expiresAt = refreshed.expiresAt;
-			}
-			await ExternalWorkspaceConnections.updateCredentialsById(doc._id, encryptCredentials(merged));
-		},
-	};
-}
+// Runtime connection building (decrypted creds + refresh-persistence hook) lives in
+// ./runtimeConnection so the live message bridge can use it without importing this module
+// (which imports the providerRegistry → providers — an import cycle otherwise). Re-exported
+// here for existing callers.
+export { toProviderConnection };
 
 /** Split the provider's qualified `Team / Channel` label into its parts (falls back gracefully). */
 function splitChannelLabel(channel: IProviderChannel, fallbackTeam: string): { teamName: string; name: string } {
@@ -462,7 +422,11 @@ function providerError(err: unknown, fallbackCode: string): ProviderError {
  * forever. Best-effort (a failed status write never masks the original error), and then normalizes
  * the error exactly like providerError.
  */
-async function providerErrorMarkingAuthDeath(doc: IExternalWorkspaceConnection, err: unknown, fallbackCode: string): Promise<ProviderError> {
+async function providerErrorMarkingAuthDeath(
+	doc: IExternalWorkspaceConnection,
+	err: unknown,
+	fallbackCode: string,
+): Promise<ProviderError> {
 	const message = err instanceof Error ? err.message : String(err);
 	if (message.includes('invalid_grant')) {
 		try {
@@ -640,7 +604,10 @@ export async function unreadSummaryForMyConnections(userId: string): Promise<Unr
  * failure rides back as a structured ProviderError), then calls the provider's optional `markRead`.
  * A provider that hasn't implemented it is a no-op success; only an ownership/auth failure surfaces.
  */
-export async function markMyRead(userId: string, opts: { connectionId: string; externalId: string }): Promise<{ ok: true } | ProviderError> {
+export async function markMyRead(
+	userId: string,
+	opts: { connectionId: string; externalId: string },
+): Promise<{ ok: true } | ProviderError> {
 	const loaded = await loadOwnedConnection(userId, opts.connectionId);
 	if ('error' in loaded) {
 		return loaded;

@@ -29,10 +29,19 @@
  *                          Entra user id (`microsoft.graph.aadUserConversationMember.userId`).
  *                          Requires the newly-granted TeamMember.Read.All scope.
  *
- * WHAT IS A TODO STUB (the realtime milestone):
- *   - subscribe          → Graph change-notifications (webhooks) keyed by (tenantId, channelId);
- *                          polling fallback on a per-connection toggle.
- *   - resolveIdentity    → from the message `from.user` block (avoids User.ReadBasic.All).
+ * WHAT IS REAL as of the LIVE MESSAGE BRIDGE milestone:
+ *   - subscribe          → Graph change-notifications: POST /subscriptions for the channel/chat
+ *                          (delegated; created in the EXTERNAL tenant), delivered to the public
+ *                          /_connectors/teams/webhook endpoint (see ./teams/webhook.ts). The
+ *                          bridge's durable dispatch is Mongo-backed (subscriptionId → connection),
+ *                          so the returned handle's stop() deletes the Graph subscription.
+ *   - disconnect         → deletes every Graph subscription THIS app created for the signed-in
+ *                          user (matched by our notificationUrl) — provider-pure teardown; the
+ *                          bridge records are removed by connectionService/bridgeService.
+ *
+ * WHAT IS A TODO STUB:
+ *   - resolveIdentity    → from the message `from.user` block (avoids User.ReadBasic.All); the
+ *                          bridge already renders names from authorDisplayName, so nothing calls it.
  *
  * MESSAGE-TARGET IDENTITY (channel vs direct chat): Microsoft Graph addresses a CHANNEL as
  * `/teams/{teamId}/channels/{channelId}` — it needs BOTH ids — but a DIRECT CHAT as `/chats/{chatId}`.
@@ -66,16 +75,28 @@ import type {
 	IProviderUser,
 	IVerifiedConnection,
 } from '../ChatProvider';
-import { GRAPH_BASE, getTeamsConfig, isTeamsConfigured, tokenEndpoint, redirectUri, TEAMS_DELEGATED_SCOPES } from './teams/config';
+import {
+	GRAPH_BASE,
+	getTeamsConfig,
+	isTeamsConfigured,
+	isTeamsWebhookConfigured,
+	tokenEndpoint,
+	redirectUri,
+	TEAMS_DELEGATED_SCOPES,
+	webhookNotificationUrl,
+} from './teams/config';
 import type { GraphTokens, RefreshedTokens } from './teams/graphClient';
 import { graphFetch, graphGetAll } from './teams/graphClient';
+import { mapGraphMessage } from './teams/messageMapping';
+import type { GraphChatMessage } from './teams/messageMapping';
+import { createChannelSubscription, deleteSubscription } from './teams/subscriptions';
 
 // Mounting the OAuth routes is a side-effect of importing this provider, so booting the connectors
 // index (which constructs the registry with `new TeamsProvider()`) also wires /api/apps/teamsbridge.
 import './teams/routes';
 
 const NEXT_MILESTONE =
-	'TeamsProvider: read/post/realtime is the next milestone (syncMessages/subscribe/postMessage). See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §3.3–§3.5.';
+	'TeamsProvider.resolveIdentity: names already ride on each message (from.user.displayName); a directory lookup is a future milestone. See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §3.2.';
 
 function notConfigured(): never {
 	throw new Error('teams_not_configured');
@@ -137,26 +158,7 @@ function messagesBaseUrl(externalId: string): string {
 	return `${GRAPH_BASE}/chats/${encodeURIComponent(externalId)}`;
 }
 
-/**
- * Reduce a Teams message HTML body to plain text: drop tags, decode the handful of entities Graph
- * emits, and collapse whitespace. Deliberately tiny (no DOM dep) — the bridge does richer rendering
- * later; here we just need legible, safe text for the panel/log.
- */
-function htmlToText(html: string): string {
-	return html
-		.replace(/<br\s*\/?>(?=)/gi, '\n')
-		.replace(/<\/(p|div|li)>/gi, '\n')
-		.replace(/<[^>]+>/g, '')
-		.replace(/&nbsp;/gi, ' ')
-		.replace(/&amp;/gi, '&')
-		.replace(/&lt;/gi, '<')
-		.replace(/&gt;/gi, '>')
-		.replace(/&quot;/gi, '"')
-		.replace(/&#39;/gi, "'")
-		.replace(/[ \t]+\n/g, '\n')
-		.replace(/\n{3,}/g, '\n\n')
-		.trim();
-}
+// htmlToText lives in ./teams/messageMapping (shared with the webhook's inbound path + unit-tested).
 
 /** Build the mutable GraphTokens bundle the graphClient reads/refreshes from stored credentials. */
 function tokensFromCredentials(credentials: IProviderCredentials): GraphTokens {
@@ -237,11 +239,7 @@ const PRESENCE_BATCH_SIZE = 100;
  * resolves to an EMPTY map — presence is purely additive, so a failure simply leaves it undefined on
  * every chat/member rather than breaking the list. Batched to respect the endpoint's id-count cap.
  */
-async function fetchPresences(
-	tokens: GraphTokens,
-	userIds: string[],
-	onRefreshed?: OnRefreshed,
-): Promise<Map<string, ProviderPresence>> {
+async function fetchPresences(tokens: GraphTokens, userIds: string[], onRefreshed?: OnRefreshed): Promise<Map<string, ProviderPresence>> {
 	const out = new Map<string, ProviderPresence>();
 	// Dedupe + drop empties so a batch is never wasted on a blank/duplicate id.
 	const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
@@ -373,12 +371,31 @@ export class TeamsProvider implements IChatProvider {
 	}
 
 	/**
-	 * Tear down live resources for this connection. No sockets/subscriptions exist yet (realtime is
-	 * the next milestone), so this is a no-op today — disconnect at the record level is handled by
-	 * connectionService.
+	 * Tear down live resources for this connection: delete every Graph change-notification
+	 * subscription THIS app created for the signed-in user. Provider-pure (no Mongo): delegated
+	 * `GET /subscriptions` lists only the app+user pair's subscriptions; we delete the ones whose
+	 * notificationUrl is ours. Record-level teardown stays in connectionService/bridgeService.
+	 * Best-effort by contract (the caller swallows errors) — but we don't throw for empty creds.
 	 */
-	async disconnect(_connection: IProviderConnection): Promise<void> {
-		// No live Graph subscriptions to delete until the realtime milestone; nothing to release.
+	async disconnect(connection: IProviderConnection): Promise<void> {
+		if (!isTeamsConfigured() || !connection.credentials?.accessToken) {
+			return;
+		}
+		const { tokens, onRefreshed } = tokensAndHook(connection);
+		const ourUrl = webhookNotificationUrl();
+
+		type GraphSubscription = { id?: string; notificationUrl?: string };
+		const subs = await graphGetAll<GraphSubscription>(`${GRAPH_BASE}/subscriptions`, tokens, onRefreshed);
+		for (const sub of subs) {
+			if (!sub?.id || sub.notificationUrl !== ourUrl) {
+				continue;
+			}
+			try {
+				await deleteSubscription(tokens, sub.id, onRefreshed);
+			} catch (err) {
+				SystemLogger.warn({ msg: 'Teams disconnect: subscription delete failed', subscriptionId: sub.id, err: String(err) });
+			}
+		}
 	}
 
 	// ─── discovery ─────────────────────────────────────────────────────────────────────────────
@@ -454,18 +471,6 @@ export class TeamsProvider implements IChatProvider {
 		// Channel composite (`teamId|channelId`) → /teams/.../channels/...; bare chat id → /chats/...
 		const baseUrl = messagesBaseUrl(channelExternalId);
 
-		type GraphMessageBody = { content?: string; contentType?: 'text' | 'html' };
-		type GraphMessageFrom = { user?: { id?: string; displayName?: string } };
-		type GraphMessage = {
-			id?: string;
-			messageType?: string;
-			createdDateTime?: string;
-			lastModifiedDateTime?: string;
-			deletedDateTime?: string | null;
-			body?: GraphMessageBody;
-			from?: GraphMessageFrom;
-		};
-
 		const sinceMs = since ? Date.parse(since) : NaN;
 		const hasSince = !Number.isNaN(sinceMs);
 
@@ -473,21 +478,11 @@ export class TeamsProvider implements IChatProvider {
 		let pages = 0;
 
 		while (next && pages < MAX_MESSAGE_PAGES) {
-			const page = await graphFetch<{ value?: GraphMessage[]; '@odata.nextLink'?: string }>(next, tokens, {}, onRefreshed);
+			const page = await graphFetch<{ 'value'?: GraphChatMessage[]; '@odata.nextLink'?: string }>(next, tokens, {}, onRefreshed);
 			pages++;
 
 			for (const msg of page.value || []) {
-				if (!msg?.id || msg.deletedDateTime) {
-					continue;
-				}
-				// Skip system/event messages (joins, renames) — they carry no human `from.user`.
-				const authorId = msg.from?.user?.id;
-				if (!authorId || (msg.messageType && msg.messageType !== 'message')) {
-					continue;
-				}
-				const authorName = msg.from?.user?.displayName;
-
-				const ts = msg.createdDateTime || '';
+				const ts = msg?.createdDateTime || '';
 				// Newest-first feed: once we cross the `since` cursor we can stop entirely.
 				if (hasSince && ts) {
 					const tsMs = Date.parse(ts);
@@ -496,38 +491,61 @@ export class TeamsProvider implements IChatProvider {
 					}
 				}
 
-				const rawBody = msg.body?.content || '';
-				const isHtml = msg.body?.contentType === 'html';
-				const text = isHtml ? htmlToText(rawBody) : rawBody.trim();
-
-				yield {
-					externalId: msg.id,
-					channelExternalId,
-					authorExternalId: authorId,
-					// Display name rides on the message (`from.user.displayName`), so the bridge/UI can render
-					// a name without a separate resolveIdentity lookup. Falls back to the id at the client.
-					...(authorName ? { authorDisplayName: authorName } : {}),
-					text,
-					ts,
-					...(msg.lastModifiedDateTime && msg.lastModifiedDateTime !== msg.createdDateTime
-						? { editedTs: msg.lastModifiedDateTime }
-						: {}),
-				};
+				// Shared mapping (same as the webhook path): skips deleted/system/authorless messages,
+				// strips HTML bodies, carries authorDisplayName + editedTs + threadExternalId.
+				const mapped = mapGraphMessage(msg, channelExternalId);
+				if (!mapped) {
+					continue;
+				}
+				yield mapped;
 			}
 
 			next = page['@odata.nextLink'];
 		}
 	}
 
+	/**
+	 * Begin real-time updates for a channel/chat: creates the Graph change-notification
+	 * subscription delivering to the public /_connectors/teams/webhook endpoint.
+	 *
+	 * NOTE on dispatch: the live bridge's inbound delivery is DURABLE — the webhook resolves the
+	 * subscription from the connection document (Mongo) and ingests via bridgeCore, surviving
+	 * restarts. The `onMessage` handler here is therefore not the delivery path for bridged rooms;
+	 * this method exists to honor the IChatProvider contract for callers that manage their own
+	 * subscription lifecycle. The returned handle's stop() deletes the Graph subscription.
+	 *
+	 * Requires webhook mode (public URL + TEAMS_WEBHOOK_CLIENT_STATE_SECRET) — throws
+	 * `teams_webhook_not_configured` otherwise. A `shared: true` outcome (Graph already holds the
+	 * one-per-app+channel subscription) returns a no-op handle — delivery rides the existing
+	 * subscription's fan-out.
+	 */
 	async subscribe(
-		_connection: IProviderConnection,
-		_channelExternalId: string,
+		connection: IProviderConnection,
+		channelExternalId: string,
 		_onMessage: InboundMessageHandler,
 	): Promise<IProviderSubscription> {
-		// TODO(next milestone): Graph change-notifications (POST /subscriptions) keyed by
-		// (tenantId, channelId) and shared across users; T-12h renewal cron; lifecycle + `missed`
-		// backfill; polling fallback on a per-connection toggle. See spec §3.3.
-		throw new Error(NEXT_MILESTONE);
+		if (!isTeamsConfigured()) {
+			return notConfigured();
+		}
+		if (!isTeamsWebhookConfigured()) {
+			throw new Error('teams_webhook_not_configured');
+		}
+		const { tokens, onRefreshed } = tokensAndHook(connection);
+		const created = await createChannelSubscription(tokens, connection.connectionId, channelExternalId, onRefreshed);
+		if (created.shared) {
+			return {
+				stop: async (): Promise<void> => {
+					// Nothing owned to release — another connection owns the actual Graph subscription.
+				},
+			};
+		}
+		const { subscriptionId } = created;
+		return {
+			stop: async (): Promise<void> => {
+				const stopBundle = tokensAndHook(connection);
+				await deleteSubscription(stopBundle.tokens, subscriptionId, stopBundle.onRefreshed);
+			},
+		};
 	}
 
 	// ─── identity — NEXT MILESTONE ───────────────────────────────────────────────────────────────
@@ -648,7 +666,7 @@ export class TeamsProvider implements IChatProvider {
 			let name: string;
 			if (isGroup) {
 				// Prefer the group's own topic; fall back to the joined other-member names, then the id.
-				name = (chat.topic && chat.topic.trim()) || (otherNames.length ? otherNames.join(', ') : '') || chat.id;
+				name = chat.topic?.trim() || (otherNames.length ? otherNames.join(', ') : '') || chat.id;
 			} else {
 				// 1:1 → the single other member's name (or the id if Graph didn't expand a name).
 				name = otherNames[0] || chat.id;

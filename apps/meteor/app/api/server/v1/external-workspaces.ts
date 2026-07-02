@@ -27,6 +27,7 @@
  */
 import type { ExternalProvider } from '@rocket.chat/core-typings';
 
+import { bridgeMyChannel, listMyBridges, unbridgeMyChannel } from '../../../connectors/server/bridge/bridgeService';
 import {
 	disconnectMyConnection,
 	getProviderAuthUrl,
@@ -235,6 +236,82 @@ API.v1.addRoute(
 				return API.v1.failure('connection-not-found');
 			}
 			return API.v1.success({ disconnected: true });
+		},
+	},
+);
+
+// ─── live message bridge (mirror an external channel into a MatterChat room) ──────────────────
+
+API.v1.addRoute(
+	'external-workspaces.bridges',
+	{ authRequired: true },
+	{
+		async get() {
+			// Own-connections-only (enumerated inside listMyBridges via findByUserId).
+			const bridges = await listMyBridges(this.userId);
+			return API.v1.success({ ok: true as const, bridges });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.bridgeChannel',
+	{ authRequired: true },
+	{
+		async post() {
+			const { connectionId, channelExternalId, name } = this.bodyParams as {
+				connectionId?: string;
+				channelExternalId?: string;
+				name?: string;
+			};
+
+			if (!connectionId || typeof connectionId !== 'string') {
+				return API.v1.failure('connectionId is required');
+			}
+			if (!channelExternalId || typeof channelExternalId !== 'string') {
+				return API.v1.failure('channelExternalId is required');
+			}
+
+			// Own-connections-only (enforced inside bridgeMyChannel via ownership-scoped model methods).
+			const result = await bridgeMyChannel(this.userId, {
+				connectionId,
+				channelExternalId,
+				...(typeof name === 'string' ? { name } : {}),
+			});
+
+			// A real Graph/auth/config error is NOT swallowed: it rides back inside a 200 envelope so the
+			// panel can render it plainly (the RC REST client hides 4xx bodies — see api-client send()).
+			if ('error' in result) {
+				return API.v1.success({ ok: false as const, error: result.error, message: result.message, status: result.status });
+			}
+
+			return API.v1.success({ ok: true as const, bridge: result.bridge });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.unbridgeChannel',
+	{ authRequired: true },
+	{
+		async post() {
+			const { connectionId, channelExternalId } = this.bodyParams as { connectionId?: string; channelExternalId?: string };
+
+			if (!connectionId || typeof connectionId !== 'string') {
+				return API.v1.failure('connectionId is required');
+			}
+			if (!channelExternalId || typeof channelExternalId !== 'string') {
+				return API.v1.failure('channelExternalId is required');
+			}
+
+			// Own-connections-only (enforced inside unbridgeMyChannel via ownership-scoped model methods).
+			const result = await unbridgeMyChannel(this.userId, { connectionId, channelExternalId });
+
+			if ('error' in result) {
+				return API.v1.success({ ok: false as const, error: result.error, message: result.message, status: result.status });
+			}
+
+			return API.v1.success({ ok: true as const });
 		},
 	},
 );

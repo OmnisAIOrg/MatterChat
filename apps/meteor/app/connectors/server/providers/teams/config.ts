@@ -101,6 +101,54 @@ export const TEAMS_REDIRECT_PATH = '_teams/oauth/callback';
 // value is sent in the authorize request AND the token exchange (both call this function).
 export const redirectUri = (): string => String(process.env.TEAMS_OAUTH_REDIRECT_URI || '').trim() || Meteor.absoluteUrl(TEAMS_REDIRECT_PATH);
 
+// ─── change-notification webhook (the live message bridge's inbound transport) ────────────────
+
+/**
+ * Webhook mount prefix — OUTSIDE /api (RC's REST/Apps router owns `/api/*` and 404s custom
+ * connect-handlers there; mirrors the `/_crossfirm` / `/_teams/oauth` mounting precedent).
+ */
+export const TEAMS_WEBHOOK_ROUTE_PREFIX = '/_connectors/teams';
+export const TEAMS_WEBHOOK_NOTIFICATION_PATH = `${TEAMS_WEBHOOK_ROUTE_PREFIX}/webhook`;
+export const TEAMS_WEBHOOK_LIFECYCLE_PATH = `${TEAMS_WEBHOOK_ROUTE_PREFIX}/lifecycle`;
+
+/**
+ * The PUBLIC base URL Microsoft Graph must be able to reach to deliver change notifications
+ * (validation handshake + message/lifecycle POSTs). Admin setting first, env fallback, then the
+ * instance Site_Url — a deploy behind an ingress alias sets one of the first two.
+ *
+ *   Teams_Webhook_Public_Base_Url  ||  TEAMS_WEBHOOK_PUBLIC_BASE_URL  ||  Site_Url
+ */
+export function webhookPublicBaseUrl(): string {
+	const fromSetting = String(settings.get('Teams_Webhook_Public_Base_Url') || '').trim();
+	const fromEnv = String(process.env.TEAMS_WEBHOOK_PUBLIC_BASE_URL || '').trim();
+	const base = fromSetting || fromEnv || Meteor.absoluteUrl();
+	return base.replace(/\/$/, '');
+}
+
+/** Absolute URL Graph POSTs message notifications to. */
+export const webhookNotificationUrl = (): string => `${webhookPublicBaseUrl()}${TEAMS_WEBHOOK_NOTIFICATION_PATH}`;
+/** Absolute URL Graph POSTs lifecycle events to (required: our subscriptions outlive 1h). */
+export const webhookLifecycleUrl = (): string => `${webhookPublicBaseUrl()}${TEAMS_WEBHOOK_LIFECYCLE_PATH}`;
+
+/**
+ * The deploy-level secret that keys the per-subscription clientState HMAC (see
+ * webhookSecurity.deriveClientState). ENV ONLY — never a committed default, never an admin
+ * setting (it authenticates an UNAUTHENTICATED public endpoint, so it stays out of Mongo).
+ */
+export function webhookClientStateSecret(): string {
+	return String(process.env.TEAMS_WEBHOOK_CLIENT_STATE_SECRET || '').trim();
+}
+
+/**
+ * FAIL-CLOSED webhook gate: true only when the Teams connector itself is configured AND the
+ * clientState secret is set. Without it, NO subscription is created and NO webhook payload is
+ * processed — bridges still work outbound; inbound realtime simply stays off until the deploy
+ * provides `TEAMS_WEBHOOK_CLIENT_STATE_SECRET` (and, if needed, the public base URL).
+ */
+export function isTeamsWebhookConfigured(): boolean {
+	return isTeamsConfigured() && Boolean(webhookClientStateSecret());
+}
+
 /**
  * The admin-consent request URL. When a tenant admin hasn't granted the read scopes, point the
  * user's admin here once to grant tenant-wide consent for our multi-tenant app (spec §3.2). Uses
