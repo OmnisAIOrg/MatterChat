@@ -1,0 +1,137 @@
+name: E2E Gate
+
+# MatterChat's deterministic regression net (see docs/E2E-GATE.md).
+#
+# - pull_request → staging: builds the PR's image (same Dockerfile.alpha as the staging
+#   deploy, warmed by the same ECR build cache), boots app+Mongo, runs the SMOKE tier
+#   (~26 curated upstream tests). The check shows on the PR but is NOT a required check —
+#   the founder merges solo with approvals at 0; a red gate is a signal, not a block.
+# - workflow_dispatch: choose `full` to run the whole curated MIT-core suite (~592 tests).
+#
+# Spec curation lives in apps/meteor/tests/e2e/matterchat-suites.ts and
+# apps/meteor/playwright.matterchat.config.ts.
+
+on:
+  pull_request:
+    branches: [staging]
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Test tier to run'
+        type: choice
+        options:
+          - smoke
+          - full
+        default: smoke
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: matterchat
+  E2E_GATE_IMAGE: matterchat-e2e:pr
+
+concurrency:
+  group: e2e-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E ${{ (github.event_name == 'workflow_dispatch' && inputs.suite) || 'smoke' }} (CE, local boot)
+    # Meteor-from-source docker build needs the same large runner as the staging deploy.
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick Playwright project
+        id: suite
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.suite }}" = "full" ]; then
+            echo "project=mit-core" >> "$GITHUB_OUTPUT"
+          else
+            echo "project=smoke" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ECR login is only for the buildx REGISTRY CACHE (kept warm by every staging deploy
+      # build). If creds are unavailable the build still works — just slower (cold build).
+      - name: Configure AWS credentials (ECR build cache)
+        id: aws
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        if: steps.aws.outcome == 'success'
+        continue-on-error: true
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build MatterChat image (Dockerfile.alpha, cache-from staging ECR)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/meteor/.docker/Dockerfile.alpha
+          push: false
+          load: true
+          tags: ${{ env.E2E_GATE_IMAGE }}
+          build-args: |
+            NPM_TOKEN=${{ secrets.NPM_TOKEN }}
+          # read-only cache reuse; we deliberately do NOT cache-to (PR layers would thrash
+          # the staging deploy's cache)
+          cache-from: ${{ steps.ecr-login.outcome == 'success' && format('type=registry,ref={0}/{1}:cache', steps.ecr-login.outputs.registry, env.ECR_REPOSITORY) || '' }}
+
+      # start the stack without --wait so first-boot migrations overlap with the node setup
+      # below; the "Wait for app" step blocks on the healthcheck afterwards
+      - name: Boot app + Mongo (async)
+        run: docker compose -f docker-compose-e2e-gate.yml up -d rocketchat
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+        with:
+          cache-modules: true
+          install: true
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - uses: rharkor/caching-for-turbo@5d14fba18e450c09393333cfd4242e8b3cb455a6 # v2.4.2
+
+      # e2e specs import @rocket.chat/core-typings and @rocket.chat/random at runtime;
+      # build just those (plus their deps) instead of the whole workspace.
+      - name: Build workspace packages the tests import
+        run: yarn turbo run build --filter=@rocket.chat/core-typings --filter=@rocket.chat/random
+
+      - uses: ./.github/actions/setup-playwright
+
+      - name: Wait for app to be healthy
+        run: docker compose -f docker-compose-e2e-gate.yml up -d --wait rocketchat
+
+      - name: Run Playwright (${{ steps.suite.outputs.project }})
+        working-directory: ./apps/meteor
+        env:
+          CI: true
+          BASE_URL: http://localhost:3000
+          MONGO_URL: mongodb://localhost:27017/rocketchat?replicaSet=rs0&directConnection=true
+          PLAYWRIGHT_RETRIES: 1
+          # full audit runs should surface EVERY failure, not stop at upstream's cap of 5
+          E2E_MAX_FAILURES: ${{ steps.suite.outputs.project == 'mit-core' && '0' || '' }}
+        run: |
+          yarn prepare
+          yarn test:e2e --config=playwright.matterchat.config.ts --project=${{ steps.suite.outputs.project }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ steps.suite.outputs.project }}
+          # covers traces (.playwright) and the HTML report (.playwright-html)
+          path: apps/meteor/tests/e2e/.playwright*
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Show server logs on failure
+        if: failure()
+        run: docker compose -f docker-compose-e2e-gate.yml logs --tail=300 rocketchat mongo
