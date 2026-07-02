@@ -23,6 +23,12 @@ slashCommands.add({
 });
 
 slashCommands.add({
+	command: 'chi',
+	options: { description: 'Ask Chi (AI assistant) about this channel or its CasePro matter', params: 'question' },
+	providesPreview: false,
+});
+
+slashCommands.add({
 	command: 'folder',
 	options: { description: 'File this channel under a sidebar folder (no name removes it)', params: 'folder name' },
 	providesPreview: false,

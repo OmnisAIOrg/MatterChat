@@ -3,6 +3,14 @@
 
 **Last updated:** 2026-07-02 · **Branch:** `staging` (deploy is now BUILD-ONLY — ArgoCD owns the cluster; see below)
 
+## 🤖 2026-07-02 — /chi CHI assistant in-channel (branch `auto/chi-assistant`, code-complete; go-live is deploy-time only)
+`/chi <question>` in any channel asks the CHI agent (AI-Agents platform) about the channel's CasePro matter and posts the answer as a "Chi" bot user (immediate "Chi is thinking…" placeholder → edited in place with the answer or a friendly failure; ephemeral-only on usage/permission/not-configured misses; question/answer content never logged). New `server/lib/chi/` (config/context/client/bot/service) + `/chi` registration in `app/slashcommands-omnis/` + `chi-use` permission (seeded to admin/user/partner/attorney/paralegal). Config = env `CHI_API_URL`/`CHI_API_KEY`/`CHI_AGENT_ID`, all optional (unset ⇒ "CHI is not configured"). 28 unit tests green (`tests/unit/server/lib/chi/`), typecheck 0 errors, eslint clean.
+**Deploy-time to go live (documented in DECISIONS.md 2026-07-02, nothing executed):**
+1. Deploy `~/matterchat-mcp-v2`: create k8s secret `matterchat-mcp-v2-secrets` (per `kubernetes/staging/secrets.yaml.example`; point `MATTERCHAT_API_URL` at staging MatterChat), then create+push a `staging` branch (repo only has `master`) → `.github/workflows/deploy-staging.yaml` builds→ECR→applies → `matterchat-mcp-v2.stg-omnisai.io`.
+2. Register a CHI agent in AI-Agents wired to BOTH MCP servers (`casepro-mcp-v2.stg-omnisai.io` for matter data + `matterchat-mcp-v2.stg-omnisai.io/mcp` for boards/chat) with the legal-assistant system prompt (template in DECISIONS entry).
+3. Set `CHI_API_URL`/`CHI_API_KEY`/`CHI_AGENT_ID` on the MatterChat staging deployment — **via `MatterChat-New` `kubernetes/staging/` (ArgoCD owns the manifests; this repo's k8s dir is dead)**.
+**Must verify live before go-live:** the invoke contract in `server/lib/chi/client.ts` is the documented best guess (`POST /api/v1/chat/agents/{id}/chat`, dual `Authorization: Bearer` + `X-API-Key` send) — run the curl in that file's CONTRACT comment against staging AI-Agents, then pin route/header/field names.
+
 ## ✅ 2026-07-02 — Integration pass 4 SHIPPED to staging (verification + ship of pass 3's merges)
 Pass 3 merged 4 branches (`staging-typecheck-debt`, `boards-pagination-2`, `legal-hold-admin`, `teams-message-bridge`+`teams-oauth-connect`) but was cut off pre-verification. Pass 4 verified + fixed + shipped everything, plus merged **`auto/playwright-gate`** (PR #32 — the e2e gate + staging smoke workflows are now armed on `staging`):
 - **requireUid purge**: `boards-reports.ts` (2), `boards-matters.ts` (12, 3 effect-only deleted) **and `boards-views.ts` (5 — missed by the pass-3 notes, found because the harness views-family 500'd)** all switched to `this.userId`. The typed REST router CANNOT run `Meteor.userId()` — any future boards endpoint must use `this.userId` (see boards-forms.ts line-60 comment).
