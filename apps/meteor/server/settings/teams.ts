@@ -69,4 +69,15 @@ export const createTeamsSettings = () =>
 			i18nLabel: 'Teams_OAuth_Authority',
 			i18nDescription: 'Teams_OAuth_Authority_Description',
 		});
+
+		// PUBLIC base URL Microsoft Graph delivers change notifications to (the live message
+		// bridge's inbound webhook). Empty (default) → TEAMS_WEBHOOK_PUBLIC_BASE_URL env → Site_Url.
+		// The webhook additionally requires the env-only TEAMS_WEBHOOK_CLIENT_STATE_SECRET — with no
+		// secret, webhook mode stays entirely off (fail-closed); this URL alone enables nothing.
+		await this.add('Teams_Webhook_Public_Base_Url', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Teams_Webhook_Public_Base_Url',
+			i18nDescription: 'Teams_Webhook_Public_Base_Url_Description',
+		});
 	});

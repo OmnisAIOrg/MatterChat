@@ -16,10 +16,23 @@
  *
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md.
  */
+import { Meteor } from 'meteor/meteor';
+
 import './providerRegistry';
 import './methods';
+// Live message bridge: mounts /_connectors/teams/{webhook,lifecycle} (validation handshake +
+// fail-closed clientState verification; inert until TEAMS_WEBHOOK_CLIENT_STATE_SECRET is set).
+import './providers/teams/webhook';
+import { startBridgeRuntime } from './bridge/bridgeService';
 
 export type * from './ChatProvider';
 export { providerRegistry } from './providerRegistry';
 export * from './tokenCrypto';
 export * from './connectionService';
+export * from './bridge/bridgeService';
+
+// Boot the bridge runtime: registers the outbound afterSaveMessage mirror and starts the
+// subscription reconcile/renewal loop (renew at ~T-12h; recreate dropped subs; close gaps).
+Meteor.startup(() => {
+	startBridgeRuntime();
+});

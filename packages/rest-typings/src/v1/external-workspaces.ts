@@ -129,6 +129,33 @@ export type ExternalWorkspaceUnreadSummaryResult =
 /** The "mark read" result. Best-effort acknowledgement in the same 200 envelope. */
 export type ExternalWorkspaceMarkReadResult = { ok: true } | { ok: false; error: string; message: string; status?: number };
 
+/**
+ * One live-bridged channel: an external channel mirrored into a MatterChat room. `realtime` says
+ * how inbound arrives: `webhook` = this connection's own Graph subscription; `shared` = riding
+ * another connection's subscription for the same channel (fan-out); `none` = outbound-only (the
+ * deploy hasn't enabled webhook mode).
+ */
+export type ExternalWorkspaceBridge = {
+	connectionId: string;
+	provider: ExternalProvider;
+	channelExternalId: string;
+	name: string;
+	rid: string;
+	realtime: 'webhook' | 'shared' | 'none';
+	subscriptionExpiresAt?: string;
+};
+
+/** The "list bridges" result (always ok — enumerates the caller's own records only). */
+export type ExternalWorkspaceBridgesResult = { ok: true; bridges: ExternalWorkspaceBridge[] };
+
+/** The "bridge channel" result. Same 200-envelope discriminated union as the other views. */
+export type ExternalWorkspaceBridgeChannelResult =
+	| { ok: true; bridge: ExternalWorkspaceBridge }
+	| { ok: false; error: string; message: string; status?: number };
+
+/** The "unbridge channel" result. Same 200-envelope discriminated union as the other views. */
+export type ExternalWorkspaceUnbridgeChannelResult = { ok: true } | { ok: false; error: string; message: string; status?: number };
+
 export type ExternalWorkspacesEndpoints = {
 	'/v1/external-workspaces.list': {
 		GET: () => { connections: ExternalWorkspaceClientConnection[] };
@@ -165,5 +192,19 @@ export type ExternalWorkspacesEndpoints = {
 	// id (from .channels) OR a direct-chat id (from .directChats) — the provider detects which.
 	'/v1/external-workspaces.markRead': {
 		POST: (params: { connectionId: string; externalId: string }) => ExternalWorkspaceMarkReadResult;
+	};
+	// ─── live message bridge ───────────────────────────────────────────────────────────────────
+	// All of the caller's own bridged channels, across their connections.
+	'/v1/external-workspaces.bridges': {
+		GET: () => ExternalWorkspaceBridgesResult;
+	};
+	// Mirror one external channel/chat into a new MatterChat room (creates the room, tags it, opens
+	// the Graph change-notification subscription, seeds recent history). Idempotent per channel.
+	'/v1/external-workspaces.bridgeChannel': {
+		POST: (params: { connectionId: string; channelExternalId: string; name?: string }) => ExternalWorkspaceBridgeChannelResult;
+	};
+	// Stop mirroring one channel (deletes the subscription; the room + history stay).
+	'/v1/external-workspaces.unbridgeChannel': {
+		POST: (params: { connectionId: string; channelExternalId: string }) => ExternalWorkspaceUnbridgeChannelResult;
 	};
 };
