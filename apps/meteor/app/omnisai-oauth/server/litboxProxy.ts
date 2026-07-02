@@ -36,8 +36,8 @@ import { Accounts } from 'meteor/accounts-base';
 import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
+import { encryptToken, decryptToken, getKeyStatus, isEncryptedValue } from './litboxCrypto';
 import { SystemLogger } from '../../../server/lib/logger/system';
-import { encryptToken, decryptToken } from './litboxCrypto';
 
 // Parsed once at boot. Must be an absolute https URL; the proxy pins outbound calls to this origin.
 function getLitboxBase(): URL | null {
@@ -114,15 +114,49 @@ function badRequest(res: any): void {
 	res.end(JSON.stringify({ success: false, error: 'bad_request' }));
 }
 
+/**
+ * Lazy migration: records written before LITBOX_TOKEN_ENC_KEY was configured hold PLAINTEXT
+ * tokens. When a key is configured and a plaintext value is read, opportunistically re-write it
+ * encrypted — no big-bang migration script needed. Each update is guarded on the current
+ * plaintext value so a concurrent refresh-on-401 rotation is never clobbered by a stale write,
+ * and it is fire-and-forget so the request path takes no extra latency and a failed migration
+ * never breaks the proxy. Token values are NEVER logged (only userId + field name).
+ */
+function migrateLegacyPlaintextTokens(userId: string, stored: { sessionToken?: string; refreshToken?: string }): void {
+	if (getKeyStatus() !== 'configured') {
+		return;
+	}
+	for (const field of ['sessionToken', 'refreshToken'] as const) {
+		const value = stored[field];
+		if (!value || isEncryptedValue(value)) {
+			continue;
+		}
+		void Users.updateOne({ _id: userId, [`omnisaiLitbox.${field}`]: value }, { $set: { [`omnisaiLitbox.${field}`]: encryptToken(value) } })
+			.then((r) => {
+				if (r.modifiedCount) {
+					SystemLogger.info({ msg: 'LitBox credential lazily encrypted at rest', userId, field });
+				}
+			})
+			.catch((err) => SystemLogger.error({ msg: 'LitBox credential lazy encryption failed', userId, field, err }));
+	}
+}
+
 /** Resolve the MatterChat user from the raw resume/login token (bearer), standard hashed lookup. */
 async function resolveUser(rawToken: string): Promise<{ _id: string; litbox?: any } | null> {
 	const hashedToken = Accounts._hashLoginToken(rawToken);
-	const user = await Users.findOne({ 'services.resume.loginTokens.hashedToken': hashedToken }, { projection: { _id: 1, omnisaiLitbox: 1 } });
+	const user = await Users.findOne(
+		{ 'services.resume.loginTokens.hashedToken': hashedToken },
+		{ projection: { _id: 1, omnisaiLitbox: 1 } },
+	);
 	if (!user) {
 		return null;
 	}
-	// Decrypt the stored credential (no-op for legacy plaintext; see litboxCrypto).
+	// Decrypt the stored credential (no-op for legacy plaintext; see litboxCrypto), and
+	// opportunistically re-encrypt legacy plaintext at rest (see migrateLegacyPlaintextTokens).
 	const stored = (user as any).omnisaiLitbox;
+	if (stored) {
+		migrateLegacyPlaintextTokens(user._id, stored);
+	}
 	const litbox = stored
 		? { ...stored, sessionToken: decryptToken(stored.sessionToken), refreshToken: decryptToken(stored.refreshToken) }
 		: undefined;
@@ -151,7 +185,8 @@ async function refreshLitboxToken(userId: string, refreshToken: string): Promise
 	}
 	try {
 		const tokenRes = await fetch(endpoint.url, {
-			ignoreSsrfValidation: true, followRedirects: false, // issuer is admin-configured; followRedirects:false so a redirect can't carry the refresh_token off-origin
+			ignoreSsrfValidation: true,
+			followRedirects: false, // issuer is admin-configured; followRedirects:false so a redirect can't carry the refresh_token off-origin
 			method: 'POST',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 			body: new URLSearchParams({
@@ -248,7 +283,7 @@ async function handle(req: any, res: any): Promise<void> {
 	}
 
 	// 1. Auth: Authorization header ONLY (no cookie — CSRF defence).
-	const authHeader = String(req.headers['authorization'] || '');
+	const authHeader = String(req.headers.authorization || '');
 	if (!authHeader.startsWith('Bearer ')) {
 		return unauthorized(res);
 	}
@@ -306,10 +341,11 @@ async function handle(req: any, res: any): Promise<void> {
 
 		const forward = (bearer: string): Promise<any> =>
 			fetch(target.toString(), {
-				ignoreSsrfValidation: true, followRedirects: false, // origin pinned; followRedirects:false so serverFetch can't chase a redirect re-sending the credential
+				ignoreSsrfValidation: true,
+				followRedirects: false, // origin pinned; followRedirects:false so serverFetch can't chase a redirect re-sending the credential
 				method,
 				headers: { ...baseHeaders, authorization: `Bearer ${bearer}` },
-				...(body && body.length ? { body } : {}),
+				...(body?.length ? { body } : {}),
 				redirect: 'manual', // never follow a redirect carrying the credential off-origin
 			} as any);
 
@@ -342,6 +378,22 @@ async function handle(req: any, res: any): Promise<void> {
 		SystemLogger.error({ msg: 'LitBox proxy forward error', err });
 		res.writeHead(502, { 'Content-Type': 'application/json' });
 		res.end(JSON.stringify({ success: false, error: 'bad_gateway' }));
+	}
+}
+
+// Boot-time key visibility (ops): the credential store is only encrypted at rest once
+// LITBOX_TOKEN_ENC_KEY is set — be LOUD when it isn't, so a deploy without the secret is
+// caught in the logs instead of silently persisting plaintext.
+{
+	const keyStatus = getKeyStatus();
+	if (keyStatus === 'unset') {
+		SystemLogger.warn({
+			msg: 'LITBOX_TOKEN_ENC_KEY is not set — LitBox credentials are stored in PLAINTEXT at rest. Set LITBOX_TOKEN_ENC_KEY (base64-encoded 32 bytes) on this deployment to enable encryption; existing plaintext credentials then migrate lazily on next use.',
+		});
+	} else if (keyStatus === 'invalid') {
+		SystemLogger.error({
+			msg: 'LITBOX_TOKEN_ENC_KEY is set but INVALID (must be base64-encoded 32 bytes) — encryption is DISABLED: new LitBox credentials will be stored in PLAINTEXT and previously encrypted ones will fail to decrypt (users must re-link) until the key is fixed.',
+		});
 	}
 }
 
