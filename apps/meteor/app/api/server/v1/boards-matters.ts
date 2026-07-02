@@ -9,6 +9,7 @@ import {
 	isBoardsCaseProMatterSnapshotProps,
 	isBoardsCaseProListMattersProps,
 	isBoardsCaseProListStagesProps,
+	isBoardsCaseProStatusProps,
 	isBoardsMattersPlaybooksListProps,
 	isBoardsMattersPlaybooksSeedProps,
 	isBoardsMattersPlaybooksApplyProps,
@@ -21,6 +22,8 @@ import {
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
 
+import { caseProTransportDiagnostics } from '../../../../server/lib/boards/casepro';
+import { isCaseProEnabled } from '../../../../server/lib/boards/leads';
 import {
 	caseProClient,
 	ensureMattersBoard,
@@ -173,6 +176,10 @@ API.v1.post(
 		},
 	},
 	async function action() {
+		// seeding pulls (and re-homes) live CasePro rows — gate on the sync capability.
+		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
 		const { boardId } = this.bodyParams;
 		const result = await seedFromCasePro(this.userId, boardId);
 		return API.v1.success({ result });
@@ -180,7 +187,8 @@ API.v1.post(
 );
 
 // ---------------------------------------------------------------------------
-// boards.casepro.* — thin wrappers over caseProClient (read-through)
+// boards.casepro.* — thin wrappers over caseProClient (read-through), all gated
+// by boards-casepro-view (the permission existed but was previously unchecked).
 // ---------------------------------------------------------------------------
 
 API.v1.get(
@@ -195,7 +203,9 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		// authRequired covers the auth gate; the client owns CasePro org-scoping.
+		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
 		const { matterId } = this.queryParams;
 		const snapshot = await caseProClient.matterSnapshot(matterId);
 		return API.v1.success({ snapshot });
@@ -214,6 +224,9 @@ API.v1.get(
 		},
 	},
 	async function action() {
+		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
 		const { stageId, caseTypeId, query, limit, offset } = this.queryParams;
 		const { matters, total } = await caseProClient.listMatters({ stageId, caseTypeId, query, limit, offset });
 		return API.v1.success({ matters, total });
@@ -232,8 +245,32 @@ API.v1.get(
 		},
 	},
 	async function action() {
+		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
 		const stages = await caseProClient.listStages();
 		return API.v1.success({ stages });
+	},
+);
+
+API.v1.get(
+	'boards.casepro.status',
+	{
+		authRequired: true,
+		query: isBoardsCaseProStatusProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		// the admin "is the live wire actually live?" surface — settings-manage capability.
+		if (!(await hasPermissionAsync(this.userId, 'boards-manage-casepro-settings'))) {
+			return API.v1.unauthorized();
+		}
+		const status = caseProTransportDiagnostics();
+		return API.v1.success({ status: { ...status, enabled: isCaseProEnabled() } });
 	},
 );
 

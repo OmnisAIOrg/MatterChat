@@ -2,6 +2,7 @@ import { cronJobs } from '@rocket.chat/cron';
 import { MongoInternals } from 'meteor/mongo';
 
 import { automationEngineCron } from './automationEngine';
+import { boardsCaseProSyncCron } from './boardsCaseProSyncCron';
 import { boardsDigestCron } from './boardsDigestCron';
 import { boardsMattersCron } from './boardsMattersCron';
 
@@ -16,5 +17,8 @@ export const startCron = async () => {
 	// Boards Notifications (M8): email digest of unread board notifications — gated by
 	// Boards_Email_Digest_Enabled + SMTP, schedule from Boards_Email_Digest_Schedule.
 	await boardsDigestCron();
+	// CasePro live wire: periodic leads pull from CasePro intake (gated on
+	// CasePro_Enabled + a LIVE transport) + the boot-time misconfig warning.
+	await boardsCaseProSyncCron();
 	return started;
 };

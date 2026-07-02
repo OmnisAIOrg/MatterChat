@@ -22,7 +22,7 @@ import {
 	type IntakeCaptureInput,
 	type IntakePatchInput,
 } from './mapping-intake';
-import { resolveTransportFromConfig, type ICaseProTransport, type CaseProRow } from './transport';
+import { resolveTransportFromConfig, type ICaseProTransport, type CaseProRow, type CaseProCallContext } from './transport';
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 const onlyStrings = (rows: CaseProRow[], key = 'id'): string[] =>
@@ -233,29 +233,31 @@ export class CaseProClient {
 	/**
 	 * Capture: match-or-create a party (when no `partyId` supplied) then create the
 	 * `intake_questionnaires` row. Write-through — returns the created intake lead.
+	 * `ctx.actingUserId` (the MatterChat user driving the write) rides along as the
+	 * transport's advisory writer-identity header.
 	 */
-	async createIntake(input: IntakeCaptureInput): Promise<IntakeLead> {
+	async createIntake(input: IntakeCaptureInput, ctx?: CaseProCallContext): Promise<IntakeLead> {
 		let partyId = str(input.partyId);
 		if (!partyId) {
-			const created = await this.tx.create('parties', buildPartyRowFromCapture(input));
+			const created = await this.tx.create('parties', buildPartyRowFromCapture(input), ctx);
 			partyId = str(created.id);
 			if (!partyId) {
 				throw new Error('CasePro createIntake: party create returned no id');
 			}
 		}
-		const intake = await this.tx.create('intake_questionnaires', buildIntakeRowFromCapture(input, partyId));
+		const intake = await this.tx.create('intake_questionnaires', buildIntakeRowFromCapture(input, partyId), ctx);
 		return this.mapIntake(intake);
 	}
 
 	/** Drag a card -> write `intake_stage_id` (write-through). Returns the updated lead. */
-	async updateIntakeStage(intakeId: string, intakeStageId: string): Promise<IntakeLead> {
-		const intake = await this.tx.update('intake_questionnaires', intakeId, { intake_stage_id: intakeStageId });
+	async updateIntakeStage(intakeId: string, intakeStageId: string, ctx?: CaseProCallContext): Promise<IntakeLead> {
+		const intake = await this.tx.update('intake_questionnaires', intakeId, { intake_stage_id: intakeStageId }, ctx);
 		return this.mapIntake(intake);
 	}
 
 	/** Qualify / edit: patch intake_status / form_data / case_type / stage / etc. */
-	async updateIntake(intakeId: string, patch: IntakePatchInput): Promise<IntakeLead> {
-		const intake = await this.tx.update('intake_questionnaires', intakeId, buildIntakePatch(patch));
+	async updateIntake(intakeId: string, patch: IntakePatchInput, ctx?: CaseProCallContext): Promise<IntakeLead> {
+		const intake = await this.tx.update('intake_questionnaires', intakeId, buildIntakePatch(patch), ctx);
 		return this.mapIntake(intake);
 	}
 
@@ -264,17 +266,17 @@ export class CaseProClient {
 	 * then set `intake_questionnaires.matter_id`. Returns the new matter id + the
 	 * now matter-linked intake. ALL writes go through the one transport.
 	 */
-	async createMatterFromIntake(intakeId: string, extra: CaseProRow = {}): Promise<ConvertIntakeResult> {
+	async createMatterFromIntake(intakeId: string, extra: CaseProRow = {}, ctx?: CaseProCallContext): Promise<ConvertIntakeResult> {
 		const intakeRow = await this.tx.get('intake_questionnaires', intakeId);
 		if (!intakeRow) {
 			throw new Error(`CasePro createMatterFromIntake: intake ${intakeId} not found`);
 		}
-		const matter = await this.tx.create('matters', buildMatterRowFromIntake(intakeRow, extra));
+		const matter = await this.tx.create('matters', buildMatterRowFromIntake(intakeRow, extra), ctx);
 		const matterId = str(matter.id);
 		if (!matterId) {
 			throw new Error('CasePro createMatterFromIntake: matter create returned no id');
 		}
-		const updated = await this.tx.update('intake_questionnaires', intakeId, { matter_id: matterId });
+		const updated = await this.tx.update('intake_questionnaires', intakeId, { matter_id: matterId }, ctx);
 		const intake = await this.mapIntake(updated);
 		return { matterId, intake };
 	}

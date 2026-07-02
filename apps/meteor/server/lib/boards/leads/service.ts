@@ -988,9 +988,7 @@ export async function convertToMatter(uid: string, leadId: string): Promise<Conv
 		lead.contact?.fullName ||
 		[lead.contact?.firstName, lead.contact?.lastName].filter(Boolean).join(' ').trim() ||
 		`Matter from intake ${lead.caseproIntakeNumber ?? lead.caseproIntakeId}`;
-	const { matterId } = await caseProClient.createMatterFromIntake(lead.caseproIntakeId, {
-		matter_name: matterName,
-	});
+	const { matterId } = await caseProClient.createMatterFromIntake(lead.caseproIntakeId, { matter_name: matterName }, { actingUserId: uid });
 
 	// 2. ensure the matters board + bind a card for the new matter (reuse M3a service).
 	const { board: mattersBoard, lists: matterLists } = await ensureMattersBoard(uid);

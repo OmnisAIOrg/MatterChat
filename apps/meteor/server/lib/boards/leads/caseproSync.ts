@@ -329,7 +329,7 @@ export async function pushStage(uid: string, lead: ILead, newStatusListId: strin
 		return { synced: false, reason: 'stage-unmapped' };
 	}
 
-	const intake = await caseProClient.updateIntakeStage(lead.caseproIntakeId, intakeStageId);
+	const intake = await caseProClient.updateIntakeStage(lead.caseproIntakeId, intakeStageId, { actingUserId: uid });
 
 	// audit the upstream write on the lead's card (the local card/lead move is logged
 	// by the caller — this records that the stage was mirrored INTO CasePro).
@@ -371,7 +371,7 @@ export async function pushCreate(uid: string, lead: ILead, captureInput?: Intake
 	}
 
 	const input: IntakeCaptureInput = captureInput ?? deriveCaptureInput(lead);
-	const intake = await caseProClient.createIntake(input);
+	const intake = await caseProClient.createIntake(input, { actingUserId: uid });
 
 	await BoardsLeads.updateOne(
 		{ _id: lead._id },
@@ -446,7 +446,7 @@ export async function pushQualify(uid: string, lead: ILead, qualification: ILead
 		},
 	};
 
-	const intake = await caseProClient.updateIntake(lead.caseproIntakeId, patch);
+	const intake = await caseProClient.updateIntake(lead.caseproIntakeId, patch, { actingUserId: uid });
 
 	if (lead.boardId) {
 		await BoardsActivities.log({

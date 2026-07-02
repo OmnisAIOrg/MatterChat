@@ -155,6 +155,34 @@ const BoardsCaseProListStagesSchema = {
 
 export const isBoardsCaseProListStagesProps = ajvQuery.compile<BoardsCaseProListStagesProps>(BoardsCaseProListStagesSchema);
 
+type BoardsCaseProStatusProps = Record<string, never>;
+
+const BoardsCaseProStatusSchema = {
+	type: 'object',
+	properties: {},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsCaseProStatusProps = ajvQuery.compile<BoardsCaseProStatusProps>(BoardsCaseProStatusSchema);
+
+/** Live-wire diagnostics returned by boards.casepro.status (never carries the key itself). */
+export type CaseProStatusDTO = {
+	/** transport the config asked for. */
+	requested: 'stub' | 'rest';
+	/** transport actually in effect (rest only when fully configured). */
+	effective: 'stub' | 'rest';
+	authMode: string;
+	/** the configured gateway host. */
+	host?: string;
+	keyConfigured: boolean;
+	orgConfigured: boolean;
+	/** why a requested live transport degraded to the stub. */
+	reason?: string;
+	/** the CasePro_Enabled master switch. */
+	enabled: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // boards.matters.playbooks.* (M5)
 // ---------------------------------------------------------------------------
@@ -404,6 +432,9 @@ export type BoardsMattersEndpoints = {
 	};
 	'/v1/boards.casepro.listStages': {
 		GET: (params: BoardsCaseProListStagesProps) => { stages: CaseProStageDTO[] };
+	};
+	'/v1/boards.casepro.status': {
+		GET: (params: BoardsCaseProStatusProps) => { status: CaseProStatusDTO };
 	};
 
 	// M5 — Matters depth (playbooks / deadlines / reports / caseload)

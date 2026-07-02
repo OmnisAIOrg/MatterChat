@@ -2,19 +2,33 @@ import type { SettingValue } from '@rocket.chat/core-typings';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
 import { settings } from '../../../../app/settings/server';
+import { SystemLogger } from '../../logger/system';
 
 /**
- * CasePro read transport (M2 — CasePro READ CLIENT).
+ * CasePro transport (M2 read client + live wire).
  *
  * The transport is the ONLY thing that touches the wire. Everything above it
  * (mapping.ts, client.ts) is pure and never knows whether the rows came from a
- * stub or a live CasePro/MCP connector. Two implementations ship:
+ * stub or the live CasePro MCP gateway. Two implementations ship:
  *
- *  - {@link StubTransport}  — representative mock rows so a MatterSnapshot fully
+ *  - {@link StubTransport}       — representative mock rows so a MatterSnapshot fully
  *    renders with zero network/config. This is the DEFAULT.
- *  - {@link RestTransport}  — a Meteor server-side fetch against the configured
- *    CasePro base URL. Auth is stubbed with a clearly-marked TODO(auth) where the
- *    OIDC `sub`→users.id / KeyGate handshake plugs in.
+ *  - {@link McpGatewayTransport} — the LIVE transport: JSON-RPC `tools/call` against the
+ *    deployed casepro-mcp-v2 gateway (verified: POST {base}/mcp/v2, X-MCP-API-Key auth).
+ *    It refuses to exist without a key — no request ever leaves unauthenticated.
+ *
+ * Auth (route A — MCP gateway; `CasePro_Auth_Mode` = 'mcp-key'):
+ *  - `X-MCP-API-Key`     — shared secret from env `CASEPRO_MCP_API_KEY` ONLY. Secrets
+ *    are NEVER stored in Mongo settings; the key lives in the deploy env/sealed secret,
+ *    and must also be provisioned on the CasePro side (its auth service validates the
+ *    key via `${AUTH_SERVICE_URL}/api/mcp/keys/validate` — see casepro-mcp-v2/src/auth).
+ *  - `X-Organization-ID` — org scope, env `CASEPRO_ORG_ID` or setting `CasePro_Org_ID`
+ *    (carepro-mcp pattern: the header selects the org per request).
+ *  - `X-Acting-User`     — advisory writer-identity seam: the MatterChat user id that
+ *    triggered a write. The gateway's identity is the MCP key (service context); this
+ *    header is forward-compat for per-user attribution and is safe to ignore upstream.
+ *  - 'keygate' auth mode is a declared stub (route B) — selecting it falls back to the
+ *    stub transport with a warning until the KeyGate handshake lands.
  *
  * IMPORTANT (carried from every CasePro discovery doc): `aggregate_data` GROUP BY
  * is broken server-side. The transport NEVER aggregates — it returns raw rows and
@@ -41,6 +55,14 @@ export type CaseProQueryResult = {
 };
 
 /**
+ * Per-call acting context for writes. The live gateway authenticates as a service
+ * (the MCP key); this carries the MatterChat user who triggered the write so the
+ * transport can attach it as an advisory `X-Acting-User` header (writer-identity
+ * seam — CasePro-side created_by/updated_by stamping is a follow-up on their end).
+ */
+export type CaseProCallContext = { actingUserId?: string };
+
+/**
  * The transport contract. Five verbs: three reads, two writes. Reads mirror the
  * CasePro connector's `query_entities` / `get_entity` / `list_schema`; writes
  * mirror `create_entity` / `update_entity`. Intake sync (M3 leads) is the first
@@ -55,9 +77,9 @@ export interface ICaseProTransport {
 	/** Schema/diagnostics for an entity (admin "test connection"). */
 	listSchema(entity: string): Promise<unknown>;
 	/** Create a row for an entity; returns the created row WITH its server-assigned `id`. */
-	create(entity: string, data: CaseProRow): Promise<CaseProRow>;
+	create(entity: string, data: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow>;
 	/** Patch a row by id; returns the full updated row. */
-	update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow>;
+	update(entity: string, id: string, patch: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow>;
 }
 
 // ---------------------------------------------------------------------------
@@ -388,14 +410,14 @@ export class StubTransport implements ICaseProTransport {
 		return { entity, columns: Object.keys(sample), stub: true };
 	}
 
-	async create(entity: string, data: CaseProRow): Promise<CaseProRow> {
+	async create(entity: string, data: CaseProRow, _ctx?: CaseProCallContext): Promise<CaseProRow> {
 		const id = str(data.id) ?? this.nextId(entity);
 		const row: CaseProRow = { ...data, id };
 		this.table(entity).push(row);
 		return { ...row };
 	}
 
-	async update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow> {
+	async update(entity: string, id: string, patch: CaseProRow, _ctx?: CaseProCallContext): Promise<CaseProRow> {
 		const rows = this.table(entity);
 		const idx = rows.findIndex((r) => r.id === id);
 		if (idx === -1) {
@@ -408,116 +430,226 @@ export class StubTransport implements ICaseProTransport {
 }
 
 // ---------------------------------------------------------------------------
-// REST transport — Meteor server-side fetch against the configured CasePro URL.
+// Live transport — JSON-RPC `tools/call` against the casepro-mcp-v2 gateway.
 // ---------------------------------------------------------------------------
 
 /**
- * Live transport skeleton. The exact CasePro/MCP REST verb shapes are confirmed
- * at integration time; this maps the three transport verbs onto a query/get/schema
- * surface and leaves auth as the single marked seam.
+ * Derive the JSON-RPC endpoint + pinned host from the configured base URL.
+ * Egress policy (enforced here, once): https ONLY, no credentials in the URL,
+ * and the returned `host` is the SSRF allow-list — requests may reach that host
+ * and nothing else. A base URL already ending in `/mcp` or `/mcp/v2` is used
+ * as-is; a bare origin gets `/mcp/v2` appended (both paths verified live on
+ * casepro-mcp-v2.stg-omnisai.io — each answers 401 without a key).
  */
-export class RestTransport implements ICaseProTransport {
-	constructor(private readonly baseUrl: string) {}
+export function deriveMcpEndpoint(baseUrl: string): { endpoint: string; host: string } {
+	const url = new URL(baseUrl); // throws on garbage — caller treats that as "not configured"
+	if (url.protocol !== 'https:') {
+		throw new Error(`CasePro transport: base URL must be https (got ${url.protocol}//)`);
+	}
+	if (url.username || url.password) {
+		throw new Error('CasePro transport: base URL must not embed credentials');
+	}
+	const path = url.pathname.replace(/\/+$/, '');
+	const endpointPath = /\/mcp(\/v2)?$/.test(path) ? path : `${path}/mcp/v2`;
+	return { endpoint: `${url.origin}${endpointPath}`, host: url.hostname };
+}
 
-	/**
-	 * TODO(auth): plug the CentralizedAuth OIDC `sub` → CasePro `users.id` /
-	 * KeyGate service-key handshake in here. For now this returns only the JSON
-	 * content-type header. When wired, read the auth mode + secret from settings
-	 * (`CasePro_Auth_Mode`, service-key/bearer/cookie) and attach the right header.
-	 */
-	private authHeaders(): Record<string, string> {
-		return { 'Content-Type': 'application/json' };
+type McpFilter = { field: string; operator: '=' | 'in'; value: unknown };
+
+/** Map the transport's equality/`$in` filter map onto the gateway's `filters` array. */
+export function buildMcpFilters(filter?: Record<string, unknown>): McpFilter[] {
+	if (!filter) {
+		return [];
+	}
+	return Object.entries(filter).map(([field, cond]) => {
+		if (cond !== null && typeof cond === 'object' && '$in' in (cond as Record<string, unknown>)) {
+			return { field, operator: 'in' as const, value: (cond as { $in: unknown[] }).$in };
+		}
+		return { field, operator: '=' as const, value: cond };
+	});
+}
+
+/** The gateway's tool payload envelope (parsed from the MCP content block). */
+type McpToolPayload = {
+	success?: boolean;
+	error?: unknown;
+	records?: unknown;
+	record?: unknown;
+	created?: unknown;
+	updated?: unknown;
+	found?: boolean;
+} & Record<string, unknown>;
+
+export type McpGatewayTransportConfig = {
+	/** Gateway base URL (https). `/mcp/v2` is appended unless the path already targets `/mcp[/v2]`. */
+	baseUrl: string;
+	/** The X-MCP-API-Key shared secret — REQUIRED; construction refuses without it. */
+	apiKey: string;
+	/** The X-Organization-ID scope sent on every call (env CASEPRO_ORG_ID / setting CasePro_Org_ID). */
+	orgId?: string;
+	/** Injectable fetch (tests). Defaults to @rocket.chat/server-fetch. */
+	fetchFn?: typeof fetch;
+};
+
+/**
+ * Live CasePro transport speaking the deployed casepro-mcp-v2 gateway protocol:
+ * JSON-RPC 2.0 `tools/call` over POST, five meta-verbs (query_entities / get_entity /
+ * list_schema / create_entity / update_entity). Every request carries the auth headers
+ * (see the module docblock) and is pinned to the configured host — SSRF validation is
+ * ON with a single-host allow-list, and redirects are never followed (a redirect would
+ * re-send the key elsewhere).
+ *
+ * Pagination note: the gateway's `query_entities` supports `limit` but NOT `offset`,
+ * and reports `count` = returned rows (no true total). `query()` emulates offset by
+ * over-fetching (`offset + limit`) and slicing, and signals "maybe more" through the
+ * returned `total` so the client's accumulate loop pages correctly.
+ */
+export class McpGatewayTransport implements ICaseProTransport {
+	private readonly endpoint: string;
+
+	private readonly host: string;
+
+	private readonly apiKey: string;
+
+	private readonly orgId?: string;
+
+	private readonly fetchFn: typeof fetch;
+
+	private seq = 0;
+
+	constructor(config: McpGatewayTransportConfig) {
+		if (!config.apiKey) {
+			// hard refusal — this transport NEVER sends an unauthenticated request.
+			throw new Error('CasePro transport: refusing to start without CASEPRO_MCP_API_KEY');
+		}
+		const { endpoint, host } = deriveMcpEndpoint(config.baseUrl);
+		this.endpoint = endpoint;
+		this.host = host;
+		this.apiKey = config.apiKey;
+		this.orgId = config.orgId;
+		this.fetchFn = config.fetchFn ?? fetch;
 	}
 
-	private url(path: string): string {
-		const base = this.baseUrl.replace(/\/+$/, '');
-		return `${base}/${path.replace(/^\/+/, '')}`;
+	/** One JSON-RPC `tools/call` round-trip; returns the parsed tool payload. */
+	private async callTool(tool: string, args: Record<string, unknown>, ctx?: CaseProCallContext): Promise<McpToolPayload> {
+		this.seq += 1;
+		const res = await this.fetchFn(this.endpoint, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-MCP-API-Key': this.apiKey,
+				...(this.orgId ? { 'X-Organization-ID': this.orgId } : {}),
+				...(ctx?.actingUserId ? { 'X-Acting-User': ctx.actingUserId } : {}),
+			},
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: this.seq,
+				method: 'tools/call',
+				params: { name: tool, arguments: args },
+			}),
+			// strict egress: SSRF checks ON, allow-list = the configured host only, and
+			// 3xx responses are returned as-is (never re-send the key to a Location).
+			ignoreSsrfValidation: false,
+			allowList: this.host,
+			followRedirects: false,
+		});
+		if (res.status >= 300 && res.status < 400) {
+			throw new Error(`CasePro ${tool}: gateway redirected (${res.status}) — refusing to follow`);
+		}
+		if (!res.ok) {
+			throw new Error(`CasePro ${tool} failed: HTTP ${res.status}`);
+		}
+		const rpc = (await res.json()) as {
+			error?: { code?: number; message?: string };
+			result?: { isError?: boolean; content?: { type?: string; text?: string }[] };
+		};
+		if (rpc.error) {
+			throw new Error(`CasePro ${tool} failed: ${rpc.error.message ?? `JSON-RPC ${rpc.error.code ?? 'error'}`}`);
+		}
+		const text = rpc.result?.content?.[0]?.text;
+		if (typeof text !== 'string') {
+			throw new Error(`CasePro ${tool} failed: gateway returned no content block`);
+		}
+		try {
+			return JSON.parse(text) as McpToolPayload;
+		} catch {
+			throw new Error(`CasePro ${tool} failed: gateway content is not JSON`);
+		}
+	}
+
+	/** Throw the payload's error unless it reports success. */
+	private assertOk(payload: McpToolPayload, label: string): void {
+		if (payload.success === false || payload.error !== undefined) {
+			const detail = typeof payload.error === 'string' ? payload.error : JSON.stringify(payload.error ?? 'unknown error');
+			throw new Error(`CasePro ${label} failed: ${detail.slice(0, 500)}`);
+		}
+	}
+
+	private asRow(value: unknown): CaseProRow | null {
+		return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as CaseProRow) : null;
 	}
 
 	async query(entity: string, query: CaseProQuery = {}): Promise<CaseProQueryResult> {
-		const res = await fetch(this.url('query_entities'), {
-			method: 'POST',
-			headers: this.authHeaders(),
-			body: JSON.stringify({ entity, filter: query.filter ?? {}, select: query.select, limit: query.limit, offset: query.offset }),
-			// TODO(auth): once a per-org allow-list exists, prefer `allowList` over disabling SSRF checks.
-			ignoreSsrfValidation: true,
+		const offset = query.offset ?? 0;
+		const limit = query.limit ?? 50;
+		// the gateway has no offset — over-fetch and slice (see class docblock).
+		const wireLimit = offset + limit;
+		const filters = buildMcpFilters(query.filter);
+		const payload = await this.callTool('query_entities', {
+			entity,
+			...(filters.length ? { filters } : {}),
+			...(query.select?.length ? { select: query.select } : {}),
+			limit: wireLimit,
 		});
-		if (!res.ok) {
-			throw new Error(`CasePro query(${entity}) failed: ${res.status}`);
-		}
-		const json = (await res.json()) as { data?: CaseProRow[]; total?: number };
-		return { data: json.data ?? [], total: json.total ?? json.data?.length ?? 0 };
+		this.assertOk(payload, `query(${entity})`);
+		const records = Array.isArray(payload.records) ? (payload.records as CaseProRow[]) : [];
+		const data = records.slice(offset, offset + limit);
+		// No true total from the gateway: report an exact total when the page came back
+		// short, or `+1` past what we returned while full pages keep coming so the
+		// client's `out.length >= total` accumulate loop knows to fetch the next page.
+		const mayHaveMore = records.length >= wireLimit;
+		return { data, total: offset + data.length + (mayHaveMore ? 1 : 0) };
 	}
 
 	async get(entity: string, id: string): Promise<CaseProRow | null> {
-		const res = await fetch(this.url('get_entity'), {
-			method: 'POST',
-			headers: this.authHeaders(),
-			body: JSON.stringify({ entity, id }),
-			ignoreSsrfValidation: true,
-		});
-		if (!res.ok) {
-			if (res.status === 404) {
-				return null;
-			}
-			throw new Error(`CasePro get(${entity}, ${id}) failed: ${res.status}`);
+		const payload = await this.callTool('get_entity', { entity, id });
+		const record = this.asRow(payload.record);
+		if (record) {
+			return record;
 		}
-		const json = (await res.json()) as { data?: CaseProRow | null };
-		return json.data ?? null;
+		// not-found comes back as success:false + "<entity> with id <id> not found".
+		const errText = typeof payload.error === 'string' ? payload.error : '';
+		if (payload.found === false || /not found/i.test(errText)) {
+			return null;
+		}
+		this.assertOk(payload, `get(${entity}, ${id})`);
+		return null;
 	}
 
 	async listSchema(entity: string): Promise<unknown> {
-		const res = await fetch(this.url('list_schema'), {
-			method: 'POST',
-			headers: this.authHeaders(),
-			body: JSON.stringify({ entity }),
-			ignoreSsrfValidation: true,
-		});
-		if (!res.ok) {
-			throw new Error(`CasePro listSchema(${entity}) failed: ${res.status}`);
-		}
-		return res.json();
+		const payload = await this.callTool('list_schema', { entity });
+		this.assertOk(payload, `listSchema(${entity})`);
+		return payload;
 	}
 
-	/**
-	 * TODO(auth): write verbs need the SAME CentralizedAuth/KeyGate handshake the
-	 * reads do (see {@link authHeaders}), plus — critically — a writer identity so
-	 * CasePro stamps created_by/updated_by. Until that seam is wired, the live
-	 * transport must NOT be used for writes in production; the stub backs all tests.
-	 */
-	async create(entity: string, data: CaseProRow): Promise<CaseProRow> {
-		const res = await fetch(this.url('create_entity'), {
-			method: 'POST',
-			headers: this.authHeaders(),
-			body: JSON.stringify({ entity, data }),
-			ignoreSsrfValidation: true,
-		});
-		if (!res.ok) {
-			throw new Error(`CasePro create(${entity}) failed: ${res.status}`);
+	async create(entity: string, data: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow> {
+		const payload = await this.callTool('create_entity', { entity, data }, ctx);
+		this.assertOk(payload, `create(${entity})`);
+		const row = this.asRow(payload.created) ?? this.asRow(payload.record);
+		if (!row || !str(row.id)) {
+			throw new Error(`CasePro create(${entity}) returned no created row`);
 		}
-		const json = (await res.json()) as { data?: CaseProRow };
-		if (!json.data) {
-			throw new Error(`CasePro create(${entity}) returned no row`);
-		}
-		return json.data;
+		return row;
 	}
 
-	async update(entity: string, id: string, patch: CaseProRow): Promise<CaseProRow> {
-		const res = await fetch(this.url('update_entity'), {
-			// PATCH semantics; some connectors expose this as POST update_entity — keep POST to match the read verbs.
-			method: 'POST',
-			headers: this.authHeaders(),
-			body: JSON.stringify({ entity, id, patch }),
-			ignoreSsrfValidation: true,
-		});
-		if (!res.ok) {
-			throw new Error(`CasePro update(${entity}, ${id}) failed: ${res.status}`);
+	async update(entity: string, id: string, patch: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow> {
+		const payload = await this.callTool('update_entity', { entity, id, data: patch }, ctx);
+		this.assertOk(payload, `update(${entity}, ${id})`);
+		const row = this.asRow(payload.updated) ?? this.asRow(payload.record);
+		if (!row) {
+			throw new Error(`CasePro update(${entity}, ${id}) returned no updated row`);
 		}
-		const json = (await res.json()) as { data?: CaseProRow };
-		if (!json.data) {
-			throw new Error(`CasePro update(${entity}, ${id}) returned no row`);
-		}
-		return json.data;
+		return row;
 	}
 }
 
@@ -525,25 +657,95 @@ export class RestTransport implements ICaseProTransport {
 // Selection — default to the stub, override by setting or env flag.
 // ---------------------------------------------------------------------------
 
+export type CaseProTransportDiagnostics = {
+	/** what the config asked for. */
+	requested: 'stub' | 'rest';
+	/** what actually resolves (rest only when the live wire is fully configured). */
+	effective: 'stub' | 'rest';
+	authMode: string;
+	/** the configured gateway host (never the key). */
+	host?: string;
+	keyConfigured: boolean;
+	orgConfigured: boolean;
+	/** why a requested live transport degraded to the stub. */
+	reason?: string;
+};
+
 /**
- * Resolve the configured transport. Default is the stub. The REST transport is
- * selected only when explicitly chosen AND a base URL is present.
+ * Inspect the live-wire config WITHOUT constructing a transport. Shared by
+ * {@link resolveTransportFromConfig}, the boot warning, the `boards.casepro.status`
+ * admin endpoint, and the leads-pull cron ("is the transport live?"). Never
+ * returns or logs the key itself.
+ */
+export function caseProTransportDiagnostics(): CaseProTransportDiagnostics {
+	const requested = (process.env.CASEPRO_TRANSPORT || safeGetSetting<string>('CasePro_Transport') || 'stub').toLowerCase() as
+		| 'stub'
+		| 'rest';
+	const authMode = (process.env.CASEPRO_AUTH_MODE || safeGetSetting<string>('CasePro_Auth_Mode') || 'mcp-key').toLowerCase();
+	const baseUrl = process.env.CASEPRO_BASE_URL || safeGetSetting<string>('CasePro_Base_URL') || '';
+	const apiKey = process.env.CASEPRO_MCP_API_KEY || '';
+	const orgId = process.env.CASEPRO_ORG_ID || safeGetSetting<string>('CasePro_Org_ID') || '';
+
+	const base: Omit<CaseProTransportDiagnostics, 'effective' | 'reason'> = {
+		requested: requested === 'rest' ? 'rest' : 'stub',
+		authMode,
+		keyConfigured: Boolean(apiKey),
+		orgConfigured: Boolean(orgId),
+	};
+
+	if (requested !== 'rest') {
+		return { ...base, effective: 'stub' };
+	}
+	if (authMode === 'keygate') {
+		// route B stub — declared but not implemented; never silently sends the wrong auth.
+		return { ...base, effective: 'stub', reason: 'auth mode "keygate" is not implemented yet (use "mcp-key")' };
+	}
+	if (authMode !== 'mcp-key') {
+		return { ...base, effective: 'stub', reason: `unknown CasePro_Auth_Mode "${authMode}"` };
+	}
+	if (!baseUrl) {
+		return { ...base, effective: 'stub', reason: 'no base URL configured (CASEPRO_BASE_URL / CasePro_Base_URL)' };
+	}
+	let host: string;
+	try {
+		({ host } = deriveMcpEndpoint(baseUrl));
+	} catch (err) {
+		return { ...base, effective: 'stub', reason: err instanceof Error ? err.message : 'invalid base URL' };
+	}
+	if (!apiKey) {
+		// the loud refusal: live requested, no key — we NEVER send unauthenticated.
+		return { ...base, host, effective: 'stub', reason: 'CASEPRO_MCP_API_KEY is not set — refusing unauthenticated live calls' };
+	}
+	return { ...base, host, effective: 'rest' };
+}
+
+/**
+ * Resolve the configured transport. Default is the stub. The live MCP-gateway
+ * transport is selected only when explicitly chosen AND fully configured
+ * (https base URL + env `CASEPRO_MCP_API_KEY`); anything less degrades to the
+ * stub with a LOUD warning — never an unauthenticated live call.
  *
  * Selection order:
  *   1. env CASEPRO_TRANSPORT = 'stub' | 'rest'   (test / local override)
  *   2. setting CasePro_Transport (select, default 'stub')
  */
 export function resolveTransportFromConfig(): ICaseProTransport {
-	const envChoice = process.env.CASEPRO_TRANSPORT;
-	const settingChoice = safeGetSetting<string>('CasePro_Transport');
-	const choice = (envChoice || settingChoice || 'stub').toLowerCase();
-
-	if (choice === 'rest') {
-		const baseUrl = process.env.CASEPRO_BASE_URL || safeGetSetting<string>('CasePro_Base_URL') || '';
-		if (baseUrl) {
-			return new RestTransport(baseUrl);
-		}
-		// Misconfigured (rest selected, no URL) — fall back to stub so snapshots still render.
+	const diag = caseProTransportDiagnostics();
+	if (diag.effective === 'rest') {
+		return new McpGatewayTransport({
+			baseUrl: process.env.CASEPRO_BASE_URL || safeGetSetting<string>('CasePro_Base_URL') || '',
+			apiKey: process.env.CASEPRO_MCP_API_KEY || '',
+			orgId: process.env.CASEPRO_ORG_ID || safeGetSetting<string>('CasePro_Org_ID') || undefined,
+		});
+	}
+	if (diag.requested === 'rest') {
+		SystemLogger.warn({
+			msg: 'CasePro LIVE transport requested but not usable — serving STUB data instead',
+			reason: diag.reason,
+			authMode: diag.authMode,
+			keyConfigured: diag.keyConfigured,
+			orgConfigured: diag.orgConfigured,
+		});
 	}
 	return new StubTransport();
 }
