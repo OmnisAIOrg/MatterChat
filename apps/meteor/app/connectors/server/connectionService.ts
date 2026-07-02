@@ -15,6 +15,7 @@ import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.cha
 import { ExternalWorkspaceConnections } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
+import { SystemLogger } from '../../../server/lib/logger/system';
 import type {
 	IProviderChannel,
 	IProviderConnection,
@@ -27,7 +28,7 @@ import { providerRegistry } from './providerRegistry';
 import { isGoogleConfigured } from './providers/google/config';
 import { isSlackConfigured } from './providers/slack/config';
 import { isTeamsConfigured } from './providers/teams/config';
-import { decryptCredentials } from './tokenCrypto';
+import { decryptCredentials, encryptCredentials } from './tokenCrypto';
 
 /**
  * Client-safe projection of a connection — everything EXCEPT the encrypted credential blob.
@@ -169,6 +170,14 @@ export type ListChannelsError = {
  * Rebuild the runtime IProviderConnection (decrypted credentials) from a stored connection doc.
  * Returns null when the credential blob can't be decrypted (missing/wrong key) so the caller forces
  * a reconnect rather than calling the provider with a garbage token.
+ *
+ * TOKEN-REFRESH PERSISTENCE: the connection carries an `onCredentialsRefreshed` hook. When the
+ * provider's HTTP client refreshes the access token mid-call (proactively before expiry, or on a
+ * live 401), it forwards the refreshed fields here; we merge them over the ORIGINAL decrypted blob
+ * (preserving provider-specific extras like homeAccountId/externalAadUserId — but NOT the
+ * runtime-spliced externalOrgId, which lives on the doc), re-encrypt, and persist. Without this,
+ * every call after access-token expiry would re-run the refresh grant, and a ROTATED refresh token
+ * would be silently dropped.
  */
 function toProviderConnection(doc: IExternalWorkspaceConnection): IProviderConnection | null {
 	const credentials = decryptCredentials<IProviderCredentials>(doc.credentials);
@@ -180,6 +189,21 @@ function toProviderConnection(doc: IExternalWorkspaceConnection): IProviderConne
 		ownerUserId: doc.userId,
 		externalOrgId: doc.externalOrgId,
 		credentials: { ...credentials, externalOrgId: doc.externalOrgId },
+		onCredentialsRefreshed: async (refreshed: IProviderCredentials): Promise<void> => {
+			// Merge over the ORIGINAL blob (pre-splice) so nothing provider-specific is lost, and only
+			// fields the refresh actually produced are overwritten (a response may omit a rotated token).
+			const merged: IProviderCredentials = { ...credentials };
+			if (refreshed.accessToken) {
+				merged.accessToken = refreshed.accessToken;
+			}
+			if (refreshed.refreshToken) {
+				merged.refreshToken = refreshed.refreshToken;
+			}
+			if (refreshed.expiresAt !== undefined) {
+				merged.expiresAt = refreshed.expiresAt;
+			}
+			await ExternalWorkspaceConnections.updateCredentialsById(doc._id, encryptCredentials(merged));
+		},
 	};
 }
 
@@ -262,10 +286,9 @@ export async function listMyChannels(
 		const provider = providerRegistry.get(doc.provider);
 		const channels = await provider.listChannels(connection);
 
-		// NOTE on token refresh: the Graph client refreshes the access token in place on a 401 during the
-		// call (so this listing still succeeds), but the provider's listChannels does not yet surface the
-		// refreshed token back to us to re-persist (the graphClient's onTokensRefreshed hook is wired in
-		// the read/post milestone). A re-refresh on the next call is the only cost — not a correctness bug.
+		// Token refresh: when the Graph client refreshed the access token mid-call (proactively or on a
+		// 401), the connection's onCredentialsRefreshed hook (attached in toProviderConnection) already
+		// re-encrypted + persisted the rotated tokens on the connection document.
 
 		// Group the flat channel list by team (the provider qualifies names as `Team / Channel`).
 		const byTeam = new Map<string, ClientChannel[]>();
@@ -294,7 +317,8 @@ export async function listMyChannels(
 	} catch (err) {
 		// DO NOT swallow — surface the real Graph/auth error so the UI (and we) can see if listChannels
 		// works against real Teams. graphFetch throws `graph_error:<code>:<message>` and stamps `status`.
-		return providerError(err, 'list_channels_failed');
+		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
+		return providerErrorMarkingAuthDeath(doc, err, 'list_channels_failed');
 	}
 }
 
@@ -371,7 +395,8 @@ export async function listMyDirectChats(
 		return { chats: clientChats, connection: toClientConnection(doc) };
 	} catch (err) {
 		// DO NOT swallow — surface the real Graph/auth error (e.g. Chat.Read missing) so the UI can show it.
-		return providerError(err, 'list_direct_chats_failed');
+		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
+		return providerErrorMarkingAuthDeath(doc, err, 'list_direct_chats_failed');
 	}
 }
 
@@ -412,7 +437,8 @@ export async function listMyMembers(
 		return { members: clientMembers, connection: toClientConnection(doc) };
 	} catch (err) {
 		// DO NOT swallow — surface the real Graph/auth error (e.g. TeamMember.Read.All missing) for the UI.
-		return providerError(err, 'list_members_failed');
+		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
+		return providerErrorMarkingAuthDeath(doc, err, 'list_members_failed');
 	}
 }
 
@@ -426,6 +452,27 @@ function providerError(err: unknown, fallbackCode: string): ProviderError {
 	const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : undefined;
 	const graphCode = (err as { graphCode?: string })?.graphCode;
 	return { error: graphCode ? `graph_error:${graphCode}` : message.split(':')[0] || fallbackCode, message, status };
+}
+
+/**
+ * REFRESH-TOKEN DEATH (spec §3.7): external-tenant Conditional Access / admin revoke / password
+ * change silently kills the refresh token — the token endpoint answers `invalid_grant` (Teams:
+ * thrown as `teams_token_refresh_failed:invalid_grant`). When a provider call died that way, flip
+ * the connection to `error` so the rail/list surfaces "reconnect" instead of retrying a dead grant
+ * forever. Best-effort (a failed status write never masks the original error), and then normalizes
+ * the error exactly like providerError.
+ */
+async function providerErrorMarkingAuthDeath(doc: IExternalWorkspaceConnection, err: unknown, fallbackCode: string): Promise<ProviderError> {
+	const message = err instanceof Error ? err.message : String(err);
+	if (message.includes('invalid_grant')) {
+		try {
+			await ExternalWorkspaceConnections.setStatusById(doc._id, 'error');
+			SystemLogger.warn({ msg: 'External connection refresh token dead — marked error (reconnect required)', connectionId: doc._id });
+		} catch {
+			// Status write failed — the original provider error below still tells the story.
+		}
+	}
+	return providerError(err, fallbackCode);
 }
 
 /** A single message as returned to the client by the messages view (provider-native ids). */
@@ -499,7 +546,8 @@ export async function listMyMessages(
 		}
 		return { messages, connection: toClientConnection(loaded.doc) };
 	} catch (err) {
-		return providerError(err, 'list_messages_failed');
+		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
+		return providerErrorMarkingAuthDeath(loaded.doc, err, 'list_messages_failed');
 	}
 }
 
@@ -540,7 +588,8 @@ export async function sendMyMessage(
 		const { externalId } = await provider.postMessage(loaded.connection, opts.channelExternalId, { text: opts.text });
 		return { externalId, connection: toClientConnection(loaded.doc) };
 	} catch (err) {
-		return providerError(err, 'send_message_failed');
+		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
+		return providerErrorMarkingAuthDeath(loaded.doc, err, 'send_message_failed');
 	}
 }
 

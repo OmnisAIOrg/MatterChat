@@ -103,10 +103,13 @@ export type GraphFetchOptions = {
 	headers?: Record<string, string>;
 };
 
+/** Refresh this long before `expiresAt` (clock-skew margin). We still react to live 401s. */
+const EXPIRY_SKEW_MS = 60_000;
+
 /**
- * Single Graph call with 401-refresh-once + 429/503 backoff. `tokens` is mutated in place when a
- * refresh happens; `onTokensRefreshed` (if provided) is awaited so the caller can persist them.
- * Returns the parsed JSON body (or `{}` for empty 2xx responses).
+ * Single Graph call with proactive refresh-before-expiry + 401-refresh-once + 429/503 backoff.
+ * `tokens` is mutated in place when a refresh happens; `onTokensRefreshed` (if provided) is awaited
+ * so the caller can persist them. Returns the parsed JSON body (or `{}` for empty 2xx responses).
  */
 export async function graphFetch<T = any>(
 	url: string,
@@ -116,6 +119,20 @@ export async function graphFetch<T = any>(
 ): Promise<T> {
 	const method = options.method || 'GET';
 	let refreshedOnce = false;
+
+	// PROACTIVE refresh (spec §3.7 "refresh before expiry"): when the access token is at/near expiry
+	// and we hold a refresh token, refresh BEFORE burning a doomed request + 401 round-trip. Failure
+	// here is the same refresh-token-death signal as the 401 path — it throws (invalid_grant etc.) so
+	// the caller can mark the connection for reconnect. A stale/absent `expiresAt` still falls back to
+	// the live-401 handling below.
+	if (tokens.expiresAt && tokens.refreshToken && Date.now() >= tokens.expiresAt - EXPIRY_SKEW_MS) {
+		refreshedOnce = true;
+		const refreshed = await refreshAccessToken(tokens.refreshToken);
+		tokens.accessToken = refreshed.accessToken;
+		tokens.refreshToken = refreshed.refreshToken;
+		tokens.expiresAt = refreshed.expiresAt;
+		await onTokensRefreshed?.(refreshed);
+	}
 
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
 		const res = await fetch(url, {

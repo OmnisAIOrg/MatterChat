@@ -172,6 +172,17 @@ export interface IProviderConnection {
 	externalOrgId: string;
 	/** Decrypted credentials, valid for the duration of the call. */
 	credentials: IProviderCredentials;
+	/**
+	 * OPTIONAL persistence hook the CALLER (connectionService / future BridgeCore) attaches when it
+	 * builds the connection. A provider that refreshes tokens mid-call (e.g. the Teams Graph client's
+	 * 401-refresh / refresh-before-expiry) invokes it with the refreshed credential FIELDS
+	 * (accessToken / rotated refreshToken / expiresAt) so the caller can merge + re-encrypt + persist
+	 * them on the connection document — providers still NEVER touch Mongo themselves. Absent hook =
+	 * refresh stays in-memory for the call (the pre-existing behavior); best-effort by design.
+	 *
+	 * ADDITIVE, optional — no frozen method signature changes; existing providers/callers ignore it.
+	 */
+	onCredentialsRefreshed?: (refreshed: IProviderCredentials) => void | Promise<void>;
 }
 
 /** Result of verifying/establishing credentials against the external workspace. */

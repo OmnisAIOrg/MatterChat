@@ -44,17 +44,35 @@ export type TeamsConfig = {
 	authority: string;
 };
 
-/** Read the live Teams config from settings. */
+/**
+ * Read the live Teams config: admin setting first, `TEAMS_*` env var as the fallback.
+ *
+ * ENV FALLBACKS (mirrors the OmnisAI OIDC pattern in apps/meteor/app/omnisai-oauth/server/index.ts,
+ * `settings.get(...) || process.env.OMNISAI_OIDC_*`): a k8s/ArgoCD deploy can carry the whole Teams
+ * config — INCLUDING the client secret — as container env without an admin ever pasting it into
+ * Mongo. The admin setting, when set, still wins (a live UI override). Secrets are env-or-admin
+ * only; never committed, never defaulted.
+ *
+ *   Teams_Enabled              || TEAMS_ENABLED=true
+ *   Teams_OAuth_Client_Id      || TEAMS_OAUTH_CLIENT_ID
+ *   Teams_OAuth_Tenant_Id      || TEAMS_OAUTH_TENANT_ID
+ *   Teams_OAuth_Client_Secret  || TEAMS_OAUTH_CLIENT_SECRET
+ *   Teams_OAuth_Authority      || TEAMS_OAUTH_AUTHORITY   (default /organizations)
+ *   (redirect URI)             || TEAMS_OAUTH_REDIRECT_URI (default Site_Url + /_teams/oauth/callback)
+ */
 export function getTeamsConfig(): TeamsConfig {
+	const env = (name: string): string => String(process.env[name] || '').trim();
+	const settingStr = (id: string): string => String(settings.get(id) || '').trim();
 	return {
-		enabled: Boolean(settings.get('Teams_Enabled')),
-		clientId: String(settings.get('Teams_OAuth_Client_Id') || '').trim(),
-		tenantId: String(settings.get('Teams_OAuth_Tenant_Id') || '').trim(),
-		clientSecret: String(settings.get('Teams_OAuth_Client_Secret') || '').trim(),
+		enabled: Boolean(settings.get('Teams_Enabled')) || env('TEAMS_ENABLED') === 'true',
+		clientId: settingStr('Teams_OAuth_Client_Id') || env('TEAMS_OAUTH_CLIENT_ID'),
+		tenantId: settingStr('Teams_OAuth_Tenant_Id') || env('TEAMS_OAUTH_TENANT_ID'),
+		clientSecret: settingStr('Teams_OAuth_Client_Secret') || env('TEAMS_OAUTH_CLIENT_SECRET'),
 		// Strip a trailing slash so `${authority}/oauth2/...` is always well-formed.
-		authority: String(settings.get('Teams_OAuth_Authority') || 'https://login.microsoftonline.com/organizations')
-			.trim()
-			.replace(/\/$/, ''),
+		authority: (settingStr('Teams_OAuth_Authority') || env('TEAMS_OAUTH_AUTHORITY') || 'https://login.microsoftonline.com/organizations').replace(
+			/\/$/,
+			'',
+		),
 	};
 }
 
@@ -78,7 +96,10 @@ export const tokenEndpoint = (c: TeamsConfig): string => `${c.authority}/oauth2/
  * there. Built from the instance Site_Url so prod/staging/dev each produce their own registered URI.
  */
 export const TEAMS_REDIRECT_PATH = '_teams/oauth/callback';
-export const redirectUri = (): string => Meteor.absoluteUrl(TEAMS_REDIRECT_PATH);
+// `TEAMS_OAUTH_REDIRECT_URI` env override for deploys where the externally-registered URI differs
+// from Site_Url (e.g. an ingress alias). Must STILL match the Entra registration exactly — the same
+// value is sent in the authorize request AND the token exchange (both call this function).
+export const redirectUri = (): string => String(process.env.TEAMS_OAUTH_REDIRECT_URI || '').trim() || Meteor.absoluteUrl(TEAMS_REDIRECT_PATH);
 
 /**
  * The admin-consent request URL. When a tenant admin hasn't granted the read scopes, point the

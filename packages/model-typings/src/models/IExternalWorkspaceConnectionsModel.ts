@@ -44,4 +44,11 @@ export interface IExternalWorkspaceConnectionsModel extends IBaseModel<IExternal
 	): Promise<{ _id: string; result: UpdateResult }>;
 	/** Delete a connection only if it belongs to `userId`. */
 	deleteByIdAndUserId(id: string, userId: string): Promise<DeleteResult>;
+	/**
+	 * Persist a re-encrypted credential blob after a mid-call token refresh (rotated refresh token /
+	 * new access token). Touches ONLY the credentials field — status/scopes/name are untouched.
+	 */
+	updateCredentialsById(id: string, credentials: IEncryptedTokenRef): Promise<UpdateResult>;
+	/** Flip a connection's lifecycle status (e.g. `error` on refresh-token death — spec §3.7). */
+	setStatusById(id: string, status: IExternalWorkspaceConnection['status']): Promise<UpdateResult>;
 }

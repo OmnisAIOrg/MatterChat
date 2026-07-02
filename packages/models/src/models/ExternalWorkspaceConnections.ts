@@ -1,4 +1,4 @@
-import type { ExternalProvider, IExternalWorkspaceConnection, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
+import type { ExternalProvider, IEncryptedTokenRef, IExternalWorkspaceConnection, RocketChatRecordDeleted } from '@rocket.chat/core-typings';
 import type { IExternalWorkspaceConnectionsModel, UpsertExternalWorkspaceConnection } from '@rocket.chat/model-typings';
 import type { Collection, DeleteResult, Db, FindCursor, IndexDescription, UpdateResult } from 'mongodb';
 
@@ -88,5 +88,20 @@ export class ExternalWorkspaceConnectionsRaw extends BaseRaw<IExternalWorkspaceC
 	deleteByIdAndUserId(id: string, userId: string): Promise<DeleteResult> {
 		// Ownership-scoped delete: a user can only remove their OWN connection.
 		return this.deleteOne({ _id: id, userId });
+	}
+
+	/**
+	 * Persist a re-encrypted credential blob after a mid-call token refresh (rotated refresh token /
+	 * new access token). Touches ONLY the credentials field — status/scopes/name are untouched. Not
+	 * ownership-scoped: the caller (connectionService) already loaded the doc ownership-scoped and
+	 * passes its own `_id` back.
+	 */
+	updateCredentialsById(id: string, credentials: IEncryptedTokenRef): Promise<UpdateResult> {
+		return this.updateOne({ _id: id }, { $set: { credentials } });
+	}
+
+	/** Flip a connection's lifecycle status (e.g. `error` on refresh-token death — spec §3.7). */
+	setStatusById(id: string, status: IExternalWorkspaceConnection['status']): Promise<UpdateResult> {
+		return this.updateOne({ _id: id }, { $set: { status } });
 	}
 }

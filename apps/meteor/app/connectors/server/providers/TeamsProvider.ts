@@ -67,7 +67,7 @@ import type {
 	IVerifiedConnection,
 } from '../ChatProvider';
 import { GRAPH_BASE, getTeamsConfig, isTeamsConfigured, tokenEndpoint, redirectUri, TEAMS_DELEGATED_SCOPES } from './teams/config';
-import type { GraphTokens } from './teams/graphClient';
+import type { GraphTokens, RefreshedTokens } from './teams/graphClient';
 import { graphFetch, graphGetAll } from './teams/graphClient';
 
 // Mounting the OAuth routes is a side-effect of importing this provider, so booting the connectors
@@ -170,6 +170,35 @@ function tokensFromCredentials(credentials: IProviderCredentials): GraphTokens {
 	};
 }
 
+/** The graphClient's refresh callback shape, forwarded to the connection's persistence hook. */
+type OnRefreshed = (t: RefreshedTokens) => void | Promise<void>;
+
+/**
+ * Build BOTH the mutable GraphTokens bundle AND the refresh-persistence hook for one call chain.
+ * When the caller attached `connection.onCredentialsRefreshed` (connectionService does), every
+ * graphFetch/graphGetAll in the chain gets a hook that forwards the refreshed fields (new access
+ * token, ROTATED refresh token, expiresAt) so the caller can merge + re-encrypt + persist them.
+ * The provider itself still never touches Mongo. No hook attached → undefined (in-memory refresh
+ * only — the pre-existing behavior).
+ */
+function tokensAndHook(connection: IProviderConnection): { tokens: GraphTokens; onRefreshed?: OnRefreshed } {
+	const tokens = tokensFromCredentials(connection.credentials);
+	const { onCredentialsRefreshed } = connection;
+	if (!onCredentialsRefreshed) {
+		return { tokens };
+	}
+	const onRefreshed: OnRefreshed = async (t) => {
+		try {
+			await onCredentialsRefreshed({ accessToken: t.accessToken, refreshToken: t.refreshToken, expiresAt: t.expiresAt });
+		} catch (err) {
+			// Persistence is best-effort: the in-memory refresh already succeeded, so the live call
+			// proceeds; the only cost of a failed persist is a re-refresh on a later call.
+			SystemLogger.warn({ msg: 'Teams refreshed-token persistence failed (call continues)', err: String(err) });
+		}
+	};
+	return { tokens, onRefreshed };
+}
+
 /** The presence enum the IProviderDirectChat/IProviderMember contract carries (frontend renders a dot). */
 type ProviderPresence = 'active' | 'away' | 'dnd' | 'offline';
 
@@ -208,7 +237,11 @@ const PRESENCE_BATCH_SIZE = 100;
  * resolves to an EMPTY map — presence is purely additive, so a failure simply leaves it undefined on
  * every chat/member rather than breaking the list. Batched to respect the endpoint's id-count cap.
  */
-async function fetchPresences(tokens: GraphTokens, userIds: string[]): Promise<Map<string, ProviderPresence>> {
+async function fetchPresences(
+	tokens: GraphTokens,
+	userIds: string[],
+	onRefreshed?: OnRefreshed,
+): Promise<Map<string, ProviderPresence>> {
 	const out = new Map<string, ProviderPresence>();
 	// Dedupe + drop empties so a batch is never wasted on a blank/duplicate id.
 	const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
@@ -220,10 +253,15 @@ async function fetchPresences(tokens: GraphTokens, userIds: string[]): Promise<M
 	try {
 		for (let i = 0; i < ids.length; i += PRESENCE_BATCH_SIZE) {
 			const batch = ids.slice(i, i + PRESENCE_BATCH_SIZE);
-			const res = await graphFetch<{ value?: GraphPresence[] }>(`${GRAPH_BASE}/communications/getPresencesByUserId`, tokens, {
-				method: 'POST',
-				body: { ids: batch },
-			});
+			const res = await graphFetch<{ value?: GraphPresence[] }>(
+				`${GRAPH_BASE}/communications/getPresencesByUserId`,
+				tokens,
+				{
+					method: 'POST',
+					body: { ids: batch },
+				},
+				onRefreshed,
+			);
 			for (const p of res.value || []) {
 				if (!p?.id) {
 					continue;
@@ -356,12 +394,12 @@ export class TeamsProvider implements IChatProvider {
 		if (!isTeamsConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 
 		type GraphTeam = { id: string; displayName?: string };
 		type GraphChannel = { id: string; displayName?: string; description?: string; membershipType?: string };
 
-		const teams = await graphGetAll<GraphTeam>(`${GRAPH_BASE}/me/joinedTeams?$select=id,displayName`, tokens);
+		const teams = await graphGetAll<GraphTeam>(`${GRAPH_BASE}/me/joinedTeams?$select=id,displayName`, tokens, onRefreshed);
 
 		const channels: IProviderChannel[] = [];
 		for (const team of teams) {
@@ -371,6 +409,7 @@ export class TeamsProvider implements IChatProvider {
 			const teamChannels = await graphGetAll<GraphChannel>(
 				`${GRAPH_BASE}/teams/${encodeURIComponent(team.id)}/channels?$select=id,displayName,description,membershipType`,
 				tokens,
+				onRefreshed,
 			);
 			for (const ch of teamChannels) {
 				if (!ch?.id) {
@@ -411,7 +450,7 @@ export class TeamsProvider implements IChatProvider {
 		if (!isTeamsConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 		// Channel composite (`teamId|channelId`) → /teams/.../channels/...; bare chat id → /chats/...
 		const baseUrl = messagesBaseUrl(channelExternalId);
 
@@ -434,7 +473,7 @@ export class TeamsProvider implements IChatProvider {
 		let pages = 0;
 
 		while (next && pages < MAX_MESSAGE_PAGES) {
-			const page = await graphFetch<{ value?: GraphMessage[]; '@odata.nextLink'?: string }>(next, tokens);
+			const page = await graphFetch<{ value?: GraphMessage[]; '@odata.nextLink'?: string }>(next, tokens, {}, onRefreshed);
 			pages++;
 
 			for (const msg of page.value || []) {
@@ -525,14 +564,19 @@ export class TeamsProvider implements IChatProvider {
 		if (typeof text !== 'string' || !text.trim()) {
 			throw new Error('teams_empty_message');
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 		// Channel composite (`teamId|channelId`) → /teams/.../channels/...; bare chat id → /chats/...
 		const baseUrl = messagesBaseUrl(channelExternalId);
 
-		const created = await graphFetch<{ id?: string }>(`${baseUrl}/messages`, tokens, {
-			method: 'POST',
-			body: { body: { content: text } },
-		});
+		const created = await graphFetch<{ id?: string }>(
+			`${baseUrl}/messages`,
+			tokens,
+			{
+				method: 'POST',
+				body: { body: { content: text } },
+			},
+			onRefreshed,
+		);
 		if (!created?.id) {
 			throw new Error('teams_post_no_message_id');
 		}
@@ -555,9 +599,9 @@ export class TeamsProvider implements IChatProvider {
 		if (!isTeamsConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 		// The signed-in user's own id — so we can name a 1:1 by the OTHER member, not by ourselves.
-		const me = await graphFetch<{ id?: string }>(`${GRAPH_BASE}/me?$select=id`, tokens);
+		const me = await graphFetch<{ id?: string }>(`${GRAPH_BASE}/me?$select=id`, tokens, {}, onRefreshed);
 		const myId = me?.id || '';
 
 		type GraphChatMember = {
@@ -579,7 +623,7 @@ export class TeamsProvider implements IChatProvider {
 			viewpoint?: { lastMessageReadDateTime?: string } | null;
 		};
 
-		const chats = await graphGetAll<GraphChat>(`${GRAPH_BASE}/me/chats?$expand=members,lastMessagePreview`, tokens);
+		const chats = await graphGetAll<GraphChat>(`${GRAPH_BASE}/me/chats?$expand=members,lastMessagePreview`, tokens, onRefreshed);
 
 		const out: IProviderDirectChat[] = [];
 		// Collect the 1:1 counterpart ids so we can resolve presence in ONE batched call after the loop.
@@ -651,7 +695,7 @@ export class TeamsProvider implements IChatProvider {
 		// ids. Best-effort — if Presence.Read isn't consented (or it throttles) this returns an empty map
 		// and presence stays undefined on every chat. Matched back onto the 1:1 rows by counterpart id.
 		if (oneOnOneOtherIds.length) {
-			const presences = await fetchPresences(tokens, oneOnOneOtherIds);
+			const presences = await fetchPresences(tokens, oneOnOneOtherIds, onRefreshed);
 			if (presences.size) {
 				for (const chat of chats) {
 					if (!chat?.id || chat.chatType !== 'oneOnOne') {
@@ -687,7 +731,7 @@ export class TeamsProvider implements IChatProvider {
 		if (!isTeamsConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 
 		type GraphTeam = { id: string };
 		type GraphTeamMember = {
@@ -697,7 +741,7 @@ export class TeamsProvider implements IChatProvider {
 			email?: string;
 		};
 
-		const teams = await graphGetAll<GraphTeam>(`${GRAPH_BASE}/me/joinedTeams?$select=id`, tokens);
+		const teams = await graphGetAll<GraphTeam>(`${GRAPH_BASE}/me/joinedTeams?$select=id`, tokens, onRefreshed);
 
 		// Dedupe people across teams by Entra user id (one person is a member of many teams).
 		const byUserId = new Map<string, IProviderMember>();
@@ -705,7 +749,11 @@ export class TeamsProvider implements IChatProvider {
 			if (!team?.id) {
 				continue;
 			}
-			const teamMembers = await graphGetAll<GraphTeamMember>(`${GRAPH_BASE}/teams/${encodeURIComponent(team.id)}/members`, tokens);
+			const teamMembers = await graphGetAll<GraphTeamMember>(
+				`${GRAPH_BASE}/teams/${encodeURIComponent(team.id)}/members`,
+				tokens,
+				onRefreshed,
+			);
 			for (const m of teamMembers) {
 				const externalId = m?.userId;
 				if (!externalId || byUserId.has(externalId)) {
@@ -727,7 +775,7 @@ export class TeamsProvider implements IChatProvider {
 		// undefined on every member — purely additive, never breaks the list.
 		const memberIds = [...byUserId.keys()];
 		if (memberIds.length) {
-			const presences = await fetchPresences(tokens, memberIds);
+			const presences = await fetchPresences(tokens, memberIds, onRefreshed);
 			for (const [id, presence] of presences) {
 				const member = byUserId.get(id);
 				if (member) {
@@ -763,17 +811,22 @@ export class TeamsProvider implements IChatProvider {
 		if (isChannelComposite(externalId)) {
 			return;
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 		// markChatReadForUser needs the acting user's Entra id in the body.
-		const me = await graphFetch<{ id?: string }>(`${GRAPH_BASE}/me?$select=id`, tokens);
+		const me = await graphFetch<{ id?: string }>(`${GRAPH_BASE}/me?$select=id`, tokens, {}, onRefreshed);
 		const myId = me?.id;
 		if (!myId) {
 			return;
 		}
-		await graphFetch(`${GRAPH_BASE}/chats/${encodeURIComponent(externalId)}/markChatReadForUser`, tokens, {
-			method: 'POST',
-			body: { user: { id: myId } },
-		});
+		await graphFetch(
+			`${GRAPH_BASE}/chats/${encodeURIComponent(externalId)}/markChatReadForUser`,
+			tokens,
+			{
+				method: 'POST',
+				body: { user: { id: myId } },
+			},
+			onRefreshed,
+		);
 	}
 
 	/**
@@ -792,7 +845,7 @@ export class TeamsProvider implements IChatProvider {
 		if (!isTeamsConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 
 		type GraphChat = {
 			id?: string;
@@ -805,6 +858,7 @@ export class TeamsProvider implements IChatProvider {
 		const chats = await graphGetAll<GraphChat>(
 			`${GRAPH_BASE}/me/chats?$select=id,chatType,lastMessagePreview,viewpoint`,
 			tokens,
+			onRefreshed,
 		);
 
 		let unreadCount = 0;
