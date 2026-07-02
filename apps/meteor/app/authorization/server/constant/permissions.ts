@@ -48,6 +48,9 @@ export const permissions = [
 	{ _id: 'leave-p', roles: ['admin', 'user', 'federated-external', 'bot', 'anonymous', 'app'] },
 	{ _id: 'logout-other-user', roles: ['admin'] },
 	{ _id: 'manage-assets', roles: ['admin'] },
+	// MatterChat: set/clear litigation holds on rooms (blocks retention pruning + manual purge).
+	// Admin-only by default; grant to `partner` deliberately via the admin UI if the firm wants it.
+	{ _id: 'manage-legal-hold', roles: ['admin'] },
 	{ _id: 'manage-email-inbox', roles: ['admin'] },
 	{ _id: 'manage-emoji', roles: ['admin'] },
 	{ _id: 'manage-user-status', roles: ['admin'] },

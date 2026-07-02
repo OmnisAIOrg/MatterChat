@@ -1,5 +1,6 @@
 import type { IRocketChatRecord } from './IRocketChatRecord';
 import type { IUser } from './IUser';
+import type { IServerEventLegalHoldChanged } from './ServerAudit/IAuditLegalHoldChangedEvent';
 import type { IServerEventPermissionChanged } from './ServerAudit/IAuditPermissionChangedEvent';
 import type { IServerEventRoleChanged } from './ServerAudit/IAuditRoleChangedEvent';
 import type {
@@ -80,6 +81,7 @@ export interface IServerEvents {
 	'user.changed': IServerEventUserChanged;
 	'role.changed': IServerEventRoleChanged;
 	'permission.changed': IServerEventPermissionChanged;
+	'room.legalHold.changed': IServerEventLegalHoldChanged;
 }
 
 type KeyValuePair = { key: string; value: any };
