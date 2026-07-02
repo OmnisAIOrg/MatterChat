@@ -77,7 +77,9 @@ const middleware = async function (req: express.Request, res: ServerResponse, ne
 };
 
 // Listen to incoming SAML http requests
-WebApp.connectHandlers.use(
+// The bundled WebApp typings only accept (path, handler), but the runtime (express-style) accepts
+// a middleware chain — type-level widening only, same call at runtime.
+(WebApp.connectHandlers.use as unknown as (...handlers: unknown[]) => void)(
 	/^\/_saml/,
 	bodyParser.json(),
 	express.urlencoded({

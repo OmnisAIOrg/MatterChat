@@ -431,7 +431,10 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const text = typeof this.queryParams.text === 'string' ? this.queryParams.text : '';
+		// No `query` schema is declared for this route, so `this.queryParams` types as `never`;
+		// widen it locally (type-level only — same property read at runtime).
+		const { text: rawText } = this.queryParams as { text?: unknown };
+		const text = typeof rawText === 'string' ? rawText : '';
 		const { cards } = await searchCards(this.userId, text);
 		return API.v1.success({ cards, count: cards.length });
 	},

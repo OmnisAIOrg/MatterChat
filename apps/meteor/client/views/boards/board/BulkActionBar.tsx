@@ -4,7 +4,7 @@ import { GenericMenu } from '@rocket.chat/ui-client';
 import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
 import { useEndpoint, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { ReactElement } from 'react';
+import type { ComponentProps, ReactElement } from 'react';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -107,7 +107,9 @@ const BulkActionBar = ({ boardId, selectedIds, lists, onClearSelection }: BulkAc
 				{t('Boards_Bulk_Selected', { defaultValue: '{{count}} selected', count: selectedIds.length })}
 			</Box>
 
-			<ButtonGroup mie={8}>
+			{/* ButtonGroup's props type doesn't declare Box spacing props; cast keeps the exact same
+			    props at runtime (type-level only). */}
+			<ButtonGroup {...({ mie: 8 } as unknown as ComponentProps<typeof ButtonGroup>)}>
 				<Button small disabled={busy} onClick={() => run({ action: 'complete', completed: true })}>
 					<Icon name='circle-check' size='x16' mie={4} />
 					{t('Complete', { defaultValue: 'Complete' })}
@@ -142,7 +144,15 @@ const BulkActionBar = ({ boardId, selectedIds, lists, onClearSelection }: BulkAc
 				/>
 			</Box>
 
-			<Button small nude disabled={busy} onClick={onClearSelection} title={t('Clear_selection', { defaultValue: 'Clear selection' })}>
+			{/* `nude` is not in this Fuselage version's Button props type; cast keeps the exact same
+			    props at runtime (type-level only). */}
+			<Button
+				small
+				{...({ nude: true } as unknown as ComponentProps<typeof Button>)}
+				disabled={busy}
+				onClick={onClearSelection}
+				title={t('Clear_selection', { defaultValue: 'Clear selection' })}
+			>
 				<Icon name='cross' size='x16' />
 			</Button>
 		</Box>

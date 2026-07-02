@@ -434,7 +434,9 @@ export class TeamsProvider implements IChatProvider {
 		let pages = 0;
 
 		while (next && pages < MAX_MESSAGE_PAGES) {
-			const page = await graphFetch<{ value?: GraphMessage[]; '@odata.nextLink'?: string }>(next, tokens);
+			// Explicit annotation (not just the generic) — breaks the `page` -> `next` -> `page`
+			// inference cycle tsc reports as TS7022.
+			const page: { value?: GraphMessage[]; '@odata.nextLink'?: string } = await graphFetch(next, tokens);
 			pages++;
 
 			for (const msg of page.value || []) {

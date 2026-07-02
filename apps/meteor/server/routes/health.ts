@@ -9,6 +9,12 @@ import { SystemLogger } from '../lib/logger/system';
 
 const { mongo } = MongoInternals.defaultRemoteCollectionDriver();
 
+// `WebApp.rawHandlers` exists at runtime but is missing from the bundled WebApp typings —
+// type-level widening only, same object at runtime.
+const { rawHandlers } = WebApp as unknown as {
+	rawHandlers: { use: (path: string, handler: (req: IncomingMessage, res: ServerResponse) => void) => void };
+};
+
 export function pingMongo() {
 	return mongo.db.command({ ping: 1 });
 }
@@ -26,7 +32,7 @@ function setDefaultHeaders(res: ServerResponse) {
  * Maintained for backward compatibility. Behaves like a simple liveness probe.
  * @deprecated Update infrastructure to use /livez and /readyz.
  */
-WebApp.rawHandlers.use('/health', (_req: IncomingMessage, res: ServerResponse) => {
+rawHandlers.use('/health', (_req: IncomingMessage, res: ServerResponse) => {
 	setDefaultHeaders(res);
 
 	res.writeHead(200);
@@ -119,7 +125,7 @@ async function performHealthChecks(histogram: ReturnType<typeof monitorEventLoop
  * Performs a non-destructive health check. A failure here indicates a pod is
  * unrecoverable and should be restarted.
  */
-WebApp.rawHandlers.use('/livez', async (_req: IncomingMessage, res: ServerResponse) => {
+rawHandlers.use('/livez', async (_req: IncomingMessage, res: ServerResponse) => {
 	const { statusCode, body, isHealthy } = await performHealthChecks(eventLoopHistogramLiveness);
 
 	if (!isHealthy) {
@@ -137,7 +143,7 @@ WebApp.rawHandlers.use('/livez', async (_req: IncomingMessage, res: ServerRespon
  * Performs a destructive health check, resetting the histogram for the next interval.
  * A failure tells the orchestrator to stop sending traffic to this instance.
  */
-WebApp.rawHandlers.use('/readyz', async (_req: IncomingMessage, res: ServerResponse) => {
+rawHandlers.use('/readyz', async (_req: IncomingMessage, res: ServerResponse) => {
 	const { statusCode, body, isHealthy } = await performHealthChecks(eventLoopHistogramReadiness);
 
 	if (!isHealthy) {

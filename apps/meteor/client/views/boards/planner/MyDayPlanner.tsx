@@ -13,9 +13,9 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
 const MyDayPlanner = () => {
 	const router = useRouter();
 	const qc = useQueryClient();
-	const getMyDay = useEndpoint('GET', '/v1/boards.cards.myDay' as any);
-	const updateCard = useEndpoint('POST', '/v1/boards.card.update' as any);
-	const setRecEndpoint = useEndpoint('POST', '/v1/boards.card.recurrence.set' as any);
+	const getMyDay = useEndpoint('GET', '/v1/boards.cards.myDay' as any, undefined as never);
+	const updateCard = useEndpoint('POST', '/v1/boards.card.update' as any, undefined as never);
+	const setRecEndpoint = useEndpoint('POST', '/v1/boards.card.recurrence.set' as any, undefined as never);
 
 	const { data, isLoading } = useQuery({ queryKey: ['boards', 'myDay'], queryFn: () => getMyDay({}), refetchInterval: 30000 });
 	const cards: any[] = (data as any)?.cards || [];

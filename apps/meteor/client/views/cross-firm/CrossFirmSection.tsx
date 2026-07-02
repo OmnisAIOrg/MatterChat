@@ -1,6 +1,7 @@
 import { Box, Button, TextInput, Throbber, Icon, Badge, Callout, Divider } from '@rocket.chat/fuselage';
 import { useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { ComponentProps } from 'react';
 import { useMemo, useState } from 'react';
 
 import { useCrossFirmFetch } from './useCrossFirmFetch';
@@ -110,10 +111,10 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 
 	const Header = (
 		<Box display='flex' alignItems='center' mbe={8}>
-			<Icon name='balance' size='x20' mie={8} color='hint' />
+			<Icon name={'balance' as ComponentProps<typeof Icon>['name']} size='x20' mie={8} color='hint' />
 			<Box fontScale='h4' color='default'>Cross-firm · Opposing counsel</Box>
-			{room?.holdActive && <Badge variant='danger' mis={8}>HOLD</Badge>}
-			{room?.retention && <Badge mis={8}>{room.retention.days}d</Badge>}
+			{room?.holdActive && <Badge variant='danger' {...({ mis: 8 } as unknown as ComponentProps<typeof Badge>)}>HOLD</Badge>}
+			{room?.retention && <Badge {...({ mis: 8 } as unknown as ComponentProps<typeof Badge>)}>{room.retention.days}d</Badge>}
 		</Box>
 	);
 
@@ -155,7 +156,7 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 						{room.members?.map((m: any) => (
 							<Box key={m.attorneyId} display='flex' alignItems='center' mbs={2}>
 								<Box withTruncatedText>{m.name} ({m.firm}{m.represents ? ` — ${m.represents}` : ''})</Box>
-								{m.state === 'screened' && <Badge variant='warning' mis={4}>screened</Badge>}
+								{m.state === 'screened' && <Badge variant='warning' {...({ mis: 4 } as unknown as ComponentProps<typeof Badge>)}>screened</Badge>}
 								{m.firm === firmName && m.attorneyId !== attorneyId && m.state !== 'invited' && (
 									<Button mis={8} small onClick={() => screen.mutate({ screenAttorneyId: m.attorneyId, unscreen: m.state === 'screened' })}>{m.state === 'screened' ? 'Unscreen' : 'Screen'}</Button>
 								)}

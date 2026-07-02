@@ -20,7 +20,7 @@ const BoardsCalendar = () => {
 	const { t } = useTranslation();
 	const router = useRouter();
 	const setModal = useSetModal();
-	const getMyDay = useEndpoint('GET', '/v1/boards.cards.myDay' as any);
+	const getMyDay = useEndpoint('GET', '/v1/boards.cards.myDay' as any, undefined as never);
 
 	const openSubscribe = useCallback(() => {
 		setModal(<SubscribeCalendarModal onClose={() => setModal(null)} />);
