@@ -4,6 +4,7 @@ import { MongoInternals } from 'meteor/mongo';
 import { automationEngineCron } from './automationEngine';
 import { boardsDigestCron } from './boardsDigestCron';
 import { boardsMattersCron } from './boardsMattersCron';
+import { caseproClientSyncCron } from './caseproClientSyncCron';
 
 export const startCron = async () => {
 	const started = await cronJobs.start((MongoInternals.defaultRemoteCollectionDriver().mongo as any).client.db());
@@ -16,5 +17,9 @@ export const startCron = async () => {
 	// Boards Notifications (M8): email digest of unread board notifications — gated by
 	// Boards_Email_Digest_Enabled + SMTP, schedule from Boards_Email_Digest_Schedule.
 	await boardsDigestCron();
+	// CasePro CLIENT-message two-way sync: inbound poll of client→firm portal messages into the
+	// per-matter "Client" channel — gated by CasePro_Enabled + CasePro_Client_Sync_Enabled,
+	// schedule from CasePro_Client_Sync_Poll_Schedule. (Outbound leg is the afterSaveMessage hook.)
+	await caseproClientSyncCron();
 	return started;
 };
