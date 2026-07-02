@@ -1,4 +1,4 @@
-import type { BoardFormFieldType, IBoardForm, IBoardFormField } from '@rocket.chat/core-typings';
+import type { BoardFormFieldType, BoardFormIntakeRouting, IBoardForm, IBoardFormField, IBoardFormIntakeMapping } from '@rocket.chat/core-typings';
 
 import { ajvQuery, ajv } from './Ajv';
 
@@ -21,6 +21,32 @@ import { ajvQuery, ajv } from './Ajv';
  */
 
 const FIELD_TYPES: BoardFormFieldType[] = ['text', 'textarea', 'select', 'date', 'checkbox', 'email', 'phone'];
+
+const INTAKE_ROUTINGS: BoardFormIntakeRouting[] = ['none', 'lead', 'casepro-direct'];
+
+// every value is a form FIELD ID; the service validates existence against the form's own fields
+const intakeMappingSchema = {
+	type: 'object',
+	nullable: true,
+	properties: {
+		fullName: { type: 'string', nullable: true, maxLength: 64 },
+		firstName: { type: 'string', nullable: true, maxLength: 64 },
+		lastName: { type: 'string', nullable: true, maxLength: 64 },
+		email: { type: 'string', nullable: true, maxLength: 64 },
+		phone: { type: 'string', nullable: true, maxLength: 64 },
+		caseType: { type: 'string', nullable: true, maxLength: 64 },
+		incidentDate: { type: 'string', nullable: true, maxLength: 64 },
+	},
+	additionalProperties: false,
+} as const;
+
+// shared by create + update (all optional; service enforces per-mode requirements)
+const intakeRoutingProps = {
+	intakeRouting: { type: 'string', enum: INTAKE_ROUTINGS, nullable: true },
+	intakeMapping: intakeMappingSchema,
+	caseproOrgId: { type: 'string', nullable: true, maxLength: 128 },
+	caseproSourceToken: { type: 'string', nullable: true, maxLength: 256 },
+} as const;
 
 const fieldSchema = {
 	type: 'object',
@@ -48,6 +74,10 @@ export type BoardsFormsCreateProps = {
 	fields: (Omit<IBoardFormField, 'id'> & { id?: string })[];
 	titleTemplate?: string;
 	enabled?: boolean;
+	intakeRouting?: BoardFormIntakeRouting;
+	intakeMapping?: IBoardFormIntakeMapping;
+	caseproOrgId?: string;
+	caseproSourceToken?: string;
 };
 
 const BoardsFormsCreateSchema = {
@@ -60,6 +90,7 @@ const BoardsFormsCreateSchema = {
 		fields: { type: 'array', minItems: 1, maxItems: 50, items: fieldSchema },
 		titleTemplate: { type: 'string', nullable: true, maxLength: 300 },
 		enabled: { type: 'boolean', nullable: true },
+		...intakeRoutingProps,
 	},
 	required: ['boardId', 'targetListId', 'title', 'fields'],
 	additionalProperties: false,
@@ -79,6 +110,10 @@ export type BoardsFormsUpdateProps = {
 	fields?: BoardsFormsCreateProps['fields'];
 	titleTemplate?: string;
 	enabled?: boolean;
+	intakeRouting?: BoardFormIntakeRouting;
+	intakeMapping?: IBoardFormIntakeMapping;
+	caseproOrgId?: string;
+	caseproSourceToken?: string;
 };
 
 const BoardsFormsUpdateSchema = {
@@ -91,6 +126,7 @@ const BoardsFormsUpdateSchema = {
 		fields: { type: 'array', nullable: true, minItems: 1, maxItems: 50, items: fieldSchema },
 		titleTemplate: { type: 'string', nullable: true, maxLength: 300 },
 		enabled: { type: 'boolean', nullable: true },
+		...intakeRoutingProps,
 	},
 	required: ['formId'],
 	additionalProperties: false,

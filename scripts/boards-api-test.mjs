@@ -424,6 +424,146 @@ async function main() {
   const flAfter = await api('GET', `/boards.forms.list?boardId=${boardId}`);
   ok(!(flAfter.json?.forms || []).some((f) => f._id === form?._id), 'deleted form gone from list');
 
+  // --- forms intake routing (auto/forms-casepro-intake: none / lead / casepro-direct) ---
+  // NOTE: same dist-rebuild caveat as the forms block above (rest-typings + core-typings).
+  // The casepro-direct cases write the CasePro_Intake_Capture_Base setting — needs an ADMIN token.
+
+  // routing=none stayed byte-identical: the earlier submission card carries no link
+  ok(intakeCard && intakeCard.link === undefined, 'routing=none submission card carries no link');
+
+  // mapping validation: unknown field id / casepro-direct without org+token both 400
+  const badMap = await api('POST', '/boards.forms.create', {
+    boardId,
+    targetListId: listId,
+    title: 'Bad mapping form',
+    fields: [{ id: 'name', label: 'Name', type: 'text', required: true }],
+    intakeRouting: 'lead',
+    intakeMapping: { fullName: 'not-a-field-id' },
+  });
+  ok(badMap.status === 400, 'create rejects mapping to unknown field id', `http=${badMap.status}`);
+  const badDirect = await api('POST', '/boards.forms.create', {
+    boardId,
+    targetListId: listId,
+    title: 'Unconfigured direct form',
+    fields: [{ id: 'name', label: 'Name', type: 'text', required: true }],
+    intakeRouting: 'casepro-direct',
+  });
+  ok(badDirect.status === 400, 'create rejects casepro-direct without org id + source token', `http=${badDirect.status}`);
+
+  // poll the board activity feed for an intake-routing audit entry
+  const waitForActivity = async (bId, pred, tries = 25) => {
+    for (let i = 0; i < tries; i += 1) {
+      const a = await api('GET', `/boards.activities?boardId=${bId}&count=50`);
+      const hit = (a.json?.activities || []).find(pred);
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return null;
+  };
+
+  // --- routing=lead: submit -> card + board lead, linked ---
+  const leadTok = `FormLead${Date.now()}`;
+  const leadPhone = `+1666${String(Date.now()).slice(-7)}`;
+  const flc = await api('POST', '/boards.forms.create', {
+    boardId,
+    targetListId: listId,
+    title: 'Lead intake',
+    titleTemplate: 'Lead — {{name}}',
+    intakeRouting: 'lead',
+    intakeMapping: { fullName: 'name', email: 'email', phone: 'phone', caseType: 'casetype', incidentDate: 'doi' },
+    fields: [
+      { id: 'name', label: 'Name', type: 'text', required: true },
+      { id: 'email', label: 'Email', type: 'email' },
+      { id: 'phone', label: 'Phone', type: 'phone' },
+      { id: 'casetype', label: 'Case type', type: 'select', options: ['Motor Vehicle Accident', 'Slip and Fall'] },
+      { id: 'doi', label: 'Incident date', type: 'date' },
+    ],
+  });
+  const leadForm = flc.json?.form;
+  ok(!!leadForm?._id && leadForm?.intakeRouting === 'lead', 'create routing=lead form', leadForm?._id);
+
+  // public GET must NOT expose routing config or tokens
+  const pgLead = await pub('GET', `/boards.forms.public.get?slug=${encodeURIComponent(leadForm.slug)}`);
+  ok(
+    pgLead.status === 200 &&
+      pgLead.json?.form?.intakeRouting === undefined &&
+      pgLead.json?.form?.intakeMapping === undefined &&
+      pgLead.json?.form?.caseproOrgId === undefined &&
+      pgLead.json?.form?.caseproSourceToken === undefined,
+    'public.get leaks no intake routing config',
+    `keys=${Object.keys(pgLead.json?.form || {}).join(',')}`,
+  );
+
+  const psLead = await pub('POST', '/boards.forms.public.submit', {
+    slug: leadForm.slug,
+    answers: { name: leadTok, email: `${leadTok.toLowerCase()}@example.com`, phone: leadPhone, casetype: 'Motor Vehicle Accident', doi: '2026-05-01' },
+  });
+  ok(psLead.status === 200 && psLead.json?.ok === true, 'routing=lead public.submit ok', `http=${psLead.status}`);
+
+  // the submission card exists on the form's board and carries the lead link
+  const leadCards = await api('GET', `/boards.cards?boardId=${boardId}`);
+  const leadFormCard = (leadCards.json?.cards || []).find((x) => x.title === `Lead — ${leadTok}`);
+  ok(!!leadFormCard, 'routing=lead created the submission card', leadFormCard?._id);
+  ok(leadFormCard?.link?.kind === 'lead' && !!leadFormCard?.link?.leadId, 'submission card is linked {kind:lead}', JSON.stringify(leadFormCard?.link));
+
+  // the board lead exists, captured via web-form, mapped contact + classification intact
+  const leadList = await api('GET', `/boards.leads.list?q=${encodeURIComponent(leadTok)}`);
+  const routedLead = (leadList.json?.leads || []).find((l) => l._id === leadFormCard?.link?.leadId);
+  ok(!!routedLead, 'routing=lead created the board lead (linked id matches)', routedLead?._id);
+  ok(routedLead?.capturedChannel === 'web-form', 'lead capturedChannel=web-form', routedLead?.capturedChannel);
+  ok(routedLead?.contact?.fullName === leadTok && routedLead?.contact?.phone === leadPhone, 'lead contact mapped from answers');
+  ok(routedLead?.practiceArea === 'Motor Vehicle Accident', 'lead practiceArea mapped from case-type answer', routedLead?.practiceArea);
+  const leadAudit = await waitForActivity(boardId, (a) => a.verb === 'form.intake.routed' && a.to?.formId === leadForm._id && a.to?.mode === 'lead');
+  ok(!!leadAudit, 'lead routing audited (form.intake.routed)', leadAudit?.to?.leadId);
+
+  // --- routing=casepro-direct: attempt recorded, submitter unaffected, no live call needed ---
+  const SETTING_ID = 'CasePro_Intake_Capture_Base';
+  const setSetting = (value) => api('POST', `/settings/${SETTING_ID}`, { value });
+
+  const mkDirectForm = async (title) => {
+    const r = await api('POST', '/boards.forms.create', {
+      boardId,
+      targetListId: listId,
+      title,
+      intakeRouting: 'casepro-direct',
+      intakeMapping: { fullName: 'name' },
+      caseproOrgId: 'org-test-123',
+      caseproSourceToken: 'src-secret-token-abc',
+      fields: [{ id: 'name', label: 'Name', type: 'text', required: true }],
+    });
+    return r.json?.form;
+  };
+
+  // (a) capture base unset -> submit still {ok:true}, failure audited as no-capture-base
+  const clearRes = await setSetting('');
+  ok(clearRes.status === 200, 'clear capture base setting (admin token required)', `http=${clearRes.status}`);
+  const direct1 = await mkDirectForm('Direct intake (unconfigured)');
+  ok(!!direct1?._id, 'create routing=casepro-direct form', direct1?._id);
+  const psD1 = await pub('POST', '/boards.forms.public.submit', { slug: direct1.slug, answers: { name: 'Direct One' } });
+  ok(psD1.status === 200 && psD1.json?.ok === true, 'casepro-direct submit ok even when unconfigured', `http=${psD1.status}`);
+  const failNoBase = await waitForActivity(
+    boardId,
+    (a) => a.verb === 'form.intake.failed' && a.to?.formId === direct1._id && a.to?.reason === 'no-capture-base',
+  );
+  ok(!!failNoBase, 'unconfigured capture base audited (form.intake.failed/no-capture-base)');
+
+  // (b) capture base set to an unreachable https host -> POST attempted, failure audited,
+  //     token never written into the audit trail. NO live CasePro call is ever made.
+  const setRes = await setSetting('https://127.0.0.1:1');
+  ok(setRes.status === 200, 'set capture base to unreachable https host', `http=${setRes.status}`);
+  const direct2 = await mkDirectForm('Direct intake (attempted)');
+  const psD2 = await pub('POST', '/boards.forms.public.submit', { slug: direct2.slug, answers: { name: 'Direct Two' } });
+  ok(psD2.status === 200 && psD2.json?.ok === true, 'casepro-direct submit ok while POST fails behind the scenes', `http=${psD2.status}`);
+  const failPost = await waitForActivity(boardId, (a) => a.verb === 'form.intake.failed' && a.to?.formId === direct2._id && a.to?.mode === 'casepro-direct');
+  ok(!!failPost, 'capture POST attempt recorded on the audit trail', failPost?.to?.reason ?? failPost?.to?.status);
+  ok(!JSON.stringify(failPost ?? {}).includes('src-secret-token-abc'), 'audit trail never contains the source token');
+  await setSetting(''); // restore
+
+  // authenticated forms.list still returns the routing config to board members (management UI needs it)
+  const flRouting = await api('GET', `/boards.forms.list?boardId=${boardId}`);
+  const listedLeadForm = (flRouting.json?.forms || []).find((f) => f._id === leadForm._id);
+  ok(listedLeadForm?.intakeRouting === 'lead' && listedLeadForm?.intakeMapping?.fullName === 'name', 'forms.list returns routing config to members');
+
   // --- boards.views.cards pagination (opt-in flat offset/count + per-group cap) ---
   // second list on the pagination board so groupBy=list yields two groups (7 + 3 = 10 cards)
   const pl2 = await api('POST', '/boards.list.create', { boardId: pgBoardId, title: 'Paged list B' });

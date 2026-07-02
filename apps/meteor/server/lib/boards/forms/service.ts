@@ -1,11 +1,12 @@
-import type { IBoardForm, IBoardFormField } from '@rocket.chat/core-typings';
+import type { BoardFormIntakeRouting, IBoardCardLink, IBoardForm, IBoardFormField, IBoardFormIntakeMapping } from '@rocket.chat/core-typings';
 import type { PublicBoardFormDTO } from '@rocket.chat/rest-typings';
-import { BoardsForms, BoardsLists } from '@rocket.chat/models';
+import { BoardsActivities, BoardsForms, BoardsLists } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
 import { assertBoardRole, getBoardForUser } from '../permissions';
 import { createCard } from '../service';
+import { deliverToCaseProCapture, routeSubmissionToLead } from './intakeRouting';
 
 /**
  * Boards FORMS service (parity P0.7 — generic form builder: intake → card).
@@ -50,6 +51,11 @@ export type CreateFormParams = {
 	fields: BoardFormFieldInput[];
 	titleTemplate?: string;
 	enabled?: boolean;
+	/** intake routing (absent == 'none' — legacy behavior, card only). */
+	intakeRouting?: BoardFormIntakeRouting;
+	intakeMapping?: IBoardFormIntakeMapping;
+	caseproOrgId?: string;
+	caseproSourceToken?: string;
 };
 
 export type UpdateFormPatch = Partial<Omit<CreateFormParams, 'boardId'>>;
@@ -87,6 +93,69 @@ function normalizeFields(inputs: BoardFormFieldInput[], method: string): IBoardF
 	});
 }
 
+// ---------------------------------------------------------------------------
+// Intake-routing config (create/update-time validation)
+// ---------------------------------------------------------------------------
+
+const CONTACT_MAPPING_KEYS: (keyof IBoardFormIntakeMapping)[] = ['fullName', 'firstName', 'lastName', 'email', 'phone'];
+const ALL_MAPPING_KEYS: (keyof IBoardFormIntakeMapping)[] = [...CONTACT_MAPPING_KEYS, 'caseType', 'incidentDate'];
+
+/** Trim mapping values and drop empties; undefined when nothing is mapped. */
+function normalizeIntakeMapping(mapping: IBoardFormIntakeMapping | undefined): IBoardFormIntakeMapping | undefined {
+	if (!mapping) {
+		return undefined;
+	}
+	const out: IBoardFormIntakeMapping = {};
+	for (const key of ALL_MAPPING_KEYS) {
+		const value = mapping[key]?.trim();
+		if (value) {
+			out[key] = value;
+		}
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
+}
+
+type IntakeConfig = {
+	intakeRouting?: BoardFormIntakeRouting;
+	intakeMapping?: IBoardFormIntakeMapping;
+	caseproOrgId?: string;
+	caseproSourceToken?: string;
+};
+
+/**
+ * Validate the EFFECTIVE (post-merge) intake config against the form's own
+ * fields: every mapped id must exist, 'lead' needs at least one contact mapping,
+ * 'casepro-direct' needs the per-form org id + source token.
+ */
+function assertIntakeConfig(config: IntakeConfig, fields: IBoardFormField[], method: string): void {
+	const routing = config.intakeRouting ?? 'none';
+	const mapping = config.intakeMapping ?? {};
+	const fieldIds = new Set(fields.map((f) => f.id));
+
+	for (const key of ALL_MAPPING_KEYS) {
+		const fieldId = mapping[key];
+		if (fieldId && !fieldIds.has(fieldId)) {
+			throw new Meteor.Error('error-invalid-intake-mapping', `Mapped form field does not exist: ${key}`, { method });
+		}
+	}
+
+	if (routing === 'lead' && !CONTACT_MAPPING_KEYS.some((key) => mapping[key])) {
+		throw new Meteor.Error(
+			'error-invalid-intake-mapping',
+			'Lead routing needs at least one mapped contact field (name, email or phone)',
+			{ method },
+		);
+	}
+
+	if (routing === 'casepro-direct' && (!config.caseproOrgId?.trim() || !config.caseproSourceToken?.trim())) {
+		throw new Meteor.Error(
+			'error-invalid-intake-config',
+			'CasePro-direct routing needs caseproOrgId and caseproSourceToken',
+			{ method },
+		);
+	}
+}
+
 /** Assert the target list exists, belongs to the board, and is not archived. */
 async function assertTargetList(boardId: string, listId: string, method: string): Promise<void> {
 	const list = await BoardsLists.findOneById(listId);
@@ -104,14 +173,26 @@ export async function createForm(uid: string, params: CreateFormParams): Promise
 		throw new Meteor.Error('error-invalid-form-title', 'Invalid form title', { method: 'boards.forms.create' });
 	}
 
+	const fields = normalizeFields(params.fields, 'boards.forms.create');
+	const intakeMapping = normalizeIntakeMapping(params.intakeMapping);
+	assertIntakeConfig(
+		{ intakeRouting: params.intakeRouting, intakeMapping, caseproOrgId: params.caseproOrgId, caseproSourceToken: params.caseproSourceToken },
+		fields,
+		'boards.forms.create',
+	);
+
 	const now = new Date();
 	const doc: Omit<IBoardForm, '_id' | '_updatedAt'> = {
 		boardId: params.boardId,
 		targetListId: params.targetListId,
 		title,
 		...(params.description?.trim() ? { description: params.description.trim() } : {}),
-		fields: normalizeFields(params.fields, 'boards.forms.create'),
+		fields,
 		...(params.titleTemplate?.trim() ? { titleTemplate: params.titleTemplate.trim() } : {}),
+		...(params.intakeRouting ? { intakeRouting: params.intakeRouting } : {}),
+		...(intakeMapping ? { intakeMapping } : {}),
+		...(params.caseproOrgId?.trim() ? { caseproOrgId: params.caseproOrgId.trim() } : {}),
+		...(params.caseproSourceToken?.trim() ? { caseproSourceToken: params.caseproSourceToken.trim() } : {}),
 		enabled: params.enabled ?? true,
 		slug: Random.secret(), // 43 chars ≈ 256 bits — the public-URL capability token
 		submissionCount: 0,
@@ -165,6 +246,32 @@ export async function updateForm(uid: string, formId: string, patch: UpdateFormP
 	if (patch.enabled !== undefined) {
 		$set.enabled = patch.enabled;
 	}
+	if (patch.intakeRouting !== undefined) {
+		$set.intakeRouting = patch.intakeRouting;
+	}
+	if (patch.intakeMapping !== undefined) {
+		// {} clears the mapping (model $set has no unset lane); values are trimmed/dropped
+		$set.intakeMapping = normalizeIntakeMapping(patch.intakeMapping) ?? {};
+	}
+	if (patch.caseproOrgId !== undefined) {
+		$set.caseproOrgId = patch.caseproOrgId.trim();
+	}
+	if (patch.caseproSourceToken !== undefined) {
+		$set.caseproSourceToken = patch.caseproSourceToken.trim();
+	}
+
+	// validate the EFFECTIVE config — merged patch over current — against the
+	// effective fields, so a field edit can never orphan an intake mapping.
+	assertIntakeConfig(
+		{
+			intakeRouting: $set.intakeRouting ?? form.intakeRouting,
+			intakeMapping: $set.intakeMapping ?? form.intakeMapping,
+			caseproOrgId: $set.caseproOrgId ?? form.caseproOrgId,
+			caseproSourceToken: $set.caseproSourceToken ?? form.caseproSourceToken,
+		},
+		$set.fields ?? form.fields,
+		'boards.forms.update',
+	);
 
 	await BoardsForms.updateForm(formId, $set);
 	const updated = await BoardsForms.findById(formId);
@@ -325,9 +432,12 @@ function renderCardTitle(form: IBoardForm, values: Map<string, string>): string 
 }
 
 /**
- * PUBLIC submit: validate → create a card in the form's target list (as the
- * form's creator, through the normal createCard service path) → bump counters.
- * Returns {ok:true} and nothing else.
+ * PUBLIC submit: validate → (routing 'lead': also create a board lead from the
+ * mapped answers, best-effort) → create a card in the form's target list (as the
+ * form's creator, through the normal createCard service path) → (routing
+ * 'casepro-direct': fire-and-forget POST to the CasePro capture endpoint) →
+ * bump counters. Returns {ok:true} and nothing else — intake routing outcomes
+ * are recorded on the board's activity feed, NEVER surfaced to the submitter.
  */
 export async function submitPublicForm(slug: string, answers: Record<string, unknown>): Promise<{ ok: true }> {
 	const form = await resolveActiveForm(slug);
@@ -336,19 +446,50 @@ export async function submitPublicForm(slug: string, answers: Record<string, unk
 	}
 
 	const values = validateAnswers(form, answers);
+	const routing = form.intakeRouting ?? 'none';
+
+	// 'lead' first, so the submission card carries the {kind:'lead'} link from birth.
+	// Failure is audited inside and yields undefined — the card is still created.
+	let leadLink: Extract<IBoardCardLink, { kind: 'lead' }> | undefined;
+	if (routing === 'lead') {
+		const routed = await routeSubmissionToLead(form, values);
+		if (routed) {
+			leadLink = { kind: 'lead', leadId: routed.leadId };
+		}
+	}
 
 	const lines = form.fields
 		.filter((field) => values.has(field.id))
 		.map((field) => `**${field.label}:** ${values.get(field.id)}`);
 	const description = [...lines, '', `_Submitted via form "${form.title}"._`].join('\n\n');
 
-	await createCard(form.createdBy, {
+	const card = await createCard(form.createdBy, {
 		boardId: form.boardId,
 		listId: form.targetListId,
 		title: renderCardTitle(form, values),
 		description,
 		cardType: 'task',
+		...(leadLink ? { link: leadLink } : {}),
 	});
+
+	if (leadLink) {
+		// the same card.linked convention the leads/casepro sync writes
+		await BoardsActivities.log({
+			boardId: form.boardId,
+			listId: form.targetListId,
+			cardId: card._id,
+			actor: form.createdBy,
+			verb: 'card.linked',
+			to: { kind: 'lead', leadId: leadLink.leadId, viaFormId: form._id },
+			ts: new Date(),
+		});
+	}
+
+	if (routing === 'casepro-direct') {
+		// fire-and-forget: public latency stays identical to routing 'none'; delivery
+		// is at-least-once-ATTEMPTED and every outcome is audited inside.
+		void deliverToCaseProCapture(form, values, card._id);
+	}
 
 	await BoardsForms.recordSubmission(form._id);
 	return { ok: true };

@@ -16,6 +16,34 @@ import type { IUser } from './IUser';
 
 export type BoardFormFieldType = 'text' | 'textarea' | 'select' | 'date' | 'checkbox' | 'email' | 'phone';
 
+/**
+ * Where a public submission is routed IN ADDITION to the always-created card:
+ *  - 'none'           — card only (the default; absent == 'none', byte-identical legacy behavior)
+ *  - 'lead'           — also create a board lead via the leads service (which itself
+ *                       write-throughs to CasePro when `CasePro_Enabled`)
+ *  - 'casepro-direct' — also POST the mapped answers to CasePro's public intake
+ *                       capture endpoint (`{CasePro_Intake_Capture_Base}/api/v1/
+ *                       intake-questionnaires/capture?org=&source=`), no board lead.
+ */
+export type BoardFormIntakeRouting = 'none' | 'lead' | 'casepro-direct';
+
+/**
+ * Which form fields feed the intake contact/classification — the value of every
+ * key is a form FIELD ID (validated to exist on save). Mirrors the shape the leads
+ * service derives for its CasePro capture (`deriveCaptureInput`): contact
+ * name/email/phone + case type + incident date.
+ */
+export interface IBoardFormIntakeMapping {
+	fullName?: string;
+	firstName?: string;
+	lastName?: string;
+	email?: string;
+	phone?: string;
+	/** free-text/select case-type NAME (routed to lead.practiceArea / capture caseType — not a CasePro id). */
+	caseType?: string;
+	incidentDate?: string;
+}
+
 export interface IBoardFormField {
 	/** Stable field key (Random.id()); answers are keyed by it and `titleTemplate` may reference it as `{{id}}`. */
 	id: string;
@@ -42,6 +70,18 @@ export interface IBoardForm extends IRocketChatRecord {
 	 * Unset/blank renders as `<form title> submission`.
 	 */
 	titleTemplate?: string;
+
+	/**
+	 * Intake routing (absent == 'none'). NEVER exposed on the public surface —
+	 * `PublicBoardFormDTO` stays a strict whitelist of title/description/fields.
+	 */
+	intakeRouting?: BoardFormIntakeRouting;
+	/** Field-id mapping feeding the intake contact block; required keys enforced per routing mode. */
+	intakeMapping?: IBoardFormIntakeMapping;
+	/** CasePro org id for 'casepro-direct' (the capture endpoint's ?org= — validated server-side by CasePro). */
+	caseproOrgId?: string;
+	/** CasePro marketing-attribution source token for 'casepro-direct' (?source=). Never leaks publicly. */
+	caseproSourceToken?: string;
 
 	/** Master switch: a disabled form 404s on both public routes (indistinguishable from unknown). */
 	enabled: boolean;

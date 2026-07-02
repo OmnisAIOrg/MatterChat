@@ -6,6 +6,13 @@ import { settingsRegistry } from '../../app/settings/server';
  * - CasePro_Enabled   : master switch the read client honors.
  * - CasePro_Base_URL  : the live CasePro/MCP base URL (only used when transport = rest).
  * - CasePro_Transport : 'stub' (default — mock rows, zero config) or 'rest' (live fetch).
+ * - CasePro_Intake_Capture_Base : the CasePro CRM base URL for the PUBLIC intake
+ *   capture endpoint (`{base}/api/v1/intake-questionnaires/capture?org=&source=`)
+ *   used by boards forms with `intakeRouting:'casepro-direct'`. DISTINCT from
+ *   CasePro_Base_URL (the MCP connector base) — the capture lane is auth-less and
+ *   points at the CRM backend itself. Must be https; the outbound POST is host-pinned
+ *   to this base. Independent of CasePro_Enabled/CasePro_Transport by design: a firm
+ *   can route public forms into CasePro without turning on the full board sync.
  *
  * Defaulting to the stub means a fresh MatterChat boots and renders a complete
  * MatterSnapshot with no CasePro credentials. Flip to 'rest' + set the base URL
@@ -45,5 +52,13 @@ export const createBoardsCaseProSettings = () =>
 				_id: 'CasePro_Transport',
 				value: 'rest',
 			},
+		});
+
+		await this.add('CasePro_Intake_Capture_Base', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'CasePro_Intake_Capture_Base',
+			i18nDescription: 'CasePro_Intake_Capture_Base_Description',
+			placeholder: 'https://crm.stg-omnisai.io',
 		});
 	});

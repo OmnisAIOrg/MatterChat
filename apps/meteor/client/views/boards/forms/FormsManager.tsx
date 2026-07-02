@@ -1,4 +1,12 @@
-import type { BoardFormFieldType, IBoard, IBoardForm, IBoardList, Serialized } from '@rocket.chat/core-typings';
+import type {
+	BoardFormFieldType,
+	BoardFormIntakeRouting,
+	IBoard,
+	IBoardForm,
+	IBoardFormIntakeMapping,
+	IBoardList,
+	Serialized,
+} from '@rocket.chat/core-typings';
 import type { SelectOption } from '@rocket.chat/fuselage';
 import {
 	Box,
@@ -27,10 +35,30 @@ import { useTranslation } from 'react-i18next';
  * by BoardRouter at /boards/board/:id/forms. Lists the board's intake forms,
  * builds/edits them (ordered field builder), toggles enable, copies the public
  * link (/form/:slug), and deletes. Submissions land as cards in the target list.
- * Standalone-safe: plain boards.* REST, no CasePro coupling.
+ * Standalone-safe: plain boards.* REST; the OPTIONAL "Send to intake" section
+ * (routing none / board lead / CasePro-direct) degrades gracefully — the default
+ * stays card-only with zero CasePro coupling.
  */
 
 const FIELD_TYPES: BoardFormFieldType[] = ['text', 'textarea', 'select', 'date', 'checkbox', 'email', 'phone'];
+
+const INTAKE_ROUTINGS: BoardFormIntakeRouting[] = ['none', 'lead', 'casepro-direct'];
+
+/** intake-mapping keys, in display order, with their default labels. */
+const MAPPING_KEYS: { key: keyof IBoardFormIntakeMapping; label: string }[] = [
+	{ key: 'fullName', label: 'Full name' },
+	{ key: 'firstName', label: 'First name' },
+	{ key: 'lastName', label: 'Last name' },
+	{ key: 'email', label: 'Email' },
+	{ key: 'phone', label: 'Phone' },
+	{ key: 'caseType', label: 'Case type' },
+	{ key: 'incidentDate', label: 'Incident date' },
+];
+
+const CONTACT_MAPPING_KEYS: (keyof IBoardFormIntakeMapping)[] = ['fullName', 'firstName', 'lastName', 'email', 'phone'];
+
+/** Client-minted stable field id (matches the server's /^[A-Za-z0-9_-]{1,64}$/) so mapping can reference unsaved fields. */
+const mintFieldId = (): string => `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 type EditorField = {
 	id?: string;
@@ -49,9 +77,13 @@ type EditorState = {
 	titleTemplate: string;
 	enabled: boolean;
 	fields: EditorField[];
+	intakeRouting: BoardFormIntakeRouting;
+	intakeMapping: IBoardFormIntakeMapping;
+	caseproOrgId: string;
+	caseproSourceToken: string;
 };
 
-const emptyField = (): EditorField => ({ label: '', type: 'text', required: false, optionsCsv: '', placeholder: '' });
+const emptyField = (): EditorField => ({ id: mintFieldId(), label: '', type: 'text', required: false, optionsCsv: '', placeholder: '' });
 
 const toEditor = (form: Serialized<IBoardForm>): EditorState => ({
 	formId: form._id,
@@ -60,6 +92,10 @@ const toEditor = (form: Serialized<IBoardForm>): EditorState => ({
 	targetListId: form.targetListId,
 	titleTemplate: form.titleTemplate ?? '',
 	enabled: form.enabled,
+	intakeRouting: form.intakeRouting ?? 'none',
+	intakeMapping: form.intakeMapping ?? {},
+	caseproOrgId: form.caseproOrgId ?? '',
+	caseproSourceToken: form.caseproSourceToken ?? '',
 	fields: form.fields.map((f) => ({
 		id: f.id,
 		label: f.label,
@@ -115,6 +151,11 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 
 	const saveMutation = useMutation({
 		mutationFn: async (state: EditorState) => {
+			// prune mapping entries pointing at fields removed in this edit session
+			const fieldIds = new Set(state.fields.map((f) => f.id).filter(Boolean));
+			const intakeMapping = Object.fromEntries(
+				Object.entries(state.intakeMapping).filter(([, fieldId]) => fieldId && fieldIds.has(fieldId)),
+			) as IBoardFormIntakeMapping;
 			const common = {
 				targetListId: state.targetListId,
 				title: state.title,
@@ -122,6 +163,10 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 				fields: toPayloadFields(state.fields),
 				titleTemplate: state.titleTemplate,
 				enabled: state.enabled,
+				intakeRouting: state.intakeRouting,
+				intakeMapping,
+				caseproOrgId: state.caseproOrgId.trim(),
+				caseproSourceToken: state.caseproSourceToken.trim(),
 			};
 			if (state.formId) {
 				return updateForm({ formId: state.formId, ...common });
@@ -193,12 +238,26 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 		setEditor((prev) => (prev ? { ...prev, fields: prev.fields.filter((_, i) => i !== index) } : prev));
 	};
 
+	const mappedToExistingField = (key: keyof IBoardFormIntakeMapping): boolean => {
+		const fieldId = editor?.intakeMapping[key];
+		return Boolean(fieldId && editor?.fields.some((f) => f.id === fieldId));
+	};
+
+	// mirrors the server's assertIntakeConfig: 'lead' needs a mapped contact field,
+	// 'casepro-direct' needs the per-form org id + source token.
+	const intakeConfigValid =
+		editor !== null &&
+		(editor.intakeRouting === 'none' ||
+			(editor.intakeRouting === 'lead' && CONTACT_MAPPING_KEYS.some(mappedToExistingField)) ||
+			(editor.intakeRouting === 'casepro-direct' && editor.caseproOrgId.trim().length > 0 && editor.caseproSourceToken.trim().length > 0));
+
 	const canSave =
 		editor !== null &&
 		editor.title.trim().length > 0 &&
 		editor.targetListId.length > 0 &&
 		editor.fields.length > 0 &&
-		editor.fields.every((f) => f.label.trim().length > 0 && (f.type !== 'select' || f.optionsCsv.trim().length > 0));
+		editor.fields.every((f) => f.label.trim().length > 0 && (f.type !== 'select' || f.optionsCsv.trim().length > 0)) &&
+		intakeConfigValid;
 
 	if (isLoading) {
 		return (
@@ -225,6 +284,10 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 								targetListId: lists[0]?._id ?? '',
 								titleTemplate: '',
 								enabled: true,
+								intakeRouting: 'none',
+								intakeMapping: {},
+								caseproOrgId: '',
+								caseproSourceToken: '',
 								fields: [emptyField()],
 							})
 						}
@@ -336,6 +399,93 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 						<Icon name='plus' size='x16' mie={4} />
 						{t('Boards_Forms_AddField', { defaultValue: 'Add field' })}
 					</Button>
+
+					{/* ------------------------------------------ send to intake */}
+					<Box fontScale='p2b' mbe={8}>
+						{t('Boards_Forms_Intake_Title', { defaultValue: 'Send to intake' })}
+					</Box>
+					<Field mbe={8}>
+						<FieldRow>
+							<Select
+								value={editor.intakeRouting}
+								options={INTAKE_ROUTINGS.map((routing) => [
+									routing,
+									{
+										'none': t('Boards_Forms_Intake_None', { defaultValue: 'None — card only' }),
+										'lead': t('Boards_Forms_Intake_Lead', { defaultValue: 'Create board lead' }),
+										'casepro-direct': t('Boards_Forms_Intake_CaseProDirect', { defaultValue: 'Send directly to CasePro' }),
+									}[routing],
+								])}
+								onChange={(value) => setEditor({ ...editor, intakeRouting: value as BoardFormIntakeRouting })}
+							/>
+						</FieldRow>
+					</Field>
+
+					{editor.intakeRouting !== 'none' && (
+						<Box mbe={16} padding={12} borderWidth={1} borderColor='extra-light' borderRadius={8}>
+							<Box fontScale='c1' color='hint' mbe={8}>
+								{editor.intakeRouting === 'lead'
+									? t('Boards_Forms_Intake_Lead_Help', {
+											defaultValue:
+												'Each submission also creates a lead on the Leads board (and syncs to CasePro when the CasePro connection is on). Map at least one contact field.',
+									  })
+									: t('Boards_Forms_Intake_CaseProDirect_Help', {
+											defaultValue:
+												'Each submission is also posted to your CasePro intake capture endpoint. Needs the workspace capture URL (admin setting) plus this form’s CasePro org id and source token.',
+									  })}
+							</Box>
+
+							{MAPPING_KEYS.map(({ key, label }) => (
+								<Field key={key} mbe={4}>
+									<Box display='flex' alignItems='center' style={{ gap: '8px' }}>
+										<Box width='x140' flexShrink={0} fontScale='c1'>
+											{t(`Boards_Forms_Intake_Map_${key}`, { defaultValue: label })}
+										</Box>
+										<Box flexGrow={1} minWidth={0}>
+											<Select
+												value={editor.intakeMapping[key] ?? ''}
+												options={[
+													['', t('Boards_Forms_Intake_Map_None', { defaultValue: '— not mapped —' })],
+													...editor.fields
+														.filter((f): f is EditorField & { id: string } => Boolean(f.id))
+														.map((f): SelectOption => [f.id, f.label || f.id]),
+												]}
+												onChange={(value) =>
+													setEditor({
+														...editor,
+														intakeMapping: { ...editor.intakeMapping, [key]: value ? String(value) : undefined },
+													})
+												}
+											/>
+										</Box>
+									</Box>
+								</Field>
+							))}
+
+							{editor.intakeRouting === 'casepro-direct' && (
+								<>
+									<Field mbe={8} mbs={8}>
+										<FieldLabel>{t('Boards_Forms_Intake_CaseProOrgId', { defaultValue: 'CasePro org id' })}</FieldLabel>
+										<FieldRow>
+											<TextInput
+												value={editor.caseproOrgId}
+												onChange={(e) => setEditor({ ...editor, caseproOrgId: (e.target as HTMLInputElement).value })}
+											/>
+										</FieldRow>
+									</Field>
+									<Field mbe={4}>
+										<FieldLabel>{t('Boards_Forms_Intake_CaseProSourceToken', { defaultValue: 'CasePro source token' })}</FieldLabel>
+										<FieldRow>
+											<TextInput
+												value={editor.caseproSourceToken}
+												onChange={(e) => setEditor({ ...editor, caseproSourceToken: (e.target as HTMLInputElement).value })}
+											/>
+										</FieldRow>
+									</Field>
+								</>
+							)}
+						</Box>
+					)}
 
 					<Box display='flex' justifyContent='flex-end' style={{ gap: '8px' }}>
 						<Button small onClick={() => setEditor(null)}>

@@ -58,7 +58,8 @@ API.v1.post(
 	},
 	async function action() {
 		const uid = this.userId; // authRequired guarantees presence; Meteor.userId() is unavailable in this REST context
-		const { boardId, targetListId, title, description, fields, titleTemplate, enabled } = this.bodyParams;
+		const { boardId, targetListId, title, description, fields, titleTemplate, enabled, intakeRouting, intakeMapping, caseproOrgId, caseproSourceToken } =
+			this.bodyParams;
 		const form = await createForm(uid, {
 			boardId,
 			targetListId,
@@ -67,6 +68,10 @@ API.v1.post(
 			...(description !== undefined ? { description } : {}),
 			...(titleTemplate !== undefined ? { titleTemplate } : {}),
 			...(enabled !== undefined ? { enabled } : {}),
+			...(intakeRouting !== undefined ? { intakeRouting } : {}),
+			...(intakeMapping !== undefined ? { intakeMapping } : {}),
+			...(caseproOrgId !== undefined ? { caseproOrgId } : {}),
+			...(caseproSourceToken !== undefined ? { caseproSourceToken } : {}),
 		});
 		return API.v1.success({ form });
 	},
@@ -85,7 +90,8 @@ API.v1.post(
 	},
 	async function action() {
 		const uid = this.userId;
-		const { formId, targetListId, title, description, fields, titleTemplate, enabled } = this.bodyParams;
+		const { formId, targetListId, title, description, fields, titleTemplate, enabled, intakeRouting, intakeMapping, caseproOrgId, caseproSourceToken } =
+			this.bodyParams;
 		const form = await updateForm(uid, formId, {
 			...(targetListId !== undefined ? { targetListId } : {}),
 			...(title !== undefined ? { title } : {}),
@@ -93,6 +99,10 @@ API.v1.post(
 			...(fields !== undefined ? { fields } : {}),
 			...(titleTemplate !== undefined ? { titleTemplate } : {}),
 			...(enabled !== undefined ? { enabled } : {}),
+			...(intakeRouting !== undefined ? { intakeRouting } : {}),
+			...(intakeMapping !== undefined ? { intakeMapping } : {}),
+			...(caseproOrgId !== undefined ? { caseproOrgId } : {}),
+			...(caseproSourceToken !== undefined ? { caseproSourceToken } : {}),
 		});
 		return API.v1.success({ form });
 	},
