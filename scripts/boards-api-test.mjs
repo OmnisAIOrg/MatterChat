@@ -424,6 +424,97 @@ async function main() {
   const flAfter = await api('GET', `/boards.forms.list?boardId=${boardId}`);
   ok(!(flAfter.json?.forms || []).some((f) => f._id === form?._id), 'deleted form gone from list');
 
+  // --- boards.views.cards pagination (opt-in flat offset/count + per-group cap) ---
+  // second list on the pagination board so groupBy=list yields two groups (7 + 3 = 10 cards)
+  const pl2 = await api('POST', '/boards.list.create', { boardId: pgBoardId, title: 'Paged list B' });
+  const pgListB = pl2.json?.list?._id;
+  const pgIdsB = [];
+  for (let i = 1; i <= 3; i++) {
+    const pc = await api('POST', '/boards.card.create', { boardId: pgBoardId, listId: pgListB, title: `Paged-B card ${i}` });
+    pgIdsB.push(pc.json?.card?._id);
+  }
+  ok(pgIdsB.every(Boolean), 'create 3 cards in second list', `${pgIdsB.length} cards`);
+
+  const sv = await api('POST', '/boards.views.upsert', { name: 'Grouped by list', viewType: 'table', scope: 'board', boardId: pgBoardId, config: { groupBy: 'list' } });
+  const svId = sv.json?.view?._id;
+  ok(!!svId, 'create saved view (groupBy=list)', svId);
+
+  // no-params compat: full 10-card set + total, groups uncapped with exact per-group totals
+  const vc0 = await api('GET', `/boards.views.cards?boardId=${pgBoardId}&viewId=${svId}`);
+  const vc0r = vc0.json?.result;
+  const vc0Groups = vc0r?.groups || [];
+  ok(vc0r?.cards?.length === 10 && vc0r?.total === 10, 'views.cards without params returns full set + total', `rows=${vc0r?.cards?.length} total=${vc0r?.total}`);
+  ok(vc0Groups.length === 2 && vc0Groups.every((g) => g.total === g.cards.length && g.hasMore === false),
+    'uncapped groups carry exact total + hasMore=false', vc0Groups.map((g) => `${g.cards.length}/${g.total}`).join(' '));
+
+  // flat paging: walk the 10 cards in pages of 4 (disjoint, union-complete, total constant)
+  const vp1 = await api('GET', `/boards.views.cards?boardId=${pgBoardId}&viewId=${svId}&count=4`);
+  const vp2 = await api('GET', `/boards.views.cards?boardId=${pgBoardId}&viewId=${svId}&count=4&offset=4`);
+  const vp3 = await api('GET', `/boards.views.cards?boardId=${pgBoardId}&viewId=${svId}&count=4&offset=8`);
+  ok(vp1.json?.result?.cards?.length === 4 && vp1.json?.result?.total === 10 && vp1.json?.result?.offset === 0,
+    'views.cards page 1: 4 rows, total=10, offset=0', `rows=${vp1.json?.result?.cards?.length}`);
+  ok(vp3.json?.result?.cards?.length === 2 && vp3.json?.result?.total === 10, 'views.cards page 3: 2 remaining rows', `rows=${vp3.json?.result?.cards?.length}`);
+  const vpIds = [vp1, vp2, vp3].flatMap((r) => (r.json?.result?.cards || []).map((x) => x._id));
+  const vpAll = [...pgIds, ...pgIdsB];
+  ok(new Set(vpIds).size === 10 && vpAll.every((id) => vpIds.includes(id)),
+    'views.cards pages are disjoint and union to all 10 cards', `unique=${new Set(vpIds).size}`);
+
+  // groups keep bucketing the FULL match set (exact totals) while the flat array is paged
+  ok((vp1.json?.result?.groups || []).reduce((n, g) => n + g.total, 0) === 10,
+    'group totals stay complete while cards page', `sum=${(vp1.json?.result?.groups || []).reduce((n, g) => n + g.total, 0)}`);
+
+  // per-group cap: groupLimit=2 caps every bucket; per-group total/hasMore stay exact
+  const vgl = await api('GET', `/boards.views.cards?boardId=${pgBoardId}&viewId=${svId}&groupLimit=2`);
+  const vglr = vgl.json?.result;
+  const gA = (vglr?.groups || []).find((g) => g.key === pgListId);
+  const gB = (vglr?.groups || []).find((g) => g.key === pgListB);
+  ok(gA?.cards?.length === 2 && gA?.total === 7 && gA?.hasMore === true, 'groupLimit=2 caps 7-card group (total=7, hasMore)', `${gA?.cards?.length}/${gA?.total}`);
+  ok(gB?.cards?.length === 2 && gB?.total === 3 && gB?.hasMore === true, 'groupLimit=2 caps 3-card group (total=3, hasMore)', `${gB?.cards?.length}/${gB?.total}`);
+  ok(vglr?.cards?.length === 10, 'groupLimit alone leaves flat cards unpaged (orthogonal)', `rows=${vglr?.cards?.length}`);
+
+  // --- boards.leads.list pagination (Mongo-paged envelope) ---
+  const tok = `PagLead${Date.now()}`;
+  const lb = await api('POST', '/boards.leads.ensureBoard', {});
+  const leadsBoardId = lb.json?.board?._id;
+  ok(!!leadsBoardId, 'ensure leads board', leadsBoardId);
+  const leadIds = [];
+  let leadStatusId;
+  for (let i = 1; i <= 5; i++) {
+    const lc = await api('POST', '/boards.leads.create', {
+      contact: { firstName: tok, lastName: `Case ${i}`, phone: `+1555${String(Date.now()).slice(-5)}${i}` },
+      allowDuplicate: true,
+    });
+    leadIds.push(lc.json?.lead?._id);
+    leadStatusId = lc.json?.lead?.statusId ?? leadStatusId;
+  }
+  ok(leadIds.every(Boolean), 'create 5 leads', `${leadIds.filter(Boolean).length} leads`);
+
+  // q-scoped full list: exactly our 5 (q narrows in the Mongo query, not in JS)
+  const lq = await api('GET', `/boards.leads.list?q=${encodeURIComponent(tok)}`);
+  ok(lq.json?.leads?.length === 5 && lq.json?.total === 5, 'leads.list q-filter returns the 5 created + total', `rows=${lq.json?.leads?.length} total=${lq.json?.total}`);
+
+  // page walk 2+2+1: disjoint, union-complete, total constant across pages
+  const lp1 = await api('GET', `/boards.leads.list?q=${encodeURIComponent(tok)}&count=2`);
+  const lp2 = await api('GET', `/boards.leads.list?q=${encodeURIComponent(tok)}&count=2&offset=2`);
+  const lp3 = await api('GET', `/boards.leads.list?q=${encodeURIComponent(tok)}&count=2&offset=4`);
+  ok(lp1.json?.leads?.length === 2 && lp1.json?.total === 5 && lp1.json?.offset === 0, 'leads page 1: 2 rows, total=5', `rows=${lp1.json?.leads?.length}`);
+  ok(lp3.json?.leads?.length === 1 && lp3.json?.total === 5, 'leads page 3: 1 remaining row', `rows=${lp3.json?.leads?.length}`);
+  const lpIds = [lp1, lp2, lp3].flatMap((r) => (r.json?.leads || []).map((x) => x._id));
+  ok(new Set(lpIds).size === 5 && leadIds.every((id) => lpIds.includes(id)),
+    'lead pages are disjoint and union to all 5 leads', `unique=${new Set(lpIds).size}`);
+
+  // composed filters run in the same Mongo query (boardId + q, statusId + q)
+  const lbq = await api('GET', `/boards.leads.list?boardId=${leadsBoardId}&q=${encodeURIComponent(tok)}`);
+  ok(lbq.json?.leads?.length === 5 && lbq.json?.total === 5, 'leads.list boardId+q composed filter', `rows=${lbq.json?.leads?.length}`);
+  const lsq = await api('GET', `/boards.leads.list?statusId=${leadStatusId}&q=${encodeURIComponent(tok)}`);
+  ok(lsq.json?.leads?.length === 5 && lsq.json?.total === 5, 'leads.list statusId+q composed filter', `rows=${lsq.json?.leads?.length}`);
+
+  // no-params compat: historical default page (API_Default_Count), enforced by the
+  // query's limit — rows = min(total, 50) and never more than the 100 hard cap
+  const l0 = await api('GET', '/boards.leads.list');
+  ok(typeof l0.json?.total === 'number' && l0.json?.leads?.length === Math.min(l0.json?.total, 50),
+    'leads.list without params returns the default-capped page + total', `rows=${l0.json?.leads?.length} total=${l0.json?.total}`);
+
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);
 }

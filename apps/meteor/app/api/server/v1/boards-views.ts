@@ -10,6 +10,7 @@ import {
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
 
+import { requireUid } from '../../../../server/lib/boards';
 import {
 	listSavedViews,
 	getSavedView,
@@ -18,8 +19,8 @@ import {
 	setDefaultSavedView,
 	queryBoardCards,
 } from '../../../../server/lib/boards/views';
-import { requireUid } from '../../../../server/lib/boards';
 import { API } from '../api';
+import { getPaginationItems } from '../helpers/getPaginationItems';
 
 /**
  * REST surface for Boards SAVED VIEWS (M8 — the generic view switcher).
@@ -140,7 +141,7 @@ API.v1.get(
 	},
 	async function action() {
 		const uid = requireUid('boards.views.cards');
-		const { boardId, viewId, viewType } = this.queryParams;
+		const { boardId, viewId, viewType, groupLimit } = this.queryParams;
 
 		// when a saved view id is given, hydrate its config + viewType (caller may
 		// still override the rendered viewType, e.g. preview a saved table as a timeline).
@@ -152,7 +153,19 @@ API.v1.get(
 			resolvedViewType = (viewType as SavedViewType | undefined) ?? view.viewType;
 		}
 
-		const result = await queryBoardCards(uid, boardId, config, resolvedViewType ?? 'table');
+		// PAGINATION (opt-in, myDay/search pattern): the Table/Timeline/Dashboard/Gantt
+		// clients consume the FULL set and bucket it client-side, so callers that pass
+		// no offset/count keep the historical full response. offset/count page the flat
+		// `cards` (standard envelope, `total` = full match count); `groupLimit` caps each
+		// group's cards while its exact `total`/`hasMore` ride along per group.
+		const wantsPaging = this.queryParams.offset !== undefined || this.queryParams.count !== undefined;
+		const paging = wantsPaging ? await getPaginationItems(this.queryParams) : undefined;
+		const cappedGroupLimit = typeof groupLimit === 'number' && groupLimit > 0 ? Math.floor(groupLimit) : undefined;
+
+		const result = await queryBoardCards(uid, boardId, config, resolvedViewType ?? 'table', {
+			...(paging ? { paging } : {}),
+			...(cappedGroupLimit ? { groupLimit: cappedGroupLimit } : {}),
+		});
 		return API.v1.success({ result });
 	},
 );

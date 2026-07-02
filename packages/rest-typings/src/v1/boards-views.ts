@@ -40,7 +40,16 @@ export const isBoardsViewsListProps = ajvQuery.compile<BoardsViewsListProps>(Boa
 // GET — cards (run a saved view, or an empty config, over a board)
 // ---------------------------------------------------------------------------
 
-type BoardsViewsCardsProps = { boardId: string; viewId?: string; viewType?: string };
+type BoardsViewsCardsProps = {
+	boardId: string;
+	viewId?: string;
+	viewType?: string;
+	/** opt-in flat paging over the sorted cards (standard RC envelope). Omit both = full set. */
+	offset?: number;
+	count?: number;
+	/** opt-in per-group cap: each group returns at most N cards + exact total/hasMore. */
+	groupLimit?: number;
+};
 
 const BoardsViewsCardsSchema = {
 	type: 'object',
@@ -48,6 +57,9 @@ const BoardsViewsCardsSchema = {
 		boardId: { type: 'string', minLength: 1 },
 		viewId: { type: 'string', nullable: true },
 		viewType: { type: 'string', nullable: true },
+		offset: { type: 'number', nullable: true },
+		count: { type: 'number', nullable: true },
+		groupLimit: { type: 'number', nullable: true },
 	},
 	required: ['boardId'],
 	additionalProperties: false,
@@ -109,7 +121,15 @@ export const isBoardsViewsSetDefaultProps = ajv.compile<BoardsViewsByIdProps>(Bo
 // Result shapes
 // ---------------------------------------------------------------------------
 
-export type BoardCardGroupDTO = { key: string; label: string; cards: IBoardCard[] };
+export type BoardCardGroupDTO = {
+	key: string;
+	label: string;
+	cards: IBoardCard[];
+	/** full bucket size — `cards` may be capped by `groupLimit`, this never is. */
+	total?: number;
+	/** true when `groupLimit` cut this bucket. */
+	hasMore?: boolean;
+};
 
 export type QueryBoardCardsResultDTO = {
 	boardId: string;
@@ -117,6 +137,8 @@ export type QueryBoardCardsResultDTO = {
 	cards: IBoardCard[];
 	groups?: BoardCardGroupDTO[];
 	total: number;
+	/** echoed when the caller opted into flat paging. */
+	offset?: number;
 	dateField?: string;
 };
 
