@@ -5,7 +5,7 @@ import { caseProClientMessagesClient, type CaseProClientAttachment, type CasePro
 import { clientSyncEcho, clientSyncMessageId, isClientSyncMessageId } from './echoSuppression';
 import { ensureClientRoom, findClientRoom, getClientSyncBot } from './room';
 import { settings } from '../../../../app/settings/server';
-import { executeSendMessage } from '../../../../app/lib/server/methods/sendMessage';
+import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
 import { SystemLogger } from '../../logger/system';
 
 /**
@@ -60,7 +60,7 @@ function toRcAttachments(attachments?: CaseProClientAttachment[]): IMessage['att
  * `_id` upserts onto itself, so a re-polled message never duplicates. Skips firm-origin rows
  * (our own echo) — those are the outbound leg's own POSTs coming back.
  */
-async function ingestInbound(rid: string, matterId: string, msg: CaseProClientMessage): Promise<void> {
+async function ingestInbound(room: IRoom, matterId: string, msg: CaseProClientMessage): Promise<void> {
 	if (msg.from !== 'client') {
 		return; // firm-origin rows are our echo; guard 3 (persistent) — never re-inject.
 	}
@@ -74,18 +74,21 @@ async function ingestInbound(rid: string, matterId: string, msg: CaseProClientMe
 	}
 
 	const _id = clientSyncMessageId(matterId, msg.id);
-	// Upsert-safe: if this deterministic id already exists, skip (a prior poll ingested it).
+	// Guard 3 (persistent): the deterministic id upserts onto itself — a re-polled message
+	// never duplicates. Skipping the insert when it already exists also avoids a needless
+	// afterSaveMessage re-fire.
 	if (await Messages.findOneById(_id, { projection: { _id: 1 } })) {
 		return;
 	}
 
-	const message: Partial<IMessage> & { _id: string; rid: string; msg: string } = {
+	const rcMessage: Partial<IMessage> & { _id: string; rid: string; msg: string } = {
 		_id,
-		rid,
+		rid: room._id,
 		msg: msg.body,
 		ts: new Date(msg.sentAt),
 		u: { _id: bot._id, username: bot.username },
-		// Render as the CLIENT via the alias mechanism — never a ghost RC account.
+		// Render as the CLIENT via the alias mechanism — never a ghost RC account (same pattern
+		// as the connectors bridge).
 		alias: msg.author || 'Client',
 		...(toRcAttachments(msg.attachments) ? { attachments: toRcAttachments(msg.attachments) } : {}),
 		customFields: {
@@ -97,7 +100,10 @@ async function ingestInbound(rid: string, matterId: string, msg: CaseProClientMe
 		},
 	};
 
-	await executeSendMessage(bot._id, message, { ts: message.ts });
+	// Inner sendMessage with upsert — preserves our deterministic _id (executeSendMessage would
+	// run impersonation/permission checks and not guarantee the _id). The outbound afterSaveMessage
+	// hook skips this message by its cpc- prefix (guard 2), so no loop.
+	await sendMessage(bot, rcMessage, room, { upsert: true });
 }
 
 /**
@@ -105,8 +111,8 @@ async function ingestInbound(rid: string, matterId: string, msg: CaseProClientMe
  * then advance the cursor to the newest ingested `sentAt`. Best-effort — errors are logged and
  * swallowed so one bad matter never stalls the sweep.
  */
-export async function pollMatter(room: Pick<IRoom, '_id' | 'matterId' | 'clientSyncCursor'>): Promise<number> {
-	if (!isClientSyncEnabled() || !caseProClientMessagesClient.isConfigured() || !room.matterId) {
+export async function pollMatter(room: IRoom): Promise<number> {
+	if (!isClientSyncEnabled() || !caseProClientMessagesClient.isConfigured() || !room.matterId || !room.clientChannel) {
 		return 0;
 	}
 	const matterId = room.matterId;
@@ -115,7 +121,7 @@ export async function pollMatter(room: Pick<IRoom, '_id' | 'matterId' | 'clientS
 		const messages = await caseProClientMessagesClient.listSince(matterId, room.clientSyncCursor);
 		let newestSentAt = room.clientSyncCursor;
 		for (const msg of messages) {
-			await ingestInbound(room._id, matterId, msg);
+			await ingestInbound(room, matterId, msg);
 			if (msg.from === 'client') {
 				ingested += 1;
 			}
@@ -142,15 +148,12 @@ export async function runClientSyncSweep(): Promise<{ rooms: number; ingested: n
 	if (!isClientSyncEnabled() || !caseProClientMessagesClient.isConfigured()) {
 		return { rooms: 0, ingested: 0 };
 	}
-	const cursor = Rooms.find(
-		{ clientChannel: true, matterId: { $exists: true } },
-		{ projection: { _id: 1, matterId: 1, clientSyncCursor: 1 } },
-	);
+	const cursor = Rooms.find({ clientChannel: true, matterId: { $exists: true } });
 	let rooms = 0;
 	let ingested = 0;
 	for await (const room of cursor) {
 		rooms += 1;
-		ingested += await pollMatter(room as Pick<IRoom, '_id' | 'matterId' | 'clientSyncCursor'>);
+		ingested += await pollMatter(room);
 	}
 	return { rooms, ingested };
 }
