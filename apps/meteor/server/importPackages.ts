@@ -48,6 +48,8 @@ import '../app/slackbridge/server';
 import '../app/connectors/server';
 // CasePro CLIENT-message two-way sync — outbound leg (afterSaveMessage hook, gated OFF by default).
 import './lib/boards/casepro-clientsync/startup';
+// CasePro inbound webhook receiver (/_casepro/webhook) — signed case-update events → matter channels.
+import '../app/casepro-events/server';
 import '../app/slashcommands-archiveroom/server';
 import '../app/slashcommand-asciiarts/server';
 import '../app/slashcommands-ban/server';
