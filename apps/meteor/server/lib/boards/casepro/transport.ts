@@ -94,6 +94,25 @@ export interface ICaseProTransport {
 	 * (https-only, refuse-without-key). It never rides `tools/call`.
 	 */
 	ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown>;
+	/**
+	 * Generic authenticated request to a plain CasePro CRM REST controller for the verbs `ingest`
+	 * (POST-only) does not cover — GET (reads) / PATCH / DELETE (mutations by row id). First consumer:
+	 * the calendar-reuse bridge (`casepro/calendarBridge.ts`), which routes a MatterChat user's
+	 * due-card → calendar event through CasePro's OWN calendar controller
+	 * (`POST /calendar/create`, `PATCH /calendar/update/:id`, `DELETE /calendar/:id`,
+	 * `GET /calendar/all-events`) instead of MatterChat holding a second Google/Outlook OAuth token.
+	 *
+	 * Same auth + egress posture as {@link ICaseProTransport.ingest}: reuses the entity verbs' headers
+	 * (X-MCP-API-Key + X-Organization-ID + advisory X-Acting-User), https-only, single-host SSRF
+	 * allow-list, never follows redirects, refuses without a key. `path` is relative to the configured
+	 * base host or an absolute https URL. `query` is appended as the search string (GET reads). Returns
+	 * the parsed JSON body (or `undefined` for an empty 2xx, e.g. a 204 DELETE).
+	 */
+	request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +468,37 @@ export class StubTransport implements ICaseProTransport {
 		this.ingested.push({ path, payload });
 		return { ok: true, stub: true };
 	}
+
+	/** Records of every generic request (tests inspect them). Reads return an empty CasePro-shaped payload. */
+	public readonly requests: {
+		method: string;
+		path: string;
+		query?: Record<string, string | undefined>;
+		body?: Record<string, unknown>;
+	}[] = [];
+
+	async request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown> {
+		this.requests.push({ method, path, query: options?.query, body: options?.body });
+		// Shape stub replies like the CasePro calendar controller so the bridge composes without network:
+		//  - all-events read  → { data: [], total: 0 }
+		//  - create/update     → echo the body with a synthetic id so correlation is recorded
+		//  - delete            → { success: true }
+		if (method === 'GET') {
+			// sync-status probe → "not connected" (the stub isn't a real calendar); all-events → empty feed.
+			if (/calendar\/sync-status/.test(path)) {
+				return { connected: false, provider: null };
+			}
+			return { data: [], total: 0 };
+		}
+		if (method === 'DELETE') {
+			return { success: true };
+		}
+		return { id: `stub-calendar-${Date.now().toString(36)}-${(this.seq += 1)}`, ...(options?.body || {}) };
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -730,6 +780,72 @@ export class McpGatewayTransport implements ICaseProTransport {
 			throw new Error(`CasePro ingest(${path}) failed: HTTP ${res.status}`);
 		}
 		return res.json();
+	}
+
+	/**
+	 * Generic authenticated CRM REST call (GET/POST/PATCH/DELETE) — see the interface docblock. Reuses
+	 * the EXACT same auth headers + strict egress posture as {@link McpGatewayTransport.ingest} (the
+	 * only additions are the method + optional query string). Refuses without a key by construction.
+	 */
+	async request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown> {
+		let target: string;
+		let allowHost: string;
+		if (/^https?:\/\//i.test(path)) {
+			const url = new URL(path);
+			if (url.protocol !== 'https:') {
+				throw new Error(`CasePro request: endpoint must be https (got ${url.protocol}//)`);
+			}
+			if (url.username || url.password) {
+				throw new Error('CasePro request: endpoint must not embed credentials');
+			}
+			target = url.toString();
+			allowHost = url.hostname;
+		} else {
+			const origin = new URL(this.endpoint).origin;
+			target = `${origin}/${path.replace(/^\/+/, '')}`;
+			allowHost = this.host;
+		}
+
+		// Append the query string (skip undefined values) without mangling an existing one.
+		if (options?.query) {
+			const url = new URL(target);
+			for (const [key, value] of Object.entries(options.query)) {
+				if (value !== undefined && value !== '') {
+					url.searchParams.set(key, value);
+				}
+			}
+			target = url.toString();
+		}
+
+		const ctx = options?.ctx;
+		const res = await this.fetchFn(target, {
+			method,
+			headers: {
+				'Content-Type': 'application/json',
+				'X-MCP-API-Key': this.apiKey,
+				...(this.orgId ? { 'X-Organization-ID': this.orgId } : {}),
+				...(ctx?.actingUserId ? { 'X-Acting-User': ctx.actingUserId } : {}),
+			},
+			...(options?.body ? { body: JSON.stringify(options.body) } : {}),
+			ignoreSsrfValidation: false,
+			allowList: allowHost,
+			followRedirects: false,
+		});
+		if (res.status >= 300 && res.status < 400) {
+			throw new Error(`CasePro request ${method} ${path}: gateway redirected (${res.status}) — refusing to follow`);
+		}
+		if (!res.ok) {
+			throw new Error(`CasePro request ${method} ${path} failed: HTTP ${res.status}`);
+		}
+		// A 204 (or any empty 2xx) has no JSON body — return undefined rather than throwing.
+		if (res.status === 204) {
+			return undefined;
+		}
+		return res.json().catch(() => undefined);
 	}
 }
 

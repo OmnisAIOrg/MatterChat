@@ -42,4 +42,6 @@ export interface IBoardsCardsModel extends IBaseModel<IBoardCard> {
 	findByCalendarConnection(connectionId: string): FindCursor<IBoardCard>;
 	/** Set a card's due date (inbound reflect of a calendar-side move). */
 	setDueDate(cardId: string, dueDate: Date): Promise<UpdateResult>;
+	/** Distinct user ids holding a CasePro-namespaced calendar mirror (cron polls these CasePro users). */
+	findUserIdsWithCaseProMirror(): Promise<string[]>;
 }

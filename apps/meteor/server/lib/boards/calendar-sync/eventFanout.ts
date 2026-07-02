@@ -8,6 +8,8 @@
  */
 import { BoardCalendarConnections, BoardsCards } from '@rocket.chat/models';
 
+import { getCaseProBridgeForUser } from './caseproBridge';
+import { pushCardThroughCasePro } from './caseproSync';
 import { isCalendarSyncEnabled } from './config';
 import { pushCardToConnection } from './service';
 import { SystemLogger } from '../../logger/system';
@@ -34,6 +36,25 @@ export async function pushCardOnEvent(cardId: string): Promise<void> {
 	}
 
 	for (const userId of userIds) {
+		// PREFERRED SOURCE: if CasePro is this user's calendar source (enabled + linked + connected in
+		// CasePro), route through CasePro and skip their standalone connections — the user authorized
+		// their calendar once, in CasePro. When there's no CasePro bridge, use the standalone path
+		// unchanged (the CasePro-free case: cross-firm / non-CasePro firms).
+		try {
+			const bridge = await getCaseProBridgeForUser(userId);
+			if (bridge) {
+				try {
+					await pushCardThroughCasePro(card, userId, bridge);
+				} catch (err) {
+					SystemLogger.warn({ msg: 'boards.calendar.fanout.caseproPushFailed', cardId, userId, err: String(err) });
+				}
+				continue;
+			}
+		} catch (err) {
+			// Bridge resolution shouldn't block the standalone path — log and fall through.
+			SystemLogger.debug({ msg: 'boards.calendar.fanout.caseproBridgeFailed', userId, err: String(err) });
+		}
+
 		let conns;
 		try {
 			conns = await BoardCalendarConnections.findByUserId(userId).toArray();

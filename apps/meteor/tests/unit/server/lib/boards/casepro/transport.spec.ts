@@ -190,6 +190,73 @@ describe('CasePro transport (live wire)', () => {
 
 			await expect(tx.query('matters')).to.be.rejectedWith(/redirect/);
 		});
+
+		describe('request() — generic CRM REST verb (calendar/email reuse)', () => {
+			const okJson = (status: number, body: unknown) =>
+				sinon.stub().resolves({ ok: status >= 200 && status < 300, status, json: async () => body });
+
+			it('GET builds a query string and reuses the same auth headers + egress posture', async () => {
+				const fetchFn = okJson(200, { data: [{ id: 'cal-1' }], total: 1 });
+				const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, orgId: ORG, fetchFn });
+
+				const res = await tx.request('GET', 'calendar/all-events', {
+					query: { userId: 'sub-1', timeMin: '2026-01-01T00:00:00.000Z', timeMax: undefined },
+					ctx: { actingUserId: 'sub-1' },
+				});
+
+				const [url, options] = fetchFn.firstCall.args;
+				expect(url).to.equal(`${BASE}/calendar/all-events?userId=sub-1&timeMin=2026-01-01T00%3A00%3A00.000Z`);
+				expect(options.method).to.equal('GET');
+				expect(options.headers['X-MCP-API-Key']).to.equal(KEY);
+				expect(options.headers['X-Organization-ID']).to.equal(ORG);
+				expect(options.headers['X-Acting-User']).to.equal('sub-1');
+				expect(options.ignoreSsrfValidation).to.equal(false);
+				expect(options.allowList).to.equal('casepro-mcp-v2.stg-omnisai.io');
+				expect(options.followRedirects).to.equal(false);
+				expect(options.body).to.equal(undefined); // GET has no body
+				expect(res).to.deep.equal({ data: [{ id: 'cal-1' }], total: 1 });
+			});
+
+			it('POST sends a JSON body (calendar create)', async () => {
+				const fetchFn = okJson(201, { id: 'cal-new' });
+				const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, orgId: ORG, fetchFn });
+
+				const res = (await tx.request('POST', 'calendar/create', {
+					body: { user_id: 'sub-1', title: 'Deadline', start: 's', end: 'e' },
+					ctx: { actingUserId: 'sub-1' },
+				})) as { id: string };
+
+				const [url, options] = fetchFn.firstCall.args;
+				expect(url).to.equal(`${BASE}/calendar/create`);
+				expect(options.method).to.equal('POST');
+				expect(JSON.parse(options.body)).to.deep.equal({ user_id: 'sub-1', title: 'Deadline', start: 's', end: 'e' });
+				expect(res.id).to.equal('cal-new');
+			});
+
+			it('DELETE returns undefined on a 204 (no JSON body)', async () => {
+				const fetchFn = sinon.stub().resolves({ ok: true, status: 204, json: async () => undefined });
+				const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
+
+				const res = await tx.request('DELETE', 'calendar/cal-1', { ctx: { actingUserId: 'sub-1' } });
+				expect(res).to.equal(undefined);
+				expect(fetchFn.firstCall.args[1].method).to.equal('DELETE');
+			});
+
+			it('refuses to follow redirects (never re-sends the key)', async () => {
+				const fetchFn = sinon.stub().resolves({ ok: false, status: 302, json: async () => ({}) });
+				const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
+
+				await expect(tx.request('GET', 'calendar/all-events')).to.be.rejectedWith(/redirected/);
+			});
+
+			it('refuses a non-https absolute endpoint (never sends the key over http)', async () => {
+				const fetchFn = okJson(200, {});
+				const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
+
+				await expect(tx.request('GET', 'http://evil.example/calendar')).to.be.rejectedWith(/https/);
+				expect(fetchFn.called).to.equal(false);
+			});
+		});
 	});
 
 	describe('resolveTransportFromConfig (refusal + fallback matrix)', () => {

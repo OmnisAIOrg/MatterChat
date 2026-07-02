@@ -2,6 +2,8 @@ import type { CalendarProvider } from '@rocket.chat/core-typings';
 import { BoardCalendarConnections } from '@rocket.chat/models';
 import { ajv, validateBadRequestErrorResponse, validateUnauthorizedErrorResponse } from '@rocket.chat/rest-typings';
 
+import { getCaseProBridgeForUser, isCaseProCalendarActive } from '../../../../server/lib/boards/calendar-sync/caseproBridge';
+import { pollCasePro, pushUserCardsThroughCasePro } from '../../../../server/lib/boards/calendar-sync/caseproSync';
 import { isCalendarSyncEnabled, isProviderConfigured } from '../../../../server/lib/boards/calendar-sync/config';
 import { buildAuthorizeUrl } from '../../../../server/lib/boards/calendar-sync/routes';
 import { pollConnection, pushUserCards, teardownConnectionMirrors } from '../../../../server/lib/boards/calendar-sync/service';
@@ -49,8 +51,22 @@ API.v1.get(
 			return API.v1.success({ enabled: false, providers: {}, connections: [] });
 		}
 		const docs = await BoardCalendarConnections.findByUserId(this.userId).toArray();
+		// Is CasePro this user's PREFERRED calendar source (enabled + linked + connected in CasePro)?
+		// When so, the UI shows "connected via CasePro" and hides the redundant provider connect buttons —
+		// the user already authorized their calendar once, in CasePro. Best-effort: a failure just falls
+		// back to the standalone view.
+		let casepro: { active: boolean; connected: boolean } = { active: isCaseProCalendarActive(), connected: false };
+		try {
+			if (casepro.active) {
+				const bridge = await getCaseProBridgeForUser(this.userId);
+				casepro = { active: true, connected: Boolean(bridge) };
+			}
+		} catch {
+			// keep casepro.connected = false
+		}
 		return API.v1.success({
 			enabled: true,
+			casepro,
 			providers: {
 				google: { configured: isProviderConfigured('google') },
 				outlook: { configured: isProviderConfigured('outlook') },
@@ -72,6 +88,15 @@ API.v1.post(
 		const { provider } = this.bodyParams as { provider: CalendarProvider };
 		if (!isCalendarSyncEnabled() || !isProviderConfigured(provider)) {
 			return API.v1.success({ authorizeUrl: null, configured: false });
+		}
+		// If CasePro is already this user's calendar source, there's nothing to authorize — they connected
+		// in CasePro. Tell the client so it can show "connected via CasePro" instead of launching OAuth.
+		try {
+			if (isCaseProCalendarActive() && (await getCaseProBridgeForUser(this.userId))) {
+				return API.v1.success({ authorizeUrl: null, configured: true, casepro: true });
+			}
+		} catch {
+			// fall through to the standalone OAuth start
 		}
 		try {
 			const { authorizeUrl } = await buildAuthorizeUrl(provider, this.userId);
@@ -107,17 +132,42 @@ API.v1.post(
 );
 
 // POST boards.calendar.syncNow — push the caller's due cards + poll for inbound changes, on demand.
+// `connectionId` is OPTIONAL: a CasePro-preferred user has no standalone connection, so they sync with
+// an empty body (routed through CasePro). When a connectionId is given but CasePro is preferred, CasePro
+// still wins (single source of truth per user).
+const isSyncNowBody = ajv.compile({
+	type: 'object',
+	properties: { connectionId: { type: 'string', minLength: 1 } },
+	additionalProperties: false,
+});
+
 API.v1.post(
 	'boards.calendar.syncNow',
 	{
 		authRequired: true,
-		body: isConnectionIdBody,
+		body: isSyncNowBody,
 		response: { 200: successSchema, 400: validateBadRequestErrorResponse, 401: validateUnauthorizedErrorResponse },
 	},
 	async function action() {
-		const { connectionId } = this.bodyParams as { connectionId: string };
+		const { connectionId } = (this.bodyParams as { connectionId?: string }) || {};
 		if (!isCalendarSyncEnabled()) {
 			return API.v1.success({ enabled: false });
+		}
+
+		// PREFERRED: route through CasePro when it's this user's calendar source.
+		try {
+			const bridge = await getCaseProBridgeForUser(this.userId);
+			if (bridge) {
+				const pushed = await pushUserCardsThroughCasePro(this.userId, bridge);
+				const polled = await pollCasePro(this.userId, bridge);
+				return API.v1.success({ source: 'casepro', pushed, polled });
+			}
+		} catch {
+			// fall through to standalone
+		}
+
+		if (!connectionId) {
+			return API.v1.failure('connection_not_found');
 		}
 		const doc = await BoardCalendarConnections.findOneByIdAndUserId(connectionId, this.userId);
 		if (!doc) {
@@ -125,6 +175,6 @@ API.v1.post(
 		}
 		const pushed = await pushUserCards(doc);
 		const polled = await pollConnection(doc);
-		return API.v1.success({ pushed, polled });
+		return API.v1.success({ source: 'standalone', pushed, polled });
 	},
 );

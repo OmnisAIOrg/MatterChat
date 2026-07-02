@@ -241,4 +241,17 @@ export class BoardsCardsRaw extends BaseRaw<IBoardCard> implements IBoardsCardsM
 	public setDueDate(cardId: string, dueDate: Date): Promise<UpdateResult> {
 		return this.updateOne({ _id: cardId }, { $set: { dueDate }, $inc: { rev: 1 } });
 	}
+
+	/**
+	 * Distinct MatterChat user ids that already hold at least one CasePro-namespaced calendar mirror
+	 * (connectionId begins `casepro:`). The calendar cron uses this to keep polling/pushing CasePro
+	 * users who have no standalone `boards_calendar_connections` document (their calendar lives in
+	 * CasePro). Cheap: a distinct over the (typically small) set of cards carrying a CasePro mirror.
+	 */
+	public async findUserIdsWithCaseProMirror(): Promise<string[]> {
+		const ids = await this.col.distinct('calendarSync.userId', {
+			'calendarSync.connectionId': { $regex: '^casepro:' },
+		});
+		return (ids as string[]).filter((id): id is string => typeof id === 'string' && id.length > 0);
+	}
 }
