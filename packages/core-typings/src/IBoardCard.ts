@@ -163,10 +163,43 @@ export interface IBoardCard extends IRocketChatRecord {
 		occurrencesDone?: number; // how many occurrences have been completed so far
 	};
 
+	// Two-way calendar sync (Phase 3). When a user with a connected Google/Outlook calendar has a card
+	// with a due date, the outbound sync creates a mirror event in their calendar and records the
+	// correlation here (mirrors the connector `bridgedChannels.subscriptionId` / tasksync external_ref
+	// pattern). One entry per (card, connection): a card assigned to two people who each connected a
+	// calendar can carry two mirrors. Inbound reconcile reads `externalEventId` to update the same event
+	// and reads `externalEtag`/`externalUpdatedAt` to detect a calendar-side change to reflect back onto
+	// the card's due date. Absent = the card is not mirrored anywhere.
+	calendarSync?: ICardCalendarSync[];
+
 	archived: boolean;
 	rev: number;
 	createdBy: IUser['_id'];
 	createdAt: Date;
+}
+
+/**
+ * One card↔calendar-event correlation, stored on the card by the outbound sync. Keeps the external
+ * event id (for update/delete) plus the provider's change markers so inbound reconcile can tell
+ * whether the calendar side moved. Never carries a token — credentials live only on the connection.
+ */
+export interface ICardCalendarSync {
+	/** The board-calendar connection (per-user) this mirror belongs to. -> boards_calendar_connections._id */
+	connectionId: string;
+	/** The MatterChat user who owns the connection the mirror lives in (denormalized for cheap scans). */
+	userId: IUser['_id'];
+	/** Provider-native event id, used to update/delete the mirror event (Google: event id; Graph: id). */
+	externalEventId: string;
+	/** Provider-native calendar id the event lives in ('primary' for Google, the Graph calendar id). */
+	externalCalendarId: string;
+	/** Provider ETag / changeKey captured at last write — inbound reconcile compares to detect edits. */
+	externalEtag?: string;
+	/** The event's last-modified time reported by the provider at last sync (inbound change detection). */
+	externalUpdatedAt?: Date;
+	/** The card `dueDate` value we last pushed — so we only re-push when the card side actually changes. */
+	lastPushedDueDate?: Date;
+	/** When this mirror was last written/reconciled. */
+	syncedAt: Date;
 }
 
 /**

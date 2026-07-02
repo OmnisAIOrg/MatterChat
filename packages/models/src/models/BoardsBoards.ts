@@ -42,6 +42,10 @@ export class BoardsBoardsRaw extends BaseRaw<IBoard> implements IBoardsBoardsMod
 		return this.findOne({ '_id': boardId, 'members.userId': userId });
 	}
 
+	public findOneByEmailIntakeToken(token: string): Promise<IBoard | null> {
+		return this.findOne({ 'emailIntake.token': token, 'emailIntake.enabled': true, 'archived': { $ne: true } });
+	}
+
 	public async setMember(boardId: string, member: IBoardMember): Promise<UpdateResult> {
 		// remove any existing membership for this user, then add the (possibly re-roled) one
 		await this.updateOne({ _id: boardId }, { $pull: { members: { userId: member.userId } } });

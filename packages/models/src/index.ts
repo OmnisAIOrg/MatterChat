@@ -7,6 +7,7 @@ import type {
 	ICannedResponseModel,
 	ICredentialTokensModel,
 	IExternalWorkspaceConnectionsModel,
+	IBoardCalendarConnectionsModel,
 	ICustomSoundsModel,
 	ICustomUserStatusModel,
 	IEmailInboxModel,
@@ -157,6 +158,7 @@ export const CallHistory = proxify<ICallHistoryModel>('ICallHistoryModel');
 export const CannedResponse = proxify<ICannedResponseModel>('ICannedResponseModel');
 export const CredentialTokens = proxify<ICredentialTokensModel>('ICredentialTokensModel');
 export const ExternalWorkspaceConnections = proxify<IExternalWorkspaceConnectionsModel>('IExternalWorkspaceConnectionsModel');
+export const BoardCalendarConnections = proxify<IBoardCalendarConnectionsModel>('IBoardCalendarConnectionsModel');
 export const CustomSounds = proxify<ICustomSoundsModel>('ICustomSoundsModel');
 export const CustomUserStatus = proxify<ICustomUserStatusModel>('ICustomUserStatusModel');
 export const EmailInbox = proxify<IEmailInboxModel>('IEmailInboxModel');

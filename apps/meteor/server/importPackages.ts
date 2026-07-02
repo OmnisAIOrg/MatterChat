@@ -50,6 +50,10 @@ import '../app/connectors/server';
 import './lib/boards/casepro-clientsync/startup';
 // CasePro inbound webhook receiver (/_casepro/webhook) — signed case-update events → matter channels.
 import '../app/casepro-events/server';
+// Boards two-way calendar sync + email-to-task (Phase 3) — mounts /_boards_calendar OAuth routes and
+// the /_boards_email inbound webhook. Gated OFF by default (Boards_Calendar_Sync_Enabled /
+// Boards_Email_To_Task_Enabled); handlers refuse before any external call when disabled.
+import './lib/boards/calendar-sync/startup';
 import '../app/slashcommands-archiveroom/server';
 import '../app/slashcommand-asciiarts/server';
 import '../app/slashcommands-ban/server';
