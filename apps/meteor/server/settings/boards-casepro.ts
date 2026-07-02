@@ -93,4 +93,44 @@ export const createBoardsCaseProSettings = () =>
 				value: true,
 			},
 		});
+
+		// -------------------------------------------------------------------------
+		// FILE (attachment) sync sub-flag. When OFF (default), attachments cross the
+		// bridge as REFERENCE STUBS only (name + size + an "open in CasePro" note) —
+		// today's behaviour. When ON, the bridge instead carries the shared-LitBox
+		// `documentId` so the file opens NATIVELY on both sides:
+		//   - inbound: the client's LitBox doc surfaces as a resolvable MatterChat
+		//     attachment (staff open it via the LitBox proxy with their OWN token —
+		//     the doc lives in their org's matter workspace, one shared LitBox tenant).
+		//   - outbound: a staff LitBox file referenced in a Client channel is forwarded
+		//     as a documentId on the client_message so the PWA renders it.
+		// This moves NO bytes — both products already point at the SAME LitBox and a
+		// documentId is org-resolvable there (same shared-file model MedChron uses).
+		// Requires the CasePro service endpoint to carry documentId + organizationId
+		// on client-message attachments (companion CasePro PR). Stays inert while OFF.
+		// -------------------------------------------------------------------------
+		await this.add('CasePro_Client_Sync_Files_Enabled', false, {
+			type: 'boolean',
+			public: true,
+			i18nLabel: 'CasePro_Client_Sync_Files_Enabled',
+			i18nDescription: 'CasePro_Client_Sync_Files_Enabled_Description',
+			enableQuery: {
+				_id: 'CasePro_Client_Sync_Enabled',
+				value: true,
+			},
+		});
+
+		// Hard cap (bytes) on a file whose reference the bridge will surface. Oversized
+		// files fall back to a reference NOTE (never blocked). Mirrors the CasePro
+		// client-portal upload cap (50 MB) so the two ends agree.
+		await this.add('CasePro_Client_Sync_File_Max_Bytes', 50 * 1024 * 1024, {
+			type: 'int',
+			public: false,
+			i18nLabel: 'CasePro_Client_Sync_File_Max_Bytes',
+			i18nDescription: 'CasePro_Client_Sync_File_Max_Bytes_Description',
+			enableQuery: {
+				_id: 'CasePro_Client_Sync_Files_Enabled',
+				value: true,
+			},
+		});
 	});
