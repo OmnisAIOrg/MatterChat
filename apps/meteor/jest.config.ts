@@ -45,6 +45,8 @@ export default {
 				'<rootDir>/server/lib/auditServerEvents/**.spec.ts',
 				'<rootDir>/server/lib/rooms/**.spec.ts',
 				'<rootDir>/server/lib/caseProCommsLog/**.spec.ts',
+				'<rootDir>/server/lib/boards/**/*.spec.ts',
+				'<rootDir>/server/services/automation/**/*.spec.ts',
 				'<rootDir>/server/services/import/**/*.spec.ts',
 				'<rootDir>/server/settings/lib/**.spec.ts',
 				'<rootDir>/server/cron/**.spec.ts',

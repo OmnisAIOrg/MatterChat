@@ -183,6 +183,23 @@ export type CaseProStatusDTO = {
 	enabled: boolean;
 };
 
+// boards.casepro.taskSync.set — per-board opt-in for the card→CasePro-task PUSH sync
+// (board.caseproSync.taskSyncEnabled; push-only, CasePro emits no task events).
+
+type BoardsCaseProTaskSyncSetProps = { boardId: string; enabled: boolean };
+
+const BoardsCaseProTaskSyncSetSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		enabled: { type: 'boolean' },
+	},
+	required: ['boardId', 'enabled'],
+	additionalProperties: false,
+};
+
+export const isBoardsCaseProTaskSyncSetProps = ajv.compile<BoardsCaseProTaskSyncSetProps>(BoardsCaseProTaskSyncSetSchema);
+
 // ---------------------------------------------------------------------------
 // boards.matters.playbooks.* (M5)
 // ---------------------------------------------------------------------------
@@ -435,6 +452,9 @@ export type BoardsMattersEndpoints = {
 	};
 	'/v1/boards.casepro.status': {
 		GET: (params: BoardsCaseProStatusProps) => { status: CaseProStatusDTO };
+	};
+	'/v1/boards.casepro.taskSync.set': {
+		POST: (params: BoardsCaseProTaskSyncSetProps) => { board: IBoard };
 	};
 
 	// M5 — Matters depth (playbooks / deadlines / reports / caseload)

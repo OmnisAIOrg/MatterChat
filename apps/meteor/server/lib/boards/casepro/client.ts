@@ -290,6 +290,41 @@ export class CaseProClient {
 		const intake = await this.mapIntake(updated);
 		return { matterId, intake };
 	}
+
+	// -------------------------------------------------------------------------
+	// Matters write-back (automation `caseproWriteback` execution path). Thin
+	// pass-throughs onto the ONE transport — same verbs the intake write-through
+	// uses; auth/transport wiring stays inside transport.ts (owned elsewhere).
+	// -------------------------------------------------------------------------
+
+	/** Patch a `matters` row (advanceStage → { stage_id }, updateField → { [col]: value }). */
+	async updateMatter(matterId: string, patch: CaseProRow): Promise<CaseProRow> {
+		return this.tx.update('matters', matterId, patch);
+	}
+
+	// -------------------------------------------------------------------------
+	// Tasks (card → CasePro task PUSH sync). Correlation contract with
+	// Crm-Backend: tasks.external_ref (varchar(128), indexed) carries the board
+	// card `_id`; tasks.source is stamped 'MatterChat'. CasePro's task field for
+	// the card title is `subject` (NOT `title`). Push-only — CasePro emits no
+	// task events, so there is no pull direction.
+	// -------------------------------------------------------------------------
+
+	/** Look up the CasePro task correlated to an external ref (board card _id), or null. */
+	async findTaskByExternalRef(externalRef: string): Promise<CaseProRow | null> {
+		const { data } = await this.tx.query('tasks', { filter: { external_ref: externalRef }, limit: 1 });
+		return data[0] ?? null;
+	}
+
+	/** Create a `tasks` row (caller stamps source/external_ref/subject). Returns the row with its id. */
+	async createTask(row: CaseProRow): Promise<CaseProRow> {
+		return this.tx.create('tasks', row);
+	}
+
+	/** Patch a `tasks` row by CasePro task id. */
+	async updateTask(taskId: string, patch: CaseProRow): Promise<CaseProRow> {
+		return this.tx.update('tasks', taskId, patch);
+	}
 }
 
 export const caseProClient = new CaseProClient();

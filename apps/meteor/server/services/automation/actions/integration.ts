@@ -3,26 +3,37 @@ import { BoardsActivities } from '@rocket.chat/models';
 
 import { settings } from '../../../../app/settings/server';
 import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { caseProClient } from '../../../lib/boards/casepro/client';
+import { isLiveTransportConfigured } from '../../../lib/boards/casepro/live';
+import type { CaseProRow } from '../../../lib/boards/casepro/transport';
 import type { AutomationContext } from '../context';
 import { interpolateString } from '../interpolate';
 import { ok, skipped, errored, planned } from './types';
 
 /**
  * Integration action handlers (M7 — §4.5 / §5.3 "Actions — Integration", P3). CasePro
- * write-backs are DOUBLE-gated: the `Boards_Automation_CasePro_Writeback_Enabled` setting
- * AND the `boards-automation-casepro-writeback` permission must both be granted, else the
- * action is `skipped` with `skippedReason:'writeback-disabled'` (per the Foundations
- * decision). The permission is checked against the acting user for a real-user (button/REST)
- * run, and against the automation's author (`createdBy`) for a system/automation actor
- * (scheduled tick / cascade child) so a non-interactive write-back still runs under a real
- * human's authority. The contract is validate → execute: an operation is only executed after
- * its validation passes, and the run records `validated`/`executed`/`caseproRef` for audit.
+ * write-backs are TRIPLE-gated:
  *
- * GRACEFUL DEGRADE: the fork's `caseProClient` is read-only today (matterSnapshot /
- * listMatters / listStages — no write transport), so even when fully gated this handler
- * VALIDATES and records the planned write but does not yet `execute`; it never throws out
- * of the engine. TODO(P3): wire the concrete `validate_operation`→`execute_operation`
- * write transport (the integrator's CasePro MCP) here, behind the same gate.
+ *   1. the `Boards_Automation_CasePro_Writeback_Enabled` setting,
+ *   2. the `boards-automation-casepro-writeback` permission (acting user for a
+ *      button/REST run; the automation's author for a system/scheduled actor),
+ *   3. a LIVE CasePro transport (`isLiveTransportConfigured`) — writes are only
+ *      EXECUTED when the 'rest' transport + base URL are configured. Without a live
+ *      transport the handler keeps the original audit-only behavior: it validates,
+ *      records the planned write (`executed:false`) on the activity feed, and returns
+ *      `skipped` with `skippedReason:'no-live-transport'`.
+ *
+ * Gate-fail on 1/2 is `skipped` with `skippedReason:'writeback-disabled'` (per the
+ * Foundations decision). The contract is validate → execute: an operation is only
+ * executed after its validation passes, and the run records `validated`/`executed`/
+ * `caseproRef` (+ `caseproResponse` when executed) for audit.
+ *
+ * EXECUTION goes through the one `caseProClient` (matters writes ride the same
+ * transport verbs the intake write-through uses; auth wiring lives in transport.ts and
+ * is owned by the auth-wire lane). `updateField` only writes ALLOW-LISTED matters
+ * columns ({@link WRITEBACK_FIELD_ALLOWLIST}). An in-memory idempotency guard drops a
+ * re-fire of the SAME card+operation+field+value within {@link WRITEBACK_TTL_MS}
+ * (`skippedReason:'duplicate-op'`) so cascade/echo re-triggers can't double-write.
  */
 
 function writebackEnabled(): boolean {
@@ -36,6 +47,43 @@ function writebackEnabled(): boolean {
 /** Resolve the CasePro matter id this card writes back to (matter-linked cards only). */
 function matterIdFor(card: IBoardCard | undefined): string | undefined {
 	return card?.link?.kind === 'matter' ? card.link.matterId : undefined;
+}
+
+/**
+ * The `matters` columns `updateField` may write. Conservative on purpose (the
+ * IActionCaseproWriteback contract promises an allow-list): operational columns only —
+ * never money, never identity/FK columns. Extend deliberately, with founder sign-off.
+ */
+const WRITEBACK_FIELD_ALLOWLIST = new Set(['stage_id', 'sub_stage', 'liability_status', 'status', 'description']);
+
+// ---------------------------------------------------------------------------
+// Idempotency guard — same card + same op (operation/field/value) within TTL
+// executes once; re-fires are `skipped:'duplicate-op'`. In-memory (single-node,
+// same caveat as the automation queue §14.1).
+// ---------------------------------------------------------------------------
+
+const WRITEBACK_TTL_MS = 5 * 60_000;
+
+const recentOps = new Map<string, number>();
+
+/** true ⇒ this exact op already EXECUTED within the TTL. Records the op when new. */
+function isDuplicateOp(key: string, nowTs = Date.now()): boolean {
+	for (const [k, ts] of recentOps) {
+		if (nowTs - ts > WRITEBACK_TTL_MS) {
+			recentOps.delete(k);
+		}
+	}
+	const seen = recentOps.get(key);
+	if (seen !== undefined && nowTs - seen <= WRITEBACK_TTL_MS) {
+		return true;
+	}
+	recentOps.set(key, nowTs);
+	return false;
+}
+
+/** Test hook: clear the idempotency window between cases. */
+export function __resetWritebackStateForTests(): void {
+	recentOps.clear();
 }
 
 export async function handleCaseproWriteback(action: IActionCaseproWriteback, ctx: AutomationContext, index: number) {
@@ -73,24 +121,114 @@ export async function handleCaseproWriteback(action: IActionCaseproWriteback, ct
 			return { ...planned(index, action.type, `casepro ${action.operation}`), validated: true, caseproRef };
 		}
 
-		// validate_operation → execute_operation. The fork's client is read-only, so we
-		// validate the shape and record the intended write; execution is the P3 transport.
 		const { value: rawValue } = interpolateString(String(action.value ?? ''), ctx);
+
+		// Gate 3: live transport. Without one, keep the original audit-only behavior —
+		// validate + record the planned write, never execute.
+		if (!isLiveTransportConfigured()) {
+			await BoardsActivities.log({
+				boardId: ctx.boardId,
+				...(ctx.subject.card ? { cardId: ctx.subject.card._id } : {}),
+				actor: `automation:${ctx.automation._id}`,
+				verb: 'automation.ran',
+				to: { caseproWriteback: action.operation, ...caseproRef, value: rawValue, executed: false, skippedReason: 'no-live-transport' },
+				ts: new Date(),
+			});
+			return {
+				...skipped(index, action.type, 'no-live-transport', `validated casepro ${action.operation} — no live CasePro transport (audit-only)`),
+				validated: true,
+				executed: false,
+				caseproRef,
+			};
+		}
+
+		// validate_operation: resolve the concrete client call (and its idempotency key)
+		// or bail as `unsupported` — an op is only executed after this passes.
+		let opKey: string;
+		let execute: () => Promise<{ response: CaseProRow; summary: Record<string, unknown> }>;
+		switch (action.operation) {
+			case 'advanceStage': {
+				if (!action.stageId || !matterId) {
+					return skipped(index, action.type, 'unsupported', 'advanceStage requires a stageId and a matter-linked card');
+				}
+				const stageId = action.stageId;
+				const id = matterId;
+				opKey = `advanceStage:${stageId}`;
+				execute = async () => {
+					const response = await caseProClient.updateMatter(id, { stage_id: stageId });
+					return { response, summary: { id: response.id, stage_id: response.stage_id } };
+				};
+				break;
+			}
+			case 'updateField': {
+				if (!action.field || !matterId) {
+					return skipped(index, action.type, 'unsupported', 'updateField requires a field and a matter-linked card');
+				}
+				if (!WRITEBACK_FIELD_ALLOWLIST.has(action.field)) {
+					return skipped(index, action.type, 'unsupported', `matters column '${action.field}' is not writeback allow-listed`);
+				}
+				const field = action.field;
+				const id = matterId;
+				opKey = `updateField:${field}=${rawValue}`;
+				execute = async () => {
+					const response = await caseProClient.updateMatter(id, { [field]: rawValue });
+					return { response, summary: { id: response.id, [field]: response[field] } };
+				};
+				break;
+			}
+			case 'createMatterFromLead': {
+				const intakeId = ctx.subject.lead?.caseproIntakeId;
+				if (!intakeId) {
+					return skipped(index, action.type, 'unsupported', 'createMatterFromLead requires a CasePro-linked lead (caseproIntakeId)');
+				}
+				opKey = `createMatterFromLead:${intakeId}`;
+				execute = async () => {
+					const { matterId: createdId } = await caseProClient.createMatterFromIntake(intakeId);
+					return { response: { id: createdId }, summary: { id: createdId } };
+				};
+				break;
+			}
+			default:
+				return skipped(index, action.type, 'unsupported', `unknown casepro operation`);
+		}
+
+		// Idempotency: the same card+op within the TTL executes once.
+		const subjectKey = ctx.subject.card?._id ?? ctx.subject.lead?._id ?? ctx.boardId;
+		const dedupeKey = `${subjectKey}:${opKey}`;
+		if (isDuplicateOp(dedupeKey)) {
+			return {
+				...skipped(index, action.type, 'duplicate-op', `casepro ${action.operation} already executed for this card+field within TTL`),
+				validated: true,
+				executed: false,
+				caseproRef,
+			};
+		}
+
+		// execute_operation — through the one caseProClient. A failure frees the
+		// idempotency slot (so a retry may run) and surfaces as an `error` result.
+		let summary: Record<string, unknown>;
+		try {
+			({ summary } = await execute());
+		} catch (err) {
+			recentOps.delete(dedupeKey);
+			throw err;
+		}
+
 		await BoardsActivities.log({
 			boardId: ctx.boardId,
 			...(ctx.subject.card ? { cardId: ctx.subject.card._id } : {}),
 			actor: `automation:${ctx.automation._id}`,
 			verb: 'automation.ran',
-			to: { caseproWriteback: action.operation, ...caseproRef, value: rawValue, executed: false },
+			to: { caseproWriteback: action.operation, ...caseproRef, value: rawValue, executed: true, response: summary },
 			ts: new Date(),
 		});
 
-		// validated=true (gate + shape ok), executed=false (no write transport yet — P3).
 		return {
-			...ok(index, action.type, `validated casepro ${action.operation} (execution deferred — P3)`),
+			...ok(index, action.type, `executed casepro ${action.operation}`),
 			validated: true,
-			executed: false,
+			executed: true,
 			caseproRef,
+			caseproResponse: summary,
 		};
 	} catch (err) {
 		return errored(index, action.type, err);
