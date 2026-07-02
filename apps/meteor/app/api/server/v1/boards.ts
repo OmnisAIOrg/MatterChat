@@ -420,9 +420,11 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const wantsPaging = this.queryParams.offset !== undefined || this.queryParams.count !== undefined;
+		// no ajv query validator on this route, so queryParams types to `never` — cast for the reads
+		const queryParams = this.queryParams as { offset?: string; count?: string };
+		const wantsPaging = queryParams.offset !== undefined || queryParams.count !== undefined;
 		if (wantsPaging) {
-			const { offset, count } = await getPaginationItems(this.queryParams);
+			const { offset, count } = await getPaginationItems(queryParams);
 			const { cards, total } = await getMyDayCards(this.userId, { offset, count });
 			return API.v1.success({ cards, count: cards.length, offset, total });
 		}
@@ -446,10 +448,12 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const text = typeof this.queryParams.text === 'string' ? this.queryParams.text : '';
-		const wantsPaging = this.queryParams.offset !== undefined || this.queryParams.count !== undefined;
+		// no ajv query validator on this route, so queryParams types to `never` — cast for the reads
+		const queryParams = this.queryParams as { text?: string; offset?: string; count?: string };
+		const text = typeof queryParams.text === 'string' ? queryParams.text : '';
+		const wantsPaging = queryParams.offset !== undefined || queryParams.count !== undefined;
 		if (wantsPaging) {
-			const { offset, count } = await getPaginationItems(this.queryParams);
+			const { offset, count } = await getPaginationItems(queryParams);
 			const { cards, total } = await searchCards(this.userId, text, { offset, count });
 			return API.v1.success({ cards, count: cards.length, offset, total });
 		}

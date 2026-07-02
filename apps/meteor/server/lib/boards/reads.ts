@@ -118,12 +118,13 @@ export async function getMyDayCards(
 	if (!boardIds.length) {
 		return { cards: [], total: 0 };
 	}
+	// double-cast: `dueDate: { $ne: null }` is valid Mongo but not expressible on Condition<Date>
 	const query = {
 		boardId: { $in: boardIds },
 		assignees: uid,
 		dueDate: { $exists: true, $ne: null },
 		archived: { $ne: true },
-	} as Filter<IBoardCard>;
+	} as unknown as Filter<IBoardCard>;
 	const { cursor, totalCount } = BoardsCards.findPaginated(query, {
 		sort: { dueDate: 1, _id: 1 },
 		...(paging ? { skip: paging.offset, limit: paging.count || 0 } : {}),
