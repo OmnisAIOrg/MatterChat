@@ -13,6 +13,7 @@ const OmnichannelQueueList = lazy(() => import('../views/omnichannel/queueList')
 const CMSPage = lazy(() => import('@rocket.chat/web-ui-registration').then(({ CMSPage }) => ({ default: CMSPage })));
 const SecretURLPage = lazy(() => import('../views/invite/SecretURLPage'));
 const InvitePage = lazy(() => import('../views/invite/InvitePage'));
+const PublicBoardFormPage = lazy(() => import('../views/boards/forms/PublicBoardFormPage'));
 const ConferenceRoute = lazy(() => import('../views/conference/ConferenceRoute'));
 const MailerUnsubscriptionPage = lazy(() => import('../views/mailer/MailerUnsubscriptionPage'));
 const LoginTokenRoute = lazy(() => import('../views/root/LoginTokenRoute'));
@@ -75,6 +76,10 @@ declare module '@rocket.chat/ui-contexts' {
 		'invite': {
 			pathname: `/invite/${string}`;
 			pattern: '/invite/:hash';
+		};
+		'public-board-form': {
+			pathname: `/form/${string}`;
+			pattern: '/form/:slug';
 		};
 		'conference': {
 			pathname: `/conference/${string}`;
@@ -196,6 +201,13 @@ router.defineRoutes([
 		path: '/invite/:hash',
 		id: 'invite',
 		element: appLayout.wrap(<InvitePage />),
+	},
+	{
+		// PUBLIC board-form fill page (parity P0.7) — no MainLayout, renders logged-out;
+		// the unguessable slug is the only capability (see server/lib/boards/forms/service.ts).
+		path: '/form/:slug',
+		id: 'public-board-form',
+		element: appLayout.wrap(<PublicBoardFormPage />),
 	},
 	{
 		path: '/conference/:id',

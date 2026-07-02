@@ -349,6 +349,80 @@ async function main() {
   ok(s1.json?.cards?.length === 7 && s1.json?.total === 7, 'search without params returns hits + total', `hits=${s1.json?.cards?.length}`);
   const s2 = await api('GET', `/boards.cards.search?text=${encodeURIComponent('Paged card')}&count=3&offset=3`);
   ok(s2.json?.cards?.length === 3 && s2.json?.total === 7 && s2.json?.offset === 3, 'search count=3 offset=3 pages hits', `hits=${s2.json?.cards?.length} total=${s2.json?.total}`);
+  // --- forms (parity P0.7: intake -> card, public link) ---
+  // NOTE: needs @rocket.chat/rest-typings + core-typings dist rebuilt (yarn turbo run build
+  // --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings) + server bounce,
+  // or the new ajv schemas silently strip fields.
+  const pub = async (method, path, body) => {
+    // deliberately NO auth headers — exercises the public surface
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    return { status: res.status, json };
+  };
+
+  const fc = await api('POST', '/boards.forms.create', {
+    boardId,
+    targetListId: listId,
+    title: 'Client intake',
+    description: 'Tell us about your matter',
+    titleTemplate: 'Intake — {{name}}',
+    fields: [
+      { id: 'name', label: 'Name', type: 'text', required: true },
+      { id: 'source', label: 'How did you hear about us?', type: 'select', options: ['Referral', 'Web', 'Other'] },
+      { id: 'email', label: 'Email', type: 'email' },
+    ],
+  });
+  const form = fc.json?.form;
+  const formSlug = form?.slug;
+  ok(!!form?._id && typeof formSlug === 'string' && formSlug.length >= 40, 'create form (slug >= 40 chars)', formSlug ? `${formSlug.slice(0, 6)}… (${formSlug.length})` : JSON.stringify(fc.json));
+
+  const fl = await api('GET', `/boards.forms.list?boardId=${boardId}`);
+  ok((fl.json?.forms || []).some((f) => f._id === form?._id), 'forms.list shows the form', `${fl.json?.forms?.length} forms`);
+
+  // public render payload: title + fields only, NO board metadata
+  const pg = await pub('GET', `/boards.forms.public.get?slug=${encodeURIComponent(formSlug)}`);
+  ok(pg.status === 200 && pg.json?.form?.title === 'Client intake' && (pg.json?.form?.fields || []).length === 3, 'public.get returns render payload (no auth)', `http=${pg.status}`);
+  ok(pg.json?.form?.boardId === undefined && pg.json?.form?.targetListId === undefined && pg.json?.form?.createdBy === undefined && pg.json?.form?.submissionCount === undefined, 'public.get leaks no board metadata');
+
+  // valid submit creates a card with templated title + mapped description
+  const ps = await pub('POST', '/boards.forms.public.submit', { slug: formSlug, answers: { name: 'Jane Doe', source: 'Referral', email: 'jane@example.com' } });
+  ok(ps.status === 200 && ps.json?.ok === true, 'public.submit accepts valid answers', `http=${ps.status}`);
+  const cardsAfter = await api('GET', `/boards.cards?boardId=${boardId}`);
+  const intakeCard = (cardsAfter.json?.cards || []).find((x) => x.title === 'Intake — Jane Doe');
+  ok(!!intakeCard, 'submission created card with templated title', intakeCard?._id);
+  ok((intakeCard?.description || '').includes('**Name:** Jane Doe') && (intakeCard?.description || '').includes('**Email:** jane@example.com'), 'card description maps labeled answers');
+
+  // schema validation: missing required / unknown key / bad select option
+  const psMissing = await pub('POST', '/boards.forms.public.submit', { slug: formSlug, answers: { source: 'Referral' } });
+  ok(psMissing.status === 400, 'submit rejects missing required field', `http=${psMissing.status}`);
+  const psExtra = await pub('POST', '/boards.forms.public.submit', { slug: formSlug, answers: { name: 'X', hacker: 'field' } });
+  ok(psExtra.status === 400, 'submit rejects unknown answer key', `http=${psExtra.status}`);
+  const psBadOpt = await pub('POST', '/boards.forms.public.submit', { slug: formSlug, answers: { name: 'X', source: 'Not-an-option' } });
+  ok(psBadOpt.status === 400, 'submit rejects invalid select option', `http=${psBadOpt.status}`);
+
+  // disabling kills the public link (indistinguishable from unknown)
+  const fdis = await api('POST', '/boards.forms.update', { formId: form._id, enabled: false });
+  ok(fdis.json?.form?.enabled === false, 'forms.update disables form');
+  const pgDisabled = await pub('GET', `/boards.forms.public.get?slug=${encodeURIComponent(formSlug)}`);
+  ok(pgDisabled.status === 404, 'disabled form public.get 404s', `http=${pgDisabled.status}`);
+  const psDisabled = await pub('POST', '/boards.forms.public.submit', { slug: formSlug, answers: { name: 'X' } });
+  ok(psDisabled.status === 404, 'disabled form public.submit 404s', `http=${psDisabled.status}`);
+
+  // unknown slug 404s identically
+  const pgBadSlug = await pub('GET', `/boards.forms.public.get?slug=${'x'.repeat(43)}`);
+  ok(pgBadSlug.status === 404, 'unknown slug 404s', `http=${pgBadSlug.status}`);
+
+  // delete soft-archives + removes from list
+  const fdel = await api('POST', '/boards.forms.delete', { formId: form._id });
+  ok(fdel.json?.ok === true, 'forms.delete');
+  const flAfter = await api('GET', `/boards.forms.list?boardId=${boardId}`);
+  ok(!(flAfter.json?.forms || []).some((f) => f._id === form?._id), 'deleted form gone from list');
 
   console.log(`\n${pass} passed, ${fail} failed  (board ${boardId})`);
   process.exit(fail ? 1 : 0);

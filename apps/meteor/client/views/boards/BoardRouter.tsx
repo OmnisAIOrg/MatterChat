@@ -17,6 +17,7 @@ const CardDetail = lazy(() => import('./card/CardDetail'));
 const DashboardView = lazy(() => import('./views/DashboardView'));
 const TableView = lazy(() => import('./views/TableView'));
 const TimelineView = lazy(() => import('./views/TimelineView'));
+const FormsManager = lazy(() => import('./forms/FormsManager'));
 
 const BoardRouter = () => {
 	const { t } = useTranslation();
@@ -117,6 +118,9 @@ const BoardRouter = () => {
 				return <TimelineView board={board} viewId={activeViewId} />;
 			case 'dashboard':
 				return <DashboardView board={board} viewId={activeViewId} />;
+			case 'forms':
+				// Forms manager (parity P0.7) — not a saved-view type, a management surface.
+				return <FormsManager board={board} lists={lists} />;
 			case 'board':
 			default:
 				// kanban (and any unrecognized/calendar value on a non-matters board)

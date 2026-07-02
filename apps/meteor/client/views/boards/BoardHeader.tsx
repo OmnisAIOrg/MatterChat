@@ -6,6 +6,7 @@ import { useCallback } from 'react';
 
 import BoardStatusControl from './BoardStatusControl';
 import { BoardAutomationsButton, BoardButtonsMenu } from './automation';
+import BoardFormsButton from './forms/BoardFormsButton';
 import { getPipelineTypeIcon } from './lib/icons';
 import ViewSwitcher from './views/ViewSwitcher';
 
@@ -47,6 +48,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 				</Box>
 				<ButtonGroup>
 					<BoardStatusControl board={board} />
+					<BoardFormsButton boardId={board._id} />
 					<BoardButtonsMenu boardId={board._id} />
 					<BoardAutomationsButton boardId={board._id} />
 				</ButtonGroup>

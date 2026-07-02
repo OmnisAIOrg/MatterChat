@@ -15,6 +15,7 @@ import type { BoardsReportsEndpoints } from './v1/boards-reports';
 import type { BoardsViewsEndpoints } from './v1/boards-views';
 import type { BoardsNotificationsEndpoints } from './v1/boards-notifications';
 import type { BoardsAiEndpoints } from './v1/boards-ai';
+import type { BoardsFormsEndpoints } from './v1/boards-forms';
 import type { CalendarEndpoints } from './v1/calendar';
 import type { ChannelsEndpoints } from './v1/channels';
 import type { ChatEndpoints } from './v1/chat';
@@ -104,6 +105,7 @@ export interface Endpoints
 		BoardsViewsEndpoints,
 		BoardsNotificationsEndpoints,
 		BoardsAiEndpoints,
+		BoardsFormsEndpoints,
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
@@ -282,6 +284,7 @@ export * from './v1/boards-reports';
 export * from './v1/boards-views';
 export * from './v1/boards-notifications';
 export * from './v1/boards-ai';
+export * from './v1/boards-forms';
 export type * from './v1/external-workspaces';
 export * from './v1/federation';
 export * from './v1/rooms';
