@@ -46,6 +46,7 @@ import type { PresenceEndpoints } from './v1/presence';
 import type { PushEndpoints } from './v1/push';
 import type { RolesEndpoints } from './v1/roles';
 import type { RoomsEndpoints } from './v1/rooms';
+import type { RoomsLegalHoldEndpoints } from './v1/rooms-legal-hold';
 import type { ServerEventsEndpoints } from './v1/server-events';
 import type { SettingsEndpoints } from './v1/settings';
 import type { StatisticsEndpoints } from './v1/statistics';
@@ -72,6 +73,7 @@ export interface Endpoints
 		ImEndpoints,
 		LDAPEndpoints,
 		RoomsEndpoints,
+		RoomsLegalHoldEndpoints,
 		PushEndpoints,
 		RolesEndpoints,
 		TeamsEndpoints,
@@ -288,6 +290,7 @@ export * from './v1/boards-forms';
 export type * from './v1/external-workspaces';
 export * from './v1/federation';
 export * from './v1/rooms';
+export * from './v1/rooms-legal-hold';
 export * from './v1/groups';
 export * from './v1/chat';
 export * from './v1/auth';

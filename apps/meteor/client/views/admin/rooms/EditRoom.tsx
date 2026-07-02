@@ -20,6 +20,7 @@ import { useId } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 
+import LegalHoldField from './LegalHoldField';
 import { useEditAdminRoomPermissions } from './useEditAdminRoomPermissions';
 import RoomAvatarEditor from '../../../components/avatar/RoomAvatarEditor';
 import { getDirtyFields } from '../../../lib/getDirtyFields';
@@ -343,6 +344,9 @@ const EditRoom = ({ room, onChange, onDelete, onClose }: EditRoomProps) => {
 						/>
 					</FieldRow>
 				</Field>
+				{/* Legal hold (litigation hold) — immediate action with confirmation modal, not part of
+				    the save form; renders only with the manage-legal-hold permission. */}
+				<LegalHoldField room={room} onChange={onChange} />
 			</ContextualbarScrollableContent>
 			<ContextualbarFooter>
 				<ButtonGroup stretch>

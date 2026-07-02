@@ -5,6 +5,7 @@ import { Meteor } from 'meteor/meteor';
 import { findRoomByIdOrName } from '../../../api/server/v1/rooms';
 import { canAccessRoomAsync } from '../../../authorization/server';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
+import { isRoomUnderLegalHold } from '../../../../server/lib/rooms/legalHold';
 import { cleanRoomHistory } from '../functions/cleanRoomHistory';
 
 type CleanRoomHistoryParams = {
@@ -49,6 +50,15 @@ export const cleanRoomHistoryMethod = async (
 
 	if (!room || !(await canAccessRoomAsync(room, { _id: userId }))) {
 		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'cleanRoomHistory' });
+	}
+
+	// Litigation hold: manual purge must refuse while a hold covers the room (the retention
+	// pruner already skips held rooms — this closes the admin/manual "Prune Messages" path,
+	// covering both the Meteor method and the rooms.cleanHistory REST endpoint).
+	if (isRoomUnderLegalHold(room)) {
+		throw new Meteor.Error('error-room-under-legal-hold', 'This room is under a legal hold. Message history cannot be pruned.', {
+			method: 'cleanRoomHistory',
+		});
 	}
 
 	return cleanRoomHistory({

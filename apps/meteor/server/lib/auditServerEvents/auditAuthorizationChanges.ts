@@ -7,7 +7,7 @@ import { ServerEvents, Users } from '@rocket.chat/models';
  * writer. Call sites fire these and swallow rejections (`.catch`) so auditing never breaks the
  * underlying authorization change. ip/useragent enrichment from the transport layer is a follow-up.
  */
-async function buildActor(actorUserId: string): Promise<IAuditServerUserActor> {
+export async function buildActor(actorUserId: string): Promise<IAuditServerUserActor> {
 	const user = await Users.findOneById(actorUserId, { projection: { username: 1 } });
 	return { type: 'user', _id: actorUserId, username: user?.username || '', ip: '', useragent: '' };
 }
