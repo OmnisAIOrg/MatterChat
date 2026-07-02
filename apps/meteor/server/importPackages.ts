@@ -46,6 +46,7 @@ import '../app/push-notifications/server';
 import '../app/retention-policy/server';
 import '../app/slackbridge/server';
 import '../app/connectors/server';
+import '../app/casepro-events/server';
 import '../app/slashcommands-archiveroom/server';
 import '../app/slashcommand-asciiarts/server';
 import '../app/slashcommands-ban/server';
