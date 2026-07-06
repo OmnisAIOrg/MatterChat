@@ -1,0 +1,53 @@
+name: MatterChat — Staging Disable Upstream Update Banner (authorized)
+
+# Founder-authorized one-shot, MatterChat-scoped. The upstream Rocket.Chat update
+# checker compares our pinned fork build (8.6.0-develop) against rocket.chat's
+# release feed and pops an admin banner "Update your MatterChat (8.6.0)".
+# Meaningless for a fork that updates via our own CI/ArgoCD. This disables the
+# checker setting and removes the versionUpdate-* banners from admin accounts.
+# Reversible: set Update_EnableChecker back to true.
+on:
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: stg-omnisai-cluster
+  K8S_NAMESPACE: staging
+
+jobs:
+  fix:
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    permissions:
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure kubectl
+        run: |
+          which kubectl || { curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"; chmod +x kubectl; sudo mv kubectl /usr/local/bin/; }
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: Disable update checker + remove versionUpdate banners
+        run: |
+          kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
+            db.rocketchat_settings.updateOne({_id:"Update_EnableChecker"},{$set:{value:false, _updatedAt:new Date()}});
+            print("Update_EnableChecker = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"Update_EnableChecker"})||{}).value));
+            var touched = 0;
+            db.users.find({banners:{$exists:true}},{banners:1,username:1}).forEach(function(u){
+              var unsets = {};
+              Object.keys(u.banners||{}).forEach(function(k){ if (k.indexOf("versionUpdate-")===0) { unsets["banners."+k]=1; } });
+              if (Object.keys(unsets).length) {
+                db.users.updateOne({_id:u._id},{$unset:unsets});
+                touched++;
+                print("  removed " + Object.keys(unsets).length + " versionUpdate banner(s) from " + u.username);
+              }
+            });
+            print("users cleaned = " + touched);
+          '
