@@ -1,10 +1,13 @@
 import type { IBoard, ISavedView, SavedViewType, Serialized } from '@rocket.chat/core-typings';
 import { Box, ButtonGroup, Icon } from '@rocket.chat/fuselage';
 import { PageHeader } from '@rocket.chat/ui-client';
-import { useRouter } from '@rocket.chat/ui-contexts';
-import { useCallback } from 'react';
+import { useEndpoint, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { BoardAutomationsButton, BoardButtonsMenu } from './automation';
+import { CaseProConnectionControls, CaseProStatusChip } from './casepro';
 import { getPipelineTypeIcon } from './lib/icons';
 import ViewSwitcher from './views/ViewSwitcher';
 
@@ -17,11 +20,49 @@ type BoardHeaderProps = {
 };
 
 const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSavedView }: BoardHeaderProps) => {
+	const { t } = useTranslation();
 	const router = useRouter();
+	const dispatchToastMessage = useToastMessageDispatch();
+	const queryClient = useQueryClient();
 
 	const goHome = useCallback(() => {
 		router.navigate({ name: 'boards-index' });
 	}, [router]);
+
+	// CasePro connection cluster — the dedicated routes (/boards/matters,
+	// /boards/leads) mount it themselves, but a board opened BY ID (e.g. from
+	// "All boards", route /boards/board/:id) renders through this generic
+	// header, so it must mount here too or CasePro-synced boards lose their
+	// status chip and Sync/Test actions. Mirrors MattersBoardRoute's
+	// seedFromCasePro wiring (same endpoint, toast and cards invalidation);
+	// leads boards get the chip only, exactly like LeadsBoardRoute.
+	const [lastSyncAt, setLastSyncAt] = useState<Date | undefined>();
+	const seedFromCasePro = useEndpoint('POST', '/v1/boards.matters.seedFromCasePro');
+	const seedMutation = useMutation({
+		mutationFn: () => seedFromCasePro({ boardId: board._id }),
+		onSuccess: (result) => {
+			const { bound, skipped, total } = result.result;
+			setLastSyncAt(new Date());
+			dispatchToastMessage({
+				type: 'success',
+				message: t('Boards_Matters_Sync_Result', {
+					bound,
+					skipped,
+					total,
+					defaultValue: 'Synced {{bound}} of {{total}} matters ({{skipped}} skipped)',
+				}),
+			});
+			// Refresh the kanban card list so newly bound matters appear.
+			void queryClient.invalidateQueries({ queryKey: ['boards', 'cards', board._id] });
+		},
+		onError: (error) => {
+			dispatchToastMessage({ type: 'error', message: error });
+		},
+	});
+
+	const handleSync = useCallback(() => {
+		seedMutation.mutate();
+	}, [seedMutation]);
 
 	return (
 		<PageHeader
@@ -44,6 +85,10 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 						onSelectSavedView={onSelectSavedView}
 					/>
 				</Box>
+				{board.pipelineType === 'matters' && (
+					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={8} />
+				)}
+				{board.pipelineType === 'leads' && <CaseProStatusChip mie={8} />}
 				<ButtonGroup>
 					<BoardButtonsMenu boardId={board._id} />
 					<BoardAutomationsButton boardId={board._id} />
