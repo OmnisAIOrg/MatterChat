@@ -7,6 +7,7 @@ import {
 	isBoardsCaseProMatterSnapshotProps,
 	isBoardsCaseProListMattersProps,
 	isBoardsCaseProListStagesProps,
+	isBoardsCaseProStatusProps,
 	isBoardsMattersPlaybooksListProps,
 	isBoardsMattersPlaybooksSeedProps,
 	isBoardsMattersPlaybooksApplyProps,
@@ -36,6 +37,7 @@ import {
 	financial,
 	caseload,
 } from '../../../../server/lib/boards/matters';
+import { caseProStatus } from '../../../../server/lib/boards/casepro';
 import { requireUid } from '../../../../server/lib/boards';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
@@ -108,8 +110,12 @@ API.v1.post(
 		},
 	},
 	async function action() {
+		const uid = requireUid('boards.matters.refreshSnapshot');
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
 		const { cardId } = this.bodyParams;
-		const card = await refreshMatterSnapshot(this.userId, cardId);
+		const card = await refreshMatterSnapshot(uid, cardId);
 		return API.v1.success({ card });
 	},
 );
@@ -126,8 +132,12 @@ API.v1.post(
 		},
 	},
 	async function action() {
+		const uid = requireUid('boards.matters.seedFromCasePro');
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
 		const { boardId } = this.bodyParams;
-		const result = await seedFromCasePro(this.userId, boardId);
+		const result = await seedFromCasePro(uid, boardId);
 		return API.v1.success({ result });
 	},
 );
@@ -148,8 +158,11 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		// auth gate only; the client owns CasePro org-scoping.
-		requireUid('boards.casepro.matterSnapshot');
+		// permission-gated read; the client owns CasePro org-scoping.
+		const uid = requireUid('boards.casepro.matterSnapshot');
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
 		const { matterId } = this.queryParams;
 		const snapshot = await caseProClient.matterSnapshot(matterId);
 		return API.v1.success({ snapshot });
@@ -168,7 +181,10 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		requireUid('boards.casepro.listMatters');
+		const uid = requireUid('boards.casepro.listMatters');
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
 		const { stageId, caseTypeId, query, limit, offset } = this.queryParams;
 		const { matters, total } = await caseProClient.listMatters({ stageId, caseTypeId, query, limit, offset });
 		return API.v1.success({ matters, total });
@@ -187,9 +203,33 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		requireUid('boards.casepro.listStages');
+		const uid = requireUid('boards.casepro.listStages');
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
 		const stages = await caseProClient.listStages();
 		return API.v1.success({ stages });
+	},
+);
+
+API.v1.get(
+	'boards.casepro.status',
+	{
+		authRequired: true,
+		query: isBoardsCaseProStatusProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const uid = requireUid('boards.casepro.status');
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
+			return API.v1.unauthorized();
+		}
+		const status = await caseProStatus();
+		return API.v1.success({ status });
 	},
 );
 

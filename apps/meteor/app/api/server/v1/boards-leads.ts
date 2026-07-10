@@ -350,6 +350,9 @@ API.v1.post(
 	},
 	async function action() {
 		const { userId } = this;
+		if (!(await hasPermissionAsync(userId, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
 		if (!isCaseProEnabled()) {
 			return API.v1.failure('CasePro is not enabled; nothing to sync');
 		}

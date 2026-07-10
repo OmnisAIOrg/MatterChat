@@ -205,8 +205,9 @@ async function runStuckMatterSweep(now: Date = new Date()): Promise<void> {
  * directly — e.g. an attorney advanced the stage in the CRM, not on the board).
  *
  * Uses ONLY the cached snapshot (no CasePro load) per the cron's no-context rule — the
- * snapshot freshness itself is the snapshot-refresh cron's job; this sweep just compares
- * the two stages we already have on hand. Drift = the snapshot's stage id/name differs
+ * snapshot freshness itself is `boardsCaseProSnapshotCron`'s job (the periodic sweep in
+ * `cron/boardsCaseProSnapshotCron.ts` that re-pulls every matter-bound card's snapshot);
+ * this sweep just compares the two stages we already have on hand. Drift = the snapshot's stage id/name differs
  * from the card's list (matched by `caseproStageId` first, then normalized title).
  *
  * On drift it sets `link.snapshot.stale = true` and logs a `field.changed` reconcile

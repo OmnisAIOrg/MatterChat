@@ -133,6 +133,17 @@ const BoardsCaseProListStagesSchema = {
 
 export const isBoardsCaseProListStagesProps = ajvQuery.compile<BoardsCaseProListStagesProps>(BoardsCaseProListStagesSchema);
 
+type BoardsCaseProStatusProps = Record<string, never>;
+
+const BoardsCaseProStatusSchema = {
+	type: 'object',
+	properties: {},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsCaseProStatusProps = ajvQuery.compile<BoardsCaseProStatusProps>(BoardsCaseProStatusSchema);
+
 // ---------------------------------------------------------------------------
 // boards.matters.playbooks.* (M5)
 // ---------------------------------------------------------------------------
@@ -290,6 +301,18 @@ export type CaseProMatterListItemDTO = {
 
 export type SeedFromCaseProResultDTO = { bound: number; skipped: number; total: number };
 
+/** Mirrors `caseProStatus()` in apps/meteor/server/lib/boards/casepro (kept in sync by hand). */
+export type CaseProStatusDTO = {
+	enabled: boolean;
+	transport: 'stub' | 'native' | 'mcp';
+	baseUrl: string;
+	authMode: string;
+	orgId: string;
+	reachable: boolean;
+	latencyMs?: number;
+	error?: string;
+};
+
 // M5 result shapes (mirror apps/meteor/server/lib/boards/matters/{playbooks,reports}.ts)
 
 export type ApplyPlaybookResultDTO = {
@@ -376,6 +399,9 @@ export type BoardsMattersEndpoints = {
 	};
 	'/v1/boards.casepro.listStages': {
 		GET: (params: BoardsCaseProListStagesProps) => { stages: CaseProStageDTO[] };
+	};
+	'/v1/boards.casepro.status': {
+		GET: (params: BoardsCaseProStatusProps) => { status: CaseProStatusDTO };
 	};
 
 	// M5 — Matters depth (playbooks / deadlines / reports / caseload)

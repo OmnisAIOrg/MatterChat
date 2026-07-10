@@ -22,7 +22,15 @@ export interface IAutomationActionResult {
 	status: AutomationActionStatus;
 	detail?: string; // human summary, e.g. "moved Intake → Treating"
 	error?: string;
-	skippedReason?: 'loop-depth' | 'per-card-budget' | 'writeback-disabled' | 'disabled' | 'condition' | 'unsupported';
+	skippedReason?:
+		| 'loop-depth'
+		| 'per-card-budget'
+		| 'writeback-disabled'
+		| 'casepro-disabled' // CasePro integration off (`caseProMode().enabled` false) — writes no-op
+		| 'already-converted' // createMatterFromLead: lead already has a matter — never double-create
+		| 'disabled'
+		| 'condition'
+		| 'unsupported';
 	// integration audit (CasePro write-backs)
 	validated?: boolean; // validate_operation passed
 	executed?: boolean; // execute_operation ran

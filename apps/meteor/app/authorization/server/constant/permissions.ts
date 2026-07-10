@@ -250,8 +250,10 @@ export const permissions = [
 	{ _id: 'boards-leads-view', roles: ['admin', 'intake-specialist', 'attorney'] },
 	{ _id: 'boards-leads-edit', roles: ['admin', 'intake-specialist'] },
 	{ _id: 'boards-convert-lead', roles: ['admin', 'attorney', 'intake-specialist'] },
-	{ _id: 'boards-casepro-view', roles: ['admin', 'attorney', 'case-manager'] },
-	{ _id: 'boards-casepro-sync', roles: ['admin'] },
+	// CasePro read/sync are broad by default (regular users drive the existing board
+	// flows); settings/write-back stay admin-only.
+	{ _id: 'boards-casepro-view', roles: ['admin', 'owner', 'moderator', 'user', 'attorney', 'case-manager'] },
+	{ _id: 'boards-casepro-sync', roles: ['admin', 'owner', 'moderator', 'user'] },
 	{ _id: 'boards-manage-casepro-settings', roles: ['admin'] },
 	{ _id: 'boards-casepro-write', roles: ['admin'] },
 	// Boards M7 (automation engine) — manage rules/buttons/scheduled/sequences, run buttons,
