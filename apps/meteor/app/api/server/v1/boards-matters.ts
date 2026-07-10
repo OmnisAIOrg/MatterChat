@@ -38,7 +38,6 @@ import {
 	caseload,
 } from '../../../../server/lib/boards/matters';
 import { caseProStatus } from '../../../../server/lib/boards/casepro';
-import { requireUid } from '../../../../server/lib/boards';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 
@@ -110,7 +109,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.refreshSnapshot');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
 			return API.v1.unauthorized();
 		}
@@ -132,7 +131,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.seedFromCasePro');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
 			return API.v1.unauthorized();
 		}
@@ -159,7 +158,7 @@ API.v1.get(
 	},
 	async function action() {
 		// permission-gated read; the client owns CasePro org-scoping.
-		const uid = requireUid('boards.casepro.matterSnapshot');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -181,7 +180,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.casepro.listMatters');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -203,7 +202,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.casepro.listStages');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -224,7 +223,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.casepro.status');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -250,7 +249,7 @@ API.v1.get(
 	},
 	async function action() {
 		// reads are gated by the matters-view permission (mirrors the board reads).
-		const uid = requireUid('boards.matters.playbooks.list');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -271,7 +270,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.playbooks.seed');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-playbooks-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -292,7 +291,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.playbooks.apply');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-playbooks-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -318,7 +317,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.list');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -340,7 +339,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.create');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-deadlines-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -369,7 +368,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.acknowledge');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-deadlines-acknowledge'))) {
 			return API.v1.unauthorized();
 		}
@@ -391,7 +390,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.deadlines.setStatus');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-deadlines-manage'))) {
 			return API.v1.unauthorized();
 		}
@@ -417,7 +416,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.reports.aging');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-reports-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -438,7 +437,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.reports.financial');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-reports-view'))) {
 			return API.v1.unauthorized();
 		}
@@ -459,7 +458,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.matters.caseload');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-matters-reports-view'))) {
 			return API.v1.unauthorized();
 		}

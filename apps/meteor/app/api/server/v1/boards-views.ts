@@ -18,7 +18,6 @@ import {
 	setDefaultSavedView,
 	queryBoardCards,
 } from '../../../../server/lib/boards/views';
-import { requireUid } from '../../../../server/lib/boards';
 import { API } from '../api';
 
 /**
@@ -54,7 +53,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.views.list');
+		const uid = this.userId;
 		const views = await listSavedViews(uid, this.queryParams.boardId);
 		return API.v1.success({ views });
 	},
@@ -72,7 +71,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.views.upsert');
+		const uid = this.userId;
 		const { viewId, name, viewType, scope, boardId, config, shared, isDefault } = this.bodyParams;
 		const { view, created } = await upsertSavedView(
 			uid,
@@ -103,7 +102,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.views.remove');
+		const uid = this.userId;
 		const result = await removeSavedView(uid, this.bodyParams.viewId);
 		return API.v1.success(result);
 	},
@@ -121,7 +120,7 @@ API.v1.post(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.views.setDefault');
+		const uid = this.userId;
 		const { view } = await setDefaultSavedView(uid, this.bodyParams.viewId);
 		return API.v1.success({ view });
 	},
@@ -139,7 +138,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.views.cards');
+		const uid = this.userId;
 		const { boardId, viewId, viewType } = this.queryParams;
 
 		// when a saved view id is given, hydrate its config + viewType (caller may

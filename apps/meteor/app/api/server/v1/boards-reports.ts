@@ -7,7 +7,6 @@ import {
 } from '@rocket.chat/rest-typings';
 
 import { sourceToSettlement, overview } from '../../../../server/lib/boards/reports';
-import { requireUid } from '../../../../server/lib/boards';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 
@@ -44,7 +43,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.reports.sourceToSettlement');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-view-reports'))) {
 			return API.v1.unauthorized();
 		}
@@ -66,7 +65,7 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		const uid = requireUid('boards.reports.overview');
+		const uid = this.userId;
 		if (!(await hasPermissionAsync(uid, 'boards-view-reports'))) {
 			return API.v1.unauthorized();
 		}
