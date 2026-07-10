@@ -1,13 +1,14 @@
-import { Box, Button, ButtonGroup, Callout, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
 import { Page, PageHeader } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouteParameter, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useRouteParameter, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { BoardAutomationsButton } from '../automation';
 import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
+import { CaseProConnectionControls, CaseProStubBanner } from '../casepro';
 
 /**
  * MattersBoardRoute — the `/boards/matters` landing screen (M3a client).
@@ -18,10 +19,11 @@ import CardDetail from '../card/CardDetail';
  * render the existing M1 kanban (`BoardView`) over the returned board + lists.
  *
  * Extras layered on top of the shared kanban:
- *  - a "Sync from CasePro" header action (`boards.matters.seedFromCasePro`) that
- *    pulls every CasePro matter onto the board as matter cards;
- *  - a stub-mode banner shown whenever CasePro is not live (the public
- *    `CasePro_Enabled` master switch is off), i.e. the snapshots are mock data;
+ *  - a CasePro connection cluster (status chip + "Test connection" + "Sync now",
+ *    the latter still `boards.matters.seedFromCasePro`) that pulls every CasePro
+ *    matter onto the board as matter cards;
+ *  - a stub-mode banner (CaseProStubBanner) shown whenever the stub transport is
+ *    active per `boards.casepro.status`, i.e. the snapshots are mock data;
  *  - a `:cardId` deep-link drawer (the integrator points `/boards/matters` here
  *    without a cardId segment, but we honor it if the router ever carries one).
  *
@@ -34,13 +36,11 @@ const MattersBoardRoute = () => {
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 
-	// Public master switch. When CasePro is NOT enabled the read client serves
-	// mock (stub) rows, so we surface a banner. Only `CasePro_Enabled` is a
-	// public setting (transport/base-url are private), so it is the sole signal
-	// the client can legitimately read.
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
-
 	const cardId = useRouteParameter('cardId');
+
+	// When the last in-session "Sync now" succeeded — feeds the header's
+	// "Last sync" label (client-observed; no endpoint supplies one yet).
+	const [lastSyncAt, setLastSyncAt] = useState<Date | undefined>();
 
 	const ensureBoard = useEndpoint('POST', '/v1/boards.matters.ensureBoard');
 	const seedFromCasePro = useEndpoint('POST', '/v1/boards.matters.seedFromCasePro');
@@ -61,6 +61,7 @@ const MattersBoardRoute = () => {
 		},
 		onSuccess: (result) => {
 			const { bound, skipped, total } = result.result;
+			setLastSyncAt(new Date());
 			dispatchToastMessage({
 				type: 'success',
 				message: t('Boards_Matters_Sync_Result', {
@@ -128,32 +129,13 @@ const MattersBoardRoute = () => {
 						</Box>
 					}
 				>
+					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={8} />
 					<ButtonGroup>
 						<BoardAutomationsButton boardId={board._id} small={false} />
-						<Button primary onClick={handleSync} disabled={seedMutation.isPending}>
-							{seedMutation.isPending ? (
-								<Throbber inheritColor size='x12' />
-							) : (
-								<Icon name='reload' size='x16' mie={4} />
-							)}
-							{t('Boards_Matters_Sync_From_CasePro', { defaultValue: 'Sync from CasePro' })}
-						</Button>
 					</ButtonGroup>
 				</PageHeader>
 
-				{!caseProEnabled && (
-					<Box pi={24} pbs={12}>
-						<Callout
-							type='warning'
-							icon='info'
-							title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}
-						>
-							{t('Boards_Matters_Stub_Description', {
-								defaultValue: 'CasePro is not connected — matters shown here use sample data, not live records.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner pi={24} pbs={12} />
 
 				<BoardView board={board} lists={lists} />
 			</Page>

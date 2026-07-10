@@ -11,13 +11,14 @@ import {
 	Tag,
 	Throbber,
 } from '@rocket.chat/fuselage';
-import { useEndpoint, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import AiAssistSection from './AiAssistSection';
+import { CaseProStatusChip, CaseProStubBanner } from '../casepro';
 
 /**
  * MatterPanel — the "Linked Matter" section of a board card detail (M3a client).
@@ -368,7 +369,6 @@ const DeadlinesSection = ({ cardId }: { cardId: string }): ReactElement => {
 
 const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 	const { t } = useTranslation();
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
 
 	const matterId = card.link?.kind === 'matter' ? card.link.matterId : undefined;
 
@@ -425,25 +425,14 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 					<Box fontScale='h4' color='default'>
 						{t('Boards_Matters_Linked_Matter', { defaultValue: 'Linked Matter' })}
 					</Box>
+					<CaseProStatusChip mis={8} />
 				</Box>
 				<Button small square title={t('Refresh')} disabled={isFetching} onClick={() => refetch()}>
 					{isFetching ? <Throbber inheritColor size='x12' /> : <Icon name='reload' size='x16' />}
 				</Button>
 			</Box>
 
-			{!caseProEnabled && (
-				<Box mbe={12}>
-					<Callout
-						type='warning'
-						icon='info'
-						title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}
-					>
-						{t('Boards_Matters_Stub_Description', {
-							defaultValue: 'CasePro is not connected — matter details below are sample data, not live records.',
-						})}
-					</Callout>
-				</Box>
-			)}
+			<CaseProStubBanner mbe={12} />
 
 			{isLoading && (
 				<Box display='flex' justifyContent='center' p={16}>

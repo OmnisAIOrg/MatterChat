@@ -13,10 +13,12 @@ import {
 } from '@rocket.chat/fuselage';
 import type { AgingReportDTO, FinancialReportDTO } from '@rocket.chat/rest-typings';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouter, useSetting } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useRouter } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { CaseProStubBanner } from '../../casepro';
 
 /**
  * MattersReports — the `/boards/matters/reports` dashboards (M5 client).
@@ -252,7 +254,6 @@ const AgingPanel = (): ReactElement => {
 
 const MattersReports = (): ReactElement => {
 	const { t } = useTranslation();
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
 
 	return (
 		<Page>
@@ -265,15 +266,7 @@ const MattersReports = (): ReactElement => {
 				}
 			/>
 			<PageScrollableContentWithShadow>
-				{!caseProEnabled && (
-					<Box mbe={16}>
-						<Callout type='warning' icon='info' title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}>
-							{t('Boards_Matters_Stub_Description', {
-								defaultValue: 'CasePro is not connected — figures below are computed from sample data, not live records.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner mbe={16} />
 
 				<SectionTitle>{t('Boards_Matters_Report_Financial', { defaultValue: 'Financial' })}</SectionTitle>
 				<FinancialPanel />

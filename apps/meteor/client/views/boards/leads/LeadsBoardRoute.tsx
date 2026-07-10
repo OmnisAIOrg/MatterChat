@@ -1,6 +1,6 @@
-import { Box, Button, ButtonGroup, Callout, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
 import { Page, PageHeader } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouteParameter, useRouter, useSetModal, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useRouteParameter, useRouter, useSetModal, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import LeadCaptureModal from './LeadCaptureModal';
 import { BoardAutomationsButton } from '../automation';
 import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
+import { CaseProStatusChip, CaseProStubBanner, useCaseProStubMode } from '../casepro';
 import { getPipelineTypeIcon } from '../lib/icons';
 
 /**
@@ -29,11 +30,10 @@ const LeadsBoardRoute = () => {
 	const queryClient = useQueryClient();
 	const dispatchToastMessage = useToastMessageDispatch();
 
-	// Public master switch. When CasePro is NOT enabled the intake board runs
-	// local-only (no read-through pull / write-through push), so we surface a
-	// banner and the Sync action is hidden. Only `CasePro_Enabled` is a public
-	// setting, so it is the sole signal the client can legitimately read.
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
+	// Stub mode (per `boards.casepro.status`, falling back to the public
+	// settings): the intake board runs local-only (no read-through pull /
+	// write-through push), so we surface a banner and hide the Sync action.
+	const caseProStub = useCaseProStubMode();
 
 	// CardDetail drawer is opened via ?cardId= on this route.
 	const cardId = useRouteParameter('cardId');
@@ -138,14 +138,11 @@ const LeadsBoardRoute = () => {
 						</Box>
 					}
 				>
+					<CaseProStatusChip mie={8} />
 					<ButtonGroup>
-						{caseProEnabled && (
+						{!caseProStub && (
 							<Button small onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
-								{syncMutation.isPending ? (
-									<Throbber inheritColor size='x12' mie={4} />
-								) : (
-									<Icon name='reload' size='x16' mie={4} />
-								)}
+								{syncMutation.isPending ? <Throbber inheritColor size='x12' mie={4} /> : <Icon name='reload' size='x16' mie={4} />}
 								{t('Boards_Leads_SyncFromCasePro', { defaultValue: 'Sync from CasePro' })}
 							</Button>
 						)}
@@ -156,15 +153,7 @@ const LeadsBoardRoute = () => {
 						</Button>
 					</ButtonGroup>
 				</PageHeader>
-				{!caseProEnabled && (
-					<Box pi={24} pbs={16}>
-						<Callout type='info' icon='info-circled' title={t('Boards_Leads_LocalOnly_Title', { defaultValue: 'Intake is local-only' })}>
-							{t('Boards_Leads_LocalOnly_Description', {
-								defaultValue: 'CasePro is not connected, so leads stay on this board and are not synced to CasePro intake. Enable CasePro to sync.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner variant='leads' pi={24} pbs={16} />
 				<BoardView board={board} lists={lists} />
 			</Page>
 			{cardId && boardId && <CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />}

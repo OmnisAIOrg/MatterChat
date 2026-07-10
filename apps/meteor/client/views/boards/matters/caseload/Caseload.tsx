@@ -14,10 +14,12 @@ import {
 } from '@rocket.chat/fuselage';
 import type { CaseloadReportDTO, CaseloadRowDTO } from '@rocket.chat/rest-typings';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
-import { useEndpoint, useSetting } from '@rocket.chat/ui-contexts';
+import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { CaseProStubBanner } from '../../casepro';
 
 /**
  * Caseload — the `/boards/matters/caseload` view (M5 client).
@@ -89,7 +91,6 @@ const CaseloadRow = ({ row, label }: { row: CaseloadRowDTO; label: ReactNode }):
 
 const Caseload = (): ReactElement => {
 	const { t } = useTranslation();
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
 	const getCaseload = useEndpoint('GET', '/v1/boards.matters.caseload');
 
 	const { data, isLoading, isError, refetch } = useQuery({
@@ -110,15 +111,7 @@ const Caseload = (): ReactElement => {
 				}
 			/>
 			<PageScrollableContentWithShadow>
-				{!caseProEnabled && (
-					<Box mbe={16}>
-						<Callout type='warning' icon='info' title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}>
-							{t('Boards_Matters_Stub_Description', {
-								defaultValue: 'CasePro is not connected — the caseload below is computed from sample data, not live records.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner mbe={16} />
 
 				{isLoading && (
 					<Box display='flex' justifyContent='center' p={24}>

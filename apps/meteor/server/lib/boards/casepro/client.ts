@@ -39,17 +39,21 @@ export type ConvertIntakeResult = { matterId: string; intake: IntakeLead };
 
 /**
  * The single outbound CasePro read client (M2). All Matters reads go through here;
- * the transport (stub | rest) is config-selected. Sums are computed in JS — CasePro's
- * aggregate_data GROUP BY is broken (see casepro discovery docs).
+ * the transport (stub | native | mcp) is config-selected. Sums are computed in JS —
+ * CasePro's aggregate_data GROUP BY is broken (see casepro discovery docs).
  */
 export class CaseProClient {
 	private transport: ICaseProTransport | undefined;
 
+	/**
+	 * Resolved per access so the `caseProMode()` enablement gate and admin setting
+	 * changes take effect immediately: disabled → every read serves the stub (demo
+	 * mode) and client "writes" only touch the stub's in-memory store — no
+	 * upstream effect. `resolveTransportFromConfig` memoizes on the config
+	 * fingerprint, so this is cheap and the stub store survives across calls.
+	 */
 	private get tx(): ICaseProTransport {
-		if (!this.transport) {
-			this.transport = resolveTransportFromConfig();
-		}
-		return this.transport;
+		return this.transport ?? resolveTransportFromConfig();
 	}
 
 	/** Override the transport (tests / runtime swap); pass undefined to revert to config. */
