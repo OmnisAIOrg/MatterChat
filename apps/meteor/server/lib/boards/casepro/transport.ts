@@ -466,6 +466,29 @@ function ssrfAllowListFor(baseUrl: string): string[] {
 	}
 }
 
+/**
+ * Loopback normalization for the wire: `serverFetch`'s SSRF gate rejects
+ * single-label hostnames (no dot ⇒ fails its domain pattern) BEFORE it ever
+ * consults the allow-list, so a configured `http://localhost:…` base — the
+ * standard local Crm-Backend rig — can never pass validation even though we
+ * allow-list exactly the configured host (error-ssrf-validation-failed on every
+ * call). IP literals take the IP path through the gate and match the allow-list
+ * fine, so pin a `localhost` hostname to `127.0.0.1` for URL building and the
+ * allow-list. Config/status keep displaying whatever the admin typed.
+ */
+function normalizeLoopbackBase(baseUrl: string): string {
+	try {
+		const url = new URL(baseUrl);
+		if (url.hostname.toLowerCase() === 'localhost') {
+			url.hostname = '127.0.0.1';
+			return url.toString().replace(/\/+$/, '');
+		}
+	} catch {
+		// malformed base URLs fall through to the transport's own error paths
+	}
+	return baseUrl;
+}
+
 type WireRequest = {
 	method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 	url: string;
@@ -679,10 +702,12 @@ export class NativeRestTransport implements ICaseProTransport {
 		opts: { timeoutMs?: number } = {},
 	) {
 		// The backend serves everything under a global /api/v1 prefix; accept base
-		// URLs configured with or without it.
-		this.apiBase = /\/api\/v\d+\/?$/.test(cfg.baseUrl) ? cfg.baseUrl.replace(/\/+$/, '') : joinUrl(cfg.baseUrl, 'api/v1');
+		// URLs configured with or without it. `localhost` is pinned to 127.0.0.1
+		// so the SSRF gate's allow-list can actually match (see normalizeLoopbackBase).
+		const wireBase = normalizeLoopbackBase(cfg.baseUrl);
+		this.apiBase = /\/api\/v\d+\/?$/.test(wireBase) ? wireBase.replace(/\/+$/, '') : joinUrl(wireBase, 'api/v1');
 		this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		this.allowList = ssrfAllowListFor(cfg.baseUrl);
+		this.allowList = ssrfAllowListFor(wireBase);
 	}
 
 	/** internal-key → X-API-Key + X-Organization-ID (Crm-Backend's service path); bearer → Authorization. */
@@ -1204,9 +1229,12 @@ export class McpTransport implements ICaseProTransport {
 		private readonly cfg: CaseProConfig,
 		opts: { timeoutMs?: number } = {},
 	) {
-		this.url = joinUrl(cfg.baseUrl, cfg.mcpPath || '/mcp/v2');
+		// `localhost` pinned to 127.0.0.1 for the same SSRF-gate reason as
+		// NativeRestTransport (see normalizeLoopbackBase).
+		const wireBase = normalizeLoopbackBase(cfg.baseUrl);
+		this.url = joinUrl(wireBase, cfg.mcpPath || '/mcp/v2');
 		this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		this.allowList = ssrfAllowListFor(cfg.baseUrl);
+		this.allowList = ssrfAllowListFor(wireBase);
 	}
 
 	/** Extract the JSON-RPC response object from a JSON or SSE (`data:` lines) payload. */
