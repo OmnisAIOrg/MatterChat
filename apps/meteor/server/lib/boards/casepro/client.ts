@@ -247,8 +247,26 @@ export class CaseProClient {
 				throw new Error('CasePro createIntake: party create returned no id');
 			}
 		}
-		const intake = await this.tx.create('intake_questionnaires', buildIntakeRowFromCapture(input, partyId));
+		// CasePro REQUIRES template_id on intake create ("An intake template is
+		// required…", surfaced as an opaque 500; only MEDICAL orgs get a server-side
+		// get-or-create fallback). Manual captures don't carry one, so fall back to
+		// the org's first intake form template (the transport caches the lookup).
+		const templateId = str(input.templateId) ?? (await this.defaultIntakeTemplateId());
+		const intake = await this.tx.create('intake_questionnaires', buildIntakeRowFromCapture({ ...input, templateId }, partyId));
 		return this.mapIntake(intake);
+	}
+
+	/** First intake form template id of the org, or a CLEAR error (the upstream
+	 * failure mode is an unexplained 500 wrapping the template requirement). */
+	private async defaultIntakeTemplateId(): Promise<string> {
+		const { data } = await this.tx.query('intake_form_templates', { limit: 1 });
+		const id = str(data[0]?.id);
+		if (!id) {
+			throw new Error(
+				'CasePro createIntake: the organization has no intake form templates — create one in CasePro or pass templateId in the capture input',
+			);
+		}
+		return id;
 	}
 
 	/** Drag a card -> write `intake_stage_id` (write-through). Returns the updated lead. */

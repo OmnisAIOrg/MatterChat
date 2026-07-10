@@ -318,6 +318,14 @@ const STUB_INTAKE_QUESTIONNAIRES: CaseProRow[] = [
 	},
 ];
 
+/** Intake form templates referenced by the seeded intakes (`template_id`). CasePro
+ * requires one on every intake create, so the client's default-template fallback
+ * must find rows in stub mode too. */
+const STUB_INTAKE_FORM_TEMPLATES: CaseProRow[] = [
+	{ id: 'stub-intaketmpl-pi', name: 'Standard PI Intake', description: 'Stub personal-injury intake form' },
+	{ id: 'stub-intaketmpl-mva', name: 'MVA Intake', description: 'Stub motor-vehicle-accident intake form' },
+];
+
 /** entity -> seed rows. Anything not listed returns []. */
 const STUB_TABLES: Record<string, CaseProRow[]> = {
 	matters: STUB_MATTERS,
@@ -337,6 +345,7 @@ const STUB_TABLES: Record<string, CaseProRow[]> = {
 	litigations: STUB_LITIGATIONS,
 	intake_stages: STUB_INTAKE_STAGES,
 	intake_questionnaires: STUB_INTAKE_QUESTIONNAIRES,
+	intake_form_templates: STUB_INTAKE_FORM_TEMPLATES,
 };
 
 /** Narrow an unknown to a non-empty string, else undefined. */
@@ -912,6 +921,17 @@ export class NativeRestTransport implements ICaseProTransport {
 				// (the paginated POST list route reads req.organization and 500s).
 				const { rows } = await this.fetchPaged('intake-stages/list-all', {}, maxRows, 'GET');
 				return { rows: this.setLookup('intake_stages', rows.map(normalizeIntakeStageRow)), pushed: [], truncated: false };
+			}
+			case 'intake_form_templates': {
+				// Needed for intake create: CasePro REQUIRES template_id (law-firm orgs
+				// have no server-side fallback). GET /intake-form-templates scopes to the
+				// auth org and returns the standard { data, total } envelope.
+				const cached = this.cachedLookup('intake_form_templates');
+				if (cached) {
+					return { rows: cached, pushed: [], truncated: false };
+				}
+				const { rows } = await this.fetchPaged('intake-form-templates', {}, maxRows, 'GET');
+				return { rows: this.setLookup('intake_form_templates', rows), pushed: [], truncated: false };
 			}
 			case 'case_types':
 			case 'settlement_types': {
