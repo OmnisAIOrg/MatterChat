@@ -23,6 +23,9 @@ import './methods';
 // Live message bridge: mounts /_connectors/teams/{webhook,lifecycle} (validation handshake +
 // fail-closed clientState verification; inert until TEAMS_WEBHOOK_CLIENT_STATE_SECRET is set).
 import './providers/teams/webhook';
+// Slack live message bridge: mounts /_slack/events (url_verification handshake + fail-closed
+// signing-secret verification; inert until Slack_Signing_Secret / SLACK_SIGNING_SECRET is set).
+import './providers/slack/events';
 import { startBridgeRuntime } from './bridge/bridgeService';
 
 export type * from './ChatProvider';

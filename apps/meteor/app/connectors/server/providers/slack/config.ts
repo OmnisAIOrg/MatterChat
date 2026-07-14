@@ -85,3 +85,41 @@ export function isSlackConfigured(): boolean {
  */
 export const SLACK_REDIRECT_PATH = '_slack/oauth/callback';
 export const redirectUri = (): string => Meteor.absoluteUrl(SLACK_REDIRECT_PATH);
+
+// ─── Events API endpoint (the live message bridge's inbound transport) ────────────────────────
+
+/**
+ * Events endpoint mount prefix — OUTSIDE /api (RC's REST/Apps router owns `/api/*` and 404s custom
+ * connect-handlers there; mirrors the `/_slack/oauth` + `/_connectors/teams` mounting precedent).
+ * Registered in the Slack app as Event Subscriptions → Request URL:
+ *   https://<Site_Url host>/_slack/events
+ */
+export const SLACK_EVENTS_ROUTE_PREFIX = '/_slack/events';
+
+/** Absolute URL to register as the Slack app's Event Subscriptions Request URL (docs/UI helper). */
+export const slackEventsUrl = (): string => Meteor.absoluteUrl(SLACK_EVENTS_ROUTE_PREFIX.replace(/^\//, ''));
+
+/**
+ * The Slack app SIGNING SECRET that authenticates every Events API delivery (v0 HMAC over the raw
+ * body — see eventsSecurity.verifySlackSignature). Admin setting first, `SLACK_SIGNING_SECRET` env
+ * as the deploy-level fallback (same setting-then-env pattern as the Teams `getTeamsConfig`
+ * fields: a k8s/ArgoCD deploy can carry it as container env without an admin pasting it into
+ * Mongo; the admin setting, when set, still wins). Never committed, never defaulted.
+ */
+export function slackSigningSecret(): string {
+	const fromSetting = String(settings.get('Slack_Signing_Secret') || '').trim();
+	const fromEnv = String(process.env.SLACK_SIGNING_SECRET || '').trim();
+	return fromSetting || fromEnv;
+}
+
+/**
+ * FAIL-CLOSED events gate: true only when the Slack connector itself is configured AND the signing
+ * secret is set. Without it, NO event payload is processed — bridges still work outbound (and the
+ * reconcile poll still backfills); inbound realtime simply stays off until the admin provides the
+ * signing secret. Unlike Teams/Graph there is NO per-channel subscription to create: the app-level
+ * event subscription (message.channels + message.groups) covers every channel the connected user
+ * (or the app's bot) can see, so "subscribing" a bridge is just recording the channel mapping.
+ */
+export function isSlackEventsConfigured(): boolean {
+	return isSlackConfigured() && Boolean(slackSigningSecret());
+}

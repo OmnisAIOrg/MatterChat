@@ -23,6 +23,7 @@ import { ExternalWorkspaceConnections, Rooms, Users } from '@rocket.chat/models'
 import { SystemLogger } from '../../../../server/lib/logger/system';
 import type { IProviderConnection, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
+import { isSlackEventsConfigured } from '../providers/slack/config';
 import { isTeamsWebhookConfigured } from '../providers/teams/config';
 import type { GraphTokens, RefreshedTokens } from '../providers/teams/graphClient';
 import { createChannelSubscription, deleteSubscription, renewSubscription } from '../providers/teams/subscriptions';
@@ -59,6 +60,12 @@ function realtimeModeOf(doc: IExternalWorkspaceConnection, bridge: IBridgedChann
 	// for the same channel (fan-out); with webhook mode off it's outbound-only.
 	if (doc.provider === 'teams' && isTeamsWebhookConfigured()) {
 		return 'shared';
+	}
+	// Slack realtime is the APP-LEVEL Events API (/_slack/events): no per-channel subscription
+	// exists — every bridge is live once the signing secret is configured, off (outbound + the
+	// reconcile poll) when it isn't. This `realtime` value IS the admin-facing status surface.
+	if (doc.provider === 'slack' && isSlackEventsConfigured()) {
+		return 'webhook';
 	}
 	return 'none';
 }
@@ -157,9 +164,12 @@ export async function backfillBridge(
 	return ingested;
 }
 
-/** The owner's external (Entra) user id captured at OAuth — inbound alias suppression for self. */
+/**
+ * The owner's external user id captured at OAuth — inbound alias suppression for self.
+ * Teams stores it as `externalAadUserId` (Entra oid), Slack as `externalSlackUserId` (U…).
+ */
 function ownerExternalIdOf(connection: IProviderConnection): string | undefined {
-	const v = connection.credentials.externalAadUserId;
+	const v = connection.credentials.externalAadUserId ?? connection.credentials.externalSlackUserId;
 	return typeof v === 'string' && v ? v : undefined;
 }
 
@@ -173,6 +183,21 @@ async function ensureSubscription(
 	bridge: IBridgedChannel,
 	connection: IProviderConnection,
 ): Promise<'webhook' | 'shared' | 'none'> {
+	// SLACK: realtime is the APP-LEVEL Events API — there is no per-channel subscription to create
+	// (the app's event subscription covers every visible channel), so "activating" inbound is just
+	// the bridge record itself. Fail-closed + graceful: with no signing secret, inbound stays off
+	// (outbound + the reconcile poll keep working) and the admin-facing status is 'none'.
+	if (doc.provider === 'slack') {
+		if (isSlackEventsConfigured()) {
+			return 'webhook';
+		}
+		SystemLogger.warn({
+			msg: 'Slack inbound realtime is OFF — signing secret unset (set Slack_Signing_Secret in admin or SLACK_SIGNING_SECRET env). Bridge stays outbound-only + reconcile poll.',
+			connectionId: doc._id,
+			channelExternalId: bridge.channelExternalId,
+		});
+		return 'none';
+	}
 	if (doc.provider !== 'teams' || !isTeamsWebhookConfigured()) {
 		return 'none';
 	}
@@ -317,11 +342,17 @@ export async function listMyBridges(userId: string): Promise<ClientBridge[]> {
 let runtimeStarted = false;
 let sweepRunning = false;
 
+/** The providers the reconcile sweep covers (the ones with an inbound realtime/poll loop). */
+const RECONCILED_PROVIDERS = new Set<IExternalWorkspaceConnection['provider']>(['teams', 'slack']);
+
 /**
- * One reconcile pass over every Teams connection with bridges:
- *  - subscription missing (never created / previously shared / dropped) → try to create;
- *  - subscription expiring within RENEW_BEFORE_MS → renew (recreate on 404);
- *  - then a `since=lastInboundAt` backfill so downtime/missed windows are closed.
+ * One reconcile pass over every Teams AND Slack connection with bridges:
+ *  - Teams: subscription missing (never created / previously shared / dropped) → try to create;
+ *    subscription expiring within RENEW_BEFORE_MS → renew (recreate on 404);
+ *  - both: a `since=lastInboundAt` backfill so downtime/missed windows are closed — for Slack this
+ *    poll is ALSO the graceful degradation when the Events API signing secret is unset (inbound
+ *    still arrives, just on the reconcile cadence instead of realtime).
+ * (Google bridges are activation-backfill only for now — deliberately not swept here.)
  */
 export async function reconcileBridges(): Promise<void> {
 	if (sweepRunning) {
@@ -329,9 +360,9 @@ export async function reconcileBridges(): Promise<void> {
 	}
 	sweepRunning = true;
 	try {
-		const docs = await ExternalWorkspaceConnections.findAllWithBridges('teams').toArray();
+		const docs = await ExternalWorkspaceConnections.findAllWithBridges().toArray();
 		for (const doc of docs) {
-			if (doc.status !== 'connected') {
+			if (doc.status !== 'connected' || !RECONCILED_PROVIDERS.has(doc.provider)) {
 				continue;
 			}
 			const connection = toProviderConnection(doc);
@@ -341,7 +372,7 @@ export async function reconcileBridges(): Promise<void> {
 			const ownerExternalId = ownerExternalIdOf(connection);
 			for (const bridge of doc.bridgedChannels || []) {
 				try {
-					if (isTeamsWebhookConfigured()) {
+					if (doc.provider === 'teams' && isTeamsWebhookConfigured()) {
 						if (!bridge.subscriptionId) {
 							await ensureSubscription(doc, bridge, connection);
 						} else if (!bridge.subscriptionExpiresAt || bridge.subscriptionExpiresAt.getTime() - Date.now() < RENEW_BEFORE_MS) {
