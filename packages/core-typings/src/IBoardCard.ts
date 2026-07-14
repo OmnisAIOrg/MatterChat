@@ -90,7 +90,7 @@ export interface IMatterSnapshot {
  */
 export type IBoardCardLink =
 	| { kind: 'lead'; leadId: string } // -> boards_leads._id
-	| { kind: 'matter'; matterId: string; snapshot?: IMatterSnapshot; snapshotAt?: Date } // CasePro matters.id
+	| { kind: 'matter'; matterId: string; roomId?: string; snapshot?: IMatterSnapshot; snapshotAt?: Date } // CasePro matters.id; roomId = bound RC channel
 	| { kind: 'document'; litboxRef: string } // LitBox path/id
 	| { kind: 'evidence'; evidenceId: string };
 
@@ -110,6 +110,18 @@ export interface IBoardCard extends IRocketChatRecord {
 	startDate?: Date;
 	dueDate?: Date;
 	dueComplete?: boolean;
+	completed?: boolean; // Asana-style task-level "done" (independent of dueComplete and of archive)
+	completedAt?: Date;
+	completedBy?: IUser['_id'];
+	priority?: 'low' | 'medium' | 'high' | 'urgent';
+	isMilestone?: boolean; // Asana-style milestone marker (a key dated checkpoint; rendered as a diamond)
+	approval?: {
+		status: 'pending' | 'approved' | 'changes' | 'rejected';
+		approvers?: IUser['_id'][];
+		requestedBy?: IUser['_id'];
+		decidedBy?: IUser['_id'];
+		decidedAt?: Date;
+	};
 	cover?: ICardCover;
 
 	fieldValues: Record<string, BoardsFieldValue>; // fieldDef.id -> value
@@ -122,6 +134,18 @@ export interface IBoardCard extends IRocketChatRecord {
 	cardNumber: number; // per-board sequential shortlink number
 	relations?: { type: 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child'; cardId: string }[];
 	mirrorOf?: string; // source card _id if this is a mirror
+
+	// Recurring "routine" tasks. When a card carrying a recurrence rule is completed (dueComplete
+	// flips true), the service materializes the next occurrence — a clone with the due date advanced
+	// and checklists reset — and moves the rule onto that new card. The completed card becomes a plain
+	// record. (A daily/weekly/monthly cadence is the personal-PM "routine" pillar.)
+	recurrence?: {
+		freq: 'daily' | 'weekly' | 'monthly';
+		interval: number; // every N periods (>= 1)
+		basis?: 'completion' | 'dueDate'; // anchor for the next due date (default 'completion')
+		count?: number; // stop after N total occurrences (omitted = indefinitely)
+		occurrencesDone?: number; // how many occurrences have been completed so far
+	};
 
 	archived: boolean;
 	rev: number;

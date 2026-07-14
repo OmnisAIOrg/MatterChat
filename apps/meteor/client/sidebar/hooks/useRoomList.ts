@@ -24,6 +24,7 @@ const order = [
 	'Favorites',
 	'Teams',
 	'Discussions',
+	'Matters',
 	'Channels',
 	'Direct_Messages',
 	'Conversations',
@@ -72,6 +73,7 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 			const discussion = new Set();
 			const conversation = new Set();
 			const onHold = new Set();
+			const matters = new Set();
 
 			rooms.forEach((room) => {
 				if (room.archived) {
@@ -100,6 +102,10 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 				if (sidebarGroupByType && isDiscussionEnabled && room.prid) {
 					return discussion.add(room);
+				}
+
+				if (sidebarGroupByType && room.matterCardId) {
+					return matters.add(room);
 				}
 
 				if (room.t === 'c' || room.t === 'p') {
@@ -137,6 +143,8 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 			sidebarGroupByType && team.size && groups.set('Teams', team);
 
 			sidebarGroupByType && isDiscussionEnabled && discussion.size && groups.set('Discussions', discussion);
+
+			sidebarGroupByType && matters.size && groups.set('Matters', matters);
 
 			sidebarGroupByType && channels.size && groups.set('Channels', channels);
 

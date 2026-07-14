@@ -4,6 +4,7 @@ import type {
 	IBoardCard,
 	IBoardActivity,
 	BoardsPipelineType,
+	BoardsStatus,
 	BoardsCardType,
 	IBoardCardLink,
 } from '@rocket.chat/core-typings';
@@ -62,6 +63,19 @@ const BoardsCardsSchema = {
 };
 
 export const isBoardsCardsProps = ajvQuery.compile<BoardsCardsProps>(BoardsCardsSchema);
+
+// Public (unauthenticated) iCal feed: resolves the user from a per-user `?token=` secret so
+// calendar apps can subscribe to a plain URL. The token is the only param.
+type BoardsCardsIcalPublicProps = { token: string };
+
+const BoardsCardsIcalPublicSchema = {
+	type: 'object',
+	properties: { token: { type: 'string', minLength: 1 } },
+	required: ['token'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardsIcalPublicProps = ajvQuery.compile<BoardsCardsIcalPublicProps>(BoardsCardsIcalPublicSchema);
 
 type BoardsCardProps = { cardId: string };
 
@@ -177,6 +191,20 @@ const BoardsArchiveSchema = {
 
 export const isBoardsArchiveProps = ajv.compile<BoardsArchiveProps>(BoardsArchiveSchema);
 
+type BoardsSetStatusProps = { boardId: string; status: BoardsStatus };
+
+const BoardsSetStatusSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		status: { type: 'string', enum: ['active', 'on_hold', 'completed', 'archived'] },
+	},
+	required: ['boardId', 'status'],
+	additionalProperties: false,
+};
+
+export const isBoardsSetStatusProps = ajv.compile<BoardsSetStatusProps>(BoardsSetStatusSchema);
+
 type BoardsListCreateProps = { boardId: string; title: string; position?: number; caseproStageId?: string };
 
 const BoardsListCreateSchema = {
@@ -195,7 +223,7 @@ export const isBoardsListCreateProps = ajv.compile<BoardsListCreateProps>(Boards
 
 type BoardsListUpdateProps = {
 	listId: string;
-	patch: { title?: string; wipLimit?: number; subStatuses?: string[]; collapsed?: boolean };
+	patch: { title?: string; wipLimit?: number; subStatuses?: string[]; collapsed?: boolean; color?: string };
 };
 
 const BoardsListUpdateSchema = {
@@ -209,6 +237,9 @@ const BoardsListUpdateSchema = {
 				wipLimit: { type: 'number', nullable: true },
 				subStatuses: { type: 'array', items: { type: 'string' }, nullable: true },
 				collapsed: { type: 'boolean', nullable: true },
+				// list/column accent color — raw CSS color string (hex). MUST be listed here
+				// or ajv `additionalProperties:false` silently strips it from the request body.
+				color: { type: 'string', nullable: true },
 			},
 			required: [],
 			additionalProperties: false,
@@ -233,6 +264,26 @@ const BoardsListMoveSchema = {
 };
 
 export const isBoardsListMoveProps = ajv.compile<BoardsListMoveProps>(BoardsListMoveSchema);
+
+// Reorder a board's columns. Two accepted shapes (validated as a combination in the service):
+//  - { boardId, listIds }   full ordering: positions are reassigned in array order
+//  - { listId, position }   single-list move to an absolute fractional rank (mirrors list.move)
+// All four keys live here or ajv `additionalProperties:false` silently strips them from the body.
+type BoardsListReorderProps = { boardId?: string; listIds?: string[]; listId?: string; position?: number };
+
+const BoardsListReorderSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1, nullable: true },
+		listIds: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, nullable: true },
+		listId: { type: 'string', minLength: 1, nullable: true },
+		position: { type: 'number', nullable: true },
+	},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsListReorderProps = ajv.compile<BoardsListReorderProps>(BoardsListReorderSchema);
 
 type BoardsListArchiveProps = { listId: string };
 
@@ -284,6 +335,7 @@ type BoardsCardUpdateProps = {
 		subStatus?: string;
 		assignees?: string[];
 		watchers?: string[];
+		priority?: 'low' | 'medium' | 'high' | 'urgent';
 		cover?: { kind: 'color' | 'image' | 'attachment'; value: string };
 	};
 };
@@ -303,6 +355,7 @@ const BoardsCardUpdateSchema = {
 				subStatus: { type: 'string', nullable: true },
 				assignees: { type: 'array', items: { type: 'string' }, nullable: true },
 				watchers: { type: 'array', items: { type: 'string' }, nullable: true },
+				priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], nullable: true },
 				cover: {
 					type: 'object',
 					nullable: true,
@@ -351,6 +404,158 @@ const BoardsCardArchiveSchema = {
 
 export const isBoardsCardArchiveProps = ajv.compile<BoardsCardArchiveProps>(BoardsCardArchiveSchema);
 
+// Bulk card operations: apply one action to many cards in a single request. The optional action
+// params (toListId/position/subStatus for move, completed for complete, priority for setPriority)
+// ride alongside; the server validates the combination per-action.
+type BoardsCardsBulkProps = {
+	cardIds: string[];
+	action: 'move' | 'complete' | 'archive' | 'setPriority' | 'delete';
+	toListId?: string;
+	position?: number;
+	subStatus?: string;
+	completed?: boolean;
+	priority?: 'low' | 'medium' | 'high' | 'urgent';
+};
+
+const BoardsCardsBulkSchema = {
+	type: 'object',
+	properties: {
+		cardIds: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1 },
+		action: { type: 'string', enum: ['move', 'complete', 'archive', 'setPriority', 'delete'] },
+		toListId: { type: 'string', nullable: true },
+		position: { type: 'number', nullable: true },
+		subStatus: { type: 'string', nullable: true },
+		completed: { type: 'boolean', nullable: true },
+		priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], nullable: true },
+	},
+	required: ['cardIds', 'action'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardsBulkProps = ajv.compile<BoardsCardsBulkProps>(BoardsCardsBulkSchema);
+
+// Card checklists / sub-tasks. Granular item-level mutations on a card's default checklist
+// (the service auto-creates one on the first add). Each new field MUST be declared here or
+// ajv `additionalProperties:false` silently strips it from the request body.
+type BoardsCardChecklistAddProps = { cardId: string; text: string };
+
+const BoardsCardChecklistAddSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		text: { type: 'string', minLength: 1 },
+	},
+	required: ['cardId', 'text'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardChecklistAddProps = ajv.compile<BoardsCardChecklistAddProps>(BoardsCardChecklistAddSchema);
+
+// Toggle (or explicitly set) a checklist item's done state. With `done` omitted the item flips.
+type BoardsCardChecklistToggleProps = { cardId: string; itemId: string; done?: boolean };
+
+const BoardsCardChecklistToggleSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		itemId: { type: 'string', minLength: 1 },
+		done: { type: 'boolean', nullable: true },
+	},
+	required: ['cardId', 'itemId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardChecklistToggleProps = ajv.compile<BoardsCardChecklistToggleProps>(BoardsCardChecklistToggleSchema);
+
+type BoardsCardChecklistRemoveProps = { cardId: string; itemId: string };
+
+const BoardsCardChecklistRemoveSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		itemId: { type: 'string', minLength: 1 },
+	},
+	required: ['cardId', 'itemId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardChecklistRemoveProps = ajv.compile<BoardsCardChecklistRemoveProps>(BoardsCardChecklistRemoveSchema);
+
+// ---------------------------------------------------------------------------
+// Labels / tags
+//
+// Board-level palette (create/update/delete a label def) + per-card assignment
+// (replace a card's label-id set). NOTE: every property below MUST be declared
+// or ajv `additionalProperties:false` silently strips it from the request body.
+// ---------------------------------------------------------------------------
+
+type BoardsLabelCreateProps = { boardId: string; name: string; color: string };
+
+const BoardsLabelCreateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		name: { type: 'string', minLength: 1 },
+		color: { type: 'string', minLength: 1 },
+	},
+	required: ['boardId', 'name', 'color'],
+	additionalProperties: false,
+};
+
+export const isBoardsLabelCreateProps = ajv.compile<BoardsLabelCreateProps>(BoardsLabelCreateSchema);
+
+type BoardsLabelUpdateProps = { boardId: string; labelId: string; patch: { name?: string; color?: string } };
+
+const BoardsLabelUpdateSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		labelId: { type: 'string', minLength: 1 },
+		patch: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', nullable: true },
+				color: { type: 'string', nullable: true },
+			},
+			required: [],
+			additionalProperties: false,
+		},
+	},
+	required: ['boardId', 'labelId', 'patch'],
+	additionalProperties: false,
+};
+
+export const isBoardsLabelUpdateProps = ajv.compile<BoardsLabelUpdateProps>(BoardsLabelUpdateSchema);
+
+type BoardsLabelDeleteProps = { boardId: string; labelId: string };
+
+const BoardsLabelDeleteSchema = {
+	type: 'object',
+	properties: {
+		boardId: { type: 'string', minLength: 1 },
+		labelId: { type: 'string', minLength: 1 },
+	},
+	required: ['boardId', 'labelId'],
+	additionalProperties: false,
+};
+
+export const isBoardsLabelDeleteProps = ajv.compile<BoardsLabelDeleteProps>(BoardsLabelDeleteSchema);
+
+// Replace a card's label-id set wholesale (server validates each id against the board palette).
+type BoardsCardLabelsSetProps = { cardId: string; labelIds: string[] };
+
+const BoardsCardLabelsSetSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		labelIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+	},
+	required: ['cardId', 'labelIds'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardLabelsSetProps = ajv.compile<BoardsCardLabelsSetProps>(BoardsCardLabelsSetSchema);
+
 // ---------------------------------------------------------------------------
 // Endpoint type map
 // ---------------------------------------------------------------------------
@@ -371,6 +576,9 @@ export type BoardsEndpoints = {
 	'/v1/boards.archive': {
 		POST: (params: BoardsArchiveProps) => { success: true };
 	};
+	'/v1/boards.setStatus': {
+		POST: (params: BoardsSetStatusProps) => { board: IBoard };
+	};
 	'/v1/boards.lists': {
 		GET: (params: BoardsListsProps) => { lists: IBoardList[] };
 	};
@@ -383,11 +591,29 @@ export type BoardsEndpoints = {
 	'/v1/boards.list.move': {
 		POST: (params: BoardsListMoveProps) => { list: IBoardList };
 	};
+	'/v1/boards.list.reorder': {
+		POST: (params: BoardsListReorderProps) => { lists: IBoardList[] };
+	};
 	'/v1/boards.list.archive': {
 		POST: (params: BoardsListArchiveProps) => { success: true };
 	};
 	'/v1/boards.cards': {
 		GET: (params: BoardsCardsProps) => PaginatedResult<{ cards: IBoardCard[] }>;
+	};
+	// iCal (.ics) feed of the current user's due cards. Returns a raw RFC-5545
+	// `text/calendar` document (a string), NOT the usual JSON envelope.
+	'/v1/boards.cards.ical': {
+		GET: () => string;
+	};
+	// Mint (idempotently) + return the caller's per-user secret token for the public iCal feed,
+	// so a calendar app can subscribe to `/api/v1/boards.cards.ical.public?token=...`.
+	'/v1/boards.cards.ical.token': {
+		POST: () => { token: string };
+	};
+	// Public, UNAUTHENTICATED iCal feed. Resolves the user from `?token=` and returns the same
+	// raw RFC-5545 `text/calendar` document as boards.cards.ical (no JSON envelope, no auth headers).
+	'/v1/boards.cards.ical.public': {
+		GET: (params: { token: string }) => string;
 	};
 	'/v1/boards.card': {
 		GET: (params: BoardsCardProps) => { card: IBoardCard };
@@ -404,7 +630,35 @@ export type BoardsEndpoints = {
 	'/v1/boards.card.archive': {
 		POST: (params: BoardsCardArchiveProps) => { success: true };
 	};
+	'/v1/boards.cards.bulk': {
+		POST: (params: BoardsCardsBulkProps) => {
+			results: { cardId: string; ok: boolean; error?: string }[];
+			updated: number;
+			failed: number;
+		};
+	};
+	'/v1/boards.card.checklist.add': {
+		POST: (params: BoardsCardChecklistAddProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.checklist.toggle': {
+		POST: (params: BoardsCardChecklistToggleProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.checklist.remove': {
+		POST: (params: BoardsCardChecklistRemoveProps) => { card: IBoardCard };
+	};
 	'/v1/boards.activities': {
 		GET: (params: BoardsActivitiesProps) => PaginatedResult<{ activities: IBoardActivity[] }>;
+	};
+	'/v1/boards.label.create': {
+		POST: (params: BoardsLabelCreateProps) => { board: IBoard };
+	};
+	'/v1/boards.label.update': {
+		POST: (params: BoardsLabelUpdateProps) => { board: IBoard };
+	};
+	'/v1/boards.label.delete': {
+		POST: (params: BoardsLabelDeleteProps) => { board: IBoard };
+	};
+	'/v1/boards.card.labels.set': {
+		POST: (params: BoardsCardLabelsSetProps) => { card: IBoardCard };
 	};
 };

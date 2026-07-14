@@ -1,0 +1,114 @@
+# DECISIONS.md — why we built it this way
+> Append‑only. One dated entry per meaningful decision: what we chose, what we rejected, and **why** (the trade‑off). Never rewrite past entries. **No secrets** (no keys, passwords, tokens) — reasoning only. The "checkpoint matterchat" command appends here.
+
+---
+
+### 2026-06-23 — Cross-firm = CFCS multi-tenant trust domain, NOT federation (re-confirmed); going live secure-first
+**Chose:** wire the already-built cross-firm UI to a live CFCS backend deployed INTERNAL-ONLY (ClusterIP, no public ingress), fronted by a new MatterChat `/_crossfirm` server proxy that injects the verified OmnisAI identity (overriding the client-supplied actor `*AttorneyId` fields).
+**Rejected:** (a) Rocket.Chat/Matrix federation for the MatterChat-org case — re-confirmed the prior rejection (E2EE×federation mutually exclusive in RC, EE-only, beta, no deletion enforcement → not legal-grade); (b) a fresh from-scratch design — caught that CFCS already exists (designed + 17/17 POC + the UI already on `staging`); (c) the browser calling CFCS directly with a spoofable identity header (the current POC wiring).
+**Why:** the founder nearly paid for a duplicate — CFCS *is* the multi-org architecture, already built. The only real gap vs. "talk to people still on Slack" is a LIVE Slack bridge (not built; Slack today is migration-only). Internal-only CFCS + a proxy that injects the verified identity closes the POC's "identity trusted from the request" hole WITHOUT touching the hardened trust core; a public CFCS would need CORS + a bigger attack surface.
+
+### 2026-06-23 — First OmnisAI user auto-promoted to admin (the OIDC path skipped stock RC's first-user rule)
+**Chose:** in `loginHandler.ts`, on login grant `admin` to the user if the workspace has no admin yet.
+**Rejected:** a DB-level role grant (no local cluster access); `ADMIN_*` env bootstrap (a second account + a committed password).
+**Why:** the OmnisAI OIDC login creates users with `globalRoles:['user']` and never ran Rocket.Chat's "first user is admin" (that lives in the password/setup-wizard path), so the workspace had no owner and `/admin` blocked everyone. The fix is idempotent (fires only while ownerless) and fixes every future workspace. GOTCHA: it only takes effect on a TRUE logout→login — incognito windows share a session, so a "fresh" incognito silently resumed and the promotion never ran (that cost an hour of debugging).
+
+### 2026-06-23 — Re-registered the OmnisAI OIDC client for staging (the login blocker)
+**Chose:** register a NEW public OIDC client (`WoqX…`) whose redirect URIs include the staging + prod callbacks, and point MatterChat + LitBox at it.
+**Rejected:** editing the original client's redirect URIs (the clean fix, but needs CentralizedAuth admin access we lacked — founder hit a dashboard 401).
+**Why:** the original client was DCR-registered for localhost, so the staging callback returned INVALID_REDIRECT_URI for any logged-in user. Re-registering was the only autonomous path; founder explicitly authorized it. NOTE: registering on shared staging CentralizedAuth is high-severity — the safety classifier requires a specific, unambiguous yes, not a terse one.
+
+### 2026-06-22 — LitBox auth proxy: hardened server-side credential forwarding (mounted off /api; credential OFF services.*)
+**Chose:** a streaming server proxy `litboxProxy.ts` mounted at **`/_litbox`** that resolves the MatterChat user from the loginToken and forwards `/_litbox/v1/* → ${LITBOX_API_URL}/api/v1/*` with the user's CentralizedAuth credential (the OIDC `access_token`, Option A) injected server-side. Credential persisted on a **top-level `omnisaiLitbox` user field**, NOT `services.*`.
+**Rejected:** mounting under `/api/litbox` (Rocket.Chat's own router owns `/api/*` and 404s unknown paths — confirmed); storing the credential under `services.omnisai.litbox` (the design's first choice).
+**Why:** `getFullUserData.ts` projects the **entire `services` object** to the user themselves (blacklist of password/resume/email only) — so anything under `services.*` leaks to the browser via `users.info`/`me`. The red-team caught this (verdict: UNSAFE); a top-level field is excluded from `getDefaultUserFields` so no endpoint projects it. The proxy is hardened per the red-team: Authorization-header-only (no CSRF-able cookie), path-traversal/`//` rejection, outbound origin-pin + v1 resource-prefix + method allow-lists with the credential attached ONLY after every gate passes, `redirect:'manual'`, inbound Cookie/Origin dropped, Authorization never logged. Open: refresh-on-401, encrypt-at-rest, the JIT email-rebind footgun, and the credential-type gate — all need a REAL env to verify (local uses a mock OIDC that real LitBox rejects).
+
+### 2026-06-22 — Embed LitBox via the official npm component + a MatterChat server proxy
+**Chose:** mount `@omnisaiorg/litbox-file-browser` (GitHub Packages, lazy-loaded) as a `/litbox` "Files" screen, pointed at a MatterChat server proxy `/api/litbox/v1` that forwards to the LitBox backend.
+**Rejected:** iframing the LitBox web app; a custom file UI against the LitBox API; calling LitBox directly from the browser.
+**Why:** the component is the canonical, full-featured integration and — the main risk — it **bundles + mounts + renders cleanly in Meteor** (proven this session). A server proxy bypasses LitBox CORS entirely (no LitBox-side allowlist change) and keeps the LitBox credential off the client. Lazy-load keeps the heavy deps (AG Grid, react-pdf) out of the main bundle.
+
+### 2026-06-22 — LitBox auth is a CentralizedAuth better-auth SESSION token, NOT KeyGate/OIDC
+**Chose:** design the proxy to forward a CentralizedAuth **better-auth session token** (or provision a per-user `litbox_` API key) as the LitBox credential.
+**Rejected:** forwarding MatterChat's OIDC access_token; using KeyGate (assumed, both wrong).
+**Why:** reading Litbox-backend this session (deps.py + services/auth/centralized_auth.py) proved LitBox has **no** KeyGate/JWKS/OIDC-token handling — its `Authorization: Bearer <X>` path stuffs X into the `better-auth.session_token` cookie and validates via `{CENTRALIZED_AUTH_URL}/auth/session` (valid → JIT-creates user/org). An OIDC access_token is a different credential and is rejected. So the open problem for the proxy phase: MatterChat's OIDC login only holds an OIDC access_token. Decided on a verified reading via a research→design→security-review workflow rather than guessing on a security-sensitive auth bridge.
+
+### 2026-06-22 — Files lives in the left rail with the LitBox logo (not the top nav)
+**Chose:** the Files entry sits in `AppLeftRail` next to Chats/Boards/Activity/Search, rendered with the LitBox wordmark (recolored 'Lit' white for the dark rail).
+**Rejected:** the top NavBar, where it was first placed.
+**Why:** founder direction — Files is a primary section and should read as the LitBox-branded file area in the global nav.
+
+### 2026-06-22 — Boards UI for the 4 new server features (parallel worktrees) + an i18n catch
+**Chose:** wire label chips/manager, checklist panel, drag-to-reorder lists, and the iCal Subscribe flow (incl. a public tokenized feed URL `boards.cards.ical.public`) as 4 parallel worktree builds; integrate + verify 58/58 + eyeball.
+**Why:** completes last session's server features (they had no UI); same proven parallel pattern. Browser verification caught an i18n bug — the Subscribe modal rendered raw keys; the boards convention is inline `t(key,{defaultValue})`, which that agent had skipped. Lesson: verify UI in the browser, not just the harness.
+
+### 2026-06-22 — Second parallel wave: 7 features at once (3 UI + 3 server + iCal), each in its own worktree
+**Chose:** scale the worktree‑per‑agent pattern up to **7 concurrent builds** — wire the 3 server features' UI (status/bulk/list‑color) + 3 new server features (labels, list reorder, checklists) + the iCal feed — then integrate sequentially and verify.
+**Rejected:** one feature at a time; or a single mega‑branch.
+**Why:** the velocity win compounds. Integration cost stayed mechanical (all server features append to `rest-typings/boards.ts` + `service.ts` + the harness at distinct anchors; the 2 UI features that shared `Column.tsx`/`BoardView.tsx` merged by keeping both prop sets). Notable: **labels, checklists, and list `position` already existed at the model layer** — the agents found this and only added the missing API/UI, which is lower‑risk than net‑new schema.
+
+### 2026-06-22 — Re‑activating an archived board restores ALL its lists/cards
+**Chose:** in `setBoardStatus`, when moving from `archived` to any non‑archived status, un‑archive the board's lists/cards (reverse the archive cascade) via a direct `updateMany` in the service.
+**Rejected:** (a) leaving them archived (the bug — board unusable, `error-list-not-found` on card create); (b) tracking exactly which items the cascade archived so only those are restored.
+**Why:** a user who re‑opens a board expects their columns back; full restore matches that intent and stays inside `service.ts` (no model/package change, so no dist‑rebuild). The "only restore cascade‑archived items" refinement needs a per‑item flag — deferred until someone actually archives lists independently *and* then archives the board.
+
+### 2026-06-22 — iCal feed ships authenticated‑only; tokenized public URL deferred
+**Chose:** `GET boards.cards.ical` returns the caller's due cards as `text/calendar`, authenticated via `X‑Auth‑Token`.
+**Rejected:** a tokenized public `?token=` feed URL in this pass.
+**Why:** real calendar apps can't send auth headers, so a public token URL is the eventual shape — but it requires an `icalToken` on the shared **Users** model + an `authRequired:false` resolver, a cross‑cutting change that didn't fit a single narrow worktree. Logged as the next task; the endpoint + ICS builder are done and reusable.
+
+### 2026-06-22 — Verify Boards UI via the preview tool, authenticated by the browser's own session
+**Chose:** hand :3100 to the `preview_*` tool (point `.claude/launch.json`'s `matterchat` config at `/tmp/mc-dev.sh`), drive the board view, and screenshot the 3 UI controls.
+**Rejected:** asking the founder to eyeball it, or forging a session.
+**Why:** the preview browser already carried the founder's logged‑in session, so no auth injection was needed. Recorded the **board route** (`/boards/board/:id/:view?`) since the bare `/boards/:id` 404s — future UI verification needs the `/board/` segment. Confirmed all three render + interact (status menu, bulk bar on select, color swatch menu).
+
+### 2026-06-22 — Built 3 boards‑parity features in parallel via isolated git worktrees
+**Chose:** build board‑status / bulk‑card‑ops / list‑colors **concurrently** — three parallel sub‑agents, each in its own `git worktree` + branch off `feature/matterchat-cross-firm` — then integrate sequentially and verify once with the API harness (26/26).
+**Rejected:** building the three one at a time on the live dev server.
+**Why:** independent, additive server features parallelize cleanly, and worktrees stop the agents stomping each other's edits to the shared files (`rest-typings/boards.ts`, `server/lib/boards/service.ts`, the harness). The only integration conflicts were additive test‑block overlaps (kept all). Caveat learned: a fresh worktree has **no `node_modules`**, so agents can write code but cannot build/verify — verification is a single harness pass after integration, not per‑agent.
+
+### 2026-06-22 — After a typings edit, rebuild `dist/` AND bounce the dev server
+**Chose:** after editing `packages/rest-typings` / `packages/core-typings`, run `yarn turbo run build --filter=@rocket.chat/rest-typings --filter=@rocket.chat/core-typings` (~38s) **then bounce the meteor dev process** (the self‑heal wrapper warm‑restarts it).
+**Rejected:** trusting the dev watcher to hot‑reload the rebuilt `dist/` (CLAUDE.md implies it does).
+**Why:** the dev server imports each workspace package's built `dist/`, and its watcher did **not** pick up a one‑off `turbo` dist rebuild — 3 harness tests failed (new `color` field stripped by `additionalProperties:false`, status enum bypassed) until the process was bounced, which reloads `dist/` fresh on boot. Symptom to recognize: `must NOT have additional properties` in the server log + validation that should reject silently passing.
+
+### 2026-06-22 — Dev server on :3100 under a self‑heal wrapper (don't patch the toolchain)
+**Chose:** run the **dev** server (not the prod bundle) on the founder's familiar **:3100** via `/tmp/mc-dev.sh`, wrapped in `while true; do bash /tmp/mc-dev.sh; done` so a crash auto‑recovers in ~30s.
+**Rejected:** (a) a ~15‑min prod build per change; (b) patching Meteor's `run-proxy.js` to swallow the error.
+**Why:** Meteor's dev proxy crashes on aborted connections (`ERR_STREAM_WRITE_AFTER_END`) — triggered by curl health‑checks with short `--max-time` or a browser dropping mid‑load. The wrapper keeps the fast HMR loop AND auto‑heals without editing the global toolchain (patching `~/.meteor/.../run-proxy.js` is outside the repo and was deliberately left alone). Lesson: verify the dev server via its **log file + the API harness**, never by polling it with aborting curls.
+
+### 2026-06-20 — Session resume = repo + skill, not personal memory
+**Chose:** in‑repo `CLAUDE.md` (rules + the two commands) + `HANDOFF.md` (state) + `DECISIONS.md` (this file) + an `omnis-os:matterchat` skill, driven by two plain‑English commands ("resume matterchat" / "checkpoint matterchat").
+**Rejected:** relying on Claude's personal memory for continuity.
+**Why:** personal memory does not transfer to teammates or fresh machines — only what's in the repo/skill does. Also: usage is metered by tokens, not minutes, so a tight handoff + fresh sessions beat one giant session.
+
+### 2026-06-20 — Backed all work to GitHub (OmnisAIOrg)
+**Chose:** push all three repos — `MatterChat` (branch `feature/matterchat-cross-firm`), and new private repos `matterchat-mcp-v2` + `omnis-counsel`. Vendored the loose harness + design docs into the repos.
+**Why:** committed‑locally is safe for same‑machine resume, but only pushed‑to‑remote survives a lost machine or a teammate handoff.
+
+### 2026-06-20 — CHI is the existing AI‑Agents platform; integrate via an MCP tool server
+**Chose:** build `matterchat-mcp-v2` — a deterministic MCP tool server over `boards.*`/chat — and plug it into the existing OmnisAI AI‑Agents (CHI) platform.
+**Rejected:** building a new agent/chat loop inside MatterChat.
+**Why:** CHI already does the reasoning/agent orchestration; duplicating it wastes effort. MatterChat only needs to expose tools. The server copies **CasePro's** HTTP/JSON‑RPC + API‑key plumbing and **CarePro's** deterministic static‑tool style (no in‑server LLM — the agent reasons).
+
+### 2026-06-20 — AI sourcing for CHI: self‑hosted OSS is the default for legal
+**Chose:** treat AI sourcing as a Chi‑platform decision with three models — (a) MCP connector to the user's own Claude/ChatGPT plan, (b) BYO commercial API key under DPA/ZDR, (c) self‑hosted open‑source (e.g. gpt‑oss‑120b on vLLM). Default for legal = **(c) self‑hosted**.
+**Rejected:** programmatically driving a consumer Plus/Pro subscription as a free API.
+**Why:** that's ToS‑prohibited (Anthropic banned it Feb 2026) and gives weak confidentiality. Self‑hosting avoids per‑token API charges (the founder's constraint) and keeps privileged legal data in‑house.
+
+### 2026-06-20 — Omnis Boards must be a full standalone PM suite (Trello/Asana parity)
+**Chose:** build personal‑PM + full PM parity on the generic board/list/card core, fully functional **without** CasePro/OmnisAI; CasePro matters/leads are an additive, setting‑gated layer.
+**Why:** the founder wants Boards to run anyone's day/routine/projects, and — like cross‑firm — opposing counsel / non‑PI firms won't have CasePro, so it can never be load‑bearing.
+
+### 2026-06-20 — Calendar/email integrate with the user's Gmail / Microsoft
+**Chose:** roadmap the Boards Calendar + email toward **2‑way Google/Outlook calendar sync + email‑to‑task** via the user's own account; start with an iCal feed off `boards.cards.myDay`.
+**Why:** real‑world calendars/email live in Gmail/Outlook; the internal calendar is only the base layer.
+
+### 2026-06-20 — Velocity harness over per‑change prod rebuilds
+**Chose:** a Meteor dev server (HMR, seconds) + a Node API test suite (`scripts/boards-api-test.mjs`, ~2s) as the build/verify loop.
+**Rejected:** a ~15‑min `meteor build` per change.
+**Why:** ~10× faster cycles and the API suite catches schema‑strip bugs a browser wouldn't (it caught the `priority` field being dropped). Note the prod‑build gotcha: a prod build does NOT rebuild workspace `packages/*` — rebuild them first.
+
+### earlier — Cross‑firm chat lives inside the matter
+**Chose:** fold cross‑firm (opposing‑counsel) messaging into the matter surface; removed the standalone cross‑firm view.
+**Why:** keeps the feature in context and additive; CFCS trust core is channel‑hosted and CasePro‑free so it stands alone.

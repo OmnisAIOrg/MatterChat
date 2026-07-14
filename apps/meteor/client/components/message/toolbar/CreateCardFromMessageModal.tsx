@@ -120,7 +120,7 @@ const CreateCardFromMessageModal = ({ message, onClose }: CreateCardFromMessageM
 					<Field>
 						<FieldLabel htmlFor={titleId}>{t('Title')}</FieldLabel>
 						<FieldRow>
-							<TextInput id={titleId} value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
+							<TextInput id={titleId} value={title} onChange={(e) => setTitle((e.currentTarget as HTMLInputElement).value)} />
 						</FieldRow>
 					</Field>
 					<Field mbs={12}>

@@ -180,6 +180,7 @@ export class APIClass<TBasePath extends string = '', TOperations extends Record<
 		members: number;
 		importIds: number;
 		e2e: number;
+		omnisaiLitbox: number;
 	};
 
 	public defaultLimitedUserFieldsToExclude: IAPIDefaultFieldsToExclude;
@@ -204,6 +205,10 @@ export class APIClass<TBasePath extends string = '', TOperations extends Record<
 			members: 0,
 			importIds: 0,
 			e2e: 0,
+			// SECURITY: server-only OmnisAI/LitBox credential must never be projected to
+			// clients (this is an EXCLUSION projection; the proxy reads it via its own
+			// projection in resolveUser, so excluding it here does not affect the proxy).
+			omnisaiLitbox: 0,
 		};
 		this.defaultLimitedUserFieldsToExclude = {
 			avatarOrigin: 0,

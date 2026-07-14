@@ -60,6 +60,10 @@ declare module '@rocket.chat/ui-contexts' {
 			pathname: '/boards/planner';
 			pattern: '/boards/planner';
 		};
+		'boards-calendar': {
+			pathname: '/boards/calendar';
+			pattern: '/boards/calendar';
+		};
 	}
 }
 
@@ -143,4 +147,26 @@ registerBoardsRoute('/leads/:cardId?', {
 registerBoardsRoute('/reports/source-to-settlement', {
 	name: 'boards-reports-source-to-settlement',
 	component: lazy(() => import('./reports/SourceToSettlement')),
+});
+
+// Personal PM (standalone / CasePro-free): "My Day" — my cards by due date across all my boards.
+registerBoardsRoute('/planner', {
+	name: 'boards-planner',
+	component: lazy(() => import('./planner/MyDayPlanner')),
+});
+
+// Generic personal Calendar — my tasks on a month grid by due date (standalone, CasePro-free).
+registerBoardsRoute('/calendar', {
+	name: 'boards-calendar',
+	component: lazy(() => import('./calendar/BoardsCalendar')),
+});
+
+// Activity / Notifications inbox — the full-page version of the NavBar bell's dropdown.
+// The 'boards-inbox' path type (above) was declared but never registered, so the left-rail
+// "Activity" item, the Boards sidebar "Inbox" item, and the My Day "activity inbox" link all
+// navigated to /boards/inbox and hit the 404 NotFoundPage. NotificationsInbox is the same
+// component the bell drops down; mounted as a route its onNavigate (panel-close) prop is a no-op.
+registerBoardsRoute('/inbox', {
+	name: 'boards-inbox',
+	component: lazy(() => import('./notifications/NotificationsInbox')),
 });

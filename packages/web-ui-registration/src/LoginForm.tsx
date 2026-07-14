@@ -89,6 +89,8 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 
 	const usernameOrEmailPlaceholder = useSetting('Accounts_EmailOrUsernamePlaceholder', '');
 	const passwordPlaceholder = useSetting('Accounts_PasswordPlaceholder', '');
+	const omnisaiOidcEnabled = useSetting('OmnisAI_OIDC_Enabled', false);
+	const omnisaiButtonLabel = useSetting('OmnisAI_OIDC_Button_Label', 'Sign in with OmnisAI');
 
 	useDocumentTitle(t('registration.component.login'), false);
 
@@ -244,6 +246,18 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 						</p>
 					</Form.Footer>
 				</>
+			)}
+			{omnisaiOidcEnabled && (
+				<ButtonGroup>
+					<Button
+						disabled={loginMutation.isPending}
+						onClick={(): void => {
+							window.location.href = '/_omnisai/authorize';
+						}}
+					>
+						{omnisaiButtonLabel}
+					</Button>
+				</ButtonGroup>
 			)}
 			<LoginServices disabled={loginMutation.isPending} setError={setErrorOnSubmit} />
 		</Form>

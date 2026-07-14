@@ -27,6 +27,10 @@ export interface IRoom extends IRocketChatRecord {
 	abacAttributes?: IAbacAttributeDefinition[];
 	topic?: string;
 
+	// Omnis Boards — channel↔matter link: a private channel bound to a Matter card.
+	matterCardId?: string; // boards_cards._id this channel is bound to
+	matterId?: string; // CasePro matters.id (mirrors the card's link.matterId)
+
 	reactWhenReadOnly?: boolean;
 
 	// TODO: this boolean might be an accident

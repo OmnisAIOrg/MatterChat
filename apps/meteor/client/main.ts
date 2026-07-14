@@ -13,5 +13,6 @@ import('./meteor/login')
 			import('./views/marketplace'),
 			import('./views/account'),
 			import('./views/boards'),
+			import('./views/litbox'),
 		]),
 	);

@@ -16,6 +16,7 @@ import '../app/slashcommands-invite/client';
 import '../app/slashcommands-inviteall/client';
 import '../app/slashcommands-join/client';
 import '../app/slashcommands-kick/client';
+import '../app/slashcommands-omnis/client';
 import '../app/slashcommands-open/client';
 import '../app/slashcommands-topic/client';
 import '../app/slashcommands-unarchiveroom/client';

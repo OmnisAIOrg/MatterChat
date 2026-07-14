@@ -1,0 +1,172 @@
+# MatterChat MongoDB — single-node replica set (rs0) for Meteor oplog tailing.
+#
+# Rocket.Chat is a Meteor app: it needs MONGO_OPLOG_URL pointed at the `local`
+# database, which only exists when Mongo runs as a replica set. This file stands
+# up a 1-node replica set "rs0" and initiates it idempotently.
+#
+# Spec contract (must match the app Deployment + Service):
+#   Service name : matterchat-mongo   (port 27017)
+#   MONGO_URL       = mongodb://matterchat-mongo:27017/matterchat?replicaSet=rs0
+#   MONGO_OPLOG_URL = mongodb://matterchat-mongo:27017/local?replicaSet=rs0
+#
+# rs.initiate host MUST be the stable Service DNS name "matterchat-mongo:27017"
+# (NOT the pod hostname) so the replica-set member host matches what the app
+# connects to. If they differ, the Meteor driver will follow the rs config's
+# advertised host and fail to reach it.
+---
+# Headless Service — gives the StatefulSet pod a stable DNS identity and is what
+# the app + oplog URLs resolve to. clusterIP: None means DNS returns the pod IP
+# directly (no VIP), which is what a replica-set member host should advertise.
+apiVersion: v1
+kind: Service
+metadata:
+  name: matterchat-mongo
+  namespace: staging
+  labels:
+    app: matterchat
+    component: mongo
+spec:
+  clusterIP: None
+  # Publish the pod's address even while NotReady so `matterchat-mongo` resolves
+  # during the postStart rs.initiate() (the pod stays NotReady until rs0 has a
+  # PRIMARY, which only the initiate produces — chicken-and-egg without this).
+  publishNotReadyAddresses: true
+  selector:
+    app: matterchat
+    component: mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: matterchat-mongo
+  namespace: staging
+  labels:
+    app: matterchat
+    component: mongo
+spec:
+  serviceName: matterchat-mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app: matterchat
+      component: mongo
+  template:
+    metadata:
+      labels:
+        app: matterchat
+        component: mongo
+    spec:
+      # Staging nodes are tainted; every pod must tolerate it.
+      tolerations:
+        - key: staging
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 30
+      # Make /data/db writable by the mongodb user (uid/gid 999 in the official image).
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: mongo
+          image: mongo:8.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--replSet"
+            - "rs0"
+            - "--bind_ip_all"
+          ports:
+            - name: mongo
+              containerPort: 27017
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          # Liveness: process is up and answering pings.
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping').ok"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 6
+          # Readiness: only Ready once the replica set has a PRIMARY, so the app
+          # (and the oplog URL) never connect before rs0 is usable.
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "mongosh --quiet --eval \"db.hello().isWritablePrimary || db.hello().secondary\" | grep -q true"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          lifecycle:
+            # postStart runs every time the container starts. It waits for mongod
+            # to answer, then initiates rs0 ONLY if not already configured.
+            # rs.status() throwing code 94 (NotYetInitialized) is the signal to
+            # initiate; any other state means it's already a member -> no-op.
+            # This makes the hook safe across pod restarts and re-creates.
+            postStart:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - |
+                    set -e
+                    echo "[rs-init] waiting for mongod to accept connections..."
+                    until mongosh --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do
+                      sleep 2
+                    done
+                    echo "[rs-init] mongod is up; checking replica set state..."
+                    # Returns "uninitialized" when rs.status throws NotYetInitialized (94),
+                    # otherwise "initialized". Idempotent across restarts.
+                    STATE=$(mongosh --quiet --eval '
+                      try {
+                        rs.status();
+                        print("initialized");
+                      } catch (e) {
+                        if (e.code === 94) { print("uninitialized"); }
+                        else { print("initialized"); }
+                      }
+                    ')
+                    if [ "$STATE" = "uninitialized" ]; then
+                      echo "[rs-init] initiating rs0..."
+                      mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'matterchat-mongo:27017'}]})"
+                      echo "[rs-init] waiting for PRIMARY..."
+                      until mongosh --quiet --eval "db.hello().isWritablePrimary" | grep -q true; do
+                        sleep 2
+                      done
+                      echo "[rs-init] rs0 is PRIMARY; done."
+                    else
+                      echo "[rs-init] replica set already initialized; nothing to do."
+                    fi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: matterchat
+          component: mongo
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi

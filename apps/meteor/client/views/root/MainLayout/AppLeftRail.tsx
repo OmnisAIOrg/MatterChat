@@ -110,12 +110,17 @@ const AppLeftRail = () => {
 	const currentRoute = useCurrentRoutePath();
 
 	const canViewBoards = usePermission('boards-view');
+	// Admins get a direct rail entry to /admin. This custom rail replaced the stock sidebar's
+	// admin affordance, so without it an admin has no visible way into the admin area.
+	const isAdmin = Boolean(user?.roles?.includes('admin'));
 
 	// Active-section detection. `/boards/inbox` must win for Activity, so Boards
 	// excludes the inbox sub-route to avoid both lighting up at once.
 	const inboxActive = currentRoute?.includes('/boards/inbox');
 	const boardsActive = currentRoute?.includes('/boards') && !inboxActive;
+	const filesActive = Boolean(currentRoute?.includes('/litbox'));
 	const chatActive = !currentRoute?.includes('/boards') && Boolean(currentRoute?.includes('/home') || currentRoute?.includes('/channel'));
+	const adminActive = Boolean(currentRoute?.includes('/admin'));
 
 	const handleChat = useStableCallback(() => {
 		router.navigate('/home');
@@ -125,8 +130,16 @@ const AppLeftRail = () => {
 		router.navigate('/boards');
 	});
 
+	const handleFiles = useStableCallback(() => {
+		router.navigate('/litbox');
+	});
+
 	const handleActivity = useStableCallback(() => {
 		router.navigate('/boards/inbox');
+	});
+
+	const handleAdmin = useStableCallback(() => {
+		router.navigate('/admin');
 	});
 
 	// Search has no global "open" action; the NavBar search is a focus-driven
@@ -190,9 +203,32 @@ const AppLeftRail = () => {
 			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px' }}>
 				{renderItem('balloons', t('Chats'), handleChat, chatActive)}
 				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, boardsActive)}
+				<Box
+					is='button'
+					type='button'
+					className={itemClass}
+					onClick={handleFiles}
+					title={t('Files', { defaultValue: 'Files' })}
+					aria-label={t('Files', { defaultValue: 'Files' })}
+					aria-current={filesActive ? 'page' : undefined}
+				>
+					{/* The LitBox brand wordmark, recolored ('Lit' white) so it reads on the dark rail. */}
+					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '24px' }}>
+						<svg width='52' height='13' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
+							<text x='0' y='30' fontFamily='Arial, Helvetica, sans-serif' fontSize='28' fontWeight='bold'>
+								<tspan fill='#ffffff'>Lit</tspan>
+								<tspan fill='#5b7cff'>Box</tspan>
+							</text>
+						</svg>
+					</Box>
+					<Box is='span' className='rail-label'>
+						{t('Files', { defaultValue: 'Files' })}
+					</Box>
+				</Box>
 				{canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
 				{renderItem('magnifier', t('Search'), handleSearch, false)}
 				{renderLinkItem('document-eye', t('EvidenceHunt'), 'evidencehunt://open')}
+				{isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
 			{user && (
 				<Box display='flex' flexDirection='column' alignItems='center' mbs={8}>

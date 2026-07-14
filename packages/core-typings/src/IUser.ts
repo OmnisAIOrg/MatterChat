@@ -208,6 +208,11 @@ export interface IUser extends IRocketChatRecord {
 	ldap?: boolean;
 	freeSwitchExtension?: string;
 	inviteToken?: string;
+	// Per-user secret token for the public (calendar-subscribable) Omnis Boards iCal feed.
+	// Lazily generated on first call to POST boards.cards.ical.token; used to resolve the user
+	// for the unauthenticated GET boards.cards.ical?token=... feed. Never exposed in directory/
+	// search projections — read it explicitly when needed.
+	boardsIcalToken?: string;
 	canViewAllInfo?: boolean;
 	phone?: string;
 	reason?: string;

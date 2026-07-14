@@ -16,6 +16,8 @@ export type SubscriptionWithRoom = ISubscription &
 		| 'federated'
 		| 'lm'
 		| 'abacAttributes'
+		| 'matterCardId'
+		| 'matterId'
 	> &
 	Pick<
 		IOmnichannelRoom,

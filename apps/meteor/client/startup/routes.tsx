@@ -17,6 +17,7 @@ const ConferenceRoute = lazy(() => import('../views/conference/ConferenceRoute')
 const MailerUnsubscriptionPage = lazy(() => import('../views/mailer/MailerUnsubscriptionPage'));
 const LoginTokenRoute = lazy(() => import('../views/root/LoginTokenRoute'));
 const SAMLLoginRoute = lazy(() => import('../views/root/SAMLLoginRoute'));
+const OmnisAILoginRoute = lazy(() => import('../views/root/OmnisAILoginRoute'));
 const ResetPasswordPage = lazy(() =>
 	import('@rocket.chat/web-ui-registration').then(({ ResetPasswordPage }) => ({ default: ResetPasswordPage })),
 );
@@ -106,6 +107,10 @@ declare module '@rocket.chat/ui-contexts' {
 		'saml': {
 			pathname: `/saml/${string}`;
 			pattern: '/saml/:token';
+		};
+		'omnisai': {
+			pathname: `/omnisai/${string}`;
+			pattern: '/omnisai/:token';
 		};
 		'call-history': {
 			pathname: `/call-history${`/details/${string}` | ''}`;
@@ -231,6 +236,11 @@ router.defineRoutes([
 		path: '/saml/:token',
 		id: 'saml',
 		element: appLayout.wrap(<SAMLLoginRoute />),
+	},
+	{
+		path: '/omnisai/:token',
+		id: 'omnisai',
+		element: appLayout.wrap(<OmnisAILoginRoute />),
 	},
 	{
 		path: '/call-history/:tab?/:historyId?',

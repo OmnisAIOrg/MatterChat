@@ -5,6 +5,7 @@ import './google';
 import './ldap';
 import './meteorDeveloperAccount';
 import './oauth';
+import './omnisai';
 import './password';
 import './saml';
 import './twitter';

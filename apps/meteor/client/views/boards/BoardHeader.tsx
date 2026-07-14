@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import BoardStatusControl from './BoardStatusControl';
 import { BoardAutomationsButton, BoardButtonsMenu } from './automation';
 import { CaseProConnectionControls, CaseProStatusChip } from './casepro';
 import { getPipelineTypeIcon } from './lib/icons';
@@ -90,6 +91,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 				)}
 				{board.pipelineType === 'leads' && <CaseProStatusChip mie={8} />}
 				<ButtonGroup>
+					<BoardStatusControl board={board} />
 					<BoardButtonsMenu boardId={board._id} />
 					<BoardAutomationsButton boardId={board._id} />
 				</ButtonGroup>

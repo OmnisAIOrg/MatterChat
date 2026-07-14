@@ -1,0 +1,95 @@
+name: MatterChat — Staging Admin Fix (authorized)
+
+# Founder-authorized one-shot, MatterChat-scoped. Promotes the founder's accounts (phillip, john)
+# to admin — the setup-wizard skip meant the "first OmnisAI user -> admin" bootstrap was already
+# claimed by 'Chi', so OmnisAI logins came in as plain users. Also force Show_Setup_Wizard=completed.
+on:
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: stg-omnisai-cluster
+  K8S_NAMESPACE: staging
+
+jobs:
+  fix:
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    permissions:
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure kubectl
+        run: |
+          which kubectl || { curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"; chmod +x kubectl; sudo mv kubectl /usr/local/bin/; }
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: Make john@omnisai.io admin; force wizard completed; hide usernames (UI_Use_Real_Name)
+        run: |
+          kubectl exec -n "${K8S_NAMESPACE}" matterchat-mongo-0 -- mongosh matterchat --quiet --eval '
+            db.rocketchat_settings.updateOne({_id:"Show_Setup_Wizard"},{$set:{value:"completed", _updatedAt:new Date()}});
+            // Hide usernames: show real names across the UI. Founder logs in by email; never wants to see usernames.
+            db.rocketchat_settings.updateOne({_id:"UI_Use_Real_Name"},{$set:{value:true, _updatedAt:new Date()}});
+            // Founder is john@omnisai.io (the email used for staging). Promote that account by email.
+            var p = db.users.findOne({"emails.address":{$regex:/^john@omnisai\.io$/i}});
+            if (p) { db.users.updateOne({_id:p._id},{$addToSet:{roles:"admin"}}); print("promote john@omnisai.io: username=" + p.username + " name=" + JSON.stringify(p.name) + " -> admin"); }
+            else { print("NO user with email john@omnisai.io found"); }
+            print("--- admins now ---");
+            db.users.find({roles:"admin"},{username:1,name:1}).forEach(function(u){ print("  ADMIN: " + u.username + " (" + (u.name||"no name") + ")"); });
+            print("UI_Use_Real_Name = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"UI_Use_Real_Name"})||{}).value));
+            print("Show_Setup_Wizard = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"Show_Setup_Wizard"})||{}).value));
+            print("--- Teams config (why not_configured?) ---");
+            ["Teams_Enabled","Teams_OAuth_Client_Id","Teams_OAuth_Client_Secret"].forEach(function(id){
+              var s = db.rocketchat_settings.findOne({_id:id}); var v = s ? s.value : undefined;
+              if (id === "Teams_OAuth_Client_Secret") { print("  " + id + " => " + (v ? "SET (len " + String(v).length + ")" : "EMPTY")); }
+              else { print("  " + id + " => " + JSON.stringify(v)); }
+            });
+            print("--- external workspace connections (did the Teams connect persist?) ---");
+            var colls = db.getCollectionNames().filter(function(c){ return /external_workspace/i.test(c); });
+            print("  matching collections: " + JSON.stringify(colls));
+            colls.forEach(function(c){
+              print("  " + c + " count=" + db[c].countDocuments({}));
+              db[c].find({}).limit(10).forEach(function(d){
+                print("    conn: provider=" + d.provider + " status=" + d.status + " org=" + JSON.stringify(d.externalOrgName) + " externalOrgId=" + d.externalOrgId + " user=" + d.userId + " scopes=" + (d.scopes ? d.scopes.length : 0) + " hasCreds=" + (!!d.credentials));
+              });
+            });
+            print("--- user-id reconciliation (does the connection belong to the logged-in john?) ---");
+            var johns = db.users.find({$or:[{"emails.address":{$regex:/^john@omnisai\.io$/i}},{username:"john"}]},{username:1,"emails.address":1,"services.omnisai":1}).toArray();
+            print("  john user records = " + johns.length + (johns.length>1 ? "  <<< DUPLICATE USERS (the bug)" : ""));
+            johns.forEach(function(u){ print("    john _id=" + u._id + " username=" + u.username + " email=" + ((u.emails&&u.emails[0])?u.emails[0].address:"none") + " omnisaiId=" + ((u.services&&u.services.omnisai)?u.services.omnisai.id:"none")); });
+            var johnIds = johns.map(function(u){ return String(u._id); });
+            colls.forEach(function(c){
+              db[c].find({}).limit(20).forEach(function(d){
+                print("    conn " + d._id + " userId=" + d.userId + " -> " + (johnIds.indexOf(String(d.userId))>=0 ? "MATCHES a john user" : "NO match -> orphaned to a different user record"));
+              });
+            });
+            print("--- other tiles: SlackBridge_Enabled (the white tile in the rail) ---");
+            print("  SlackBridge_Enabled = " + JSON.stringify((db.rocketchat_settings.findOne({_id:"SlackBridge_Enabled"})||{}).value));
+          '
+
+      - name: App logs — any error from the external-workspaces.list endpoint / connectors (why no Teams tile)?
+        run: |
+          echo "===== connector / external-workspace / API errors in current pod logs ====="
+          kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=4000 2>&1 \
+            | grep -iE "external-workspace|connector|listMyConnections|providerRegistry|teams" | tail -40 || echo "(no matching log lines)"
+          echo "===== generic exceptions (tail) ====="
+          kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=4000 2>&1 \
+            | grep -iE "Exception|Error:|nonAPIError|500" | tail -20 || echo "(none)"
+
+      - name: Is the NEW client code actually in the running image? (rule out a stale bundle vs build that dropped it)
+        run: |
+          POD=$(kubectl get pod -n "${K8S_NAMESPACE}" -l app=matterchat -o jsonpath='{.items[0].metadata.name}')
+          echo "pod=$POD"
+          echo "===== does the SERVER bundle contain the COMPLETE-connectors endpoints (this deploy)? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- directChats route (NEW) ---'; grep -rl 'external-workspaces.directChats' /app/bundle/programs/server 2>/dev/null | head -2; echo '--- members route (NEW) ---'; grep -rl 'external-workspaces.members' /app/bundle/programs/server 2>/dev/null | head -2; echo '--- slack provider real ---'; grep -rl 'oauth.v2.access' /app/bundle/programs/server 2>/dev/null | head -2" 2>&1 || echo "server grep failed"
+          echo "===== does the CLIENT bundle contain the GREEN redesign chrome? ====="
+          kubectl exec -n "${K8S_NAMESPACE}" "$POD" -- sh -c "echo '--- frame gradient green (#5FCB7A) ---'; grep -rl '5FCB7A' /app/bundle/programs/web.browser 2>/dev/null | head -2; echo '--- nav rail bg (#1A212C) + brand green (#1B7A2E) ---'; grep -rlE '1A212C|1B7A2E' /app/bundle/programs/web.browser 2>/dev/null | head -2; echo '--- External view STILL lazy (connectors intact) ---'; ls /app/bundle/programs/web.browser/dynamic/client/views/root/MainLayout/ 2>/dev/null | grep -iE 'ExternalSidebar|ExternalErrorBoundary'" 2>&1 || echo "client grep failed"
+          echo "===== image the pod is actually running ====="
+          kubectl get pod -n "${K8S_NAMESPACE}" "$POD" -o jsonpath='{.spec.containers[0].image}{"\n"}' 2>&1 || true

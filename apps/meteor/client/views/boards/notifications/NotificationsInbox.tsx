@@ -28,7 +28,10 @@ export const NOTIFICATIONS_UNREAD_KEY = ['boards', 'notifications', 'unreadCount
 const INBOX_PAGE = 30;
 
 type NotificationsInboxProps = {
-	onNavigate: () => void;
+	// The NavBar bell passes this to close its dropdown panel after a click. When
+	// NotificationsInbox is mounted as the full-page /boards/inbox route there is no panel
+	// to close, so it is omitted and treated as a no-op.
+	onNavigate?: () => void;
 };
 
 const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactElement => {
@@ -76,7 +79,7 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 		if (notification.link) {
 			router.navigate(notification.link as LocationPathname);
 		}
-		onNavigate();
+		onNavigate?.();
 	};
 
 	const hasUnread = notifications.some((n) => !n.read);

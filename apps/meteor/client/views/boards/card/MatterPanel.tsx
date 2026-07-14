@@ -110,6 +110,56 @@ const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
 	</Box>
 );
 
+// channel↔matter link — create-or-unlink a dedicated chat channel for this matter.
+const ChannelSection = ({ cardId, link }: { cardId: string; link: Serialized<IBoardCard>['link'] }): ReactElement => {
+	const queryClient = useQueryClient();
+	const dispatchToastMessage = useToastMessageDispatch();
+
+	const linkChannel = useEndpoint('POST', '/v1/boards.matters.linkChannel');
+	const unlinkChannel = useEndpoint('POST', '/v1/boards.matters.unlinkChannel');
+
+	const invalidate = (): void => {
+		void queryClient.invalidateQueries({ queryKey: ['boards', 'card', cardId] });
+	};
+
+	const linkMutation = useMutation({
+		mutationFn: () => linkChannel({ cardId }),
+		onSuccess: () => {
+			dispatchToastMessage({ type: 'success', message: 'Channel created and linked to this matter' });
+			invalidate();
+		},
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	const unlinkMutation = useMutation({
+		mutationFn: () => unlinkChannel({ cardId }),
+		onSuccess: invalidate,
+		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
+	});
+
+	const roomId = link?.kind === 'matter' ? link.roomId : undefined;
+
+	return (
+		<Box>
+			<SectionTitle>Channel</SectionTitle>
+			{roomId ? (
+				<Box display='flex' alignItems='center' style={{ gap: '8px' }}>
+					<Tag>
+						<Icon name='hash' size='x16' /> Channel linked
+					</Tag>
+					<Button small onClick={() => unlinkMutation.mutate()} disabled={unlinkMutation.isPending}>
+						{unlinkMutation.isPending ? <Throbber inheritColor size='x12' /> : 'Unlink'}
+					</Button>
+				</Box>
+			) : (
+				<Button small primary onClick={() => linkMutation.mutate()} disabled={linkMutation.isPending}>
+					{linkMutation.isPending ? <Throbber inheritColor size='x12' /> : 'Create channel'}
+				</Button>
+			)}
+		</Box>
+	);
+};
+
 const SOL_DANGER_KINDS: ReadonlyArray<IBoardDeadline['kind']> = ['SOL', 'filing'];
 const RESOLVED_STATUSES: ReadonlyArray<IBoardDeadline['status']> = ['satisfied', 'waived', 'missed'];
 
@@ -566,6 +616,8 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 					<DeadlinesSection cardId={card._id} />
 					{/* M8 — AI assist (summary / Stowers demand draft); hidden without boards-ai-generate */}
 					<AiAssistSection cardId={card._id} />
+					{/* channel↔matter link — bind a chat channel to this matter */}
+					<ChannelSection cardId={card._id} link={card.link} />
 				</>
 			)}
 		</Box>

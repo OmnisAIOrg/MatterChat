@@ -89,8 +89,15 @@ export async function getUserInfo(me: IUser, pullPreferences = true): Promise<IM
 
 	const userPreferences = me.settings?.preferences ?? {};
 
+	// SECURITY: never serialize the server-only OmnisAI/LitBox credential to a client.
+	// It lives top-level on the user doc (omnisaiLitbox.{sessionToken,refreshToken,...}).
+	// This is the central user->client serializer, and some callers read the user with an
+	// EXCLUSION projection (defaultFieldsToExclude), so a bare `...me` would leak it.
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const { omnisaiLitbox: _omnisaiLitbox, ...meSafe } = me as IUser & { omnisaiLitbox?: unknown };
+
 	return {
-		...me,
+		...meSafe,
 		...(me.banners && { banners: filterOutdatedVersionUpdateBanners(me.banners) }),
 		email: verifiedEmail ? verifiedEmail.address : undefined,
 		settings: {

@@ -69,6 +69,28 @@ export const isBoardsMattersRefreshSnapshotProps = ajv.compile<BoardsMattersRefr
 	BoardsMattersRefreshSnapshotSchema,
 );
 
+type BoardsMattersLinkChannelProps = { cardId: string };
+
+const BoardsMattersLinkChannelSchema = {
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 } },
+	required: ['cardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsMattersLinkChannelProps = ajv.compile<BoardsMattersLinkChannelProps>(BoardsMattersLinkChannelSchema);
+
+type BoardsMattersUnlinkChannelProps = { cardId: string };
+
+const BoardsMattersUnlinkChannelSchema = {
+	type: 'object',
+	properties: { cardId: { type: 'string', minLength: 1 } },
+	required: ['cardId'],
+	additionalProperties: false,
+};
+
+export const isBoardsMattersUnlinkChannelProps = ajv.compile<BoardsMattersUnlinkChannelProps>(BoardsMattersUnlinkChannelSchema);
+
 type BoardsMattersSeedFromCaseProProps = { boardId: string };
 
 const BoardsMattersSeedFromCaseProSchema = {
@@ -387,6 +409,12 @@ export type BoardsMattersEndpoints = {
 	};
 	'/v1/boards.matters.refreshSnapshot': {
 		POST: (params: BoardsMattersRefreshSnapshotProps) => { card: IBoardCard };
+	};
+	'/v1/boards.matters.linkChannel': {
+		POST: (params: BoardsMattersLinkChannelProps) => { card: IBoardCard };
+	};
+	'/v1/boards.matters.unlinkChannel': {
+		POST: (params: BoardsMattersUnlinkChannelProps) => { card: IBoardCard };
 	};
 	'/v1/boards.matters.seedFromCasePro': {
 		POST: (params: BoardsMattersSeedFromCaseProProps) => { result: SeedFromCaseProResultDTO };

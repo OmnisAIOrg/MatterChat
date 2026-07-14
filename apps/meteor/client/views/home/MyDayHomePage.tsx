@@ -4,7 +4,7 @@ import { UserAvatar } from '@rocket.chat/ui-avatar';
 import { Page, PageScrollableContent } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouter, useUser } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { useMemo } from 'react';
 
 /**
@@ -82,7 +82,7 @@ const decorate = (card: MatterCard): DecoratedMatter => {
 const SectionCard = ({ icon, title, count, children }: { icon: string; title: string; count?: number; children: ReactNode }) => (
 	<Box bg='light' borderRadius='x12' borderWidth='default' borderColor='extra-light' p={16} mbe={16}>
 		<Box display='flex' alignItems='center' mbe={12}>
-			<Icon name={icon} size='x18' mie={8} color='hint' />
+			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x18' mie={8} color='hint' />
 			<Box fontScale='p2b' color='default'>
 				{title}
 			</Box>
@@ -346,7 +346,7 @@ const MyDayHomePage = () => {
 									pi={8}
 									borderRadius='x8'
 									style={{ gap: '8px', cursor: 'pointer', width: '224px' }}
-									onClick={() => u.username && router.navigate(`/direct/${u.username}`)}
+									onClick={() => u.username && router.navigate({ name: 'direct', params: { rid: u.username } })}
 								>
 									<UserAvatar username={u.username ?? ''} size='x36' />
 									<Box style={{ minWidth: 0 }}>

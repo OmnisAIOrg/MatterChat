@@ -14,14 +14,26 @@
 # steps from .docker/Dockerfile.debian for the final image.
 
 ARG DENO_VERSION="1.37.1"
+ARG DENO_BUILD_VERSION="2.3.1"
 ARG METEOR_RELEASE="3.4.1"
 ARG NODE_VERSION="22.22.3"
+
+# Two Deno versions: the Apps-Engine RUNTIME bakes 1.37.1, but @rocket.chat/apps'
+# build:deno-cache script (build time) requires 2.3.1. Define both first so each
+# stage copies the one it needs.
+FROM denoland/deno:bin-${DENO_VERSION} AS deno
+FROM denoland/deno:bin-${DENO_BUILD_VERSION} AS deno_build
 
 # ---- Stage 1: build the Meteor server bundle from source ------------------
 FROM node:${NODE_VERSION}-bullseye AS builder
 ARG METEOR_RELEASE
 ARG NPM_TOKEN
-ENV METEOR_ALLOW_SUPERUSER=true \
+# Promote NPM_TOKEN to an env var so Yarn 4 picks it up: .yarnrc.yml routes the
+# @omnisaiorg scope (e.g. @omnisaiorg/litbox-file-browser) to npm.pkg.github.com
+# with npmAuthToken "${NPM_TOKEN-}". Yarn 4 reads .yarnrc.yml (NOT .npmrc), so the
+# old .npmrc line below was both wrong-registry and ignored.
+ENV NPM_TOKEN=${NPM_TOKEN} \
+    METEOR_ALLOW_SUPERUSER=true \
     CI=true \
     NODE_OPTIONS=--max-old-space-size=6144
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -30,10 +42,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL "https://install.meteor.com/?release=${METEOR_RELEASE}" | sh
 ENV PATH="/root/.meteor:${PATH}"
 RUN corepack enable
+# @rocket.chat/apps' build:deno-cache (run during `yarn build` below) needs deno
+# 2.3.1 on PATH; without it the package prebuild fails and meteor build then can't
+# find packages/livechat/dist (and others).
+COPY --from=deno_build /deno /usr/local/bin/deno
 WORKDIR /src
 COPY . .
-# Private-registry auth (harmless if the fork only needs public @rocket.chat/* pkgs).
-RUN if [ -n "$NPM_TOKEN" ]; then printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > .npmrc ; fi
+# @omnisaiorg GitHub Packages auth is handled by .yarnrc.yml + the NPM_TOKEN env
+# var promoted above (Yarn 4). No .npmrc needed.
 # Install workspace deps, pre-build the packages Meteor links (turbo), then build
 # the server-only bundle (mirrors `yarn build:ci`). The prebuild is best-effort;
 # `meteor build` rebuilds whatever it needs.
@@ -43,7 +59,6 @@ WORKDIR /src/apps/meteor
 RUN METEOR_DISABLE_OPTIMISTIC_CACHING=1 meteor build --server-only --directory /build
 
 # ---- Stage 2: runtime (mirrors .docker/Dockerfile.debian) -----------------
-FROM denoland/deno:bin-${DENO_VERSION} AS deno
 FROM node:${NODE_VERSION}-bullseye-slim
 LABEL maintainer="omnisai (MatterChat alpha)"
 RUN groupadd -g 65533 -r rocketchat \
