@@ -1,4 +1,4 @@
-import type { IBoard, IBoardCard, IBoardList } from '@rocket.chat/core-typings';
+import type { IBoard, IBoardCard, IBoardList, IMatterSnapshot } from '@rocket.chat/core-typings';
 import { Boards, BoardsLists, BoardsCards, BoardsActivities, Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
@@ -129,7 +129,8 @@ export async function bindMatterCard(uid: string, boardId: string, listId: strin
 	const existing = await BoardsCards.findByMatterId(matterId).toArray();
 	const onThisBoard = existing.find((c) => c.boardId === boardId && !c.archived);
 	if (onThisBoard) {
-		await refreshMatterSnapshot(uid, onThisBoard._id);
+		// re-bind must degrade the same way as a first bind — never hard-fail on an unresolvable matter.
+		await refreshMatterSnapshot(uid, onThisBoard._id, { graceful: true });
 		const fresh = await BoardsCards.findOneById(onThisBoard._id);
 		return fresh ?? onThisBoard;
 	}
@@ -175,8 +176,11 @@ export async function bindMatterCard(uid: string, boardId: string, listId: strin
 		ts: now,
 	});
 
-	// pull the live snapshot now so the front tile renders immediately.
-	await refreshMatterSnapshot(uid, card._id);
+	// pull the live snapshot now so the front tile renders immediately. GRACEFUL: a bind must
+	// never hard-fail just because CasePro is disabled/unreachable or the matter id doesn't
+	// resolve — the link is stored locally and the snapshot is left PENDING (a later refresh
+	// fills it in). Standalone-first: MatterChat works without CasePro.
+	await refreshMatterSnapshot(uid, card._id, { graceful: true });
 	const refreshed = await BoardsCards.findOneById(card._id);
 	return refreshed ?? card;
 }
@@ -296,13 +300,43 @@ export async function unlinkMatterChannel(uid: string, cardId: string): Promise<
 // refreshMatterSnapshot
 // ---------------------------------------------------------------------------
 
+export type RefreshMatterSnapshotOpts = {
+	/**
+	 * Degrade gracefully instead of throwing when the CasePro snapshot cannot be fetched
+	 * (CasePro disabled, transport stub/unreachable, or the matter id doesn't resolve).
+	 * Used by `bindMatterCard`/`linkMatterChannel` so a link ALWAYS succeeds locally and the
+	 * snapshot is left PENDING; a later successful refresh fills it in. When false (the
+	 * default, e.g. the manual "Refresh from CasePro" action) an unresolvable matter still
+	 * throws `error-matter-not-found` so the user gets a clear signal.
+	 */
+	graceful?: boolean;
+};
+
+/**
+ * A minimal PENDING snapshot placeholder: the card carries a real matterId link but CasePro
+ * could not resolve it (disabled / unreachable / not found) at bind time. `resolved: false`
+ * lets the UI surface "linked, but couldn't load matter details"; `stale: true` marks it for
+ * a later refresh (manual or on re-bind) to fill in. Never fabricates matter details.
+ */
+function pendingMatterSnapshot(matterId: string): IMatterSnapshot {
+	return { matterId, fetchedAt: new Date(), stale: true, resolved: false };
+}
+
 /**
  * Re-fetch the CasePro snapshot for a matter-linked card and write it onto the link
  * via the M1 `BoardsCards.refreshMatterSnapshot` setter. Also promotes the matter name
  * onto the card title (so the tile shows the client/matter, not the raw id) and logs a
  * `casepro.snapshot.refreshed` activity.
+ *
+ * Degrades gracefully when `opts.graceful` (see {@link RefreshMatterSnapshotOpts}): a
+ * missing/unreachable snapshot leaves the link in place with a PENDING placeholder instead
+ * of hard-failing, matching how `listMatters`/stage resolution already degrade offline.
  */
-export async function refreshMatterSnapshot(uid: string, cardId: string): Promise<IBoardCard> {
+export async function refreshMatterSnapshot(
+	uid: string,
+	cardId: string,
+	opts: RefreshMatterSnapshotOpts = {},
+): Promise<IBoardCard> {
 	const card = await BoardsCards.findOneById(cardId);
 	if (!card) {
 		throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.matters.refreshSnapshot' });
@@ -313,11 +347,40 @@ export async function refreshMatterSnapshot(uid: string, cardId: string): Promis
 		});
 	}
 
-	const snapshot = await caseProClient.matterSnapshot(card.link.matterId);
+	// A CasePro read may return null (matter not found) OR throw (transport unreachable, https
+	// egress refused, etc.). Treat BOTH the same: fetch failure. This mirrors `resolveStages`.
+	let snapshot: IMatterSnapshot | null = null;
+	try {
+		snapshot = await caseProClient.matterSnapshot(card.link.matterId);
+	} catch {
+		snapshot = null;
+	}
+
 	if (!snapshot) {
-		throw new Meteor.Error('error-matter-not-found', 'Matter not found in CasePro', {
-			method: 'boards.matters.refreshSnapshot',
-		});
+		if (!opts.graceful) {
+			throw new Meteor.Error('error-matter-not-found', 'Matter not found in CasePro', {
+				method: 'boards.matters.refreshSnapshot',
+			});
+		}
+		// GRACEFUL: keep the link, leave a PENDING placeholder — but never clobber an
+		// already-resolved snapshot (a transient CasePro blip shouldn't blank real details).
+		if (!card.link.snapshot?.resolved) {
+			await BoardsCards.refreshMatterSnapshot(cardId, pendingMatterSnapshot(card.link.matterId));
+			await BoardsActivities.log({
+				boardId: card.boardId,
+				listId: card.listId,
+				cardId,
+				actor: uid,
+				verb: 'casepro.snapshot.refreshed',
+				to: { matterId: card.link.matterId, resolved: false, pending: true },
+				ts: new Date(),
+			});
+		}
+		const pending = await BoardsCards.findOneById(cardId);
+		if (!pending) {
+			throw new Meteor.Error('error-card-not-found', 'Card not found', { method: 'boards.matters.refreshSnapshot' });
+		}
+		return pending;
 	}
 
 	await BoardsCards.refreshMatterSnapshot(cardId, snapshot);

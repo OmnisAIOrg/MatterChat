@@ -94,6 +94,16 @@ export interface IMatterSnapshot {
 	team?: { role: string; name: string }[]; // matter team-role string fields (display names)
 	fetchedAt: Date;
 	stale?: boolean;
+	/**
+	 * Whether this snapshot reflects a real CasePro read. `true` (or absent, for
+	 * back-compat with pre-existing snapshots) = the matter was resolved from CasePro.
+	 * `false` = a PENDING placeholder: the channel/card is soft-linked to the matter id
+	 * but CasePro was disabled, unreachable, or the matter did not resolve at bind time,
+	 * so no details could be loaded. A later successful refresh (manual or on re-bind)
+	 * fills it in and flips this to `true`. The card UI uses this to say "linked, but
+	 * couldn't load matter details" instead of hard-failing the bind (standalone-first).
+	 */
+	resolved?: boolean;
 }
 
 /**
