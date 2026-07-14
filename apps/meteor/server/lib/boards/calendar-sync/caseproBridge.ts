@@ -66,7 +66,9 @@ export function isCaseProCalendarActive(): boolean {
 		return false;
 	}
 	try {
-		return caseProTransportDiagnostics().effective === 'rest';
+		// A LIVE transport is anything other than the stub (staging renamed the pre-existing
+		// 'rest' kind into the split 'native' | 'mcp'); the stub is not a real calendar.
+		return caseProTransportDiagnostics().effective !== 'stub';
 	} catch {
 		return false;
 	}
