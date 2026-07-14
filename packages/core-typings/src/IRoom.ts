@@ -30,6 +30,7 @@ export interface IRoom extends IRocketChatRecord {
 	// Omnis Boards — channel↔matter link: a private channel bound to a Matter card.
 	matterCardId?: string; // boards_cards._id this channel is bound to
 	matterId?: string; // CasePro matters.id (mirrors the card's link.matterId)
+	importIds?: string[]; // Slack channel ids when this room is bridged via SlackBridge
 
 	reactWhenReadOnly?: boolean;
 

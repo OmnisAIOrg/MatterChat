@@ -1,22 +1,26 @@
-import { Box, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
 import { useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getCardTypeIcon } from '../lib/icons';
+import GanttChart from './gantt/GanttChart';
 import { useBoardViewCards } from './lib/useBoardViewCards';
 import { asTime, cardDateValue, fmtDate, isOverdue, type SerializedBoard, type SerializedCard } from './lib/viewModel';
 
 /**
- * TimelineView — a chronological view of a board's cards plotted on their date
- * field (M8). Reads `GET /v1/boards.views.cards` (viewType=timeline) and uses the
- * server-echoed `dateField` (defaults to dueDate) to order + bucket cards by
- * month. Cards with no date for the field fall into an "Undated" bucket at the
- * end. Overdue, not-yet-complete dates render in danger; today onward in info.
+ * TimelineView — a chronological view of a board's cards. Reads
+ * `GET /v1/boards.views.cards` (viewType=timeline) once and offers two modes:
  *
- * Rendered as a vertical timeline rail (lower-risk than a heavy gantt) — a month
- * heading, then each card as a dated node. Clicking a node deep-links the card.
+ *  • Gantt (default) — a true Gantt chart (see ./gantt/GanttChart): bars spanning
+ *    startDate→dueDate, milestone diamonds, dependency arrows, and drag-to-
+ *    reschedule. Hand-built, no third-party Gantt lib.
+ *  • List — the lighter vertical rail: cards bucketed by month on the server-
+ *    echoed `dateField` (defaults to dueDate), with an "Undated" bucket at the
+ *    end; overdue, not-yet-complete dates render in danger.
+ *
+ * Clicking a card (node or bar) deep-links it. The mode toggle is local state.
  */
 
 type TimelineViewProps = {
@@ -36,6 +40,7 @@ const monthLabel = (ms: number): string => new Date(ms).toLocaleDateString(undef
 const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 	const { t } = useTranslation();
 	const router = useRouter();
+	const [mode, setMode] = useState<'gantt' | 'list'>('gantt');
 
 	const { data, isLoading } = useBoardViewCards(board._id, 'timeline', viewId);
 
@@ -77,18 +82,49 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 		);
 	}
 
-	const dateFieldLabel =
-		!dateField || dateField === 'dueDate'
-			? t('Boards_Matters_Deadline_Due', { defaultValue: 'Due date' })
-			: dateField === 'startDate'
-				? t('Boards_Views_StartDate', { defaultValue: 'Start date' })
-				: dateField;
+	let dateFieldLabel = dateField ?? '';
+	if (!dateField || dateField === 'dueDate') {
+		dateFieldLabel = t('Boards_Matters_Deadline_Due', { defaultValue: 'Due date' });
+	} else if (dateField === 'startDate') {
+		dateFieldLabel = t('Boards_Views_StartDate', { defaultValue: 'Start date' });
+	}
+
+	if (mode === 'gantt') {
+		return (
+			<Box display='flex' flexDirection='column' style={{ minWidth: 0 }}>
+				<Box display='flex' alignItems='center' justifyContent='space-between' pi={24} style={{ gap: '12px', paddingBottom: 0 }}>
+					<Box fontScale='c1' color='hint'>
+						{t('Boards_Gantt_PlottedBy', { defaultValue: 'Plotted by start → due date' })}
+					</Box>
+					<ButtonGroup small>
+						<Button small primary onClick={() => setMode('gantt')}>
+							{t('Boards_Gantt_Mode_Gantt', { defaultValue: 'Gantt' })}
+						</Button>
+						<Button small onClick={() => setMode('list')}>
+							{t('Boards_Gantt_Mode_List', { defaultValue: 'List' })}
+						</Button>
+					</ButtonGroup>
+				</Box>
+				<GanttChart board={board} cards={cards} onOpenCard={openCard} />
+			</Box>
+		);
+	}
 
 	return (
 		<Box pi={24} pb={16} style={{ maxWidth: 760 }}>
-			<Box fontScale='c1' color='hint' mbe={16}>
-				<Icon name='clock' size='x14' mie={4} />
-				{t('Boards_Views_Timeline_PlottedBy', { field: dateFieldLabel, defaultValue: 'Plotted by {{field}}' })}
+			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={16} style={{ gap: '12px' }}>
+				<Box fontScale='c1' color='hint'>
+					<Icon name='clock' size='x14' mie={4} />
+					{t('Boards_Views_Timeline_PlottedBy', { field: dateFieldLabel, defaultValue: 'Plotted by {{field}}' })}
+				</Box>
+				<ButtonGroup small>
+					<Button small onClick={() => setMode('gantt')}>
+						{t('Boards_Gantt_Mode_Gantt', { defaultValue: 'Gantt' })}
+					</Button>
+					<Button small primary onClick={() => setMode('list')}>
+						{t('Boards_Gantt_Mode_List', { defaultValue: 'List' })}
+					</Button>
+				</ButtonGroup>
 			</Box>
 
 			{months.length === 0 && undated.length === 0 && (

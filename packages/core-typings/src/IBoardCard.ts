@@ -43,6 +43,20 @@ export interface ICardComment {
 	editedAt?: Date;
 }
 
+/**
+ * A logged-time entry (time tracking). Flat sub-document on the card, mirroring
+ * ICardComment's id + IUser ref + Date timestamps. `minutes` is the logged
+ * duration; `spentAt` is when the work happened (defaults to now on create).
+ */
+export interface ITimeEntry {
+	id: string;
+	userId: IUser['_id'];
+	minutes: number;
+	note?: string;
+	spentAt: Date;
+	createdAt: Date;
+}
+
 export interface ICardCover {
 	kind: 'color' | 'image' | 'attachment';
 	value: string;
@@ -130,6 +144,8 @@ export interface IBoardCard extends IRocketChatRecord {
 	checklists: IChecklist[];
 	attachments: IAttachment[];
 	comments: ICardComment[];
+	timeEstimateMinutes?: number; // time-tracking estimate (minutes)
+	timeEntries?: ITimeEntry[]; // logged-time entries
 
 	cardNumber: number; // per-board sequential shortlink number
 	relations?: { type: 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child'; cardId: string }[];

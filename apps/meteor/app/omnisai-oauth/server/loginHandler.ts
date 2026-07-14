@@ -14,6 +14,7 @@ import { Meteor } from 'meteor/meteor';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
 import { encryptToken } from './litboxCrypto';
+import { provisionOrgFromRoster } from './orgProvision';
 
 const makeError = (message: string): Record<string, any> => ({
 	type: 'omnisai',
@@ -117,6 +118,54 @@ async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: str
 	return { userId: user._id, token: stampedToken.token };
 }
 
+/**
+ * On a firm ADMIN's first OmnisAI login that carries an orgId, mirror the firm's
+ * CasePro team into MatterChat (see orgProvision.ts — fetches the org roster and
+ * pre-creates each teammate's linked account). Gated + idempotent:
+ *  - only an admin triggers it (the bulk import is an org-wide action);
+ *  - a per-admin marker (services.omnisai.provisionedOrgId) is set only AFTER a
+ *    successful run, so a transient auth-side failure retries on the next login;
+ *  - the import dedups by sub/email, so a concurrent double-trigger is harmless.
+ * Runs in the background — the login round-trip never waits on it — and never
+ * throws: a provisioning hiccup must not break sign-in.
+ */
+async function maybeAutoProvisionOrg(userId: string, profile: OmnisAIProfile): Promise<void> {
+	try {
+		if (!profile.orgId) {
+			return;
+		}
+		const user = await Users.findOne(
+			{ _id: userId },
+			{ projection: { roles: 1, 'services.omnisai.provisionedOrgId': 1 } },
+		);
+		if (!user) {
+			return;
+		}
+		const isAdmin = Array.isArray((user as any).roles) && (user as any).roles.includes('admin');
+		if (!isAdmin) {
+			return; // only an org admin bulk-provisions the team
+		}
+		if ((user as any)?.services?.omnisai?.provisionedOrgId === profile.orgId) {
+			return; // this admin already provisioned this org
+		}
+
+		const orgId = profile.orgId;
+		// Background: never block the login round-trip on the roster fetch + N inserts.
+		setImmediate(() => {
+			provisionOrgFromRoster(orgId)
+				.then((ok) => {
+					if (ok) {
+						return Users.updateOne({ _id: userId }, { $set: { 'services.omnisai.provisionedOrgId': orgId } });
+					}
+				})
+				.catch((err) => SystemLogger.error({ msg: 'OmnisAI auto-provision (deferred) failed', err }));
+		});
+	} catch (err) {
+		// Best-effort: a failure here must never break the login.
+		SystemLogger.warn({ msg: 'OmnisAI auto-provision trigger error (login unaffected)', err });
+	}
+}
+
 Accounts.registerLoginHandler('omnisai', async (loginRequest) => {
 	const request = loginRequest as { omnisai?: boolean; credentialToken?: string };
 	if (!request.omnisai || !request.credentialToken || typeof request.credentialToken !== 'string') {
@@ -132,7 +181,10 @@ Accounts.registerLoginHandler('omnisai', async (loginRequest) => {
 	}
 
 	try {
-		return await upsertOmnisaiUser(profile);
+		const result = await upsertOmnisaiUser(profile);
+		// Fire-and-forget the team mirror (gated to first admin login w/ orgId).
+		await maybeAutoProvisionOrg(result.userId, profile);
+		return result;
 	} catch (err: any) {
 		SystemLogger.error({ msg: 'OmnisAI login handler error', err });
 		return makeError(err?.message || 'OmnisAI login failed');

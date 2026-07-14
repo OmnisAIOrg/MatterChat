@@ -336,6 +336,7 @@ type BoardsCardUpdateProps = {
 		assignees?: string[];
 		watchers?: string[];
 		priority?: 'low' | 'medium' | 'high' | 'urgent';
+		timeEstimateMinutes?: number;
 		cover?: { kind: 'color' | 'image' | 'attachment'; value: string };
 	};
 };
@@ -356,6 +357,7 @@ const BoardsCardUpdateSchema = {
 				assignees: { type: 'array', items: { type: 'string' }, nullable: true },
 				watchers: { type: 'array', items: { type: 'string' }, nullable: true },
 				priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], nullable: true },
+				timeEstimateMinutes: { type: 'number', minimum: 0, nullable: true },
 				cover: {
 					type: 'object',
 					nullable: true,
@@ -480,6 +482,38 @@ const BoardsCardChecklistRemoveSchema = {
 };
 
 export const isBoardsCardChecklistRemoveProps = ajv.compile<BoardsCardChecklistRemoveProps>(BoardsCardChecklistRemoveSchema);
+
+// Time tracking: append / remove a logged-time entry on a card. Each field MUST be declared
+// here or ajv `additionalProperties:false` strips it from the request body.
+type BoardsCardLogTimeProps = { cardId: string; minutes: number; note?: string; spentAt?: string };
+
+const BoardsCardLogTimeSchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		minutes: { type: 'number', exclusiveMinimum: 0 },
+		note: { type: 'string', nullable: true },
+		spentAt: { type: 'string', format: 'date-time', nullable: true },
+	},
+	required: ['cardId', 'minutes'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardLogTimeProps = ajv.compile<BoardsCardLogTimeProps>(BoardsCardLogTimeSchema);
+
+type BoardsCardDeleteTimeEntryProps = { cardId: string; entryId: string };
+
+const BoardsCardDeleteTimeEntrySchema = {
+	type: 'object',
+	properties: {
+		cardId: { type: 'string', minLength: 1 },
+		entryId: { type: 'string', minLength: 1 },
+	},
+	required: ['cardId', 'entryId'],
+	additionalProperties: false,
+};
+
+export const isBoardsCardDeleteTimeEntryProps = ajv.compile<BoardsCardDeleteTimeEntryProps>(BoardsCardDeleteTimeEntrySchema);
 
 // ---------------------------------------------------------------------------
 // Labels / tags
@@ -660,5 +694,34 @@ export type BoardsEndpoints = {
 	};
 	'/v1/boards.card.labels.set': {
 		POST: (params: BoardsCardLabelsSetProps) => { card: IBoardCard };
+	};
+	// Card relations (incl. parent/child subtask links). Server routes exist in
+	// app/api/server/v1/boards.ts; the service mirrors the inverse edge automatically.
+	'/v1/boards.card.relations.add': {
+		POST: (params: {
+			cardId: string;
+			type: 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child';
+			targetCardId: string;
+		}) => {
+			card: IBoardCard;
+		};
+	};
+	'/v1/boards.card.relations.remove': {
+		POST: (params: {
+			cardId: string;
+			type: 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child';
+			targetCardId: string;
+		}) => {
+			card: IBoardCard;
+		};
+	};
+	'/v1/boards.card.complete': {
+		POST: (params: { cardId: string; completed?: boolean }) => { card: IBoardCard };
+	};
+	'/v1/boards.card.log-time': {
+		POST: (params: BoardsCardLogTimeProps) => { card: IBoardCard };
+	};
+	'/v1/boards.card.delete-time-entry': {
+		POST: (params: BoardsCardDeleteTimeEntryProps) => { card: IBoardCard };
 	};
 };

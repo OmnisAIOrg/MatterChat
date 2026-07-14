@@ -86,6 +86,15 @@ spec:
             # flips the client-visible setting (per RUNBOOK-wire-to-real-centralizedauth.md).
             - name: OVERWRITE_SETTING_OmnisAI_OIDC_Enabled
               value: "true"
+            # Seed issuer + client id as PERSISTED Mongo settings (getConfig reads these first, env
+            # second). This is the durable path: the plain OMNISAI_OIDC_* env above can fail to land on
+            # the running container (a kubectl apply 3-way merge won't restore env keys deleted from the
+            # live Deployment), which dead-ends the login at not_configured. Settings persist in Mongo, so
+            # once seeded the login keeps working regardless of the pod's container env.
+            - name: OVERWRITE_SETTING_OmnisAI_OIDC_Issuer
+              value: "https://auth-app.stg-omnisai.io"
+            - name: OVERWRITE_SETTING_OmnisAI_OIDC_Client_Id
+              value: "WoqXiUHmfiYFRtRhtZoPYygvbthcwqdz"
             # No SMTP is wired on staging, so Rocket.Chat's email-2FA code can never be
             # delivered — it would wall every OmnisAI login at an un-completable prompt.
             # OmnisAI OIDC is the real auth (and can enforce 2FA at the IdP), so disable
@@ -95,6 +104,16 @@ spec:
             # --- LitBox integration ---
             - name: LITBOX_API_URL
               value: "https://litbox-app.stg-omnisai.io"
+            # --- Cross-firm (CFCS / Omnis Counsel) ---
+            # The /_crossfirm server proxy forwards to the internal CFCS ClusterIP service (same namespace).
+            - name: CFCS_API_URL
+              value: "http://cfcs:9200"
+            # Turn cross-firm on, and set the firm identity this instance represents — the proxy stamps it
+            # as the verified x-cfcs-firm (CFCS rejects an empty firm in strict mode, so this MUST be set).
+            - name: OVERWRITE_SETTING_CrossFirm_Enabled
+              value: "true"
+            - name: OVERWRITE_SETTING_CrossFirm_Firm_Name
+              value: "Apex Law LLP"
           resources:
             requests:
               memory: "1Gi"

@@ -1,10 +1,20 @@
 name: MatterChat — Staging Deploy
 
-# Mirrors the LitBox (OmnisAIOrg) staging deploy pattern:
-# build the heavy Meteor image from source, push to ECR, apply the k8s
-# manifests, then roll the mongo StatefulSet and the app Deployment.
+# BUILD-ONLY (+ a safe pod restart). MatterChat staging is owned by ArgoCD — app
+# `matterchat-staging`, synced from the OmnisAIOrg/MatterChat-New repo (kubernetes/staging/),
+# with automated prune + selfHeal. ArgoCD owns the Deployment / Service(s) / Ingress.
 #
-# MatterChat's default branch is `develop`; this deploy fires ONLY on `staging`.
+# Therefore this pipeline must NOT `kubectl apply` the manifests under kubernetes/staging/ (a
+# stale, divergent copy) nor `kubectl set image` — both FIGHT ArgoCD's self-heal. In particular
+# the committed Ingress used the wrong shared-ALB group, so applying it flipped MatterChat onto the
+# backend ALB and 404-ed the public host until the binding was repaired. (See the repo HANDOFF /
+# memory "matterchat-staging-argocd-truth".)
+#
+# So we BUILD + push the image, then deploy it the only ArgoCD-safe way: restart the pod, so the
+# ArgoCD-managed Deployment recreates it and pulls the new :staging-latest. Deleting a pod is
+# invisible to ArgoCD (it reconciles Deployments/Services/Ingress, not individual pods).
+#
+# MatterChat's default branch is `develop`; this fires ONLY on `staging`.
 
 on:
   push:
@@ -17,7 +27,7 @@ env:
   ECR_REPOSITORY: matterchat
   K8S_NAMESPACE: staging
 
-# Avoid two overlapping deploys racing on the same cluster resources.
+# Avoid two overlapping builds racing on the same image/pod.
 concurrency:
   group: matterchat-staging-deploy
   cancel-in-progress: false
@@ -74,37 +84,31 @@ jobs:
           cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:cache
           cache-to: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:cache,mode=max
 
+      # --- Deploy the freshly built image the ArgoCD-safe way: restart the pod ---------------------
+      # NO `kubectl apply` of kubernetes/staging/* and NO `kubectl set image` (both fight ArgoCD).
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
 
-      - name: Apply manifests (idempotent — creates on first run, updates after)
+      - name: Roll the new image (restart pod; ArgoCD owns the manifests)
+        run: kubectl delete pod -n "${K8S_NAMESPACE}" -l app=matterchat --wait=false
+
+      - name: Wait for the new pod to serve /api/info
         run: |
-          # A StatefulSet's immutable fields (serviceName/selector/volumeClaimTemplates/
-          # podManagementPolicy) can't be changed via `apply`. If an incompatible
-          # matterchat-mongo already exists (e.g. from an earlier partial setup), fall
-          # back to delete + recreate. Deleting a StatefulSet does NOT delete its PVCs,
-          # so any data is preserved and re-adopted by the new object.
-          kubectl apply -f kubernetes/staging/matterchat-mongo.yaml || {
-            echo "↻ Recreating matterchat-mongo StatefulSet (immutable-field change; PVCs persist)"
-            kubectl delete statefulset matterchat-mongo -n "${K8S_NAMESPACE}" --ignore-not-found --wait=true
-            kubectl apply -f kubernetes/staging/matterchat-mongo.yaml
-          }
-          # Same for the app Deployment: spec.selector is immutable, so an incompatible
-          # pre-existing matterchat Deployment can't be `apply`d over. Delete + recreate
-          # (this also re-applies the Service + Ingress in the file idempotently).
-          kubectl apply -f kubernetes/staging/matterchat-deployment-staging.yaml || {
-            echo "↻ Recreating matterchat Deployment (immutable selector change)"
-            kubectl delete deployment matterchat -n "${K8S_NAMESPACE}" --ignore-not-found --wait=true
-            kubectl apply -f kubernetes/staging/matterchat-deployment-staging.yaml
-          }
+          for i in $(seq 1 36); do
+            code=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' "https://matterchat.stg-omnisai.io/api/info" 2>/dev/null || echo 000)
+            echo "t=$((i*10))s  /api/info=$code"
+            [ "$code" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "app did not return 200 within ~6m after restart"; exit 1
 
-      - name: Wait for MongoDB StatefulSet
-        run: kubectl rollout status statefulset/matterchat-mongo -n "${K8S_NAMESPACE}" --timeout=180s
-
-      - name: Roll app to the freshly built image
+      # On a failed roll, dump WHY the new pod did not become ready (boot crash vs scheduling vs
+      # image pull) — pod state, events, and current + previous container logs.
+      - name: Diagnose failed roll (pod state + crash logs)
+        if: failure()
         run: |
-          IMAGE="${{ steps.ecr-login.outputs.registry }}/${ECR_REPOSITORY}:staging-${{ steps.vars.outputs.sha8 }}"
-          kubectl set image deployment/matterchat matterchat="${IMAGE}" -n "${K8S_NAMESPACE}"
-
-      - name: Wait for app rollout (Meteor boot + migrations are slow)
-        run: kubectl rollout status deployment/matterchat -n "${K8S_NAMESPACE}" --timeout=600s
+          echo "===== pods ====="; kubectl get pods -n "${K8S_NAMESPACE}" -l app=matterchat -o wide 2>&1 || true
+          echo "===== describe pod (events + state) ====="; kubectl describe pod -n "${K8S_NAMESPACE}" -l app=matterchat 2>&1 | tail -70 || true
+          echo "===== current container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=140 2>&1 || true
+          echo "===== previous (crashed) container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --previous --tail=140 2>&1 || true
+          echo "===== recent namespace events ====="; kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.lastTimestamp 2>&1 | tail -30 || true

@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { useSortQueryOptions } from '../../hooks/useSortQueryOptions';
 import { useOmnichannelEnabled } from '../../views/omnichannel/hooks/useOmnichannelEnabled';
 import { useQueuedInquiries } from '../../views/omnichannel/hooks/useQueuedInquiries';
+import { useOrgSwitcherSelection } from '../../views/root/MainLayout/OrgSwitcherContext';
 
 const query = { open: { $ne: false } };
 
@@ -52,6 +53,8 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 	const rooms = useUserSubscriptions(query, options);
 
+	const { selectedOrgId } = useOrgSwitcherSelection();
+
 	const inquiries = useQueuedInquiries();
 
 	const incomingCalls = useVideoConfIncomingCalls();
@@ -77,6 +80,12 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 			rooms.forEach((room) => {
 				if (room.archived) {
+					return;
+				}
+
+				// Slack workspace view: when the connected-Slack tile is selected in the org rail,
+				// show ONLY its bridged channels (rooms carrying Slack importIds).
+				if (selectedOrgId === 'slack' && !(Array.isArray(room.importIds) && room.importIds.length > 0)) {
 					return;
 				}
 
@@ -209,6 +218,7 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 			return { groupsCount, groupsList, roomList, groupedUnreadInfo };
 		}, [
 			rooms,
+			selectedOrgId,
 			showOmnichannel,
 			inquiries.enabled,
 			sidebarDrafts,
