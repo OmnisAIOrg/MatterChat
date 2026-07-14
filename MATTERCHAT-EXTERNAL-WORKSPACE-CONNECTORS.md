@@ -128,6 +128,62 @@ Verified by grep: **nothing Slack/Teams lives in `apps/meteor/ee/`** (the propri
 
 The only edit to `slackbridge.ts` is to expose a programmatic `connectOne(credential)` the provider calls (today it only reads newline token lists from settings) — **keep the settings path working** for backward compat. For MVP, Slack stays **workspace-level** (admin token), just surfaced through the new abstraction so the rail is uniform. Per-user Slack OAuth is a fast-follow (M4) that reuses the connection storage + a `/_slack/oauth` route cloned from the OmnisAI OAuth pattern.
 
+### 2.1a Slack live inbound — Events API (BUILT; the full two-way bridge)
+
+> Status: **SHIPPED.** Per-user Slack OAuth (`/_slack/oauth/*`), discovery, backfill, and outbound
+> posting were already live; this section documents the **inbound realtime half** that replaced the
+> `subscribe` stub — the Slack sibling of the Teams change-notification webhook (§3.3), to the same
+> security model.
+
+**Transport:** Slack **Events API** (HTTP event subscriptions), NOT socket-mode. One app-level
+subscription covers every channel the connected users can see — unlike Graph there is **no
+per-channel subscription** to create/renew/delete, so a bridge's channel mapping (the
+`bridgedChannels` record) *is* the subscription.
+
+**Endpoint:** `POST /_slack/events` (`apps/meteor/app/connectors/server/providers/slack/events.ts`;
+mounted outside `/api` like `/_slack/oauth` + `/_connectors/teams`). Flow:
+1. `url_verification` handshake → echoes the `challenge` (only after the signature verifies — Slack
+   signs the handshake too).
+2. Every request verified: `X-Slack-Signature` = `v0=` + hex HMAC-SHA256(signing secret,
+   `v0:{X-Slack-Request-Timestamp}:{raw body}`), constant-time compare, timestamps staler than
+   **5 minutes rejected** (replay guard). FAIL-CLOSED: no secret → nothing processed, no crashes —
+   bridges stay outbound-only + the 30-min reconcile poll (`realtime: 'none'` in
+   `external-workspaces.bridges` is the admin-facing status).
+3. Ack **200 within 3s**, process async (`setImmediate`) — Slack retries slow/failed deliveries
+   (`X-Slack-Retry-Num`) then disables the subscription; a short-TTL `(team_id, event_id)` dedup set
+   drops retries at the door, and the deterministic `ext-…` RC `_id` keeps ingest idempotent across
+   restarts.
+4. `message` events for **channels + private channels** (`message.channels`, `message.groups`) fan
+   out to every connection bridging that `(team_id, channel)` via `ingestExternalMessage` — same
+   alias attribution as Teams (display name via cached `users.info`, no ghost accounts). Handled:
+   new messages, thread replies (mapped to RC threads when the root is ingested), `message_changed`
+   (edit applied to the bridge-inserted message), `message_deleted` (bridge-inserted message
+   removed), file/attachment **link-out stubs** (name + Slack permalink appended to the text). DMs
+   (`im`/`mpim`) stay poll/backfill-only for now.
+5. **Echo prevention** (outbound posts must not ping-pong back): our outbound `chat.postMessage`
+   runs on the owner's USER token, so the echo returns as a normal user-authored event — the echo
+   set remembers the returned `ts` per connection (checked in the events path AND inside
+   `ingestExternalMessage`), the persistent `customFields.connectorBridge.externalId` stamp catches
+   echoes after a restart, and `bot_id`/subtype events are skipped wholesale.
+
+**Config (`Slack` admin group):**
+
+| What | Setting | Env fallback |
+| --- | --- | --- |
+| Master switch | `Slack_Enabled` | — |
+| OAuth client id / secret | `Slack_OAuth_Client_Id` / `Slack_OAuth_Client_Secret` | — |
+| **Events signing secret** | `Slack_Signing_Secret` (masked, secret) | `SLACK_SIGNING_SECRET` |
+
+**Slack app setup (one-time, at api.slack.com/apps → the MatterChat app):**
+1. *Basic Information → Signing Secret* → paste into **Admin → Slack → Signing Secret** (or ship as
+   `SLACK_SIGNING_SECRET` env). Do this FIRST — the URL verification below is signature-checked.
+2. *Event Subscriptions → Enable*, Request URL: **`https://www.matterchat.com/_slack/events`**
+   (per-deploy: `<Site_Url>/_slack/events`, e.g. `https://matterchat.stg-omnisai.io/_slack/events`).
+3. *Subscribe to bot events*: **`message.channels`**, **`message.groups`** → Save, reinstall the app
+   if prompted. NOTE: bot events only deliver for channels the app's **bot user is a member of** —
+   invite the bot (`/invite @MatterChat`) to each bridged channel, or additionally subscribe the
+   same event names under *user events* to deliver for everything the OAuth-connected user can see.
+
 ### 2.2 TeamsProvider — Microsoft Graph, from scratch
 
 **What exists today:** nothing. Grep is clean of `@azure`, `msgraph`, `@microsoft/microsoft-graph`. All Teams code is new.

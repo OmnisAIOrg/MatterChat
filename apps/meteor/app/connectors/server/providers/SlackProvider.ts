@@ -23,10 +23,12 @@
  *                          IProviderMessage (author from `user`, text, `ts`). Subtype/bot messages skipped.
  *   - postMessage        → chat.postMessage AS the signed-in user. Returns the created message `ts`.
  *
- * WHAT IS A TODO STUB (the realtime milestone):
- *   - subscribe          → Slack realtime is the Events API (HTTP event subscriptions) or socket-mode;
- *                          a polling fallback is the interim path. Keyed by (teamId, channelId).
- *   - resolveIdentity    → users.info, or from the message author block carried per payload.
+ *   - subscribe          → REAL (Events API): Slack realtime is the app-level Events API endpoint
+ *                          (/_slack/events — see ./slack/events.ts), verified by the signing secret.
+ *                          There is NO per-channel subscription to create (the app-level event
+ *                          subscription covers every visible channel), so subscribe just confirms
+ *                          the inbound transport is configured and returns a no-op handle.
+ *   - resolveIdentity    → users.info on the external user id, mapped to IProviderUser.
  *
  * SLACK `ok:false` IS SURFACED, NEVER SWALLOWED: the Slack Web API returns HTTP 200 with
  * `{ ok:false, error }` for logical errors (missing_scope, channel_not_found, invalid_auth). slackApi
@@ -54,16 +56,15 @@ import type {
 	IProviderUser,
 	IVerifiedConnection,
 } from '../ChatProvider';
-import { getSlackConfig, isSlackConfigured, SLACK_TOKEN_ENDPOINT, redirectUri, SLACK_USER_SCOPES } from './slack/config';
+import { getSlackConfig, isSlackConfigured, isSlackEventsConfigured, SLACK_TOKEN_ENDPOINT, redirectUri, SLACK_USER_SCOPES } from './slack/config';
 import type { SlackTokens } from './slack/slackApi';
 import { slackFetch, slackGetAll } from './slack/slackApi';
 
 // Mounting the OAuth routes is a side-effect of importing this provider, so booting the connectors
 // index (which constructs the registry with `new SlackProvider()`) also wires /_slack/oauth.
+// (The /_slack/events inbound endpoint is mounted by the connectors server index, mirroring how
+// the Teams webhook is mounted there.)
 import './slack/routes';
-
-const NEXT_MILESTONE =
-	'SlackProvider: realtime is the next milestone (subscribe/resolveIdentity). The path is the Slack Events API / socket-mode, or polling on a per-connection toggle.';
 
 function notConfigured(): never {
 	throw new Error('slack_not_configured');
@@ -187,12 +188,14 @@ export class SlackProvider implements IChatProvider {
 	}
 
 	/**
-	 * Tear down live resources for this connection. No sockets/subscriptions exist yet (realtime is the
-	 * next milestone), so this is a no-op today — disconnect at the record level is handled by
+	 * Tear down live resources for this connection. Slack realtime rides the APP-LEVEL Events API
+	 * (nothing per-connection lives on Slack's side — unlike Teams' per-channel Graph
+	 * subscriptions), so this is a no-op: once the connection record goes away, the events endpoint
+	 * simply finds no bridge to fan out to. Disconnect at the record level is handled by
 	 * connectionService.
 	 */
 	async disconnect(_connection: IProviderConnection): Promise<void> {
-		// No live Slack subscriptions to delete until the realtime milestone; nothing to release.
+		// App-level Events API: no per-connection Slack-side resources to release.
 	}
 
 	// ─── discovery ─────────────────────────────────────────────────────────────────────────────
@@ -572,9 +575,15 @@ export class SlackProvider implements IChatProvider {
 			edited?: { ts?: string };
 		};
 
-		// Slack `ts` is a `seconds.micros` string; numeric compare works for the early-stop cursor.
-		const sinceNum = since ? Number(since) : NaN;
-		const hasSince = !Number.isNaN(sinceNum);
+		// `since` is either a Slack `ts` ("seconds.micros") or an ISO-8601 timestamp (the bridge's
+		// lastInboundAt cursor, which backfillBridge passes as an ISO string) — normalize both to
+		// epoch seconds for the server-side `oldest` filter and the early-stop compare. A raw Slack
+		// ts is forwarded verbatim (float round-tripping could clip the micros digits).
+		const asNumber = since ? Number(since) : NaN;
+		const asIsoMs = since && Number.isNaN(asNumber) ? Date.parse(since) : NaN;
+		const sinceNum = !Number.isNaN(asNumber) ? asNumber : asIsoMs / 1000;
+		const hasSince = Number.isFinite(sinceNum);
+		const oldest = hasSince ? (Number.isNaN(asNumber) ? sinceNum.toFixed(3) : since) : undefined;
 
 		let cursor: string | undefined;
 		let pages = 0;
@@ -585,7 +594,7 @@ export class SlackProvider implements IChatProvider {
 				params: {
 					channel: channelExternalId,
 					limit: MESSAGE_PAGE_SIZE,
-					...(hasSince ? { oldest: since } : {}),
+					...(oldest ? { oldest } : {}),
 					...(cursor ? { cursor } : {}),
 				},
 			});
@@ -627,23 +636,73 @@ export class SlackProvider implements IChatProvider {
 		}
 	}
 
+	/**
+	 * Begin receiving realtime updates for a channel — REAL via the Slack Events API. Unlike Teams
+	 * (one Graph subscription per channel), Slack event subscriptions are APP-LEVEL: the app's
+	 * Event Subscriptions config (Request URL `/_slack/events`, bot events `message.channels` +
+	 * `message.groups`) delivers every visible channel's messages in one stream, verified per
+	 * request by the signing secret. So there is nothing per-channel to create here — the bridge's
+	 * channel mapping (the bridgedChannels record the bridgeService keeps) IS the subscription, and
+	 * the events endpoint fans each delivery out to every connection bridging that (team, channel).
+	 *
+	 * Fail-closed gate: when the signing secret is unset, inbound realtime is OFF (the events
+	 * endpoint processes nothing) — throw so the caller knows this bridge is outbound-only until
+	 * the admin sets `Slack_Signing_Secret` / `SLACK_SIGNING_SECRET`. `onMessage` is unused: the
+	 * events endpoint routes through bridgeCore directly, exactly like the Teams webhook does.
+	 */
 	async subscribe(
 		_connection: IProviderConnection,
 		_channelExternalId: string,
 		_onMessage: InboundMessageHandler,
 	): Promise<IProviderSubscription> {
-		// TODO(next milestone): Slack realtime is the Events API (HTTP event subscriptions verified by
-		// the signing secret) or socket-mode; the interim path is polling conversations.history on a
-		// per-connection toggle. Keyed by (teamId, channelId) and shared across users.
-		throw new Error(NEXT_MILESTONE);
+		if (!isSlackEventsConfigured()) {
+			throw new Error('slack_events_not_configured');
+		}
+		// App-level Events API: nothing to create, nothing to tear down per channel.
+		return { stop: async () => undefined };
 	}
 
-	// ─── identity — NEXT MILESTONE ───────────────────────────────────────────────────────────────
+	// ─── identity — REAL ─────────────────────────────────────────────────────────────────────────
 
-	async resolveIdentity(_connection: IProviderConnection, _externalUserId: string): Promise<IProviderUser | null> {
-		// TODO(next milestone): users.info on the external user id (or resolve from the message author
-		// block carried per payload), mapped to IProviderUser. Requires the granted users:read scope.
-		throw new Error(NEXT_MILESTONE);
+	/**
+	 * Resolve an external user id to its profile via users.info (delegated users:read scope), for
+	 * alias/attribution rendering. Returns null (rather than throwing) for an unknown/unreadable
+	 * user so a single unresolved author never fails an ingest.
+	 */
+	async resolveIdentity(connection: IProviderConnection, externalUserId: string): Promise<IProviderUser | null> {
+		if (!isSlackConfigured()) {
+			return notConfigured();
+		}
+		if (!externalUserId) {
+			return null;
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		try {
+			const info = await slackFetch<{
+				user?: {
+					id?: string;
+					name?: string;
+					real_name?: string;
+					is_bot?: boolean;
+					profile?: { display_name?: string; real_name?: string; email?: string; image_72?: string; image_48?: string };
+				};
+			}>('users.info', tokens, { method: 'GET', params: { user: externalUserId } });
+			const u = info.user;
+			if (!u?.id) {
+				return null;
+			}
+			const avatarUrl = u.profile?.image_72 || u.profile?.image_48 || undefined;
+			return {
+				externalId: u.id,
+				displayName: u.profile?.display_name || u.real_name || u.profile?.real_name || u.name || u.id,
+				...(u.profile?.email ? { email: u.profile.email } : {}),
+				isBot: Boolean(u.is_bot),
+				...(avatarUrl ? { avatarUrl } : {}),
+			};
+		} catch {
+			// user_not_found / missing scope / transient failure — attribution falls back to the id.
+			return null;
+		}
 	}
 
 	// ─── write — REAL ────────────────────────────────────────────────────────────────────────────

@@ -55,4 +55,17 @@ export const createSlackSettings = () =>
 			i18nLabel: 'Slack_OAuth_Client_Secret',
 			i18nDescription: 'Slack_OAuth_Client_Secret_Description',
 		});
+
+		// Signing secret — MASKED + secret. Authenticates every Events API delivery to
+		// /_slack/events (v0 HMAC over the raw body). EMPTY by default — FAIL-CLOSED: with no
+		// signing secret, inbound realtime stays entirely off (outbound + the reconcile poll keep
+		// working). `SLACK_SIGNING_SECRET` env is the deploy-level fallback (setting wins when set;
+		// same setting-then-env pattern as the Teams config fields).
+		await this.add('Slack_Signing_Secret', '', {
+			type: 'string',
+			public: false,
+			secret: true,
+			i18nLabel: 'Slack_Signing_Secret',
+			i18nDescription: 'Slack_Signing_Secret_Description',
+		});
 	});
