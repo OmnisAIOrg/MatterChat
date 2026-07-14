@@ -293,6 +293,7 @@ export function mapMatterSnapshot(bundle: MatterRowBundle): IMatterSnapshot {
 		team: mapTeam(matter, bundle.teamNameById),
 		fetchedAt: new Date(),
 		stale: false,
+		resolved: true, // a real CasePro read (vs the pending placeholder a graceful bind writes)
 	};
 }
 

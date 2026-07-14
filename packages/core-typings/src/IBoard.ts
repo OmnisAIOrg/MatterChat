@@ -83,6 +83,22 @@ export interface IBoard extends IRocketChatRecord {
 
 	caseproSync?: IBoardCaseProSync;
 
+	/**
+	 * OPT-IN email-to-task intake (Phase 3, default absent = off). When set, an email delivered to this
+	 * board's intake address becomes a card on `targetListId`, created AS `ownerUserId` (a board member,
+	 * so ACL/activity/numbering behave as if they created it — the forms public-submit precedent). The
+	 * `token` is a high-entropy secret (43-char Random.secret, iCal-token precedent) embedded in the
+	 * plus-addressed intake address (`boards+<token>@…`), so the address is an unguessable capability;
+	 * an unknown token resolves to nothing (non-probeable). Never carries a mail password — the mail
+	 * provider forwards to the HMAC-signed webhook, this just routes the resolved email to a board.
+	 */
+	emailIntake?: {
+		token: string;
+		ownerUserId: IUser['_id'];
+		targetListId: string;
+		enabled: boolean;
+	};
+
 	// monotonic per-board counter backing card shortlink numbers (see nextCardNumber)
 	cardCounter: number;
 

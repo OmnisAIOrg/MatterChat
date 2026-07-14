@@ -5,6 +5,7 @@ import { automationEngineCron } from './automationEngine';
 import { boardsCaseProSnapshotCron } from './boardsCaseProSnapshotCron';
 import { boardsCaseProSyncCron } from './boardsCaseProSyncCron';
 import { boardsDigestCron } from './boardsDigestCron';
+import { boardsCalendarSyncCron } from './boardsCalendarSyncCron';
 import { boardsMattersCron } from './boardsMattersCron';
 import { caseproClientSyncCron } from './caseproClientSyncCron';
 
@@ -29,5 +30,8 @@ export const startCron = async () => {
 	// per-matter "Client" channel — gated by CasePro_Enabled + CasePro_Client_Sync_Enabled,
 	// schedule from CasePro_Client_Sync_Poll_Schedule. (Outbound leg is the afterSaveMessage hook.)
 	await caseproClientSyncCron();
+	// Boards two-way calendar sync (Phase 3): every 15 min, push due-dated cards to connected
+	// Google/Outlook calendars and poll for calendar-side changes — gated by Boards_Calendar_Sync_Enabled.
+	await boardsCalendarSyncCron();
 	return started;
 };

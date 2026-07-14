@@ -48,6 +48,18 @@ export type CaseProClientAttachment = {
 	documentId: string;
 	name: string;
 	sizeBytes?: number;
+	/**
+	 * MIME type as CasePro recorded it at upload (e.g. `application/pdf`). Passed through
+	 * verbatim for content-type-aware rendering; never inferred here.
+	 */
+	contentType?: string;
+	/**
+	 * The LitBox tenant/org the `documentId` lives in. REQUIRED for the file-sync
+	 * (reference-share) path: LitBox resolves a document only when scoped to its owning
+	 * org, and MatterChat's Client room does NOT carry an org id, so CasePro must supply it.
+	 * Absent (older payloads / gated-off) → the engine keeps the reference-stub behaviour.
+	 */
+	organizationId?: string;
 };
 
 export type PostClientMessageInput = {
@@ -59,6 +71,11 @@ export type PostClientMessageInput = {
 	 * is idempotent server-side AND so the inbound poll can recognise our own firm echo.
 	 */
 	sourceMessageId: string;
+	/**
+	 * Outbound file references (reference-share). Each is a shared-LitBox `documentId` the
+	 * PWA resolves natively — NO bytes are sent over this POST. Only populated when the file
+	 * sub-flag is ON and the staff message carries a LitBox doc reference; else omitted.
+	 */
 	attachments?: CaseProClientAttachment[];
 };
 

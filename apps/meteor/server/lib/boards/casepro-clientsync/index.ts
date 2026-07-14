@@ -1,8 +1,9 @@
 import type { IMessage, IRoom } from '@rocket.chat/core-typings';
 import { Messages, Rooms } from '@rocket.chat/models';
 
-import { caseProClientMessagesClient, type CaseProClientAttachment, type CaseProClientMessage } from './client';
+import { caseProClientMessagesClient, type CaseProClientMessage } from './client';
 import { clientSyncEcho, clientSyncMessageId, isClientSyncMessageId } from './echoSuppression';
+import { extractOutboundAttachments, mapInboundAttachments } from './fileSync';
 import { ensureClientRoom, findClientRoom, getClientSyncBot } from './room';
 import { settings } from '../../../../app/settings/server';
 import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
@@ -39,22 +40,6 @@ export function isClientSyncEnabled(): boolean {
 	}
 }
 
-/** Map CasePro attachment refs → RC message attachments (reference/link stubs, NOT bytes). */
-function toRcAttachments(attachments?: CaseProClientAttachment[]): IMessage['attachments'] {
-	if (!attachments?.length) {
-		return undefined;
-	}
-	return attachments.map((a) => ({
-		// A reference stub. The bytes live in the CasePro matter document store (LitBox); a
-		// service-credential byte round-trip is a deferred enhancement — for now staff see the
-		// document name + size and open it from the matter's Documents tab in CasePro.
-		title: a.name,
-		text: `Client attachment${a.sizeBytes ? ` · ${Math.round(a.sizeBytes / 1024)} KB` : ''} (open in the CasePro matter documents)`,
-		// documentId carried for future deep-linking / byte proxy.
-		fields: [{ title: 'documentId', value: a.documentId, short: true }],
-	}));
-}
-
 /**
  * Ingest ONE inbound client message into the Client channel. Idempotent: the deterministic
  * `_id` upserts onto itself, so a re-polled message never duplicates. Skips firm-origin rows
@@ -81,6 +66,10 @@ async function ingestInbound(room: IRoom, matterId: string, msg: CaseProClientMe
 		return;
 	}
 
+	// Reference-share: when file-sync is ON these are resolvable LitBox deep-links; when OFF
+	// they are the reference STUBS (today's behaviour). Either way, NO bytes cross the bridge
+	// and a bad file falls back to a note (see fileSync.mapInboundAttachment) — never blocking.
+	const attachments = mapInboundAttachments(msg.attachments);
 	const rcMessage: Partial<IMessage> & { _id: string; rid: string; msg: string } = {
 		_id,
 		rid: room._id,
@@ -90,7 +79,7 @@ async function ingestInbound(room: IRoom, matterId: string, msg: CaseProClientMe
 		// Render as the CLIENT via the alias mechanism — never a ghost RC account (same pattern
 		// as the connectors bridge).
 		alias: msg.author || 'Client',
-		...(toRcAttachments(msg.attachments) ? { attachments: toRcAttachments(msg.attachments) } : {}),
+		...(attachments ? { attachments } : {}),
 		customFields: {
 			caseproClientSync: {
 				matterId,
@@ -198,10 +187,15 @@ export async function forwardOutbound(message: IMessage, room: IRoom): Promise<b
 	}
 
 	try {
+		// Reference-share outbound: forward any shared-LitBox doc references the staff message
+		// carries so the PWA renders them natively. [] when file-sync is OFF or none present —
+		// the POST then stays text-only. A file never blocks the outbound message.
+		const attachments = extractOutboundAttachments(message);
 		const caseProId = await caseProClientMessagesClient.postFirmMessage(room.matterId, {
 			body: message.msg,
 			authorName: message.u?.name || message.u?.username,
 			sourceMessageId: message._id,
+			...(attachments.length ? { attachments } : {}),
 		});
 		clientSyncEcho.add(room.matterId, caseProId);
 		return true;

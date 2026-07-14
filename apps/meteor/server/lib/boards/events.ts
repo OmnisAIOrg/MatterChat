@@ -117,6 +117,20 @@ function asTriggerEvent(event: BoardEventName): BoardAutomationTriggerEvent | un
 /** Card events that can change the pushed CasePro-task projection (mirrors TASK_SYNC_EVENTS). */
 const CASEPRO_TASK_SYNC_EVENTS = new Set<BoardEventName>(['card.created', 'card.updated', 'due.set', 'due.completed']);
 
+/**
+ * Card events that can change a card's due date / assignment and so must re-push the card to its
+ * assignees' connected calendars (Phase 3). `card.archived`/`card.deleted` re-push so the mirror event
+ * is removed when the card leaves. Gated + no-op when calendar sync is off (checked in the handler).
+ */
+const CALENDAR_SYNC_EVENTS = new Set<BoardEventName>([
+	'card.created',
+	'card.updated',
+	'due.set',
+	'card.moved',
+	'card.archived',
+	'card.deleted',
+]);
+
 export function emitBoardEvent(event: BoardEventName, payload: BoardEventPayload): void {
 	SystemLogger.debug({ msg: 'boards.event', event, payload });
 
@@ -131,6 +145,19 @@ export function emitBoardEvent(event: BoardEventName, payload: BoardEventPayload
 			.then(({ syncCardEvent }) => syncCardEvent(event, { boardId, cardId, actor }))
 			.catch((err) => {
 				SystemLogger.debug({ msg: 'boards.event.taskSyncFailed', event, err });
+			});
+	}
+
+	// Third fan-out: card → connected-calendar PUSH sync (Phase 3, gated OFF by default). Same
+	// fire-and-forget + dynamic-import + swallowed-catch discipline: never slow/break the emitting
+	// mutation, and never pull the sync module (models/settings) at this low-level lib's eval time.
+	// The handler itself checks the master gate and no-ops when calendar sync is disabled.
+	if (CALENDAR_SYNC_EVENTS.has(event) && typeof payload.cardId === 'string') {
+		const { cardId } = payload;
+		void import('./calendar-sync/eventFanout')
+			.then(({ pushCardOnEvent }) => pushCardOnEvent(cardId))
+			.catch((err) => {
+				SystemLogger.debug({ msg: 'boards.event.calendarSyncFailed', event, err });
 			});
 	}
 

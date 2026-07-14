@@ -9,6 +9,8 @@ export interface IBoardsBoardsModel extends IBaseModel<IBoard> {
 	findByPipelineType(type: BoardsPipelineType, options?: FindOptions<IBoard>): FindCursor<IBoard>;
 	findStarred(userId: string, options?: FindOptions<IBoard>): FindCursor<IBoard>;
 	findOneByIdAndMember(boardId: string, userId: string): Promise<IBoard | null>;
+	/** The board whose email-to-task intake is enabled and matches `token` (email-to-task routing). */
+	findOneByEmailIntakeToken(token: string): Promise<IBoard | null>;
 
 	setMember(boardId: string, member: IBoardMember): Promise<UpdateResult>;
 	removeMember(boardId: string, userId: string): Promise<UpdateResult>;
