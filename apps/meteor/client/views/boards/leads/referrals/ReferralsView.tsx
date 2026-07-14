@@ -20,12 +20,14 @@ import {
 	Throbber,
 } from '@rocket.chat/fuselage';
 import { GenericModal, Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
-import { useEndpoint, useSetModal, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useSetModal, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useId, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+
+import { CaseProStubBanner } from '../../casepro';
 
 /**
  * ReferralsView — the `/boards/leads/referrals` screen (M6 client).
@@ -636,7 +638,6 @@ const SourcesPanel = (): ReactElement => {
 
 const ReferralsView = (): ReactElement => {
 	const { t } = useTranslation();
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
 
 	return (
 		<Page>
@@ -648,15 +649,7 @@ const ReferralsView = (): ReactElement => {
 				}
 			/>
 			<PageScrollableContentWithShadow>
-				{!caseProEnabled && (
-					<Box mbe={16}>
-						<Callout type='warning' icon='info' title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}>
-							{t('Boards_Matters_Stub_Description', {
-								defaultValue: 'CasePro is not connected — figures below are computed from sample data, not live records.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner mbe={16} />
 
 				<SectionTitle>{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referral sources' })}</SectionTitle>
 				<SourcesPanel />

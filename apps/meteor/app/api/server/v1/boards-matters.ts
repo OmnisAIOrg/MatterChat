@@ -24,7 +24,6 @@ import {
 } from '@rocket.chat/rest-typings';
 
 import { caseProTransportDiagnostics } from '../../../../server/lib/boards/casepro';
-import { isCaseProEnabled } from '../../../../server/lib/boards/leads';
 import {
 	caseProClient,
 	ensureMattersBoard,
@@ -44,7 +43,7 @@ import {
 	financial,
 	caseload,
 } from '../../../../server/lib/boards/matters';
-import { setTaskSyncEnabled } from '../../../../server/lib/boards/casepro';
+import { caseProStatus, setTaskSyncEnabled } from '../../../../server/lib/boards/casepro';
 import { assertBoardRole } from '../../../../server/lib/boards/permissions';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
@@ -117,8 +116,12 @@ API.v1.post(
 		},
 	},
 	async function action() {
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
 		const { cardId } = this.bodyParams;
-		const card = await refreshMatterSnapshot(this.userId, cardId);
+		const card = await refreshMatterSnapshot(uid, cardId);
 		return API.v1.success({ card });
 	},
 );
@@ -180,11 +183,12 @@ API.v1.post(
 	},
 	async function action() {
 		// seeding pulls (and re-homes) live CasePro rows — gate on the sync capability.
-		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-sync'))) {
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
 			return API.v1.unauthorized();
 		}
 		const { boardId } = this.bodyParams;
-		const result = await seedFromCasePro(this.userId, boardId);
+		const result = await seedFromCasePro(uid, boardId);
 		return API.v1.success({ result });
 	},
 );
@@ -206,7 +210,9 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-view'))) {
+		// permission-gated read; the client owns CasePro org-scoping.
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
 		const { matterId } = this.queryParams;
@@ -227,7 +233,8 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-view'))) {
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
 		const { stageId, caseTypeId, query, limit, offset } = this.queryParams;
@@ -248,7 +255,8 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		if (!(await hasPermissionAsync(this.userId, 'boards-casepro-view'))) {
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
 		const stages = await caseProClient.listStages();
@@ -268,12 +276,16 @@ API.v1.get(
 		},
 	},
 	async function action() {
-		// the admin "is the live wire actually live?" surface — settings-manage capability.
-		if (!(await hasPermissionAsync(this.userId, 'boards-manage-casepro-settings'))) {
+		// E2E-verified contract: boards-casepro-view gate + the caseProStatus() DTO
+		// (enabled/transport/baseUrl/authMode/orgId/reachable/latencyMs/error). The
+		// staging live-wire's transport diagnostics ride along ADDITIVELY under
+		// `diagnostics` so admins keep the "why did live degrade" surface.
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-view'))) {
 			return API.v1.unauthorized();
 		}
-		const status = caseProTransportDiagnostics();
-		return API.v1.success({ status: { ...status, enabled: isCaseProEnabled() } });
+		const status = await caseProStatus();
+		return API.v1.success({ status: { ...status, diagnostics: caseProTransportDiagnostics() } });
 	},
 );
 

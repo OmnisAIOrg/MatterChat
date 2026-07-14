@@ -26,6 +26,8 @@ export interface IAutomationActionResult {
 		| 'loop-depth'
 		| 'per-card-budget'
 		| 'writeback-disabled'
+		| 'casepro-disabled' // CasePro integration off (`caseProMode().enabled` false) — writes no-op
+		| 'already-converted' // createMatterFromLead: lead already has a matter — never double-create
 		| 'disabled'
 		| 'condition'
 		| 'unsupported'

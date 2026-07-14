@@ -8,7 +8,10 @@ import { __forceLiveTransportForTests } from '../../../lib/boards/casepro/live';
 import { StubTransport } from '../../../lib/boards/casepro/transport';
 import { rootLoopState } from '../context';
 import type { AutomationContext } from '../context';
+import { convertToMatter } from '../../../lib/boards/leads/service';
 import { handleCaseproWriteback, __resetWritebackStateForTests } from './integration';
+
+const convertToMatterMock = convertToMatter as jest.Mock;
 
 jest.mock('@rocket.chat/models', () => ({
 	BoardsActivities: { log: jest.fn() },
@@ -20,6 +23,16 @@ jest.mock('../../../../app/settings/server', () => ({
 
 jest.mock('../../../../app/authorization/server/functions/hasPermission', () => ({
 	hasPermissionAsync: jest.fn(),
+}));
+
+// The merged createMatterFromLead delegates to the leads-service convert flow
+// (identical to the manual convert path); integration.ts also imports pushStage.
+jest.mock('../../../lib/boards/leads/service', () => ({
+	convertToMatter: jest.fn(),
+}));
+
+jest.mock('../../../lib/boards/leads/caseproSync', () => ({
+	pushStage: jest.fn(),
 }));
 
 const settingsGetMock = settings.get as jest.Mock;
@@ -58,7 +71,7 @@ describe('handleCaseproWriteback', () => {
 		stub = new StubTransport();
 		caseProClient.setTransport(stub);
 		// default: gates open + live transport (individual cases flip these off)
-		settingsGetMock.mockImplementation((id: string) => id === 'Boards_Automation_CasePro_Writeback_Enabled');
+		settingsGetMock.mockImplementation((id: string) => id === 'Boards_Automation_CasePro_Writeback_Enabled' || id === 'CasePro_Enabled');
 		hasPermissionMock.mockResolvedValue(true);
 		__forceLiveTransportForTests(true);
 	});
@@ -146,17 +159,17 @@ describe('handleCaseproWriteback', () => {
 			expect(row?.client_id).toBe('stub-party-client');
 		});
 
-		it('createMatterFromLead executes via the lead intake link', async () => {
+		it('createMatterFromLead delegates to the leads-service convert flow (same path as manual convert)', async () => {
+			convertToMatterMock.mockResolvedValue({ matterId: 'm-123', matterCard: { _id: 'card-m' }, mattersBoardId: 'MB1' });
 			const ctx = buildCtx({
-				subject: { boardId: 'B1', lead: { _id: 'lead1', caseproIntakeId: 'stub-intake-1' } } as unknown as AutomationContext['subject'],
+				subject: { boardId: 'B1', lead: { _id: 'lead1', refNo: 7, caseproIntakeId: 'stub-intake-1' } } as unknown as AutomationContext['subject'],
 			});
 			const action: IActionCaseproWriteback = { type: 'caseproWriteback', operation: 'createMatterFromLead' };
 			const result = await handleCaseproWriteback(action, ctx, 0);
 			expect(result.executed).toBe(true);
-			const createdId = (result.caseproResponse as { id: string }).id;
-			expect(createdId).toBeTruthy();
-			const intake = await stub.get('intake_questionnaires', 'stub-intake-1');
-			expect(intake?.matter_id).toBe(createdId);
+			// the service owns ALL conversion bookkeeping — the automation path calls it verbatim.
+			expect(convertToMatterMock).toHaveBeenCalledWith('user1', 'lead1');
+			expect(result.caseproRef).toEqual({ entity: 'matters', id: 'm-123', op: 'create' });
 		});
 	});
 

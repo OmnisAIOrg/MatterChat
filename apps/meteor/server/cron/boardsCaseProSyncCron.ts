@@ -15,8 +15,8 @@ import { SystemLogger } from '../lib/logger/system';
  *
  * Hard gates — the tick is a NO-OP unless ALL hold:
  *   1. `CasePro_Enabled` is on (the master integration switch), AND
- *   2. the transport is actually LIVE (`caseProTransportDiagnostics().effective ===
- *      'rest'`) — pulling stub rows on a schedule would fabricate fake leads, AND
+ *   2. the transport is actually LIVE (`caseProTransportDiagnostics().effective !==
+ *      'stub'`, i.e. native or mcp) — pulling stub rows on a schedule would fabricate fake leads, AND
  *   3. a leads board already exists — the cron NEVER creates boards; the first board
  *      comes from a human ensureBoard/manual sync (which supplies real user context).
  *
@@ -30,7 +30,7 @@ async function runCaseProLeadsPull(): Promise<void> {
 		return;
 	}
 	const diag = caseProTransportDiagnostics();
-	if (diag.effective !== 'rest') {
+	if (diag.effective === 'stub') {
 		SystemLogger.debug({ msg: 'boards.casepro.cron.leadsPull.skipped', reason: diag.reason ?? 'transport is stub' });
 		return;
 	}
@@ -59,7 +59,7 @@ async function runCaseProLeadsPull(): Promise<void> {
  */
 export async function boardsCaseProSyncCron(): Promise<void> {
 	const diag = caseProTransportDiagnostics();
-	if (diag.requested === 'rest' && diag.effective !== 'rest') {
+	if (diag.requested !== 'stub' && diag.effective === 'stub') {
 		SystemLogger.warn({
 			msg: 'CasePro LIVE transport requested but NOT active — boards will serve STUB data and the leads-pull cron will not run',
 			reason: diag.reason,
@@ -67,7 +67,7 @@ export async function boardsCaseProSyncCron(): Promise<void> {
 			keyConfigured: diag.keyConfigured,
 			orgConfigured: diag.orgConfigured,
 		});
-	} else if (diag.effective === 'rest') {
+	} else if (diag.effective !== 'stub') {
 		SystemLogger.info({ msg: 'CasePro live transport active', host: diag.host, orgConfigured: diag.orgConfigured });
 	}
 

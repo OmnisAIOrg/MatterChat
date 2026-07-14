@@ -1,8 +1,7 @@
 import type { IBoardList, ILead, ILeadQualification } from '@rocket.chat/core-typings';
 import { Boards, BoardsLists, BoardsCards, BoardsLeads, BoardsActivities } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
-import { caseProClient } from '../casepro';
+import { caseProClient, caseProMode } from '../casepro';
 import type { IntakeCaptureInput, IntakeLead, IntakePatchInput } from '../casepro';
 import { nextLeadRefNo } from './refNo';
 import { ensureLeadsBoard, INTAKE_STAGE_NAMES } from './service';
@@ -31,13 +30,14 @@ import { ensureLeadsBoard, INTAKE_STAGE_NAMES } from './service';
 // Enablement gate
 // ---------------------------------------------------------------------------
 
-/** `settings.get` throws if the setting is not yet registered (very early boot / tests). */
+/**
+ * THE one enablement gate, shared with the read side (design §4): this simply
+ * mirrors `caseProMode().enabled` so reads and writes can never disagree again
+ * (the old footgun: reads ignored `CasePro_Enabled` while writes gated on it).
+ * Disabled → every push below no-ops AND `caseProClient` reads serve the stub.
+ */
 export function isCaseProEnabled(): boolean {
-	try {
-		return settings.get<boolean>('CasePro_Enabled') === true;
-	} catch {
-		return false;
-	}
+	return caseProMode().enabled;
 }
 
 // ---------------------------------------------------------------------------

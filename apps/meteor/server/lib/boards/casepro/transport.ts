@@ -1,39 +1,39 @@
-import type { SettingValue } from '@rocket.chat/core-typings';
-import { serverFetch as fetch } from '@rocket.chat/server-fetch';
+import { serverFetch } from '@rocket.chat/server-fetch';
 
-import { settings } from '../../../../app/settings/server';
 import { SystemLogger } from '../../logger/system';
+import type { CaseProConfig } from './config';
+import { caseProConfigFingerprint, resolveCaseProConfig, safeGetSetting, warnOnce } from './config';
 
 /**
- * CasePro transport (M2 read client + live wire).
+ * CasePro read/write transport (M2 — CasePro CLIENT wire layer).
  *
  * The transport is the ONLY thing that touches the wire. Everything above it
  * (mapping.ts, client.ts) is pure and never knows whether the rows came from a
- * stub or the live CasePro MCP gateway. Two implementations ship:
+ * stub, the Crm-Backend native REST API, or the hosted MCP connector. Three
+ * implementations ship:
  *
- *  - {@link StubTransport}       — representative mock rows so a MatterSnapshot fully
- *    renders with zero network/config. This is the DEFAULT.
- *  - {@link McpGatewayTransport} — the LIVE transport: JSON-RPC `tools/call` against the
- *    deployed casepro-mcp-v2 gateway (verified: POST {base}/mcp/v2, X-MCP-API-Key auth).
- *    It refuses to exist without a key — no request ever leaves unauthenticated.
- *
- * Auth (route A — MCP gateway; `CasePro_Auth_Mode` = 'mcp-key'):
- *  - `X-MCP-API-Key`     — shared secret from env `CASEPRO_MCP_API_KEY` ONLY. Secrets
- *    are NEVER stored in Mongo settings; the key lives in the deploy env/sealed secret,
- *    and must also be provisioned on the CasePro side (its auth service validates the
- *    key via `${AUTH_SERVICE_URL}/api/mcp/keys/validate` — see casepro-mcp-v2/src/auth).
- *  - `X-Organization-ID` — org scope, env `CASEPRO_ORG_ID` or setting `CasePro_Org_ID`
- *    (carepro-mcp pattern: the header selects the org per request).
- *  - `X-Acting-User`     — advisory writer-identity seam: the MatterChat user id that
- *    triggered a write. The gateway's identity is the MCP key (service context); this
- *    header is forward-compat for per-user attribution and is safe to ignore upstream.
- *  - 'keygate' auth mode is a declared stub (route B) — selecting it falls back to the
- *    stub transport with a warning until the KeyGate handshake lands.
+ *  - {@link StubTransport}       — representative mock rows so a MatterSnapshot
+ *    fully renders with zero network/config. This is the DEFAULT and the demo mode.
+ *  - {@link NativeRestTransport} — adapts the generic entity verbs onto
+ *    Crm-Backend's NATIVE NestJS REST routes (`POST /api/v1/matters/list`,
+ *    `PATCH /api/v1/matters/update/:id`, …). Auth: `X-API-Key` +
+ *    `X-Organization-ID` headers (the backend's internal service path) or a
+ *    bearer key. Rows come back as flat DB-column-named objects — exactly what
+ *    mapping.ts / mapping-intake.ts expect.
+ *  - {@link McpTransport}        — JSON-RPC 2.0 `tools/call` against the hosted
+ *    casepro-mcp connector (tools query_entities / get_entity / list_schema /
+ *    create_entity / update_entity — the verbs the old RestTransport skeleton
+ *    POSTed as bare routes).
  *
  * IMPORTANT (carried from every CasePro discovery doc): `aggregate_data` GROUP BY
  * is broken server-side. The transport NEVER aggregates — it returns raw rows and
  * mapping.ts sums in JS. The transport's only job is "give me the rows for this
  * entity + filter".
+ *
+ * Reads DEGRADE GRACEFULLY: an entity with no live endpoint yields
+ * `{ data: [], total: 0 }` plus one warn per entity per process — a report never
+ * throws because one rollup source is missing. Writes DO throw (a swallowed
+ * write-through is silent data loss).
  */
 
 /** A raw CasePro row. Columns are dynamic (real schema), money arrives as strings. */
@@ -55,10 +55,11 @@ export type CaseProQueryResult = {
 };
 
 /**
- * Per-call acting context for writes. The live gateway authenticates as a service
- * (the MCP key); this carries the MatterChat user who triggered the write so the
- * transport can attach it as an advisory `X-Acting-User` header (writer-identity
- * seam — CasePro-side created_by/updated_by stamping is a follow-up on their end).
+ * Per-call acting context for writes (staging live-wire seam). The live wire
+ * authenticates as a service; this carries the MatterChat user who triggered the
+ * write so transports can attach it as an advisory `X-Acting-User` header
+ * (writer-identity seam — CasePro-side created_by/updated_by stamping is a
+ * follow-up on their end). Transports may ignore it.
  */
 export type CaseProCallContext = { actingUserId?: string };
 
@@ -82,16 +83,11 @@ export interface ICaseProTransport {
 	update(entity: string, id: string, patch: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow>;
 	/**
 	 * Narrow custom-path POST for CasePro CRM endpoints that are plain REST
-	 * controllers, NOT MCP entity tools (first consumer: `matterchat-messages/ingest`,
-	 * the comms-log digest filing — CasePro PR #1234 exposes it as a REST controller,
-	 * so it does NOT go through the JSON-RPC `tools/call` transport). `path` may be
-	 * relative to the configured base host, or an absolute https URL when the CRM
-	 * backend lives on a different host than the MCP gateway.
-	 *
-	 * RECONCILED onto live-wire: the live implementation ({@link McpGatewayTransport})
-	 * issues a direct authenticated POST reusing the SAME auth headers the entity
-	 * verbs build (X-MCP-API-Key + X-Organization-ID) and the SAME egress posture
-	 * (https-only, refuse-without-key). It never rides `tools/call`.
+	 * controllers, NOT entity verbs (first consumer: `matterchat-messages/ingest`,
+	 * the comms-log digest filing). `path` may be relative to the configured base,
+	 * or an absolute https URL when the CRM backend lives on a different host.
+	 * Reuses the SAME auth headers the entity verbs build and the SAME egress
+	 * posture (host-pinned SSRF allow-list, no redirect-follow via serverFetch).
 	 */
 	ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown>;
 }
@@ -340,6 +336,14 @@ const STUB_INTAKE_QUESTIONNAIRES: CaseProRow[] = [
 	},
 ];
 
+/** Intake form templates referenced by the seeded intakes (`template_id`). CasePro
+ * requires one on every intake create, so the client's default-template fallback
+ * must find rows in stub mode too. */
+const STUB_INTAKE_FORM_TEMPLATES: CaseProRow[] = [
+	{ id: 'stub-intaketmpl-pi', name: 'Standard PI Intake', description: 'Stub personal-injury intake form' },
+	{ id: 'stub-intaketmpl-mva', name: 'MVA Intake', description: 'Stub motor-vehicle-accident intake form' },
+];
+
 /** entity -> seed rows. Anything not listed returns []. */
 const STUB_TABLES: Record<string, CaseProRow[]> = {
 	matters: STUB_MATTERS,
@@ -359,6 +363,7 @@ const STUB_TABLES: Record<string, CaseProRow[]> = {
 	litigations: STUB_LITIGATIONS,
 	intake_stages: STUB_INTAKE_STAGES,
 	intake_questionnaires: STUB_INTAKE_QUESTIONNAIRES,
+	intake_form_templates: STUB_INTAKE_FORM_TEMPLATES,
 };
 
 /** Narrow an unknown to a non-empty string, else undefined. */
@@ -452,298 +457,1109 @@ export class StubTransport implements ICaseProTransport {
 }
 
 // ---------------------------------------------------------------------------
-// Live transport — JSON-RPC `tools/call` against the casepro-mcp-v2 gateway.
+// Shared wire helpers (native + MCP).
 // ---------------------------------------------------------------------------
 
-/**
- * Derive the JSON-RPC endpoint + pinned host from the configured base URL.
- * Egress policy (enforced here, once): https ONLY, no credentials in the URL,
- * and the returned `host` is the SSRF allow-list — requests may reach that host
- * and nothing else. A base URL already ending in `/mcp` or `/mcp/v2` is used
- * as-is; a bare origin gets `/mcp/v2` appended (both paths verified live on
- * casepro-mcp-v2.stg-omnisai.io — each answers 401 without a key).
- */
-export function deriveMcpEndpoint(baseUrl: string): { endpoint: string; host: string } {
-	const url = new URL(baseUrl); // throws on garbage — caller treats that as "not configured"
-	if (url.protocol !== 'https:') {
-		throw new Error(`CasePro transport: base URL must be https (got ${url.protocol}//)`);
+/** Wire timeout for regular calls; the status probe overrides with 2.5s. */
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+/** HTTP error carrying the status + a body snippet so callers can branch on 404. */
+export class CaseProHttpError extends Error {
+	constructor(
+		public readonly status: number,
+		message: string,
+		public readonly bodySnippet: string,
+	) {
+		super(message);
+		this.name = 'CaseProHttpError';
 	}
-	if (url.username || url.password) {
-		throw new Error('CasePro transport: base URL must not embed credentials');
-	}
-	const path = url.pathname.replace(/\/+$/, '');
-	const endpointPath = /\/mcp(\/v2)?$/.test(path) ? path : `${path}/mcp/v2`;
-	return { endpoint: `${url.origin}${endpointPath}`, host: url.hostname };
 }
 
-type McpFilter = { field: string; operator: '=' | 'in'; value: unknown };
+/** First ~300 chars of a response body, single-line, for error surfacing. */
+function snippet(text: string): string {
+	return text.replace(/\s+/g, ' ').trim().slice(0, 300);
+}
 
-/** Map the transport's equality/`$in` filter map onto the gateway's `filters` array. */
-export function buildMcpFilters(filter?: Record<string, unknown>): McpFilter[] {
-	if (!filter) {
+function joinUrl(base: string, path: string): string {
+	return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+/**
+ * SSRF allow-list for the configured base URL: exactly its host (and host:port).
+ * Private/localhost hosts are permitted ONLY because the admin explicitly
+ * configured them (that IS the local Crm-Backend use case); every redirect hop is
+ * re-validated against the same list by `serverFetch`, so a redirect to any other
+ * private host is refused. URLs are only ever built from the configured base —
+ * no caller-supplied URL reaches the wire.
+ */
+function ssrfAllowListFor(baseUrl: string): string[] {
+	try {
+		const url = new URL(baseUrl);
+		return url.port ? [url.hostname, `${url.hostname}:${url.port}`] : [url.hostname];
+	} catch {
 		return [];
 	}
-	return Object.entries(filter).map(([field, cond]) => {
-		if (cond !== null && typeof cond === 'object' && '$in' in (cond as Record<string, unknown>)) {
-			return { field, operator: 'in' as const, value: (cond as { $in: unknown[] }).$in };
-		}
-		return { field, operator: '=' as const, value: cond };
-	});
 }
 
-/** The gateway's tool payload envelope (parsed from the MCP content block). */
-type McpToolPayload = {
-	success?: boolean;
-	error?: unknown;
-	records?: unknown;
-	record?: unknown;
-	created?: unknown;
-	updated?: unknown;
-	found?: boolean;
-} & Record<string, unknown>;
+/**
+ * Loopback normalization for the wire: `serverFetch`'s SSRF gate rejects
+ * single-label hostnames (no dot ⇒ fails its domain pattern) BEFORE it ever
+ * consults the allow-list, so a configured `http://localhost:…` base — the
+ * standard local Crm-Backend rig — can never pass validation even though we
+ * allow-list exactly the configured host (error-ssrf-validation-failed on every
+ * call). IP literals take the IP path through the gate and match the allow-list
+ * fine, so pin a `localhost` hostname to `127.0.0.1` for URL building and the
+ * allow-list. Config/status keep displaying whatever the admin typed.
+ */
+function normalizeLoopbackBase(baseUrl: string): string {
+	try {
+		const url = new URL(baseUrl);
+		if (url.hostname.toLowerCase() === 'localhost') {
+			url.hostname = '127.0.0.1';
+			return url.toString().replace(/\/+$/, '');
+		}
+	} catch {
+		// malformed base URLs fall through to the transport's own error paths
+	}
+	return baseUrl;
+}
 
-export type McpGatewayTransportConfig = {
-	/** Gateway base URL (https). `/mcp/v2` is appended unless the path already targets `/mcp[/v2]`. */
-	baseUrl: string;
-	/** The X-MCP-API-Key shared secret — REQUIRED; construction refuses without it. */
-	apiKey: string;
-	/** The X-Organization-ID scope sent on every call (env CASEPRO_ORG_ID / setting CasePro_Org_ID). */
-	orgId?: string;
-	/** Injectable fetch (tests). Defaults to @rocket.chat/server-fetch. */
-	fetchFn?: typeof fetch;
+type WireRequest = {
+	method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+	url: string;
+	params?: Record<string, string>;
+	body?: Record<string, unknown>;
+	headers: Record<string, string>;
+	timeoutMs: number;
+	allowList: string[];
 };
 
+/** One guarded HTTP call: allow-listed host, timeout, JSON errors with status + body snippet. */
+async function wireFetch(req: WireRequest): Promise<{ status: number; json: unknown }> {
+	let res;
+	try {
+		res = await serverFetch(req.url, {
+			method: req.method,
+			headers: { 'Content-Type': 'application/json', ...req.headers },
+			...(req.params ? { params: req.params } : {}),
+			...(req.body !== undefined ? { body: req.body } : {}),
+			timeout: req.timeoutMs,
+			ignoreSsrfValidation: false,
+			allowList: req.allowList,
+		});
+	} catch (err) {
+		throw new CaseProHttpError(0, `CasePro request ${req.method} ${req.url} failed: ${err instanceof Error ? err.message : String(err)}`, '');
+	}
+	const text = await res.text().catch(() => '');
+	if (!res.ok) {
+		throw new CaseProHttpError(res.status, `CasePro request ${req.method} ${req.url} failed: HTTP ${res.status} — ${snippet(text) || '(empty body)'}`, snippet(text));
+	}
+	if (!text) {
+		return { status: res.status, json: undefined };
+	}
+	try {
+		return { status: res.status, json: JSON.parse(text) };
+	} catch {
+		// Non-JSON 2xx (e.g. SSE from an MCP server) — hand the raw text back.
+		return { status: res.status, json: text };
+	}
+}
+
+function isObj(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Unwrap `{ data: row }` / bare-row response shapes to the row. */
+function unwrapRow(json: unknown): CaseProRow | null {
+	if (Array.isArray(json)) {
+		return isObj(json[0]) ? (json[0] as CaseProRow) : null;
+	}
+	if (!isObj(json)) {
+		return null;
+	}
+	if (isObj(json.data)) {
+		return json.data as CaseProRow;
+	}
+	return json as CaseProRow;
+}
+
+// ---------------------------------------------------------------------------
+// Native REST transport — Crm-Backend's real NestJS routes (global prefix /api/v1).
+// ---------------------------------------------------------------------------
+
+/** Crm-Backend caps list page size at 100. */
+const NATIVE_PAGE_LIMIT = 100;
+/** Hard cap: never pull more than 10 pages (1000 rows) for one query. */
+const NATIVE_MAX_PAGES = 10;
+/** Lookup tables (stages/case types/…) are org-stable — micro-cached per instance. */
+const LOOKUP_TTL_MS = 60_000;
+
+type NativePlan = {
+	rows: CaseProRow[];
+	/** Server-reported total when the WHOLE filter was pushed down; else undefined. */
+	serverTotal?: number;
+	/** Filter keys already applied natively (excluded from the residual JS filter). */
+	pushed: string[];
+	/** True when the page cap truncated the fetch (totals may undercount). */
+	truncated: boolean;
+};
+
+const str2 = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
+
+/** filter value → list of ids (plain string or `{ $in: [...] }`). */
+function filterIds(value: unknown): string[] {
+	if (typeof value === 'string' && value) {
+		return [value];
+	}
+	if (isObj(value) && Array.isArray((value as { $in?: unknown[] }).$in)) {
+		return ((value as { $in: unknown[] }).$in).filter((v): v is string => typeof v === 'string' && v !== '');
+	}
+	return [];
+}
+
 /**
- * Live CasePro transport speaking the deployed casepro-mcp-v2 gateway protocol:
- * JSON-RPC 2.0 `tools/call` over POST, five meta-verbs (query_entities / get_entity /
- * list_schema / create_entity / update_entity). Every request carries the auth headers
- * (see the module docblock) and is pinned to the configured host — SSRF validation is
- * ON with a single-host allow-list, and redirects are never followed (a redirect would
- * re-send the key elsewhere).
- *
- * Pagination note: the gateway's `query_entities` supports `limit` but NOT `offset`,
- * and reports `count` = returned rows (no true total). `query()` emulates offset by
- * over-fetching (`offset + limit`) and slicing, and signals "maybe more" through the
- * returned `total` so the client's accumulate loop pages correctly.
+ * Crm-Backend hydrates relations alongside the flat FK columns (`stage`,
+ * `case_type_data`, `sub_stage_data`, `client`). mapping.ts reads the flat
+ * DB-column names — backfill them from the nested objects when absent and
+ * normalize `archived` (null → false) so the boards' `archived: false` filter
+ * doesn't drop legacy rows.
  */
-export class McpGatewayTransport implements ICaseProTransport {
-	private readonly endpoint: string;
+function flattenMatterRow(row: CaseProRow): CaseProRow {
+	const out: CaseProRow = { ...row };
+	if (!str2(out.stage_id) && isObj(out.stage)) {
+		out.stage_id = (out.stage as CaseProRow).id;
+	}
+	if (!str2(out.case_type) && isObj(out.case_type_data)) {
+		out.case_type = (out.case_type_data as CaseProRow).id;
+	}
+	if (!str2(out.sub_stage) && isObj(out.sub_stage_data)) {
+		out.sub_stage = (out.sub_stage_data as CaseProRow).id;
+	}
+	if (!str2(out.client_id) && isObj(out.client)) {
+		out.client_id = (out.client as CaseProRow).id;
+	}
+	if (out.archived === null || out.archived === undefined) {
+		out.archived = false;
+	}
+	return out;
+}
 
-	private readonly host: string;
+/**
+ * The REAL `intake_stages` name column is `stage_name` (matter_stages uses
+ * `matter_stage_name`, matter_sub_stages `sub_stage_name` — those match the
+ * mappers, this one doesn't). mapping-intake.ts resolves board columns via
+ * `intake_stage_name`, so alias it onto every intake_stages row.
+ */
+function normalizeIntakeStageRow(row: CaseProRow): CaseProRow {
+	if (str2(row.intake_stage_name) || !str2(row.stage_name)) {
+		return row;
+	}
+	return { ...row, intake_stage_name: row.stage_name };
+}
 
-	private readonly apiKey: string;
+/** Same backfill for intake rows (party / intake_stage / case_type relations may be hydrated). */
+function flattenIntakeRow(row: CaseProRow): CaseProRow {
+	const out: CaseProRow = { ...row };
+	if (!str2(out.party_id) && isObj(out.party)) {
+		out.party_id = (out.party as CaseProRow).id;
+	}
+	if (!str2(out.intake_stage_id) && isObj(out.intake_stage)) {
+		out.intake_stage_id = (out.intake_stage as CaseProRow).id;
+	}
+	if (!str2(out.case_type_id) && isObj(out.case_type)) {
+		out.case_type_id = (out.case_type as CaseProRow).id;
+	}
+	return out;
+}
 
-	private readonly orgId?: string;
-
-	private readonly fetchFn: typeof fetch;
-
-	private seq = 0;
-
-	constructor(config: McpGatewayTransportConfig) {
-		if (!config.apiKey) {
-			// hard refusal — this transport NEVER sends an unauthenticated request.
-			throw new Error('CasePro transport: refusing to start without CASEPRO_MCP_API_KEY');
+/**
+ * Crm-Backend's `intake_questionnaires.source` column is validated as an enum
+ * (AutoDoc | CasePro | MedChron) even though the board captures free-text lead
+ * sources ('Web Form', 'Referral', …). A non-enum source would 400 the whole
+ * write — preserve it under `form_data.lead_source` instead and drop the column.
+ */
+function sanitizeIntakeWrite(data: CaseProRow): CaseProRow {
+	const out: CaseProRow = { ...data };
+	const source = str2(out.source);
+	if (source && !['AutoDoc', 'CasePro', 'MedChron'].includes(source)) {
+		delete out.source;
+		const formData = isObj(out.form_data) ? { ...(out.form_data as Record<string, unknown>) } : {};
+		if (formData.lead_source === undefined) {
+			formData.lead_source = source;
 		}
-		const { endpoint, host } = deriveMcpEndpoint(config.baseUrl);
-		this.endpoint = endpoint;
-		this.host = host;
-		this.apiKey = config.apiKey;
-		this.orgId = config.orgId;
-		this.fetchFn = config.fetchFn ?? fetch;
+		out.form_data = formData;
+	}
+	return out;
+}
+
+/**
+ * Live transport against Crm-Backend's native REST API.
+ *
+ * Entity routing (all under the backend's `/api/v1` global prefix):
+ *
+ *   matters               query  POST matters/list                     (status pushed; archived/stage_id/case_type filtered in JS)
+ *                         get    POST matters/find-one/:id
+ *                         create POST matters/create                  (organization_id ALWAYS injected — CasePro doesn't enforce org on create)
+ *                         update PATCH matters/update/:id
+ *   matter_stages         query  POST matter-stages/list → EMPTY under service auth (backend reads req.organization, which
+ *                                service-key auth leaves null) → fallback: derive stage ids from recent matters, hydrate each
+ *                                via GET matter-stages/find-one/:id (org-agnostic)
+ *   matter_sub_stages     query  POST matter-sub-stages/list → 500 under service auth → fallback: fan out
+ *                                GET matter-sub-stages/by-matter-stage/:stageId over the resolved stages
+ *   intake_stages         query  GET intake-stages/list-all?orgId=…    (plain array; org via query param works under service auth)
+ *   case_types            query  POST case-types/list                  get POST case-types/find-one/:id
+ *   settlement_types      query  POST settlement-types/list
+ *   parties               query  POST parties/list                     get POST parties/find-one/:id   create POST parties/create
+ *   intake_questionnaires query  POST intake-questionnaires/list       (matterId / intakeStageIds / caseTypeIds pushed)
+ *                         get    POST intake-questionnaires/find-one/:id
+ *                         create POST intake-questionnaires/create     update PATCH intake-questionnaires/update/:id
+ *   medical_providers     query  POST medical-providers/matter/:matterId/list (requires filter.matter_id)
+ *   bills                 query  POST medical-providers/providers/:providerId/bills/list per provider id (requires filter.medical_provider_id)
+ *   negotiations          query  POST negotiations/list                (matterId pushed; NO update endpoint upstream)
+ *   resolutions           query  POST resolutions/list                 update PATCH resolutions/update/:id
+ *   liens                 query  POST liens/list                       update PATCH liens/update/:id
+ *   reductions            query  GET liens/details/:lienId → `.reductions` per lien (requires reducible_type 'Lien' + reducible_id)
+ *   expenses / litigations / insurances — POST {entity}/list (matterId pushed), POST {entity}/find-one/:id, create/update
+ *
+ * Anything else → `{ data: [], total: 0 }` + ONE warn per entity per process.
+ */
+export class NativeRestTransport implements ICaseProTransport {
+	private readonly apiBase: string;
+
+	private readonly timeoutMs: number;
+
+	private readonly allowList: string[];
+
+	private readonly lookupCache = new Map<string, { at: number; rows: CaseProRow[] }>();
+
+	constructor(
+		private readonly cfg: CaseProConfig,
+		opts: { timeoutMs?: number } = {},
+	) {
+		// The backend serves everything under a global /api/v1 prefix; accept base
+		// URLs configured with or without it. `localhost` is pinned to 127.0.0.1
+		// so the SSRF gate's allow-list can actually match (see normalizeLoopbackBase).
+		const wireBase = normalizeLoopbackBase(cfg.baseUrl);
+		this.apiBase = /\/api\/v\d+\/?$/.test(wireBase) ? wireBase.replace(/\/+$/, '') : joinUrl(wireBase, 'api/v1');
+		this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+		this.allowList = ssrfAllowListFor(wireBase);
 	}
 
-	/** One JSON-RPC `tools/call` round-trip; returns the parsed tool payload. */
-	private async callTool(tool: string, args: Record<string, unknown>, ctx?: CaseProCallContext): Promise<McpToolPayload> {
-		this.seq += 1;
-		const res = await this.fetchFn(this.endpoint, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'X-MCP-API-Key': this.apiKey,
-				...(this.orgId ? { 'X-Organization-ID': this.orgId } : {}),
-				...(ctx?.actingUserId ? { 'X-Acting-User': ctx.actingUserId } : {}),
-			},
-			body: JSON.stringify({
-				jsonrpc: '2.0',
-				id: this.seq,
-				method: 'tools/call',
-				params: { name: tool, arguments: args },
-			}),
-			// strict egress: SSRF checks ON, allow-list = the configured host only, and
-			// 3xx responses are returned as-is (never re-send the key to a Location).
-			ignoreSsrfValidation: false,
-			allowList: this.host,
-			followRedirects: false,
+	/** internal-key → X-API-Key + X-Organization-ID (Crm-Backend's service path); bearer → Authorization. */
+	private headers(): Record<string, string> {
+		if (this.cfg.authMode === 'bearer') {
+			return { Authorization: `Bearer ${this.cfg.apiKey}` };
+		}
+		return { 'X-API-Key': this.cfg.apiKey, 'X-Organization-ID': this.cfg.orgId };
+	}
+
+	private async request(
+		method: WireRequest['method'],
+		path: string,
+		opts: { params?: Record<string, string>; body?: Record<string, unknown>; headers?: Record<string, string> } = {},
+	): Promise<{ status: number; json: unknown }> {
+		return wireFetch({
+			method,
+			url: joinUrl(this.apiBase, path),
+			params: opts.params,
+			body: opts.body,
+			headers: { ...this.headers(), ...(opts.headers ?? {}) },
+			timeoutMs: this.timeoutMs,
+			allowList: this.allowList,
 		});
-		if (res.status >= 300 && res.status < 400) {
-			throw new Error(`CasePro ${tool}: gateway redirected (${res.status}) — refusing to follow`);
+	}
+
+	/** request() but 404 → null instead of throwing (get-by-id semantics). */
+	private async requestOr404(
+		method: WireRequest['method'],
+		path: string,
+		opts: { params?: Record<string, string>; body?: Record<string, unknown> } = {},
+	): Promise<unknown | null> {
+		try {
+			return (await this.request(method, path, opts)).json;
+		} catch (err) {
+			if (err instanceof CaseProHttpError && err.status === 404) {
+				return null;
+			}
+			throw err;
 		}
-		if (!res.ok) {
-			throw new Error(`CasePro ${tool} failed: HTTP ${res.status}`);
+	}
+
+	/**
+	 * Page a native `POST {path}` list endpoint (envelope `{ data, total, currentPage,
+	 * totalPages, limit }`; some list-all endpoints return a bare array or `{ data }`).
+	 * Fetches until `maxRows` rows, the server total, or the page cap is reached.
+	 */
+	private async fetchPaged(
+		path: string,
+		params: Record<string, string>,
+		maxRows: number,
+		method: 'GET' | 'POST' = 'POST',
+	): Promise<{ rows: CaseProRow[]; total: number; truncated: boolean }> {
+		const rows: CaseProRow[] = [];
+		let total = 0;
+		for (let page = 1; page <= NATIVE_MAX_PAGES; page++) {
+			const { json } = await this.request(method, path, {
+				params: { ...params, page: String(page), limit: String(NATIVE_PAGE_LIMIT), orgId: this.cfg.orgId },
+				// list routes are POST with an optional body; send an empty object.
+				...(method === 'POST' ? { body: {} } : {}),
+			});
+			if (Array.isArray(json)) {
+				// bare-array (list-all style) responses are never paginated.
+				const all = json.filter(isObj) as CaseProRow[];
+				return { rows: all, total: all.length, truncated: false };
+			}
+			const envelope = isObj(json) ? json : {};
+			const data = Array.isArray(envelope.data) ? (envelope.data.filter(isObj) as CaseProRow[]) : [];
+			total = typeof envelope.total === 'number' ? envelope.total : rows.length + data.length;
+			rows.push(...data);
+			if (data.length < NATIVE_PAGE_LIMIT || rows.length >= total || rows.length >= maxRows) {
+				break;
+			}
 		}
-		const rpc = (await res.json()) as {
-			error?: { code?: number; message?: string };
-			result?: { isError?: boolean; content?: { type?: string; text?: string }[] };
-		};
-		if (rpc.error) {
-			throw new Error(`CasePro ${tool} failed: ${rpc.error.message ?? `JSON-RPC ${rpc.error.code ?? 'error'}`}`);
-		}
-		const text = rpc.result?.content?.[0]?.text;
-		if (typeof text !== 'string') {
-			throw new Error(`CasePro ${tool} failed: gateway returned no content block`);
+		return { rows, total: Math.max(total, rows.length), truncated: rows.length < total && rows.length >= NATIVE_PAGE_LIMIT * NATIVE_MAX_PAGES };
+	}
+
+	private cachedLookup(entity: string): CaseProRow[] | undefined {
+		const hit = this.lookupCache.get(entity);
+		return hit && Date.now() - hit.at < LOOKUP_TTL_MS ? hit.rows : undefined;
+	}
+
+	private setLookup(entity: string, rows: CaseProRow[]): CaseProRow[] {
+		this.lookupCache.set(entity, { at: Date.now(), rows });
+		return rows;
+	}
+
+	/**
+	 * matter_stages: the native list route resolves the org from `req.organization`,
+	 * which BOTH service-auth paths leave null → empty result. Try it anyway (fixed
+	 * backends / session-auth futures), then fall back to deriving the stage ids
+	 * from the most recent matters page and hydrating each via the org-agnostic
+	 * GET matter-stages/find-one/:id (real names + order_index).
+	 */
+	private async fetchMatterStages(): Promise<CaseProRow[]> {
+		const cached = this.cachedLookup('matter_stages');
+		if (cached) {
+			return cached;
 		}
 		try {
-			return JSON.parse(text) as McpToolPayload;
+			const { rows } = await this.fetchPaged('matter-stages/list', { sortBy: 'order_index', sortOrder: 'ASC' }, NATIVE_PAGE_LIMIT);
+			if (rows.length) {
+				return this.setLookup('matter_stages', rows);
+			}
+		} catch (err) {
+			warnOnce('native-matter-stages-list', 'CasePro native: matter-stages/list failed — deriving stages from recent matters', { err });
+		}
+		warnOnce(
+			'native-matter-stages-derived',
+			'CasePro native: matter-stages/list returned nothing under service auth — deriving the stage list from the most recent matters page (stages with no recent matters will be missing)',
+		);
+		const { rows: matters } = await this.fetchPaged('matters/list', {}, NATIVE_PAGE_LIMIT);
+		const byId = new Map<string, CaseProRow>();
+		for (const m of matters.map(flattenMatterRow)) {
+			const id = str2(m.stage_id);
+			if (id && !byId.has(id)) {
+				const nested = isObj(m.stage) ? (m.stage as CaseProRow) : {};
+				byId.set(id, { id, matter_stage_name: nested.matter_stage_name, order_index: byId.size + 1 });
+			}
+		}
+		const hydrated = await Promise.all(
+			[...byId.entries()].map(async ([id, fallback]) => {
+				try {
+					const row = unwrapRow(await this.requestOr404('GET', `matter-stages/find-one/${encodeURIComponent(id)}`));
+					return row && str2(row.id) ? row : fallback;
+				} catch {
+					return fallback;
+				}
+			}),
+		);
+		return this.setLookup('matter_stages', hydrated);
+	}
+
+	/** matter_sub_stages: native list 500s under service auth → fan out by-matter-stage/:stageId. */
+	private async fetchMatterSubStages(): Promise<CaseProRow[]> {
+		const cached = this.cachedLookup('matter_sub_stages');
+		if (cached) {
+			return cached;
+		}
+		try {
+			const { rows } = await this.fetchPaged('matter-sub-stages/list', { sortBy: 'order_index', sortOrder: 'ASC' }, NATIVE_PAGE_LIMIT);
+			if (rows.length) {
+				return this.setLookup('matter_sub_stages', rows);
+			}
 		} catch {
-			throw new Error(`CasePro ${tool} failed: gateway content is not JSON`);
+			// expected under service auth (route requires req.organization) — fan out below.
+		}
+		const stages = await this.fetchMatterStages();
+		const perStage = await Promise.all(
+			stages.map(async (stage) => {
+				const id = str2(stage.id);
+				if (!id) {
+					return [];
+				}
+				try {
+					const json = await this.requestOr404('GET', `matter-sub-stages/by-matter-stage/${encodeURIComponent(id)}`);
+					const arr = Array.isArray(json) ? json : isObj(json) && Array.isArray(json.data) ? json.data : [];
+					return (arr.filter(isObj) as CaseProRow[]).map((row) => ({ matter_stage_id: id, ...row }));
+				} catch (err) {
+					warnOnce(`native-sub-stages-${id}`, 'CasePro native: matter-sub-stages/by-matter-stage failed for a stage', { stageId: id, err });
+					return [];
+				}
+			}),
+		);
+		return this.setLookup('matter_sub_stages', perStage.flat());
+	}
+
+	/** Build the raw row set for one query — the shared epilogue in query() filters/pages it. */
+	private async plan(entity: string, q: CaseProQuery): Promise<NativePlan | undefined> {
+		const filter = q.filter ?? {};
+		const wanted = (q.offset ?? 0) + (q.limit ?? NATIVE_PAGE_LIMIT * NATIVE_MAX_PAGES);
+		const maxRows = NATIVE_PAGE_LIMIT * NATIVE_MAX_PAGES;
+
+		switch (entity) {
+			case 'matters': {
+				const params: Record<string, string> = {};
+				const pushed: string[] = [];
+				const status = str2(filter.status);
+				if (status) {
+					params.status = status;
+					pushed.push('status');
+				}
+				const residualKeys = Object.keys(filter).filter((k) => !pushed.includes(k));
+				const { rows, total, truncated } = await this.fetchPaged('matters/list', params, residualKeys.length ? maxRows : Math.min(wanted, maxRows));
+				return {
+					rows: rows.map(flattenMatterRow),
+					...(residualKeys.length ? {} : { serverTotal: total }),
+					pushed,
+					truncated,
+				};
+			}
+			case 'matter_stages':
+				return { rows: await this.fetchMatterStages(), pushed: [], truncated: false };
+			case 'matter_sub_stages':
+				return { rows: await this.fetchMatterSubStages(), pushed: [], truncated: false };
+			case 'intake_stages': {
+				const cached = this.cachedLookup('intake_stages');
+				if (cached) {
+					return { rows: cached, pushed: [], truncated: false };
+				}
+				// list-all takes the org as a query param, so it works under service auth
+				// (the paginated POST list route reads req.organization and 500s).
+				const { rows } = await this.fetchPaged('intake-stages/list-all', {}, maxRows, 'GET');
+				return { rows: this.setLookup('intake_stages', rows.map(normalizeIntakeStageRow)), pushed: [], truncated: false };
+			}
+			case 'intake_form_templates': {
+				// Needed for intake create: CasePro REQUIRES template_id (law-firm orgs
+				// have no server-side fallback). GET /intake-form-templates scopes to the
+				// auth org and returns the standard { data, total } envelope.
+				const cached = this.cachedLookup('intake_form_templates');
+				if (cached) {
+					return { rows: cached, pushed: [], truncated: false };
+				}
+				const { rows } = await this.fetchPaged('intake-form-templates', {}, maxRows, 'GET');
+				return { rows: this.setLookup('intake_form_templates', rows), pushed: [], truncated: false };
+			}
+			case 'case_types':
+			case 'settlement_types': {
+				const cached = this.cachedLookup(entity);
+				if (cached) {
+					return { rows: cached, pushed: [], truncated: false };
+				}
+				const { rows } = await this.fetchPaged(`${entity.replace('_', '-')}/list`, {}, maxRows);
+				return { rows: this.setLookup(entity, rows), pushed: [], truncated: false };
+			}
+			case 'parties': {
+				const residualKeys = Object.keys(filter);
+				const { rows, total, truncated } = await this.fetchPaged('parties/list', {}, residualKeys.length ? maxRows : Math.min(wanted, maxRows));
+				return { rows, ...(residualKeys.length ? {} : { serverTotal: total }), pushed: [], truncated };
+			}
+			case 'intake_questionnaires': {
+				const params: Record<string, string> = {};
+				const pushed: string[] = [];
+				const matterId = str2(filter.matter_id);
+				if (matterId) {
+					params.matterId = matterId;
+					pushed.push('matter_id');
+				}
+				const stageIds = filterIds(filter.intake_stage_id);
+				if (stageIds.length) {
+					params.intakeStageIds = stageIds.join(',');
+					pushed.push('intake_stage_id');
+				}
+				const caseTypeIds = filterIds(filter.case_type_id);
+				if (caseTypeIds.length) {
+					params.caseTypeIds = caseTypeIds.join(',');
+					pushed.push('case_type_id');
+				}
+				const residualKeys = Object.keys(filter).filter((k) => !pushed.includes(k));
+				const { rows, total, truncated } = await this.fetchPaged('intake-questionnaires/list', params, residualKeys.length ? maxRows : Math.min(wanted, maxRows));
+				return { rows: rows.map(flattenIntakeRow), ...(residualKeys.length ? {} : { serverTotal: total }), pushed, truncated };
+			}
+			case 'medical_providers': {
+				const matterId = str2(filter.matter_id);
+				if (!matterId) {
+					warnOnce('native-medical-providers-no-matter', 'CasePro native: medical_providers can only be listed per matter (filter.matter_id) — returning empty');
+					return { rows: [], serverTotal: 0, pushed: Object.keys(filter), truncated: false };
+				}
+				const { rows, total, truncated } = await this.fetchPaged(`medical-providers/matter/${encodeURIComponent(matterId)}/list`, {}, maxRows);
+				const stamped = rows.map((row) => ({ matter_id: matterId, ...row }));
+				const residualKeys = Object.keys(filter).filter((k) => k !== 'matter_id');
+				return { rows: stamped, ...(residualKeys.length ? {} : { serverTotal: total }), pushed: ['matter_id'], truncated };
+			}
+			case 'bills': {
+				const providerIds = filterIds(filter.medical_provider_id);
+				if (!providerIds.length) {
+					warnOnce('native-bills-no-provider', 'CasePro native: bills can only be listed per medical provider (filter.medical_provider_id) — returning empty');
+					return { rows: [], serverTotal: 0, pushed: Object.keys(filter), truncated: false };
+				}
+				const perProvider = await Promise.all(
+					providerIds.map(async (pid) => {
+						const { rows } = await this.fetchPaged(`medical-providers/providers/${encodeURIComponent(pid)}/bills/list`, {}, maxRows);
+						return rows.map((row) => ({ medical_provider_id: pid, ...row }));
+					}),
+				);
+				return { rows: perProvider.flat(), pushed: ['medical_provider_id'], truncated: false };
+			}
+			case 'reductions': {
+				const type = str2(filter.reducible_type);
+				const ids = filterIds(filter.reducible_id);
+				if (type !== 'Lien' || !ids.length) {
+					warnOnce(
+						'native-reductions-unsupported',
+						"CasePro native: reductions are only reachable per lien (filter { reducible_type: 'Lien', reducible_id }) — returning empty",
+					);
+					return { rows: [], serverTotal: 0, pushed: Object.keys(filter), truncated: false };
+				}
+				const perLien = await Promise.all(
+					ids.map(async (lienId) => {
+						const json = await this.requestOr404('GET', `liens/details/${encodeURIComponent(lienId)}`);
+						const reductions = isObj(json) && Array.isArray(json.reductions) ? (json.reductions.filter(isObj) as CaseProRow[]) : [];
+						return reductions.map((row) => ({ reducible_type: 'Lien', reducible_id: lienId, ...row }));
+					}),
+				);
+				return { rows: perLien.flat(), pushed: ['reducible_type', 'reducible_id'], truncated: false };
+			}
+			case 'negotiations':
+			case 'resolutions':
+			case 'liens':
+			case 'expenses':
+			case 'litigations':
+			case 'insurances': {
+				const params: Record<string, string> = {};
+				const pushed: string[] = [];
+				const matterId = str2(filter.matter_id);
+				if (matterId) {
+					params.matterId = matterId;
+					pushed.push('matter_id');
+				}
+				const residualKeys = Object.keys(filter).filter((k) => !pushed.includes(k));
+				const { rows, total, truncated } = await this.fetchPaged(`${entity}/list`, params, residualKeys.length ? maxRows : Math.min(wanted, maxRows));
+				return { rows, ...(residualKeys.length ? {} : { serverTotal: total }), pushed, truncated };
+			}
+			default:
+				return undefined;
 		}
 	}
 
-	/** Throw the payload's error unless it reports success. */
-	private assertOk(payload: McpToolPayload, label: string): void {
-		if (payload.success === false || payload.error !== undefined) {
-			const detail = typeof payload.error === 'string' ? payload.error : JSON.stringify(payload.error ?? 'unknown error');
-			throw new Error(`CasePro ${label} failed: ${detail.slice(0, 500)}`);
+	async query(entity: string, q: CaseProQuery = {}): Promise<CaseProQueryResult> {
+		// Wire/auth failures THROW (status + body snippet) — a broken connection must
+		// not masquerade as an empty org. Only UNMAPPED entities degrade to empty.
+		const plan = await this.plan(entity, q);
+		if (!plan) {
+			warnOnce(`native-entity-unmapped-${entity}`, `CasePro native: entity '${entity}' has no live Crm-Backend endpoint — returning empty result`);
+			return { data: [], total: 0 };
 		}
-	}
 
-	private asRow(value: unknown): CaseProRow | null {
-		return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as CaseProRow) : null;
-	}
-
-	async query(entity: string, query: CaseProQuery = {}): Promise<CaseProQueryResult> {
-		const offset = query.offset ?? 0;
-		const limit = query.limit ?? 50;
-		// the gateway has no offset — over-fetch and slice (see class docblock).
-		const wireLimit = offset + limit;
-		const filters = buildMcpFilters(query.filter);
-		const payload = await this.callTool('query_entities', {
-			entity,
-			...(filters.length ? { filters } : {}),
-			...(query.select?.length ? { select: query.select } : {}),
-			limit: wireLimit,
-		});
-		this.assertOk(payload, `query(${entity})`);
-		const records = Array.isArray(payload.records) ? (payload.records as CaseProRow[]) : [];
-		const data = records.slice(offset, offset + limit);
-		// No true total from the gateway: report an exact total when the page came back
-		// short, or `+1` past what we returned while full pages keep coming so the
-		// client's `out.length >= total` accumulate loop knows to fetch the next page.
-		const mayHaveMore = records.length >= wireLimit;
-		return { data, total: offset + data.length + (mayHaveMore ? 1 : 0) };
+		const residual: Record<string, unknown> = {};
+		for (const [key, cond] of Object.entries(q.filter ?? {})) {
+			if (!plan.pushed.includes(key)) {
+				residual[key] = cond;
+			}
+		}
+		const filtered = Object.keys(residual).length ? plan.rows.filter((row) => rowMatches(row, residual)) : plan.rows;
+		if (plan.truncated) {
+			warnOnce(`native-truncated-${entity}`, `CasePro native: query(${entity}) hit the ${NATIVE_PAGE_LIMIT * NATIVE_MAX_PAGES}-row cap — results/totals may be incomplete`);
+		}
+		const total = plan.serverTotal ?? filtered.length;
+		const offset = q.offset ?? 0;
+		const limit = q.limit ?? filtered.length;
+		return { data: filtered.slice(offset, offset + limit), total };
 	}
 
 	async get(entity: string, id: string): Promise<CaseProRow | null> {
-		const payload = await this.callTool('get_entity', { entity, id });
-		const record = this.asRow(payload.record);
-		if (record) {
-			return record;
-		}
-		// not-found comes back as success:false + "<entity> with id <id> not found".
-		const errText = typeof payload.error === 'string' ? payload.error : '';
-		if (payload.found === false || /not found/i.test(errText)) {
+		const eid = encodeURIComponent(id);
+		const routes: Record<string, { method: 'GET' | 'POST'; path: string }> = {
+			matters: { method: 'POST', path: `matters/find-one/${eid}` },
+			parties: { method: 'POST', path: `parties/find-one/${eid}` },
+			intake_questionnaires: { method: 'POST', path: `intake-questionnaires/find-one/${eid}` },
+			matter_stages: { method: 'GET', path: `matter-stages/find-one/${eid}` },
+			matter_sub_stages: { method: 'GET', path: `matter-sub-stages/find-one/${eid}` },
+			intake_stages: { method: 'GET', path: `intake-stages/find-one/${eid}` },
+			case_types: { method: 'POST', path: `case-types/find-one/${eid}` },
+			settlement_types: { method: 'POST', path: `settlement-types/find-one/${eid}` },
+			medical_providers: { method: 'GET', path: `medical-providers/get-one/${eid}` },
+			bills: { method: 'GET', path: `medical-providers/bills/get-one/${eid}` },
+			negotiations: { method: 'POST', path: `negotiations/find-one/${eid}` },
+			resolutions: { method: 'POST', path: `resolutions/find-one/${eid}` },
+			liens: { method: 'POST', path: `liens/find-one/${eid}` },
+			expenses: { method: 'POST', path: `expenses/find-one/${eid}` },
+			litigations: { method: 'POST', path: `litigations/find-one/${eid}` },
+			insurances: { method: 'POST', path: `insurances/find-one/${eid}` },
+		};
+		const route = routes[entity];
+		if (!route) {
+			warnOnce(`native-get-unmapped-${entity}`, `CasePro native: get(${entity}) has no live Crm-Backend endpoint — returning null`);
 			return null;
 		}
-		this.assertOk(payload, `get(${entity}, ${id})`);
-		return null;
+		const json = await this.requestOr404(route.method, route.path, route.method === 'POST' ? { body: {} } : {});
+		if (json === null) {
+			return null;
+		}
+		const row = unwrapRow(json);
+		if (!row) {
+			return null;
+		}
+		if (entity === 'matters') {
+			return flattenMatterRow(row);
+		}
+		if (entity === 'intake_questionnaires') {
+			return flattenIntakeRow(row);
+		}
+		if (entity === 'intake_stages') {
+			return normalizeIntakeStageRow(row);
+		}
+		return row;
 	}
 
 	async listSchema(entity: string): Promise<unknown> {
-		const payload = await this.callTool('list_schema', { entity });
-		this.assertOk(payload, `listSchema(${entity})`);
-		return payload;
+		return (await this.request('GET', `schema/entities/${encodeURIComponent(entity)}`)).json;
 	}
 
 	async create(entity: string, data: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow> {
-		const payload = await this.callTool('create_entity', { entity, data }, ctx);
-		this.assertOk(payload, `create(${entity})`);
-		const row = this.asRow(payload.created) ?? this.asRow(payload.record);
-		if (!row || !str(row.id)) {
-			throw new Error(`CasePro create(${entity}) returned no created row`);
+		// CasePro does NOT enforce org on create — ALWAYS inject organization_id.
+		let body: Record<string, unknown> = { organization_id: this.cfg.orgId, ...data };
+		let route: { method: 'POST'; path: string };
+		switch (entity) {
+			case 'matters':
+				route = { method: 'POST', path: 'matters/create' };
+				break;
+			case 'parties':
+				route = { method: 'POST', path: 'parties/create' };
+				break;
+			case 'intake_questionnaires':
+				route = { method: 'POST', path: 'intake-questionnaires/create' };
+				body = sanitizeIntakeWrite(body as CaseProRow);
+				break;
+			case 'case_types':
+				route = { method: 'POST', path: 'case-types/create' };
+				break;
+			case 'settlement_types':
+				route = { method: 'POST', path: 'settlement-types/create' };
+				break;
+			case 'matter_stages':
+				route = { method: 'POST', path: 'matter-stages/create' };
+				break;
+			case 'matter_sub_stages':
+				route = { method: 'POST', path: 'matter-sub-stages/create' };
+				break;
+			case 'intake_stages':
+				route = { method: 'POST', path: 'intake-stages/create' };
+				break;
+			case 'liens':
+				route = { method: 'POST', path: 'liens/create' };
+				break;
+			case 'expenses':
+				route = { method: 'POST', path: 'expenses/create' };
+				break;
+			case 'litigations':
+				route = { method: 'POST', path: 'litigations/create' };
+				break;
+			case 'negotiations':
+				route = { method: 'POST', path: 'negotiations/create' };
+				break;
+			case 'resolutions':
+				route = { method: 'POST', path: 'resolutions/create' };
+				break;
+			case 'insurances':
+				route = { method: 'POST', path: 'insurances/create' };
+				break;
+			case 'medical_providers':
+				route = { method: 'POST', path: 'medical-providers' };
+				break;
+			case 'bills': {
+				const providerId = str2(data.medical_provider_id);
+				if (!providerId) {
+					throw new Error('CasePro native create(bills): data.medical_provider_id is required');
+				}
+				route = { method: 'POST', path: `medical-providers/${encodeURIComponent(providerId)}/bills` };
+				break;
+			}
+			default:
+				throw new Error(`CasePro native create(${entity}): no live Crm-Backend endpoint`);
+		}
+		this.lookupCache.delete(entity);
+		const { json } = await this.request(route.method, route.path, { body, ...(ctx?.actingUserId ? { headers: { 'X-Acting-User': ctx.actingUserId } } : {}) });
+		const row = unwrapRow(json);
+		if (!row || !str2(row.id)) {
+			throw new Error(`CasePro native create(${entity}) returned no row id`);
 		}
 		return row;
 	}
 
 	async update(entity: string, id: string, patch: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow> {
-		const payload = await this.callTool('update_entity', { entity, id, data: patch }, ctx);
-		this.assertOk(payload, `update(${entity}, ${id})`);
-		const row = this.asRow(payload.updated) ?? this.asRow(payload.record);
+		const eid = encodeURIComponent(id);
+		const routes: Record<string, { method: 'PATCH' | 'PUT'; path: string }> = {
+			matters: { method: 'PATCH', path: `matters/update/${eid}` },
+			parties: { method: 'PATCH', path: `parties/update/${eid}` },
+			intake_questionnaires: { method: 'PATCH', path: `intake-questionnaires/update/${eid}` },
+			case_types: { method: 'PATCH', path: `case-types/update/${eid}` },
+			settlement_types: { method: 'PATCH', path: `settlement-types/update/${eid}` },
+			matter_stages: { method: 'PATCH', path: `matter-stages/update/${eid}` },
+			matter_sub_stages: { method: 'PUT', path: `matter-sub-stages/update/${eid}` },
+			intake_stages: { method: 'PUT', path: `intake-stages/update/${eid}` },
+			liens: { method: 'PATCH', path: `liens/update/${eid}` },
+			expenses: { method: 'PATCH', path: `expenses/update/${eid}` },
+			litigations: { method: 'PATCH', path: `litigations/update/${eid}` },
+			resolutions: { method: 'PATCH', path: `resolutions/update/${eid}` },
+			insurances: { method: 'PATCH', path: `insurances/update/${eid}` },
+			medical_providers: { method: 'PATCH', path: `medical-providers/edit/${eid}` },
+			bills: { method: 'PATCH', path: `medical-providers/bills/edit/${eid}` },
+			// negotiations / reductions have NO update endpoint upstream — falls to the throw below.
+		};
+		const route = routes[entity];
+		if (!route) {
+			throw new Error(`CasePro native update(${entity}): no live Crm-Backend endpoint`);
+		}
+		this.lookupCache.delete(entity);
+		const body = entity === 'intake_questionnaires' ? sanitizeIntakeWrite(patch) : patch;
+		const { json } = await this.request(route.method, route.path, {
+			body: body as Record<string, unknown>,
+			...(ctx?.actingUserId ? { headers: { 'X-Acting-User': ctx.actingUserId } } : {}),
+		});
+		let row = unwrapRow(json);
+		if (!row || !str2(row.id)) {
+			// Some update routes answer with a message envelope — re-read for the full row.
+			row = await this.get(entity, id);
+		}
 		if (!row) {
-			throw new Error(`CasePro update(${entity}, ${id}) returned no updated row`);
+			throw new Error(`CasePro native update(${entity}, ${id}) returned no row`);
 		}
 		return row;
 	}
 
 	/**
 	 * Direct authenticated POST to a plain CasePro CRM REST controller (comms-log
-	 * ingest — `POST /matterchat-messages/ingest`, CasePro PR #1234). This is NOT
-	 * an MCP entity tool, so it deliberately does NOT ride `tools/call`. It reuses
-	 * the SAME auth headers the entity verbs build (X-MCP-API-Key + X-Organization-ID,
-	 * plus the advisory X-Acting-User) and the SAME strict egress posture: https-only,
-	 * a single-host SSRF allow-list, and no redirect-following (a redirect would
-	 * re-send the key elsewhere). Refuses without a key by construction (the whole
-	 * transport does).
-	 *
-	 * `path` resolution:
-	 *  - absolute https URL  → used as-is; the allow-list is pinned to that URL's host
-	 *    (the CRM backend may live on a different host than the MCP gateway).
-	 *  - relative path       → resolved against the gateway origin; allow-list = gateway host.
-	 * A non-https absolute URL is refused (never send the key over http).
+	 * ingest — `POST /matterchat-messages/ingest`). Reconciled from the staging
+	 * live-wire onto this transport: SAME auth headers as the entity verbs, SAME
+	 * egress posture (host-pinned allow-list via wireFetch/serverFetch). A relative
+	 * `path` resolves against the transport's `/api/v1` base (the CRM serves its
+	 * controllers there); an absolute URL may point at a different CRM host —
+	 * https required unless the host is loopback (the admin-configured local rig).
 	 */
 	async ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown> {
-		let target: string;
-		let allowHost: string;
+		const extra = ctx?.actingUserId ? { 'X-Acting-User': ctx.actingUserId } : {};
 		if (/^https?:\/\//i.test(path)) {
-			const url = new URL(path);
-			if (url.protocol !== 'https:') {
-				throw new Error(`CasePro ingest: endpoint must be https (got ${url.protocol}//)`);
-			}
-			if (url.username || url.password) {
-				throw new Error('CasePro ingest: endpoint must not embed credentials');
-			}
-			target = url.toString();
-			allowHost = url.hostname;
-		} else {
-			// Resolve a relative ingest path against the gateway origin (strip the
-			// JSON-RPC path segment). Same host ⇒ same allow-list entry.
-			const origin = new URL(this.endpoint).origin;
-			target = `${origin}/${path.replace(/^\/+/, '')}`;
-			allowHost = this.host;
+			const target = resolveAbsoluteIngestUrl(path);
+			const { json } = await wireFetch({
+				method: 'POST',
+				url: target.url,
+				body: payload,
+				headers: { ...this.headers(), ...extra },
+				timeoutMs: this.timeoutMs,
+				allowList: target.allowList,
+			});
+			return json;
 		}
-		const res = await this.fetchFn(target, {
+		const { json } = await this.request('POST', path, { body: payload, ...(ctx?.actingUserId ? { headers: extra } : {}) });
+		return json;
+	}
+}
+
+/**
+ * Validate + pin an ABSOLUTE ingest URL (comms-log's ingest endpoint may live on a
+ * different host than the transport base). https is required — the payload rides
+ * with auth headers — except for loopback hosts (the explicitly configured local
+ * rig case; `localhost` is pinned to 127.0.0.1 for the SSRF gate, same as bases).
+ */
+function resolveAbsoluteIngestUrl(raw: string): { url: string; allowList: string[] } {
+	const url = new URL(raw);
+	if (url.username || url.password) {
+		throw new Error('CasePro ingest: endpoint must not embed credentials');
+	}
+	if (url.hostname.toLowerCase() === 'localhost') {
+		url.hostname = '127.0.0.1';
+	}
+	const loopback = url.hostname === '127.0.0.1' || url.hostname === '::1';
+	if (url.protocol !== 'https:' && !loopback) {
+		throw new Error(`CasePro ingest: endpoint must be https (got ${url.protocol}//)`);
+	}
+	const allowList = url.port ? [url.hostname, `${url.hostname}:${url.port}`] : [url.hostname];
+	return { url: url.toString(), allowList };
+}
+
+// ---------------------------------------------------------------------------
+// MCP transport — JSON-RPC 2.0 tools/call against the hosted CasePro connector.
+// ---------------------------------------------------------------------------
+
+/**
+ * Hosted-connector transport. POSTs JSON-RPC 2.0 `tools/call` to
+ * `{base}{mcpPath}` (staging probe: https://casepro-mcp-v2.stg-omnisai.io/mcp →
+ * 401 unauthed; the path is configurable — default '/mcp/v2'). Tools carry the
+ * connector's generic entity verbs with the args the old RestTransport sent as
+ * request bodies. Auth: `Authorization: Bearer <secret>` plus an `X-MCP-Key`
+ * fallback header (the connector accepts either).
+ *
+ * Result parsing: MCP tool results arrive as `result.content` blocks — the JSON
+ * payload is a `text` block that we `JSON.parse`. Servers speaking streamable
+ * HTTP may answer `text/event-stream`; the SSE `data:` lines are parsed and the
+ * matching JSON-RPC response extracted.
+ */
+export class McpTransport implements ICaseProTransport {
+	private readonly url: string;
+
+	private readonly timeoutMs: number;
+
+	private readonly allowList: string[];
+
+	private rpcSeq = 0;
+
+	constructor(
+		private readonly cfg: CaseProConfig,
+		opts: { timeoutMs?: number } = {},
+	) {
+		// `localhost` pinned to 127.0.0.1 for the same SSRF-gate reason as
+		// NativeRestTransport (see normalizeLoopbackBase).
+		const wireBase = normalizeLoopbackBase(cfg.baseUrl);
+		this.url = joinUrl(wireBase, cfg.mcpPath || '/mcp/v2');
+		this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+		this.allowList = ssrfAllowListFor(wireBase);
+	}
+
+	/** Extract the JSON-RPC response object from a JSON or SSE (`data:` lines) payload. */
+	private static parseRpcPayload(json: unknown): Record<string, unknown> | undefined {
+		if (isObj(json)) {
+			return json;
+		}
+		if (typeof json !== 'string') {
+			return undefined;
+		}
+		// text/event-stream: last `data:` line that parses to a JSON-RPC response wins.
+		let found: Record<string, unknown> | undefined;
+		for (const line of json.split(/\r?\n/)) {
+			if (!line.startsWith('data:')) {
+				continue;
+			}
+			try {
+				const parsed = JSON.parse(line.slice(5).trim());
+				if (isObj(parsed) && ('result' in parsed || 'error' in parsed)) {
+					found = parsed;
+				}
+			} catch {
+				// partial/keep-alive lines are expected — skip.
+			}
+		}
+		return found;
+	}
+
+	/** One tools/call round trip → the tool's parsed JSON payload (or undefined). */
+	private async call(tool: string, args: Record<string, unknown>): Promise<unknown> {
+		this.rpcSeq += 1;
+		const { json } = await wireFetch({
 			method: 'POST',
+			url: this.url,
+			body: {
+				jsonrpc: '2.0',
+				id: this.rpcSeq,
+				method: 'tools/call',
+				params: { name: tool, arguments: args },
+			},
 			headers: {
-				'Content-Type': 'application/json',
-				'X-MCP-API-Key': this.apiKey,
-				...(this.orgId ? { 'X-Organization-ID': this.orgId } : {}),
+				Authorization: `Bearer ${this.cfg.apiKey}`,
+				'X-MCP-Key': this.cfg.apiKey,
+				Accept: 'application/json, text/event-stream',
+			},
+			timeoutMs: this.timeoutMs,
+			allowList: this.allowList,
+		});
+
+		const rpc = McpTransport.parseRpcPayload(json);
+		if (!rpc) {
+			throw new Error(`CasePro MCP ${tool}: unparseable response`);
+		}
+		if (isObj(rpc.error)) {
+			const { code, message } = rpc.error as { code?: number; message?: string };
+			throw new Error(`CasePro MCP ${tool} failed: ${code ?? ''} ${message ?? 'unknown JSON-RPC error'}`.trim());
+		}
+		const result = isObj(rpc.result) ? rpc.result : {};
+		const content = Array.isArray(result.content) ? result.content : [];
+		const text = content
+			.filter((block): block is { type: string; text: string } => isObj(block) && block.type === 'text' && typeof block.text === 'string')
+			.map((block) => block.text)
+			.join('\n');
+		if (result.isError) {
+			throw new Error(`CasePro MCP ${tool} failed: ${snippet(text) || 'tool reported an error'}`);
+		}
+		if (text) {
+			try {
+				return JSON.parse(text);
+			} catch {
+				return text;
+			}
+		}
+		// Some servers return structuredContent instead of a text block.
+		return isObj(result.structuredContent) ? result.structuredContent : undefined;
+	}
+
+	async query(entity: string, q: CaseProQuery = {}): Promise<CaseProQueryResult> {
+		// Wire/auth failures THROW (status + body snippet); the connector itself
+		// answers unknown entities with an empty payload, so no unmapped-set here.
+		const parsed = await this.call('query_entities', {
+			entity,
+			filter: q.filter ?? {},
+			...(q.select ? { select: q.select } : {}),
+			...(q.limit !== undefined ? { limit: q.limit } : {}),
+			...(q.offset !== undefined ? { offset: q.offset } : {}),
+		});
+		// the connector returns raw DB columns — apply the same column aliases the mappers rely on.
+		const normalize = (rows: CaseProRow[]): CaseProRow[] => (entity === 'intake_stages' ? rows.map(normalizeIntakeStageRow) : rows);
+		if (Array.isArray(parsed)) {
+			const data = normalize(parsed.filter(isObj) as CaseProRow[]);
+			return { data, total: data.length };
+		}
+		if (isObj(parsed)) {
+			const data = normalize(Array.isArray(parsed.data) ? (parsed.data.filter(isObj) as CaseProRow[]) : []);
+			return { data, total: typeof parsed.total === 'number' ? parsed.total : data.length };
+		}
+		return { data: [], total: 0 };
+	}
+
+	async get(entity: string, id: string): Promise<CaseProRow | null> {
+		try {
+			const parsed = await this.call('get_entity', { entity, id });
+			if (parsed === null || parsed === undefined) {
+				return null;
+			}
+			const row = unwrapRow(parsed);
+			return row && entity === 'intake_stages' ? normalizeIntakeStageRow(row) : row;
+		} catch (err) {
+			if (err instanceof Error && /not[\s-]?found|404/i.test(err.message)) {
+				return null;
+			}
+			throw err;
+		}
+	}
+
+	async listSchema(entity: string): Promise<unknown> {
+		return this.call('list_schema', { entity });
+	}
+
+	async create(entity: string, data: CaseProRow, _ctx?: CaseProCallContext): Promise<CaseProRow> {
+		const parsed = await this.call('create_entity', { entity, data });
+		const row = unwrapRow(parsed);
+		if (!row || !str2(row.id)) {
+			throw new Error(`CasePro MCP create(${entity}) returned no row id`);
+		}
+		return row;
+	}
+
+	async update(entity: string, id: string, patch: CaseProRow, _ctx?: CaseProCallContext): Promise<CaseProRow> {
+		const parsed = await this.call('update_entity', { entity, id, patch });
+		let row = unwrapRow(parsed);
+		if (!row || !str2(row.id)) {
+			row = await this.get(entity, id);
+		}
+		if (!row) {
+			throw new Error(`CasePro MCP update(${entity}, ${id}) returned no row`);
+		}
+		return row;
+	}
+
+	/**
+	 * Direct authenticated POST to a plain CasePro CRM REST controller (comms-log
+	 * ingest). NOT an MCP entity tool, so it deliberately does NOT ride
+	 * `tools/call`. Same auth headers as the JSON-RPC calls, same egress posture.
+	 * A relative `path` resolves against the configured base URL; an absolute URL
+	 * may point at a different CRM host (https unless loopback).
+	 */
+	async ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown> {
+		const target = /^https?:\/\//i.test(path)
+			? resolveAbsoluteIngestUrl(path)
+			: { url: joinUrl(normalizeLoopbackBase(this.cfg.baseUrl), path), allowList: this.allowList };
+		const { json } = await wireFetch({
+			method: 'POST',
+			url: target.url,
+			body: payload,
+			headers: {
+				Authorization: `Bearer ${this.cfg.apiKey}`,
+				'X-MCP-Key': this.cfg.apiKey,
 				...(ctx?.actingUserId ? { 'X-Acting-User': ctx.actingUserId } : {}),
 			},
-			body: JSON.stringify(payload),
-			ignoreSsrfValidation: false,
-			allowList: allowHost,
-			followRedirects: false,
+			timeoutMs: this.timeoutMs,
+			allowList: target.allowList,
 		});
-		if (res.status >= 300 && res.status < 400) {
-			throw new Error(`CasePro ingest(${path}): gateway redirected (${res.status}) — refusing to follow`);
-		}
-		if (!res.ok) {
-			throw new Error(`CasePro ingest(${path}) failed: HTTP ${res.status}`);
-		}
-		return res.json();
+		return json;
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Selection — default to the stub, override by setting or env flag.
+// Selection — default to the stub; the enablement gate lives HERE.
+// ---------------------------------------------------------------------------
+
+/** Instantiate a transport for an explicit kind (the status probe uses a short timeout). */
+export function instantiateTransport(
+	kind: 'stub' | 'native' | 'mcp',
+	cfg: CaseProConfig,
+	opts: { timeoutMs?: number } = {},
+): ICaseProTransport {
+	switch (kind) {
+		case 'native':
+			return new NativeRestTransport(cfg, opts);
+		case 'mcp':
+			return new McpTransport(cfg, opts);
+		default:
+			return new StubTransport();
+	}
+}
+
+/** Memoized active transport — keeps the stub's in-memory store alive across calls. */
+let active: { fingerprint: string; transport: ICaseProTransport } | undefined;
+
+/**
+ * Resolve the ACTIVE transport. This is the single enablement gate for reads AND
+ * writes (design §4): `CasePro_Enabled === false` → the stub serves everything
+ * (demo mode, writes land only in the in-memory store); enabled → the configured
+ * transport ('stub' | 'native' | 'mcp'; legacy 'rest' → 'mcp'; a live choice
+ * without a base URL falls back to stub — see {@link resolveCaseProConfig}).
+ *
+ * The instance is memoized on the resolved config fingerprint so the default
+ * stub behaves byte-for-byte as before (one live store per config lifetime) and
+ * admin setting changes take effect on the next call without a restart.
+ */
+export function resolveTransportFromConfig(): ICaseProTransport {
+	const cfg = resolveCaseProConfig();
+	const effective = cfg.enabled ? cfg.transport : 'stub';
+	const fingerprint = `${effective} ${caseProConfigFingerprint(cfg)}`;
+	if (active?.fingerprint !== fingerprint) {
+		if (active) {
+			SystemLogger.info({ msg: 'boards.casepro.transportChanged', transport: effective, enabled: cfg.enabled });
+		}
+		active = { fingerprint, transport: instantiateTransport(effective, cfg) };
+	}
+	return active.transport;
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics — the staging live-wire's "why is live degraded?" surface,
+// reconciled onto this config model (transports: stub | native | mcp).
 // ---------------------------------------------------------------------------
 
 export type CaseProTransportDiagnostics = {
-	/** what the config asked for. */
-	requested: 'stub' | 'rest';
-	/** what actually resolves (rest only when the live wire is fully configured). */
-	effective: 'stub' | 'rest';
+	/** what the config asked for (before enablement/fallbacks). */
+	requested: 'stub' | 'native' | 'mcp';
+	/** what actually resolves (a live kind only when enabled + fully configured). */
+	effective: 'stub' | 'native' | 'mcp';
 	authMode: string;
-	/** the configured gateway host (never the key). */
+	/** the configured CasePro host (never the key). */
 	host?: string;
 	keyConfigured: boolean;
 	orgConfigured: boolean;
@@ -752,89 +1568,48 @@ export type CaseProTransportDiagnostics = {
 };
 
 /**
- * Inspect the live-wire config WITHOUT constructing a transport. Shared by
- * {@link resolveTransportFromConfig}, the boot warning, the `boards.casepro.status`
- * admin endpoint, and the leads-pull cron ("is the transport live?"). Never
- * returns or logs the key itself.
+ * Inspect the live-wire config WITHOUT constructing a transport. Shared by the
+ * boot warning, the `boards.casepro.status` admin surface (additive `diagnostics`
+ * key) and the leads-pull cron ("is the transport live?"). Never returns or logs
+ * the key itself. `requested` reflects the RAW transport choice (env/setting,
+ * with the legacy 'rest' → 'mcp' alias); `effective` folds in the enablement
+ * gate and resolveCaseProConfig's missing-base-URL fallback — mirroring
+ * {@link resolveTransportFromConfig}'s selection exactly.
  */
 export function caseProTransportDiagnostics(): CaseProTransportDiagnostics {
-	const requested = (process.env.CASEPRO_TRANSPORT || safeGetSetting<string>('CasePro_Transport') || 'stub').toLowerCase() as
-		| 'stub'
-		| 'rest';
-	const authMode = (process.env.CASEPRO_AUTH_MODE || safeGetSetting<string>('CasePro_Auth_Mode') || 'mcp-key').toLowerCase();
-	const baseUrl = process.env.CASEPRO_BASE_URL || safeGetSetting<string>('CasePro_Base_URL') || '';
-	const apiKey = process.env.CASEPRO_MCP_API_KEY || '';
-	const orgId = process.env.CASEPRO_ORG_ID || safeGetSetting<string>('CasePro_Org_ID') || '';
+	const cfg = resolveCaseProConfig();
+	const rawChoice = (process.env.CASEPRO_TRANSPORT || safeGetSetting<string>('CasePro_Transport') || 'stub').toLowerCase();
+	const requested: 'stub' | 'native' | 'mcp' =
+		rawChoice === 'rest' || rawChoice === 'mcp' ? 'mcp' : rawChoice === 'native' ? 'native' : 'stub';
+	const effective = cfg.enabled ? cfg.transport : 'stub';
 
-	const base: Omit<CaseProTransportDiagnostics, 'effective' | 'reason'> = {
-		requested: requested === 'rest' ? 'rest' : 'stub',
-		authMode,
-		keyConfigured: Boolean(apiKey),
-		orgConfigured: Boolean(orgId),
+	let host: string | undefined;
+	try {
+		host = cfg.baseUrl ? new URL(normalizeLoopbackBase(cfg.baseUrl)).host : undefined;
+	} catch {
+		host = undefined;
+	}
+
+	const base: CaseProTransportDiagnostics = {
+		requested,
+		effective,
+		authMode: cfg.authMode,
+		...(host ? { host } : {}),
+		keyConfigured: Boolean(cfg.apiKey),
+		orgConfigured: Boolean(cfg.orgId),
 	};
 
-	if (requested !== 'rest') {
-		return { ...base, effective: 'stub' };
+	if (effective !== 'stub') {
+		return base;
 	}
-	if (authMode === 'keygate') {
-		// route B stub — declared but not implemented; never silently sends the wrong auth.
-		return { ...base, effective: 'stub', reason: 'auth mode "keygate" is not implemented yet (use "mcp-key")' };
+	if (requested === 'stub') {
+		return base;
 	}
-	if (authMode !== 'mcp-key') {
-		return { ...base, effective: 'stub', reason: `unknown CasePro_Auth_Mode "${authMode}"` };
+	if (!cfg.enabled) {
+		return { ...base, reason: 'CasePro_Enabled is off — the integration is disabled (admin kill switch)' };
 	}
-	if (!baseUrl) {
-		return { ...base, effective: 'stub', reason: 'no base URL configured (CASEPRO_BASE_URL / CasePro_Base_URL)' };
+	if (!cfg.baseUrl) {
+		return { ...base, reason: 'no base URL configured (CASEPRO_BASE_URL / CasePro_Base_URL)' };
 	}
-	let host: string;
-	try {
-		({ host } = deriveMcpEndpoint(baseUrl));
-	} catch (err) {
-		return { ...base, effective: 'stub', reason: err instanceof Error ? err.message : 'invalid base URL' };
-	}
-	if (!apiKey) {
-		// the loud refusal: live requested, no key — we NEVER send unauthenticated.
-		return { ...base, host, effective: 'stub', reason: 'CASEPRO_MCP_API_KEY is not set — refusing unauthenticated live calls' };
-	}
-	return { ...base, host, effective: 'rest' };
-}
-
-/**
- * Resolve the configured transport. Default is the stub. The live MCP-gateway
- * transport is selected only when explicitly chosen AND fully configured
- * (https base URL + env `CASEPRO_MCP_API_KEY`); anything less degrades to the
- * stub with a LOUD warning — never an unauthenticated live call.
- *
- * Selection order:
- *   1. env CASEPRO_TRANSPORT = 'stub' | 'rest'   (test / local override)
- *   2. setting CasePro_Transport (select, default 'stub')
- */
-export function resolveTransportFromConfig(): ICaseProTransport {
-	const diag = caseProTransportDiagnostics();
-	if (diag.effective === 'rest') {
-		return new McpGatewayTransport({
-			baseUrl: process.env.CASEPRO_BASE_URL || safeGetSetting<string>('CasePro_Base_URL') || '',
-			apiKey: process.env.CASEPRO_MCP_API_KEY || '',
-			orgId: process.env.CASEPRO_ORG_ID || safeGetSetting<string>('CasePro_Org_ID') || undefined,
-		});
-	}
-	if (diag.requested === 'rest') {
-		SystemLogger.warn({
-			msg: 'CasePro LIVE transport requested but not usable — serving STUB data instead',
-			reason: diag.reason,
-			authMode: diag.authMode,
-			keyConfigured: diag.keyConfigured,
-			orgConfigured: diag.orgConfigured,
-		});
-	}
-	return new StubTransport();
-}
-
-/** settings.get throws if the setting is not yet registered (e.g. very early boot / tests). */
-function safeGetSetting<T extends SettingValue>(id: string): T | undefined {
-	try {
-		return settings.get<T>(id);
-	} catch {
-		return undefined;
-	}
+	return { ...base, reason: 'live transport degraded to the stub — check the server logs for the config warning' };
 }

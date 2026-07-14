@@ -166,21 +166,19 @@ const BoardsCaseProStatusSchema = {
 
 export const isBoardsCaseProStatusProps = ajvQuery.compile<BoardsCaseProStatusProps>(BoardsCaseProStatusSchema);
 
-/** Live-wire diagnostics returned by boards.casepro.status (never carries the key itself). */
-export type CaseProStatusDTO = {
+/** Live-wire transport diagnostics (rides ADDITIVELY on boards.casepro.status; never carries the key). */
+export type CaseProTransportDiagnosticsDTO = {
 	/** transport the config asked for. */
-	requested: 'stub' | 'rest';
-	/** transport actually in effect (rest only when fully configured). */
-	effective: 'stub' | 'rest';
+	requested: 'stub' | 'native' | 'mcp';
+	/** transport actually in effect (live only when fully configured). */
+	effective: 'stub' | 'native' | 'mcp';
 	authMode: string;
-	/** the configured gateway host. */
+	/** the configured CasePro host. */
 	host?: string;
 	keyConfigured: boolean;
 	orgConfigured: boolean;
 	/** why a requested live transport degraded to the stub. */
 	reason?: string;
-	/** the CasePro_Enabled master switch. */
-	enabled: boolean;
 };
 
 // boards.casepro.taskSync.set — per-board opt-in for the card→CasePro-task PUSH sync
@@ -356,6 +354,20 @@ export type CaseProMatterListItemDTO = {
 };
 
 export type SeedFromCaseProResultDTO = { bound: number; skipped: number; total: number };
+
+/** Mirrors `caseProStatus()` in apps/meteor/server/lib/boards/casepro (kept in sync by hand). */
+export type CaseProStatusDTO = {
+	enabled: boolean;
+	transport: 'stub' | 'native' | 'mcp';
+	baseUrl: string;
+	authMode: string;
+	orgId: string;
+	reachable: boolean;
+	latencyMs?: number;
+	error?: string;
+	/** staging live-wire's transport diagnostics, folded in additively by the endpoint. */
+	diagnostics?: CaseProTransportDiagnosticsDTO;
+};
 
 // M5 result shapes (mirror apps/meteor/server/lib/boards/matters/{playbooks,reports}.ts)
 

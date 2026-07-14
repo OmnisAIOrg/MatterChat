@@ -2,6 +2,7 @@ import type { SettingValue } from '@rocket.chat/core-typings';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
 import { settings } from '../../../../app/settings/server';
+import { resolveCaseProConfig } from '../casepro/config';
 
 /**
  * CasePro CLIENT-message service client — the wire half of the two-way client↔firm
@@ -17,11 +18,13 @@ import { settings } from '../../../../app/settings/server';
  *   GET  /service/matters/:matterId/client-messages?since=<iso>&limit=<n>
  *   POST /service/matters/:matterId/client-messages   { body, authorName, sourceMessageId, attachments? }
  *
- * Auth (RECONCILED onto casepro-live-wire): the service call presents the SAME identity
- * the MCP transport presents — the X-MCP-API-Key shared secret (env CASEPRO_MCP_API_KEY
- * only) plus X-Organization-ID — and carries the SAME egress posture: https-only,
- * host-pinned SSRF allow-list, no redirect-follow, and a hard refusal to send without a
- * key. The engine is additionally gated OFF by default (CasePro_Client_Sync_Enabled=false).
+ * Auth (RECONCILED onto the unified CasePro config): the service call presents the SAME
+ * identity the boards transport presents — CasePro_Api_Key/CASEPRO_API_KEY under the
+ * configured CasePro_Auth_Mode ('internal-key' → X-API-Key + X-Organization-ID, the
+ * Crm-Backend service path; 'bearer' → Authorization) — and carries the SAME egress
+ * posture: https-only (loopback exempt for the admin-configured local rig), host-pinned
+ * SSRF allow-list, no redirect-follow, and a hard refusal to send without a key. The
+ * engine is additionally gated OFF by default (CasePro_Client_Sync_Enabled=false).
  */
 
 /** One message as CasePro's service endpoint returns it. Money/ids are strings. */
@@ -87,19 +90,25 @@ function resolveBaseUrl(): string | undefined {
 
 export class CaseProClientMessagesClient {
 	/**
-	 * Auth headers for the CRM service call. RECONCILED onto the casepro-live-wire
-	 * posture: presents the SAME identity the MCP transport presents — the
-	 * X-MCP-API-Key shared secret (env CASEPRO_MCP_API_KEY only, never a setting) and
-	 * the X-Organization-ID scope. The key NEVER leaves via URL or logs, and the
+	 * Auth headers for the CRM service call. RECONCILED onto the unified CasePro
+	 * config (config.ts): presents the SAME identity the boards transport presents —
+	 * the CasePro_Api_Key credential under the configured CasePro_Auth_Mode
+	 * ('internal-key' → X-API-Key + X-Organization-ID, Crm-Backend's service path;
+	 * 'bearer' → Authorization). The key NEVER leaves via URL or logs, and the
 	 * engine refuses to send an unauthenticated request (see `sendRequest`).
 	 */
 	private authHeaders(): Record<string, string> {
-		const apiKey = str(process.env.CASEPRO_MCP_API_KEY);
-		const orgId = str(process.env.CASEPRO_ORG_ID) || str(safeGetSetting<string>('CasePro_Org_ID'));
+		const cfg = resolveCaseProConfig();
+		if (!cfg.apiKey) {
+			return { 'Content-Type': 'application/json' };
+		}
+		if (cfg.authMode === 'bearer') {
+			return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` };
+		}
 		return {
 			'Content-Type': 'application/json',
-			...(apiKey ? { 'X-MCP-API-Key': apiKey } : {}),
-			...(orgId ? { 'X-Organization-ID': orgId } : {}),
+			'X-API-Key': cfg.apiKey,
+			...(cfg.orgId ? { 'X-Organization-ID': cfg.orgId } : {}),
 		};
 	}
 
@@ -125,19 +134,26 @@ export class CaseProClientMessagesClient {
 	 */
 	private async sendRequest(target: string, init: { method: 'GET' | 'POST'; body?: string }): Promise<any> {
 		const parsed = new URL(target);
-		if (parsed.protocol !== 'https:') {
+		// `localhost` is pinned to 127.0.0.1 so serverFetch's SSRF gate can match the
+		// allow-list (single-label hostnames fail its domain pattern) — same rule as
+		// the boards transports. https required except for the loopback local rig.
+		if (parsed.hostname.toLowerCase() === 'localhost') {
+			parsed.hostname = '127.0.0.1';
+		}
+		const loopback = parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+		if (parsed.protocol !== 'https:' && !loopback) {
 			throw new Error(`CasePro client-sync: service URL must be https (got ${parsed.protocol}//)`);
 		}
 		const headers = this.authHeaders();
-		if (!headers['X-MCP-API-Key']) {
-			throw new Error('CasePro client-sync: refusing to call without CASEPRO_MCP_API_KEY');
+		if (!headers['X-API-Key'] && !headers.Authorization) {
+			throw new Error('CasePro client-sync: refusing to call without a CasePro API key (CasePro_Api_Key / CASEPRO_API_KEY)');
 		}
-		const res = await fetch(target, {
+		const res = await fetch(parsed.toString(), {
 			method: init.method,
 			headers,
 			...(init.body ? { body: init.body } : {}),
 			ignoreSsrfValidation: false,
-			allowList: parsed.hostname,
+			allowList: parsed.port ? [parsed.hostname, `${parsed.hostname}:${parsed.port}`] : parsed.hostname,
 			followRedirects: false,
 		});
 		if (res.status >= 300 && res.status < 400) {

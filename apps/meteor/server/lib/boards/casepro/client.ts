@@ -39,17 +39,21 @@ export type ConvertIntakeResult = { matterId: string; intake: IntakeLead };
 
 /**
  * The single outbound CasePro read client (M2). All Matters reads go through here;
- * the transport (stub | rest) is config-selected. Sums are computed in JS — CasePro's
- * aggregate_data GROUP BY is broken (see casepro discovery docs).
+ * the transport (stub | native | mcp) is config-selected. Sums are computed in JS —
+ * CasePro's aggregate_data GROUP BY is broken (see casepro discovery docs).
  */
 export class CaseProClient {
 	private transport: ICaseProTransport | undefined;
 
+	/**
+	 * Resolved per access so the `caseProMode()` enablement gate and admin setting
+	 * changes take effect immediately: disabled → every read serves the stub (demo
+	 * mode) and client "writes" only touch the stub's in-memory store — no
+	 * upstream effect. `resolveTransportFromConfig` memoizes on the config
+	 * fingerprint, so this is cheap and the stub store survives across calls.
+	 */
 	private get tx(): ICaseProTransport {
-		if (!this.transport) {
-			this.transport = resolveTransportFromConfig();
-		}
-		return this.transport;
+		return this.transport ?? resolveTransportFromConfig();
 	}
 
 	/** Override the transport (tests / runtime swap); pass undefined to revert to config. */
@@ -255,8 +259,26 @@ export class CaseProClient {
 				throw new Error('CasePro createIntake: party create returned no id');
 			}
 		}
-		const intake = await this.tx.create('intake_questionnaires', buildIntakeRowFromCapture(input, partyId), ctx);
+		// CasePro REQUIRES template_id on intake create ("An intake template is
+		// required…", surfaced as an opaque 500; only MEDICAL orgs get a server-side
+		// get-or-create fallback). Manual captures don't carry one, so fall back to
+		// the org's first intake form template (the transport caches the lookup).
+		const templateId = str(input.templateId) ?? (await this.defaultIntakeTemplateId());
+		const intake = await this.tx.create('intake_questionnaires', buildIntakeRowFromCapture({ ...input, templateId }, partyId), ctx);
 		return this.mapIntake(intake);
+	}
+
+	/** First intake form template id of the org, or a CLEAR error (the upstream
+	 * failure mode is an unexplained 500 wrapping the template requirement). */
+	private async defaultIntakeTemplateId(): Promise<string> {
+		const { data } = await this.tx.query('intake_form_templates', { limit: 1 });
+		const id = str(data[0]?.id);
+		if (!id) {
+			throw new Error(
+				'CasePro createIntake: the organization has no intake form templates — create one in CasePro or pass templateId in the capture input',
+			);
+		}
+		return id;
 	}
 
 	/** Drag a card -> write `intake_stage_id` (write-through). Returns the updated lead. */

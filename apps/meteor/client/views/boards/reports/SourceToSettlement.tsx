@@ -13,10 +13,12 @@ import {
 } from '@rocket.chat/fuselage';
 import type { SourceToSettlementResultDTO, SourceToSettlementRowDTO } from '@rocket.chat/rest-typings';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
-import { useEndpoint, useSetting } from '@rocket.chat/ui-contexts';
+import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { CaseProStubBanner } from '../casepro';
 
 /**
  * SourceToSettlement — the `/boards/reports/source-to-settlement` cross-pipeline
@@ -135,7 +137,6 @@ const SourceRow = ({ row, indented }: { row: SourceToSettlementRowDTO; indented?
 
 const SourceToSettlement = (): ReactElement => {
 	const { t } = useTranslation();
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
 
 	const getReport = useEndpoint('GET', '/v1/boards.reports.sourceToSettlement');
 
@@ -174,15 +175,7 @@ const SourceToSettlement = (): ReactElement => {
 					})}
 				</Box>
 
-				{!caseProEnabled && (
-					<Box mbe={16}>
-						<Callout type='warning' icon='info' title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}>
-							{t('Boards_Matters_Stub_Description', {
-								defaultValue: 'CasePro is not connected — figures below are computed from sample data, not live records.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner mbe={16} />
 
 				{report && !report.revenueResolved && (
 					<Box mbe={16}>

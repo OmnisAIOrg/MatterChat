@@ -1,50 +1,94 @@
 import { expect } from 'chai';
-import { beforeEach, afterEach, describe, it } from 'mocha';
+import { afterEach, beforeEach, describe, it } from 'mocha';
 import proxyquire from 'proxyquire';
 import sinon from 'sinon';
 
 /**
- * CasePro live-wire transport unit tests.
+ * CasePro transport unit tests (merged surface: stub | native | mcp).
  *
- * Covers the security-relevant seams:
- *   - endpoint derivation (https-only, /mcp[/v2] path handling, no URL creds),
- *   - auth header injection (X-MCP-API-Key / X-Organization-ID / X-Acting-User)
- *     + strict egress options (SSRF allow-list pinned to the host, no redirects),
- *   - refuse-without-key (constructor AND config resolution fall back to stub),
- *   - the offset-emulation paging contract of query().
+ * Covers the security-relevant seams of the RECONCILED transport layer:
+ *   - StubTransport live store semantics + the ingest recorder,
+ *   - NativeRestTransport auth header injection (X-API-Key / X-Organization-ID /
+ *     Authorization bearer / advisory X-Acting-User) + strict egress options
+ *     (SSRF allow-list pinned to the configured host, ignoreSsrfValidation:false),
+ *   - the ingest() custom-path egress policy (https-only for absolute URLs,
+ *     loopback exemption + localhost→127.0.0.1 pinning),
+ *   - config-driven selection (`resolveTransportFromConfig`): disabled → stub,
+ *     enabled+native → NativeRestTransport, enabled+mcp → McpTransport,
+ *   - `caseProTransportDiagnostics()` requested/effective derivation.
  */
 
+const fetchStub = sinon.stub();
 const settingsGetStub = sinon.stub();
 const warnStub = sinon.stub();
 
+type StubbedConfig = {
+	enabled: boolean;
+	transport: 'stub' | 'native' | 'mcp';
+	baseUrl: string;
+	authMode: 'internal-key' | 'bearer';
+	apiKey: string;
+	orgId: string;
+	mcpPath: string;
+};
+
+let currentConfig: StubbedConfig;
+
+const setConfig = (over: Partial<StubbedConfig> = {}): void => {
+	currentConfig = {
+		enabled: false,
+		transport: 'stub',
+		baseUrl: '',
+		authMode: 'internal-key',
+		apiKey: '',
+		orgId: '',
+		mcpPath: '/mcp/v2',
+		...over,
+	};
+};
+
 const transportModule = proxyquire.noCallThru().load('../../../../../../server/lib/boards/casepro/transport.ts', {
-	'@rocket.chat/server-fetch': { serverFetch: sinon.stub() },
-	'../../../../app/settings/server': { settings: { get: settingsGetStub } },
+	'@rocket.chat/server-fetch': { serverFetch: fetchStub },
 	'../../logger/system': { SystemLogger: { warn: warnStub, info: sinon.stub(), debug: sinon.stub() } },
+	'./config': {
+		resolveCaseProConfig: () => ({ ...currentConfig }),
+		caseProConfigFingerprint: () => JSON.stringify(currentConfig),
+		warnOnce: warnStub,
+		safeGetSetting: settingsGetStub,
+	},
 });
 
-const { deriveMcpEndpoint, buildMcpFilters, McpGatewayTransport, StubTransport, resolveTransportFromConfig, caseProTransportDiagnostics } =
-	transportModule;
+const { StubTransport, NativeRestTransport, McpTransport, resolveTransportFromConfig, caseProTransportDiagnostics } = transportModule;
 
-/** Build a fetch stub that answers every call with one JSON-RPC tool payload. */
-const fetchReturning = (payload: unknown, { status = 200 }: { status?: number } = {}) =>
-	sinon.stub().resolves({
+/** serverFetch stub answering with a JSON body (wireFetch reads res.text()). */
+const fetchReturning = (payload: unknown, { status = 200 }: { status?: number } = {}) => {
+	fetchStub.reset();
+	fetchStub.resolves({
 		ok: status >= 200 && status < 300,
 		status,
-		json: async () => ({
-			jsonrpc: '2.0',
-			id: 1,
-			result: { content: [{ type: 'text', text: JSON.stringify(payload) }] },
-		}),
+		text: async () => JSON.stringify(payload),
 	});
+	return fetchStub;
+};
 
-const KEY = 'test-mcp-key';
+const KEY = 'test-api-key';
 const ORG = 'org-uuid-1';
-const BASE = 'https://casepro-mcp-v2.stg-omnisai.io';
+const BASE = 'https://crm.example.com';
 
-describe('CasePro transport (live wire)', () => {
+const nativeCfg = (over: Partial<StubbedConfig> = {}): StubbedConfig => ({
+	enabled: true,
+	transport: 'native',
+	baseUrl: BASE,
+	authMode: 'internal-key',
+	apiKey: KEY,
+	orgId: ORG,
+	mcpPath: '/mcp/v2',
+	...over,
+});
+
+describe('CasePro transport (merged: stub | native | mcp)', () => {
 	const envBackup: Record<string, string | undefined> = {};
-	const ENV_KEYS = ['CASEPRO_TRANSPORT', 'CASEPRO_BASE_URL', 'CASEPRO_MCP_API_KEY', 'CASEPRO_ORG_ID', 'CASEPRO_AUTH_MODE'];
+	const ENV_KEYS = ['CASEPRO_TRANSPORT', 'CASEPRO_BASE_URL', 'CASEPRO_API_KEY', 'CASEPRO_ORG_ID', 'CASEPRO_AUTH_MODE', 'CASEPRO_ENABLED'];
 
 	beforeEach(() => {
 		for (const k of ENV_KEYS) {
@@ -54,6 +98,8 @@ describe('CasePro transport (live wire)', () => {
 		settingsGetStub.reset();
 		settingsGetStub.returns(undefined);
 		warnStub.reset();
+		fetchStub.reset();
+		setConfig();
 	});
 
 	afterEach(() => {
@@ -66,182 +112,165 @@ describe('CasePro transport (live wire)', () => {
 		}
 	});
 
-	describe('deriveMcpEndpoint (egress policy)', () => {
-		it('appends /mcp/v2 to a bare origin and pins the host', () => {
-			expect(deriveMcpEndpoint(BASE)).to.deep.equal({
-				endpoint: `${BASE}/mcp/v2`,
-				host: 'casepro-mcp-v2.stg-omnisai.io',
-			});
+	describe('StubTransport (live store + ingest recorder)', () => {
+		it('serves seeded rows and pages with limit/offset', async () => {
+			const stub = new StubTransport();
+			const all = await stub.query('matter_stages');
+			expect(all.total).to.be.greaterThan(1);
+			const page = await stub.query('matter_stages', { limit: 1, offset: 1 });
+			expect(page.data).to.have.length(1);
+			expect(page.total).to.equal(all.total);
 		});
 
-		it('keeps an explicit /mcp/v2 (and /mcp) path as-is', () => {
-			expect(deriveMcpEndpoint(`${BASE}/mcp/v2`).endpoint).to.equal(`${BASE}/mcp/v2`);
-			expect(deriveMcpEndpoint(`${BASE}/mcp/`).endpoint).to.equal(`${BASE}/mcp`);
+		it('created/updated rows become visible to get/query (write-through store)', async () => {
+			const stub = new StubTransport();
+			const created = await stub.create('parties', { first_name: 'Ada' });
+			expect(created.id).to.be.a('string');
+			const updated = await stub.update('parties', created.id as string, { last_name: 'Lovelace' });
+			expect(updated.last_name).to.equal('Lovelace');
+			const got = await stub.get('parties', created.id as string);
+			expect(got?.last_name).to.equal('Lovelace');
 		});
 
-		it('rejects non-https URLs', () => {
-			expect(() => deriveMcpEndpoint('http://casepro-mcp-v2.stg-omnisai.io')).to.throw(/https/);
-		});
-
-		it('rejects URLs embedding credentials', () => {
-			expect(() => deriveMcpEndpoint('https://user:pass@evil.example.com')).to.throw(/credentials/);
-		});
-
-		it('rejects garbage URLs', () => {
-			expect(() => deriveMcpEndpoint('not a url')).to.throw();
-		});
-	});
-
-	describe('buildMcpFilters', () => {
-		it('maps equality and $in conditions onto the gateway filters array', () => {
-			expect(buildMcpFilters({ archived: false, id: { $in: ['a', 'b'] } })).to.deep.equal([
-				{ field: 'archived', operator: '=', value: false },
-				{ field: 'id', operator: 'in', value: ['a', 'b'] },
-			]);
-		});
-
-		it('returns [] for an empty/absent filter', () => {
-			expect(buildMcpFilters(undefined)).to.deep.equal([]);
-			expect(buildMcpFilters({})).to.deep.equal([]);
+		it('ingest records the payload and reports stub acceptance', async () => {
+			const stub = new StubTransport();
+			const res = await stub.ingest('matterchat-messages/ingest', { messages: [{ id: 'm1' }] });
+			expect(res).to.deep.equal({ ok: true, stub: true });
+			expect(stub.ingested).to.have.length(1);
+			expect(stub.ingested[0].path).to.equal('matterchat-messages/ingest');
 		});
 	});
 
-	describe('McpGatewayTransport', () => {
-		it('refuses to construct without an API key (never unauthenticated)', () => {
-			expect(() => new McpGatewayTransport({ baseUrl: BASE, apiKey: '' })).to.throw(/CASEPRO_MCP_API_KEY/);
+	describe('NativeRestTransport (auth + egress)', () => {
+		it('sends X-API-Key + X-Organization-ID and pins the SSRF allow-list to the configured host', async () => {
+			const fetch = fetchReturning({ ok: true });
+			const tx = new NativeRestTransport(nativeCfg());
+			await tx.listSchema('matters');
+			expect(fetch.calledOnce).to.equal(true);
+			const [url, init] = fetch.firstCall.args;
+			expect(url).to.equal(`${BASE}/api/v1/schema/entities/matters`);
+			expect(init.headers['X-API-Key']).to.equal(KEY);
+			expect(init.headers['X-Organization-ID']).to.equal(ORG);
+			expect(init.ignoreSsrfValidation).to.equal(false);
+			expect(init.allowList).to.deep.equal(['crm.example.com']);
 		});
 
-		it('sends auth headers + strict egress options on every call', async () => {
-			const fetchFn = fetchReturning({ success: true, records: [] });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, orgId: ORG, fetchFn });
-
-			await tx.query('matters', { filter: { archived: false } });
-
-			expect(fetchFn.calledOnce).to.be.true;
-			const [url, options] = fetchFn.firstCall.args;
-			expect(url).to.equal(`${BASE}/mcp/v2`);
-			expect(options.headers['X-MCP-API-Key']).to.equal(KEY);
-			expect(options.headers['X-Organization-ID']).to.equal(ORG);
-			expect(options.ignoreSsrfValidation).to.equal(false);
-			expect(options.allowList).to.equal('casepro-mcp-v2.stg-omnisai.io');
-			expect(options.followRedirects).to.equal(false);
-
-			const body = JSON.parse(options.body);
-			expect(body.method).to.equal('tools/call');
-			expect(body.params.name).to.equal('query_entities');
-			expect(body.params.arguments.entity).to.equal('matters');
-			expect(body.params.arguments.filters).to.deep.equal([{ field: 'archived', operator: '=', value: false }]);
+		it('bearer auth mode sends Authorization instead of the service headers', async () => {
+			const fetch = fetchReturning({ ok: true });
+			const tx = new NativeRestTransport(nativeCfg({ authMode: 'bearer' }));
+			await tx.listSchema('matters');
+			const [, init] = fetch.firstCall.args;
+			expect(init.headers.Authorization).to.equal(`Bearer ${KEY}`);
+			expect(init.headers['X-API-Key']).to.equal(undefined);
 		});
 
-		it('attaches X-Acting-User on writes when a call context is given', async () => {
-			const fetchFn = fetchReturning({ success: true, created: { id: 'row-1' } });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, orgId: ORG, fetchFn });
-
-			const row = await tx.create('parties', { full_name: 'Jane Doe' }, { actingUserId: 'user-42' });
-
-			expect(row.id).to.equal('row-1');
-			const [, options] = fetchFn.firstCall.args;
-			expect(options.headers['X-Acting-User']).to.equal('user-42');
-			const body = JSON.parse(options.body);
-			expect(body.params.name).to.equal('create_entity');
-			expect(body.params.arguments.data).to.deep.equal({ full_name: 'Jane Doe' });
+		it('attaches the advisory X-Acting-User header on writes when a call context is given', async () => {
+			const fetch = fetchReturning({ id: 'p-1', first_name: 'Ada' });
+			const tx = new NativeRestTransport(nativeCfg());
+			await tx.create('parties', { first_name: 'Ada' }, { actingUserId: 'user-7' });
+			const [, init] = fetch.firstCall.args;
+			expect(init.headers['X-Acting-User']).to.equal('user-7');
 		});
 
-		it('emulates offset paging (gateway has limit only) and slices locally', async () => {
-			const records = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}` }));
-			const fetchFn = fetchReturning({ success: true, records });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
-
-			const { data, total } = await tx.query('matters', { limit: 2, offset: 2 });
-
-			const body = JSON.parse(fetchFn.firstCall.args[1].body);
-			expect(body.params.arguments.limit).to.equal(4); // offset + limit over-fetch
-			expect(data.map((r: { id: string }) => r.id)).to.deep.equal(['r2', 'r3']);
-			expect(total).to.be.greaterThan(4); // full page came back -> signal "maybe more"
+		it('ingest resolves a relative path against the /api/v1 base with the same auth', async () => {
+			const fetch = fetchReturning({ accepted: 1 });
+			const tx = new NativeRestTransport(nativeCfg());
+			const res = await tx.ingest('matterchat-messages/ingest', { messages: [] });
+			expect(res).to.deep.equal({ accepted: 1 });
+			const [url, init] = fetch.firstCall.args;
+			expect(url).to.equal(`${BASE}/api/v1/matterchat-messages/ingest`);
+			expect(init.headers['X-API-Key']).to.equal(KEY);
 		});
 
-		it('reports an exact total when the gateway returns a short page', async () => {
-			const fetchFn = fetchReturning({ success: true, records: [{ id: 'r0' }] });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
-
-			const { data, total } = await tx.query('matters', { limit: 50, offset: 0 });
-
-			expect(data).to.have.length(1);
-			expect(total).to.equal(1); // short page -> no phantom "more"
+		it('ingest accepts an absolute https URL on a DIFFERENT host and pins the allow-list to it', async () => {
+			const fetch = fetchReturning({ accepted: 1 });
+			const tx = new NativeRestTransport(nativeCfg());
+			await tx.ingest('https://crm-api.example.com/matterchat-messages/ingest', { messages: [] });
+			const [url, init] = fetch.firstCall.args;
+			expect(url).to.equal('https://crm-api.example.com/matterchat-messages/ingest');
+			expect(init.allowList).to.deep.equal(['crm-api.example.com']);
 		});
 
-		it('maps a get_entity not-found payload to null', async () => {
-			const fetchFn = fetchReturning({ success: false, found: false, record: null, error: 'matters with id nope not found' });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
-
-			expect(await tx.get('matters', 'nope')).to.equal(null);
+		it('ingest REFUSES a non-https absolute URL (unless loopback)', async () => {
+			fetchReturning({ accepted: 1 });
+			const tx = new NativeRestTransport(nativeCfg());
+			try {
+				await tx.ingest('http://evil.example.com/steal', { messages: [] });
+				expect.fail('expected a refusal');
+			} catch (err) {
+				expect((err as Error).message).to.match(/must be https/);
+			}
 		});
 
-		it('throws the tool error for non-not-found failures', async () => {
-			const fetchFn = fetchReturning({ success: false, error: 'organization mismatch' });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
-
-			await expect(tx.query('matters')).to.be.rejectedWith(/organization mismatch/);
-		});
-
-		it('refuses to follow gateway redirects', async () => {
-			const fetchFn = sinon.stub().resolves({ ok: false, status: 302, json: async () => ({}) });
-			const tx = new McpGatewayTransport({ baseUrl: BASE, apiKey: KEY, fetchFn });
-
-			await expect(tx.query('matters')).to.be.rejectedWith(/redirect/);
+		it('ingest permits the loopback rig and pins localhost to 127.0.0.1', async () => {
+			const fetch = fetchReturning({ accepted: 1 });
+			const tx = new NativeRestTransport(nativeCfg({ baseUrl: 'http://localhost:6010' }));
+			await tx.ingest('http://localhost:6010/api/v1/matterchat-messages/ingest', { messages: [] });
+			const [url, init] = fetch.firstCall.args;
+			expect(url).to.contain('127.0.0.1:6010');
+			expect(init.allowList).to.include('127.0.0.1:6010');
 		});
 	});
 
-	describe('resolveTransportFromConfig (refusal + fallback matrix)', () => {
-		it('defaults to the stub with no config at all', () => {
+	describe('resolveTransportFromConfig (enablement gate + selection)', () => {
+		it('disabled → the stub, regardless of the configured transport', () => {
+			setConfig({ enabled: false, transport: 'native', baseUrl: BASE, apiKey: KEY, orgId: ORG });
 			expect(resolveTransportFromConfig()).to.be.instanceOf(StubTransport);
 		});
 
-		it('falls back to the stub (loudly) when rest is requested WITHOUT a key', () => {
-			process.env.CASEPRO_TRANSPORT = 'rest';
-			process.env.CASEPRO_BASE_URL = BASE;
+		it('enabled + native → NativeRestTransport', () => {
+			setConfig(nativeCfg());
+			expect(resolveTransportFromConfig()).to.be.instanceOf(NativeRestTransport);
+		});
 
-			expect(resolveTransportFromConfig()).to.be.instanceOf(StubTransport);
-			expect(warnStub.calledOnce).to.be.true;
+		it('enabled + mcp → McpTransport', () => {
+			setConfig(nativeCfg({ transport: 'mcp' }));
+			expect(resolveTransportFromConfig()).to.be.instanceOf(McpTransport);
+		});
 
+		it('memoizes on the config fingerprint (stub store survives across calls)', () => {
+			setConfig();
+			const first = resolveTransportFromConfig();
+			const second = resolveTransportFromConfig();
+			expect(first).to.equal(second);
+		});
+	});
+
+	describe('caseProTransportDiagnostics', () => {
+		it('reports stub/stub with no config at all', () => {
+			setConfig();
 			const diag = caseProTransportDiagnostics();
-			expect(diag).to.include({ requested: 'rest', effective: 'stub', keyConfigured: false });
-			expect(diag.reason).to.match(/CASEPRO_MCP_API_KEY/);
+			expect(diag.requested).to.equal('stub');
+			expect(diag.effective).to.equal('stub');
+			expect(diag.keyConfigured).to.equal(false);
 		});
 
-		it('falls back to the stub when the base URL is not https', () => {
-			process.env.CASEPRO_TRANSPORT = 'rest';
-			process.env.CASEPRO_BASE_URL = 'http://casepro-mcp-v2.stg-omnisai.io';
-			process.env.CASEPRO_MCP_API_KEY = KEY;
-
-			expect(resolveTransportFromConfig()).to.be.instanceOf(StubTransport);
-			expect(caseProTransportDiagnostics().reason).to.match(/https/);
+		it('reports the kill switch when a live transport is requested while disabled', () => {
+			process.env.CASEPRO_TRANSPORT = 'native';
+			setConfig({ enabled: false, transport: 'native', baseUrl: BASE, apiKey: KEY, orgId: ORG });
+			const diag = caseProTransportDiagnostics();
+			expect(diag.requested).to.equal('native');
+			expect(diag.effective).to.equal('stub');
+			expect(diag.reason).to.match(/CasePro_Enabled/);
 		});
 
-		it('falls back to the stub for the (declared, unimplemented) keygate auth mode', () => {
-			process.env.CASEPRO_TRANSPORT = 'rest';
-			process.env.CASEPRO_BASE_URL = BASE;
-			process.env.CASEPRO_MCP_API_KEY = KEY;
-			process.env.CASEPRO_AUTH_MODE = 'keygate';
-
-			expect(resolveTransportFromConfig()).to.be.instanceOf(StubTransport);
-			expect(caseProTransportDiagnostics().reason).to.match(/keygate/);
+		it('reports a fully-live native config (host, key, org)', () => {
+			process.env.CASEPRO_TRANSPORT = 'native';
+			setConfig(nativeCfg());
+			const diag = caseProTransportDiagnostics();
+			expect(diag.effective).to.equal('native');
+			expect(diag.host).to.equal('crm.example.com');
+			expect(diag.keyConfigured).to.equal(true);
+			expect(diag.orgConfigured).to.equal(true);
+			expect(diag.reason).to.equal(undefined);
 		});
 
-		it('resolves the live transport when fully configured (url + key)', () => {
+		it("maps the legacy 'rest' request onto mcp", () => {
 			process.env.CASEPRO_TRANSPORT = 'rest';
-			process.env.CASEPRO_BASE_URL = BASE;
-			process.env.CASEPRO_MCP_API_KEY = KEY;
-			process.env.CASEPRO_ORG_ID = ORG;
-
-			expect(resolveTransportFromConfig()).to.be.instanceOf(McpGatewayTransport);
-			expect(caseProTransportDiagnostics()).to.include({
-				requested: 'rest',
-				effective: 'rest',
-				keyConfigured: true,
-				orgConfigured: true,
-				host: 'casepro-mcp-v2.stg-omnisai.io',
-			});
+			setConfig(nativeCfg({ transport: 'mcp' }));
+			const diag = caseProTransportDiagnostics();
+			expect(diag.requested).to.equal('mcp');
+			expect(diag.effective).to.equal('mcp');
 		});
 	});
 });

@@ -204,7 +204,12 @@ export function buildIntakeRowFromCapture(input: IntakeCaptureInput, partyId: st
 		intake_stage_id: str(input.intakeStageId),
 		source: str(input.source),
 		intake_status: str(input.intakeStatus),
-		status: 'open',
+		// `status` is Crm-Backend's ROW-LEVEL flag (@IsIn(['active','inactive']);
+		// soft-delete = 'inactive', every list query filters status='active') — NOT a
+		// lead lifecycle status (that's `intake_status`). 'open' fails DTO validation
+		// (400 validation_failed) and the swallowed write-through left every captured
+		// lead without a caseproIntakeId.
+		status: 'active',
 		incident_date: toIso(input.incidentDate),
 		form_data: input.formData,
 		template_id: str(input.templateId),

@@ -1,17 +1,13 @@
-import type { SettingValue } from '@rocket.chat/core-typings';
-
-import { settings } from '../../../../app/settings/server';
+import { caseProMode } from './config';
 
 /**
  * "Is a LIVE CasePro transport configured?" — the transport-live gate for
  * anything that would WRITE into CasePro (automation write-backs, card→task
- * push sync). Mirrors the selection rule in transport.ts
- * `resolveTransportFromConfig` WITHOUT touching the transport/client
- * internals (owned by the auth-wire lane): live ⇔ the 'rest' transport is
- * explicitly chosen (env `CASEPRO_TRANSPORT` or setting `CasePro_Transport`)
- * AND a base URL is present (env `CASEPRO_BASE_URL` or setting
- * `CasePro_Base_URL`). The default stub transport is NOT live — writes
- * against it must stay audit-only in production paths.
+ * push sync). RECONCILED onto the unified config model: live ⇔ the integration
+ * is ENABLED (`caseProMode().enabled` — setting-first kill switch) AND the
+ * effective transport is not the stub ('native' or 'mcp'). The default stub
+ * transport is NOT live — writes against it only touch the in-memory stub
+ * store and must stay audit-only in production paths.
  *
  * Tests (and only tests) may force the answer via
  * {@link __forceLiveTransportForTests} so harness cases can exercise the
@@ -25,23 +21,10 @@ export function __forceLiveTransportForTests(value?: boolean): void {
 	testOverride = value;
 }
 
-/** settings.get throws when the setting isn't registered yet (early boot / tests). */
-function safeGetSetting<T extends SettingValue>(id: string): T | undefined {
-	try {
-		return settings.get<T>(id);
-	} catch {
-		return undefined;
-	}
-}
-
 export function isLiveTransportConfigured(): boolean {
 	if (testOverride !== undefined) {
 		return testOverride;
 	}
-	const choice = (process.env.CASEPRO_TRANSPORT || safeGetSetting<string>('CasePro_Transport') || 'stub').toLowerCase();
-	if (choice !== 'rest') {
-		return false;
-	}
-	const baseUrl = process.env.CASEPRO_BASE_URL || safeGetSetting<string>('CasePro_Base_URL') || '';
-	return Boolean(baseUrl);
+	const mode = caseProMode();
+	return mode.enabled && mode.transport !== 'stub';
 }

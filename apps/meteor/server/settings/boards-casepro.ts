@@ -1,34 +1,42 @@
 import { settingsRegistry } from '../../app/settings/server';
 
 /**
- * Settings for the CasePro integration (M2 read client + live wire).
+ * Settings for the CasePro integration (M2 read client + live transports + the
+ * July-2 staging lanes: comms-log, client-sync, public intake capture).
  *
- * - CasePro_Enabled   : master switch the read client + write-through sync honor.
- * - CasePro_Transport : 'stub' (default — mock rows, zero config) or 'rest' (live MCP gateway).
- * - CasePro_Base_URL  : the live casepro-mcp-v2 gateway base URL (transport = rest only).
- * - CasePro_Auth_Mode : 'mcp-key' (route A — X-MCP-API-Key header, the deployed gateway's
- *                       auth) or 'keygate' (route B — declared STUB; falls back to the stub
- *                       transport until the KeyGate handshake lands).
- * - CasePro_Org_ID    : the X-Organization-ID scope; env CASEPRO_ORG_ID overrides.
+ * CORE (transport/auth — the E2E-verified release/production model):
+ * - CasePro_Enabled   : master switch the read client + write-through sync honor
+ *                       (public — the client banner logic needs it).
+ * - CasePro_Transport : 'stub' (default — mock rows, zero config), 'native'
+ *                       (direct REST against CasePro), or 'mcp' (the CasePro MCP
+ *                       endpoint). Public so the client can tell stub vs live;
+ *                       the value itself is not a secret.
+ * - CasePro_Base_URL  : the live CasePro base URL (only used when transport != stub).
+ * - CasePro_Auth_Mode : 'internal-key' (service-key header) or 'bearer' (bearer token).
+ * - CasePro_Api_Key   : the secret credential for whichever auth mode is selected.
+ * - CasePro_Org_Id    : the CasePro organization every read/write is scoped to.
+ * - CasePro_Mcp_Path  : path of the MCP endpoint on the base URL (mcp transport only).
+ * - CasePro_Snapshot_Refresh_Interval : minutes between snapshot refreshes
+ *                       (default 30; consumers clamp to a minimum of 5).
+ *
+ * STAGING LANES (additive features on the same transport):
  * - CasePro_Web_URL   : the CasePro WEB APP base URL for "Open in CasePro" deep links
- *                       (empty = links hidden). This is the human UI, not the gateway.
+ *                       (empty = links hidden). This is the human UI, not the API.
  * - CasePro_Comms_Log_* : matter-channel message auto-log (comms-log lane) — a direct
  *                       authenticated POST to the CRM ingest REST controller.
+ * - CasePro_Client_Sync_* : client↔firm portal-message two-way sync into a per-matter
+ *                       "Client" channel (its own service client, same auth material).
  * - CasePro_Intake_Capture_Base : the CasePro CRM base URL for the PUBLIC intake
  *   capture endpoint (`{base}/api/v1/intake-questionnaires/capture?org=&source=`)
  *   used by boards forms with `intakeRouting:'casepro-direct'`. DISTINCT from
- *   CasePro_Base_URL (the MCP connector base) — the capture lane is auth-less and
- *   points at the CRM backend itself. Must be https; the outbound POST is host-pinned
- *   to this base. Independent of CasePro_Enabled/CasePro_Transport by design: a firm
- *   can route public forms into CasePro without turning on the full board sync.
- *
- * SECRETS ARE NEVER SETTINGS: the MCP API key comes exclusively from env
- * `CASEPRO_MCP_API_KEY` (sealed secret in the deploy). With transport = rest and no
- * key, the transport refuses and serves the stub with a loud warning — it never
- * sends an unauthenticated request.
+ *   CasePro_Base_URL — the capture lane is auth-less and points at the CRM backend
+ *   itself. Must be https; the outbound POST is host-pinned to this base.
+ *   Independent of CasePro_Enabled/CasePro_Transport by design: a firm can route
+ *   public forms into CasePro without turning on the full board sync.
  *
  * Defaulting to the stub means a fresh MatterChat boots and renders a complete
- * MatterSnapshot with no CasePro credentials.
+ * MatterSnapshot with no CasePro credentials. Flip the transport to 'native' or
+ * 'mcp' + set the base URL / auth settings to go live.
  */
 export const createBoardsCaseProSettings = () =>
 	settingsRegistry.addGroup('CasePro', async function () {
@@ -41,12 +49,13 @@ export const createBoardsCaseProSettings = () =>
 
 		await this.add('CasePro_Transport', 'stub', {
 			type: 'select',
-			public: false,
+			public: true,
 			i18nLabel: 'CasePro_Transport',
 			i18nDescription: 'CasePro_Transport_Description',
 			values: [
 				{ key: 'stub', i18nLabel: 'CasePro_Transport_Stub' },
-				{ key: 'rest', i18nLabel: 'CasePro_Transport_Rest' },
+				{ key: 'native', i18nLabel: 'CasePro_Transport_Native' },
+				{ key: 'mcp', i18nLabel: 'CasePro_Transport_Mcp' },
 			],
 		});
 
@@ -58,34 +67,65 @@ export const createBoardsCaseProSettings = () =>
 			placeholder: 'https://casepro-mcp-v2.stg-omnisai.io',
 			enableQuery: {
 				_id: 'CasePro_Transport',
-				value: 'rest',
+				value: { $in: ['native', 'mcp'] },
 			},
 		});
 
-		await this.add('CasePro_Auth_Mode', 'mcp-key', {
+		await this.add('CasePro_Auth_Mode', 'internal-key', {
 			type: 'select',
 			public: false,
 			i18nLabel: 'CasePro_Auth_Mode',
 			i18nDescription: 'CasePro_Auth_Mode_Description',
 			values: [
-				{ key: 'mcp-key', i18nLabel: 'CasePro_Auth_Mode_McpKey' },
-				{ key: 'keygate', i18nLabel: 'CasePro_Auth_Mode_KeyGate' },
+				{ key: 'internal-key', i18nLabel: 'CasePro_Auth_Mode_Internal_Key' },
+				{ key: 'bearer', i18nLabel: 'CasePro_Auth_Mode_Bearer' },
 			],
 			enableQuery: {
 				_id: 'CasePro_Transport',
-				value: 'rest',
+				value: { $in: ['native', 'mcp'] },
 			},
 		});
 
-		await this.add('CasePro_Org_ID', '', {
+		await this.add('CasePro_Api_Key', '', {
 			type: 'string',
 			public: false,
-			i18nLabel: 'CasePro_Org_ID',
-			i18nDescription: 'CasePro_Org_ID_Description',
+			secret: true,
+			i18nLabel: 'CasePro_Api_Key',
+			i18nDescription: 'CasePro_Api_Key_Description',
 			enableQuery: {
 				_id: 'CasePro_Transport',
-				value: 'rest',
+				value: { $in: ['native', 'mcp'] },
 			},
+		});
+
+		await this.add('CasePro_Org_Id', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'CasePro_Org_Id',
+			i18nDescription: 'CasePro_Org_Id_Description',
+			enableQuery: {
+				_id: 'CasePro_Transport',
+				value: { $in: ['native', 'mcp'] },
+			},
+		});
+
+		await this.add('CasePro_Mcp_Path', '/mcp/v2', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'CasePro_Mcp_Path',
+			i18nDescription: 'CasePro_Mcp_Path_Description',
+			placeholder: '/mcp/v2',
+			enableQuery: {
+				_id: 'CasePro_Transport',
+				value: 'mcp',
+			},
+		});
+
+		await this.add('CasePro_Snapshot_Refresh_Interval', 30, {
+			type: 'int',
+			public: false,
+			i18nLabel: 'CasePro_Snapshot_Refresh_Interval',
+			i18nDescription: 'CasePro_Snapshot_Refresh_Interval_Description',
 		});
 
 		await this.add('CasePro_Web_URL', '', {
@@ -112,7 +152,7 @@ export const createBoardsCaseProSettings = () =>
 		});
 
 		// Where digests are POSTed. The CRM backend can live on a different host
-		// than the MCP connector base URL, so this may be an absolute URL
+		// than the transport base URL, so this may be an absolute URL
 		// (e.g. https://casepro-api.stg-omnisai.io/matterchat-messages/ingest).
 		// A bare path is resolved against CasePro_Base_URL.
 		await this.add('CasePro_Comms_Log_Ingest_URL', 'matterchat-messages/ingest', {
@@ -134,7 +174,7 @@ export const createBoardsCaseProSettings = () =>
 		// Reads/writes to CasePro `client_messages` use the CasePro service endpoint
 		// (GET/POST /service/matters/:id/client-messages) on the CRM API — this lane
 		// carries its own service client (casepro-clientsync/client.ts), separate from
-		// the MCP transport, reusing the same X-MCP-API-Key/org auth headers.
+		// the boards transport, reusing the same auth material (CasePro_Api_Key/Org_Id).
 		// -------------------------------------------------------------------------
 		await this.add('CasePro_Client_Sync_Enabled', false, {
 			type: 'boolean',

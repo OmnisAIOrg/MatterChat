@@ -2,7 +2,6 @@ import type { IBoardDeadline, Serialized } from '@rocket.chat/core-typings';
 import {
 	Box,
 	Button,
-	Callout,
 	Icon,
 	States,
 	StatesIcon,
@@ -12,11 +11,13 @@ import {
 	Throbber,
 } from '@rocket.chat/fuselage';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouter, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { CaseProStubBanner } from '../../casepro';
 
 /**
  * MattersCalendar — the `/boards/matters/calendar` view (M5 client).
@@ -236,7 +237,6 @@ const MattersCalendar = (): ReactElement => {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const dispatchToastMessage = useToastMessageDispatch();
-	const caseProEnabled = useSetting('CasePro_Enabled', false);
 
 	const ensureBoard = useEndpoint('POST', '/v1/boards.matters.ensureBoard');
 	const listDeadlines = useEndpoint('GET', '/v1/boards.matters.deadlines.list');
@@ -321,15 +321,7 @@ const MattersCalendar = (): ReactElement => {
 				)}
 			</PageHeader>
 			<PageScrollableContentWithShadow>
-				{!caseProEnabled && (
-					<Box mbe={16}>
-						<Callout type='warning' icon='info' title={t('Boards_Matters_Stub_Title', { defaultValue: 'CasePro is in stub mode' })}>
-							{t('Boards_Matters_Stub_Description', {
-								defaultValue: 'CasePro is not connected — deadlines shown here may be derived from sample data, not live records.',
-							})}
-						</Callout>
-					</Box>
-				)}
+				<CaseProStubBanner mbe={16} />
 
 				{isLoading && (
 					<Box display='flex' justifyContent='center' p={24}>

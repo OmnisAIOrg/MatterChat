@@ -1,8 +1,19 @@
 /**
- * CasePro READ CLIENT (M2) barrel.
+ * CasePro CLIENT (M2) barrel.
  *
  * The Matters server should import `caseProClient` from here:
  *   import { caseProClient } from '../lib/boards/casepro';
+ *
+ * Enablement/status (design §4–§5):
+ *   - `caseProMode()`   — THE single enablement gate. `enabled === false` → all
+ *     reads serve the stub (demo mode) and every write-through no-ops;
+ *     `enabled === true` → reads AND writes use the configured transport.
+ *     client.ts and leads/caseproSync.ts both align on this one helper.
+ *   - `caseProStatus()` — admin status + cheap live probe (REST endpoint contract).
+ *   - `caseProTransportDiagnostics()` — the staging live-wire's "why is live
+ *     degraded?" surface, reconciled onto this config model (additive on status).
+ *   - `isLiveTransportConfigured()` — the transport-live gate for CasePro writes
+ *     (task-sync / write-back audit labels), derived from `caseProMode()`.
  */
 export {
 	caseProClient,
@@ -42,18 +53,26 @@ export {
 } from './mapping-intake';
 export {
 	StubTransport,
-	McpGatewayTransport,
+	NativeRestTransport,
+	McpTransport,
+	CaseProHttpError,
+	instantiateTransport,
 	resolveTransportFromConfig,
 	caseProTransportDiagnostics,
-	deriveMcpEndpoint,
-	buildMcpFilters,
 	type ICaseProTransport,
 	type CaseProRow,
 	type CaseProQuery,
 	type CaseProQueryResult,
 	type CaseProCallContext,
 	type CaseProTransportDiagnostics,
-	type McpGatewayTransportConfig,
 } from './transport';
+export {
+	caseProMode,
+	resolveCaseProConfig,
+	type CaseProConfig,
+	type CaseProTransportKind,
+	type CaseProAuthMode,
+} from './config';
+export { caseProStatus, type CaseProStatus } from './status';
 export { isLiveTransportConfigured, __forceLiveTransportForTests } from './live';
 export { syncCardEvent, setTaskSyncEnabled, isTaskSyncEnabledForBoard, TASK_SYNC_EVENTS, __resetTaskSyncStateForTests } from './task-sync';

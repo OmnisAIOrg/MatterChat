@@ -254,9 +254,12 @@ export const permissions = [
 	{ _id: 'boards-leads-edit', roles: ['admin', 'intake-specialist'] },
 	{ _id: 'boards-convert-lead', roles: ['admin', 'attorney', 'intake-specialist'] },
 	// CasePro integration (enforced on boards.casepro.* + leads sync/convert + the status
-	// surface; grants backfilled for existing installs by migration v338).
-	{ _id: 'boards-casepro-view', roles: ['admin', 'partner', 'attorney', 'case-manager'] },
-	{ _id: 'boards-casepro-sync', roles: ['admin', 'partner'] },
+	// surface; grants backfilled for existing installs by migration v338). Role UNION of the
+	// staging live-wire grants (partner/attorney/case-manager) and the release/production
+	// E2E-verified broad defaults (regular users drive the existing board flows; the e2e
+	// contract requires role 'user' to hold view+sync). Settings/write-back stay admin+partner.
+	{ _id: 'boards-casepro-view', roles: ['admin', 'owner', 'moderator', 'user', 'partner', 'attorney', 'case-manager'] },
+	{ _id: 'boards-casepro-sync', roles: ['admin', 'owner', 'moderator', 'user', 'partner'] },
 	{ _id: 'boards-manage-casepro-settings', roles: ['admin', 'partner'] },
 	{ _id: 'boards-casepro-write', roles: ['admin', 'partner'] },
 	// CHI AI assistant (/chi) — seeded to every member ('user') by default; admins can
