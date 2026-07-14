@@ -1,6 +1,7 @@
 import type {
 	IBoardCard,
 	IBoardCardLink,
+	ICardCalendarSync,
 	IMatterSnapshot,
 	BoardsFieldValue,
 	OmnisCardQuery,
@@ -210,5 +211,47 @@ export class BoardsCardsRaw extends BaseRaw<IBoardCard> implements IBoardsCardsM
 			{ sort: { position: 1 }, projection: { position: 1 } },
 		);
 		return card?.position ?? 0;
+	}
+
+	// ─── two-way calendar sync (Phase 3) ────────────────────────────────────────────────────────
+
+	public findAssignedDueBetween(userId: string, from: Date, to: Date): FindCursor<IBoardCard> {
+		return this.find({ assignees: userId, archived: { $ne: true }, dueDate: { $gte: from, $lt: to } });
+	}
+
+	public findOneByCalendarEvent(connectionId: string, externalEventId: string): Promise<IBoardCard | null> {
+		return this.findOne({ calendarSync: { $elemMatch: { connectionId, externalEventId } } });
+	}
+
+	public findByCalendarConnection(connectionId: string): FindCursor<IBoardCard> {
+		return this.find({ 'calendarSync.connectionId': connectionId });
+	}
+
+	public async upsertCalendarSync(cardId: string, sync: ICardCalendarSync): Promise<UpdateResult> {
+		// Replace-if-present, else push: remove any existing entry for this connection, then add the new
+		// one. Two writes keeps the semantics simple (Mongo has no single-op array upsert-by-key).
+		await this.updateOne({ _id: cardId }, { $pull: { calendarSync: { connectionId: sync.connectionId } } });
+		return this.updateOne({ _id: cardId }, { $push: { calendarSync: sync } });
+	}
+
+	public removeCalendarSync(cardId: string, connectionId: string): Promise<UpdateResult> {
+		return this.updateOne({ _id: cardId }, { $pull: { calendarSync: { connectionId } } });
+	}
+
+	public setDueDate(cardId: string, dueDate: Date): Promise<UpdateResult> {
+		return this.updateOne({ _id: cardId }, { $set: { dueDate }, $inc: { rev: 1 } });
+	}
+
+	/**
+	 * Distinct MatterChat user ids that already hold at least one CasePro-namespaced calendar mirror
+	 * (connectionId begins `casepro:`). The calendar cron uses this to keep polling/pushing CasePro
+	 * users who have no standalone `boards_calendar_connections` document (their calendar lives in
+	 * CasePro). Cheap: a distinct over the (typically small) set of cards carrying a CasePro mirror.
+	 */
+	public async findUserIdsWithCaseProMirror(): Promise<string[]> {
+		const ids = await this.col.distinct('calendarSync.userId', {
+			'calendarSync.connectionId': { $regex: '^casepro:' },
+		});
+		return (ids as string[]).filter((id): id is string => typeof id === 'string' && id.length > 0);
 	}
 }

@@ -90,6 +90,25 @@ export interface ICaseProTransport {
 	 * posture (host-pinned SSRF allow-list, no redirect-follow via serverFetch).
 	 */
 	ingest(path: string, payload: Record<string, unknown>, ctx?: CaseProCallContext): Promise<unknown>;
+	/**
+	 * Generic authenticated request to a plain CasePro CRM REST controller for the verbs `ingest`
+	 * (POST-only) does not cover — GET (reads) / PATCH / DELETE (mutations by row id). First consumer:
+	 * the calendar-reuse bridge (`casepro/calendarBridge.ts`), which routes a MatterChat user's
+	 * due-card → calendar event through CasePro's OWN calendar controller
+	 * (`POST /calendar/create`, `PATCH /calendar/update/:id`, `DELETE /calendar/:id`,
+	 * `GET /calendar/all-events`) instead of MatterChat holding a second Google/Outlook OAuth token.
+	 *
+	 * Same auth + egress posture as {@link ICaseProTransport.ingest}: reuses the entity verbs' headers
+	 * (X-MCP-API-Key + X-Organization-ID + advisory X-Acting-User), https-only, single-host SSRF
+	 * allow-list, never follows redirects, refuses without a key. `path` is relative to the configured
+	 * base host or an absolute https URL. `query` is appended as the search string (GET reads). Returns
+	 * the parsed JSON body (or `undefined` for an empty 2xx, e.g. a 204 DELETE).
+	 */
+	request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +473,37 @@ export class StubTransport implements ICaseProTransport {
 		this.ingested.push({ path, payload });
 		return { ok: true, stub: true };
 	}
+
+	/** Records of every generic request (tests inspect them). Reads return an empty CasePro-shaped payload. */
+	public readonly requests: {
+		method: string;
+		path: string;
+		query?: Record<string, string | undefined>;
+		body?: Record<string, unknown>;
+	}[] = [];
+
+	async request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown> {
+		this.requests.push({ method, path, query: options?.query, body: options?.body });
+		// Shape stub replies like the CasePro calendar controller so the bridge composes without network:
+		//  - all-events read  → { data: [], total: 0 }
+		//  - create/update     → echo the body with a synthetic id so correlation is recorded
+		//  - delete            → { success: true }
+		if (method === 'GET') {
+			// sync-status probe → "not connected" (the stub isn't a real calendar); all-events → empty feed.
+			if (/calendar\/sync-status/.test(path)) {
+				return { connected: false, provider: null };
+			}
+			return { data: [], total: 0 };
+		}
+		if (method === 'DELETE') {
+			return { success: true };
+		}
+		return { id: `stub-calendar-${Date.now().toString(36)}-${(this.seq += 1)}`, ...(options?.body || {}) };
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -753,7 +803,7 @@ export class NativeRestTransport implements ICaseProTransport {
 		return { 'X-API-Key': this.cfg.apiKey, 'X-Organization-ID': this.cfg.orgId };
 	}
 
-	private async request(
+	private async wire(
 		method: WireRequest['method'],
 		path: string,
 		opts: { params?: Record<string, string>; body?: Record<string, unknown>; headers?: Record<string, string> } = {},
@@ -769,6 +819,32 @@ export class NativeRestTransport implements ICaseProTransport {
 		});
 	}
 
+	/**
+	 * Generic authenticated CRM REST call (GET/POST/PATCH/DELETE) — the interface verb the boards
+	 * calendar/email sync reuses (see {@link ICaseProTransport.request}). Same auth headers + egress
+	 * posture as the entity verbs; `query` is appended as the search string (undefined/empty skipped)
+	 * and `ctx.actingUserId` rides as the advisory `X-Acting-User` header. Returns the parsed JSON
+	 * body (or `undefined` for an empty 2xx, e.g. a 204 DELETE).
+	 */
+	async request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown> {
+		const params: Record<string, string> = {};
+		for (const [key, value] of Object.entries(options?.query ?? {})) {
+			if (value !== undefined && value !== '') {
+				params[key] = value;
+			}
+		}
+		const { json } = await this.wire(method, path, {
+			...(Object.keys(params).length ? { params } : {}),
+			...(options?.body ? { body: options.body } : {}),
+			...(options?.ctx?.actingUserId ? { headers: { 'X-Acting-User': options.ctx.actingUserId } } : {}),
+		});
+		return json;
+	}
+
 	/** request() but 404 → null instead of throwing (get-by-id semantics). */
 	private async requestOr404(
 		method: WireRequest['method'],
@@ -776,7 +852,7 @@ export class NativeRestTransport implements ICaseProTransport {
 		opts: { params?: Record<string, string>; body?: Record<string, unknown> } = {},
 	): Promise<unknown | null> {
 		try {
-			return (await this.request(method, path, opts)).json;
+			return (await this.wire(method, path, opts)).json;
 		} catch (err) {
 			if (err instanceof CaseProHttpError && err.status === 404) {
 				return null;
@@ -799,7 +875,7 @@ export class NativeRestTransport implements ICaseProTransport {
 		const rows: CaseProRow[] = [];
 		let total = 0;
 		for (let page = 1; page <= NATIVE_MAX_PAGES; page++) {
-			const { json } = await this.request(method, path, {
+			const { json } = await this.wire(method, path, {
 				params: { ...params, page: String(page), limit: String(NATIVE_PAGE_LIMIT), orgId: this.cfg.orgId },
 				// list routes are POST with an optional body; send an empty object.
 				...(method === 'POST' ? { body: {} } : {}),
@@ -1132,7 +1208,7 @@ export class NativeRestTransport implements ICaseProTransport {
 	}
 
 	async listSchema(entity: string): Promise<unknown> {
-		return (await this.request('GET', `schema/entities/${encodeURIComponent(entity)}`)).json;
+		return (await this.wire('GET', `schema/entities/${encodeURIComponent(entity)}`)).json;
 	}
 
 	async create(entity: string, data: CaseProRow, ctx?: CaseProCallContext): Promise<CaseProRow> {
@@ -1198,7 +1274,7 @@ export class NativeRestTransport implements ICaseProTransport {
 				throw new Error(`CasePro native create(${entity}): no live Crm-Backend endpoint`);
 		}
 		this.lookupCache.delete(entity);
-		const { json } = await this.request(route.method, route.path, { body, ...(ctx?.actingUserId ? { headers: { 'X-Acting-User': ctx.actingUserId } } : {}) });
+		const { json } = await this.wire(route.method, route.path, { body, ...(ctx?.actingUserId ? { headers: { 'X-Acting-User': ctx.actingUserId } } : {}) });
 		const row = unwrapRow(json);
 		if (!row || !str2(row.id)) {
 			throw new Error(`CasePro native create(${entity}) returned no row id`);
@@ -1232,7 +1308,7 @@ export class NativeRestTransport implements ICaseProTransport {
 		}
 		this.lookupCache.delete(entity);
 		const body = entity === 'intake_questionnaires' ? sanitizeIntakeWrite(patch) : patch;
-		const { json } = await this.request(route.method, route.path, {
+		const { json } = await this.wire(route.method, route.path, {
 			body: body as Record<string, unknown>,
 			...(ctx?.actingUserId ? { headers: { 'X-Acting-User': ctx.actingUserId } } : {}),
 		});
@@ -1270,7 +1346,7 @@ export class NativeRestTransport implements ICaseProTransport {
 			});
 			return json;
 		}
-		const { json } = await this.request('POST', path, { body: payload, ...(ctx?.actingUserId ? { headers: extra } : {}) });
+		const { json } = await this.wire('POST', path, { body: payload, ...(ctx?.actingUserId ? { headers: extra } : {}) });
 		return json;
 	}
 }
@@ -1496,6 +1572,44 @@ export class McpTransport implements ICaseProTransport {
 			},
 			timeoutMs: this.timeoutMs,
 			allowList: target.allowList,
+		});
+		return json;
+	}
+
+	/**
+	 * Generic authenticated CRM REST call (GET/POST/PATCH/DELETE) — the interface verb the boards
+	 * calendar/email sync reuses (see {@link ICaseProTransport.request}). Calendar & communications
+	 * are plain CRM REST endpoints (not JSON-RPC tools), so they ride the gateway's own origin with the
+	 * SAME auth + strict egress posture as {@link McpTransport.call} (via {@link wireFetch}: allow-listed
+	 * host, https/SSRF gate, no redirect follow). `query` is appended (undefined/empty skipped) and
+	 * `ctx.actingUserId` rides as the advisory `X-Acting-User` header. Returns the parsed JSON body
+	 * (or `undefined` for an empty 2xx).
+	 */
+	async request(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		options?: { query?: Record<string, string | undefined>; body?: Record<string, unknown>; ctx?: CaseProCallContext },
+	): Promise<unknown> {
+		const target = /^https?:\/\//i.test(path) ? path : `${new URL(this.url).origin}/${path.replace(/^\/+/, '')}`;
+		const params: Record<string, string> = {};
+		for (const [key, value] of Object.entries(options?.query ?? {})) {
+			if (value !== undefined && value !== '') {
+				params[key] = value;
+			}
+		}
+		const { json } = await wireFetch({
+			method,
+			url: target,
+			...(Object.keys(params).length ? { params } : {}),
+			...(options?.body ? { body: options.body } : {}),
+			headers: {
+				Authorization: `Bearer ${this.cfg.apiKey}`,
+				'X-MCP-Key': this.cfg.apiKey,
+				...(this.cfg.orgId ? { 'X-Organization-ID': this.cfg.orgId } : {}),
+				...(options?.ctx?.actingUserId ? { 'X-Acting-User': options.ctx.actingUserId } : {}),
+			},
+			timeoutMs: this.timeoutMs,
+			allowList: this.allowList,
 		});
 		return json;
 	}

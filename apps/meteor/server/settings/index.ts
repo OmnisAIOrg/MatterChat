@@ -4,6 +4,7 @@ import { createAssetsSettings } from './assets';
 import { createBoardsAutomationSettings } from './automation';
 import { createBoardsSettings } from './boards';
 import { createBoardsCaseProSettings } from './boards-casepro';
+import { createBoardsCalendarSyncSettings } from './boards-calendar-sync';
 import { createBoardsReportingSettings } from './boardsReporting';
 import { createBotsSettings } from './bots';
 import { createCasSettings } from './cas';
@@ -52,6 +53,7 @@ await Promise.all([
 	createBoardsSettings(),
 	createBoardsAutomationSettings(),
 	createBoardsCaseProSettings(),
+	createBoardsCalendarSyncSettings(),
 	createOmnisAIOAuthSettings(),
 	createBoardsReportingSettings(),
 	createBotsSettings(),
