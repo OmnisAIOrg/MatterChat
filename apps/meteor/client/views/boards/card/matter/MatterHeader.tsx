@@ -8,6 +8,14 @@ import { fmtDate } from './matterFormatters';
 import { useMatterChannel } from './useMatterChannel';
 import { CaseProStatusChip } from '../../casepro';
 
+// "Open in CasePro" resolves against the admin-configured CasePro_Web_URL (the human web app,
+// not the MCP gateway). Kept at module scope so its branching stays out of the component's
+// cyclomatic complexity. Returns undefined when the setting is unset → the button is hidden.
+const buildCaseProHref = (caseProWebUrl: unknown, matterId: string): string | undefined => {
+	const base = (typeof caseProWebUrl === 'string' ? caseProWebUrl : '').trim().replace(/\/+$/, '');
+	return base ? `${base}/matters/${matterId}` : undefined;
+};
+
 type MatterHeaderProps = {
 	matterId: string;
 	/** Falls back as the display name when the snapshot has no matterName. */
@@ -30,17 +38,16 @@ type MatterHeaderProps = {
  *  - action row: "Open in CasePro" (admin-configured CasePro_Web_URL; hidden
  *    when unset rather than rendered as a dead link) and "Jump to channel"
  *    (only when a channel is linked — linking itself lives in ChannelSection);
- *  - "Updated …" freshness caption.
+ *  - "Updated …" freshness caption;
+ *  - the read-only CasePro incident narrative (matters.description), shown as a
+ *    labeled "Incident" block — distinct from the editable board-card
+ *    Description in CardDetail; omitted when the snapshot carries none.
  */
 const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefreshing, onRefresh }: MatterHeaderProps): ReactElement => {
 	const { t } = useTranslation();
 	const caseProWebUrl = useSetting('CasePro_Web_URL', '');
 
-	// "Open in CasePro" resolves against the admin-configured CasePro_Web_URL
-	// (the human web app, not the MCP gateway) — when it is not configured the
-	// button is HIDDEN rather than rendered as a dead href.
-	const caseProWebBase = (typeof caseProWebUrl === 'string' ? caseProWebUrl : '').trim().replace(/\/+$/, '');
-	const caseProHref = caseProWebBase ? `${caseProWebBase}/matters/${matterId}` : undefined;
+	const caseProHref = buildCaseProHref(caseProWebUrl, matterId);
 
 	const { roomId, canJump, jumpToChannel } = useMatterChannel(link);
 
@@ -117,6 +124,18 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 			{updatedLabel && (
 				<Box fontScale='micro' color='hint' mbe={4}>
 					{t('Boards_Matters_Fetched_At', { date: updatedLabel, defaultValue: 'Updated {{date}}' })}
+				</Box>
+			)}
+
+			{/* Incident narrative — read-only CasePro matters.description (NOT the editable card Description). */}
+			{snapshot?.incidentDescription && (
+				<Box mbs={8}>
+					<Box fontScale='c1' color='hint' mbe={4}>
+						{t('Boards_Matters_Incident', { defaultValue: 'Incident' })}
+					</Box>
+					<Box fontScale='p2' color='default' bg='tint' p={8} borderRadius='x4' style={{ whiteSpace: 'pre-wrap' }}>
+						{snapshot.incidentDescription}
+					</Box>
 				</Box>
 			)}
 		</Box>

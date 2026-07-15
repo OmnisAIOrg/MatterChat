@@ -58,6 +58,11 @@ function str(value: unknown): string | undefined {
 	return undefined;
 }
 
+/** Narrow an unknown to a plain object (a nested relation row), else undefined. */
+function isObj(value: unknown): value is CaseProRow {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /** A row's `date` field, epoch-ms for sorting (missing/invalid sorts oldest). */
 function dateMs(row: CaseProRow): number {
 	const d = toDate(row.date);
@@ -170,6 +175,51 @@ export function mapExpenseTotal(expenses: CaseProRow[]): number {
 	return expenses.reduce((acc, e) => acc + num(e.amount), 0);
 }
 
+// ---------------------------------------------------------------------------
+// Medical providers (treatment section). A `medical_providers` row references a
+// Party (its display name + provider_type live on that party — see CasePro
+// `parties.party_name` / `parties.provider_type`). CasePro exposes no per-visit
+// treatment detail via this surface, so a provider list IS the representation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the party carrying a provider's display name/type. The native list
+ * route hydrates a nested `party` object; the stub (and any lean row) carries a
+ * `party_id`/`provider_party_id` FK resolved via the supplied party map.
+ */
+function resolveProviderParty(provider: CaseProRow, partyById?: Map<string, CaseProRow>): CaseProRow | undefined {
+	const nested = isObj(provider.party) ? provider.party : undefined;
+	if (nested) {
+		return nested;
+	}
+	const partyId = str(provider.party_id) ?? str(provider.provider_party_id);
+	return partyId ? partyById?.get(partyId) : undefined;
+}
+
+/**
+ * Build the snapshot's `providers[]` ({ name, type? }) from the matter's
+ * `medical_providers` rows. Name is the related party's `party_name` (falling
+ * back to the generic party display name, then any name column on the provider
+ * row); `type` is the party's `provider_type`. Soft-deleted providers and rows
+ * with no resolvable name are skipped.
+ */
+export function mapProviders(providers: CaseProRow[], partyById?: Map<string, CaseProRow>): { name: string; type?: string }[] {
+	const out: { name: string; type?: string }[] = [];
+	for (const provider of providers) {
+		if (provider.deleted_at) {
+			continue;
+		}
+		const party = resolveProviderParty(provider, partyById);
+		const name = str(party?.party_name) ?? partyDisplayName(party) ?? str(provider.provider_name) ?? str(provider.name);
+		if (!name) {
+			continue;
+		}
+		const type = str(party?.provider_type) ?? str(provider.provider_type);
+		out.push(type ? { name, type } : { name });
+	}
+	return out;
+}
+
 /** projectedNet = settlement − attorney fees − expenses − net liens (undefined w/o a settlement). */
 export function computeProjectedNet(
 	settlementAmount: number | undefined,
@@ -208,10 +258,45 @@ export const MATTER_TEAM_ROLE_COLUMNS: { column: string; label: string }[] = [
 ];
 
 /**
+ * A CasePro user's display name. CentralizedAuth stores a single `name` column
+ * (full display name); fall back to `first_name`+`last_name` (defensive — some
+ * user payloads split them) and finally `email` so a resolved user always yields
+ * SOMETHING more useful than a raw UUID.
+ */
+export function userDisplayName(user?: CaseProRow | null): string | undefined {
+	if (!user) {
+		return undefined;
+	}
+	const name = str(user.name);
+	if (name) {
+		return name;
+	}
+	const joined = [str(user.first_name), str(user.last_name)].filter(Boolean).join(' ').trim();
+	if (joined) {
+		return joined;
+	}
+	return str(user.email);
+}
+
+/** Build the `users.id -> display name` resolver map from fetched user rows. */
+export function buildUserNameMap(users: CaseProRow[]): Map<string, string> {
+	const map = new Map<string, string>();
+	for (const user of users) {
+		const id = str(user.id);
+		const name = userDisplayName(user);
+		if (id && name) {
+			map.set(id, name);
+		}
+	}
+	return map;
+}
+
+/**
  * Build the M1 snapshot's `team[]` ({ role, name }). The raw value is a CasePro
- * `users.id` string that the connector cannot resolve to a name; until the
- * user-resolution seam exists (design §6), `name` carries the raw id so the UI
- * can fall back. A name-resolver map may be supplied to upgrade ids -> names.
+ * `users.id` string. A name-resolver map (built by {@link buildUserNameMap} from
+ * the `users` transport entity) upgrades ids -> display names; when a user can't
+ * be resolved (map absent, or the users endpoint unavailable) `name` falls back
+ * to the raw id so the UI still renders.
  */
 export function mapTeam(matter: CaseProRow, nameById?: Map<string, string>): { role: string; name: string }[] {
 	const out: { role: string; name: string }[] = [];
@@ -238,6 +323,10 @@ export type MatterRowBundle = {
 	settlementTypes: CaseProRow[];
 	clientParty?: CaseProRow | null;
 	providerCount: number;
+	/** raw medical_providers rows for the matter (drives `providers[]`). */
+	providers?: CaseProRow[];
+	/** party_id -> party row, resolving provider display names when not hydrated inline. */
+	providerPartyById?: Map<string, CaseProRow>;
 	bills: CaseProRow[];
 	negotiations: CaseProRow[];
 	resolutions: CaseProRow[];
@@ -279,11 +368,14 @@ export function mapMatterSnapshot(bundle: MatterRowBundle): IMatterSnapshot {
 		subStageId: subStage.id,
 		subStageName: subStage.name,
 		incidentDate: toDate(matter.incident_date),
+		incidentDescription: str(matter.description),
 		solDate: toDate(matter.statute_of_limitations),
 		liabilityStatus: str(matter.liability_status),
 		providerCount: bundle.providerCount,
+		providers: mapProviders(bundle.providers ?? [], bundle.providerPartyById),
 		totalBilled,
 		totalBalance,
+		expensesTotal: mapExpenseTotal(bundle.expenses),
 		lastDemandAmount: optionalNum(demand?.amount),
 		lastOfferAmount: optionalNum(offer?.amount),
 		demandExpiration: toDate(demand?.expiration_date),

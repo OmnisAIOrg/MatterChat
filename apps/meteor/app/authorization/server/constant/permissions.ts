@@ -307,4 +307,9 @@ export const permissions = [
 		roles: ['admin', 'attorney', 'case-manager', 'paralegal', 'intake-manager', 'intake-specialist', 'marketing'],
 	},
 	{ _id: 'boards-ai-generate', roles: ['admin', 'attorney', 'case-manager'] },
+
+	// MATTERCHAT: Firm Feed — the admin-managed My Day bulletin (announcements /
+	// birthdays / shout-outs). Manage = create/edit/delete entries; every authenticated
+	// user can read the feed (no view permission needed). Seeded to admin + owner.
+	{ _id: 'firm-feed-manage', roles: ['admin', 'owner'] },
 ];

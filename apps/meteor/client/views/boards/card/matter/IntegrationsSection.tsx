@@ -1,8 +1,10 @@
 import type { IMatterSnapshot, Serialized } from '@rocket.chat/core-typings';
-import { Box, Icon, Tag } from '@rocket.chat/fuselage';
+import { Box, Button, Icon, Tag } from '@rocket.chat/fuselage';
+import { useSetModal } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import MatterFilesModal from '../MatterFilesModal';
 import MatterSection from './MatterSection';
 
 type IntegrationsSectionProps = {
@@ -10,31 +12,54 @@ type IntegrationsSectionProps = {
 };
 
 /**
- * Integrations row — which sibling Omnis products already know this matter.
- * The snapshot carries opaque ids (litboxWorkspaceId / medchronMatterId) but
- * there is NO admin-configured web-URL setting for either product, so these
- * render as informational tags (id in the tooltip) rather than links — we
- * never invent URLs. When a LitBox/MedChron web-URL setting lands, upgrading
- * these to deep links is a one-liner each.
+ * Integrations row — which sibling Omnis products already know this matter, and
+ * a way in.
+ *
+ *  - LitBox: when the matter has a `litboxWorkspaceId`, a "Files" button opens
+ *    the matter's CasePro LitBox files in-place (MatterFilesModal, scoped to the
+ *    workspace) so staff never leave the card to browse documents.
+ *  - MedChron: an informational tag (id in the tooltip). There is no
+ *    admin-configured MedChron web-URL setting, so we never invent a deep link;
+ *    when one lands, upgrading this to a link is a one-liner.
+ *
+ * ("Open in CasePro" lives in MatterHeader.) Hides entirely when neither
+ * product knows the matter.
  */
 const IntegrationsSection = ({ snapshot }: IntegrationsSectionProps): ReactElement | null => {
 	const { t } = useTranslation();
+	const setModal = useSetModal();
 
-	if (!snapshot.litboxWorkspaceId && !snapshot.medchronMatterId) {
+	const workspaceId = snapshot.litboxWorkspaceId;
+
+	if (!workspaceId && !snapshot.medchronMatterId) {
 		return null;
 	}
+
+	const openFiles = (): void => {
+		if (!workspaceId) {
+			return;
+		}
+		setModal(
+			<MatterFilesModal
+				workspaceId={workspaceId}
+				label={snapshot.clientName || snapshot.matterName}
+				onClose={(): void => setModal(null)}
+			/>,
+		);
+	};
 
 	return (
 		<MatterSection title={t('Boards_Matters_Integrations', { defaultValue: 'Integrations' })} icon='clip'>
 			<Box display='flex' flexWrap='wrap' alignItems='center' style={{ gap: '6px' }}>
-				{snapshot.litboxWorkspaceId && (
-					<Tag
-						variant='secondary'
-						title={`${t('Boards_Matters_LitBox_Workspace', { defaultValue: 'LitBox workspace' })}: ${snapshot.litboxWorkspaceId}`}
+				{workspaceId && (
+					<Button
+						small
+						onClick={openFiles}
+						title={`${t('Boards_Matters_LitBox_Workspace', { defaultValue: 'LitBox workspace' })}: ${workspaceId}`}
 					>
-						<Icon name='clip' size='x12' mie={4} />
-						{t('Boards_Matters_LitBox_Workspace', { defaultValue: 'LitBox workspace' })}
-					</Tag>
+						<Icon name='clip' size='x16' mie={4} />
+						{t('Boards_Matters_Files', { defaultValue: 'Files' })}
+					</Button>
 				)}
 				{snapshot.medchronMatterId && (
 					<Tag
