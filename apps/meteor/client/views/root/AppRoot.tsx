@@ -35,7 +35,7 @@ const AppRoot = () => (
 				<meta property='twitter:image' content='assets/favicon_512.png' />
 				<link rel='manifest' href='images/manifest.json' />
 				<link rel='chrome-webstore-item' href='https://chrome.google.com/webstore/detail/nocfbnnmjnndkbipkabodnheejiegccf' />
-				<link rel='mask-icon' href='assets/safari_pinned.svg' color='#04436a' />
+				<link rel='mask-icon' href='assets/safari_pinned.svg' color='#1B7A2E' />
 				{/* MatterChat-branded iOS home-screen icon (navy-tiled brand mark, served from public/images/pwa). */}
 				<link rel='apple-touch-icon' sizes='180x180' href='images/pwa/apple-touch-icon.png' />
 				<link rel='apple-touch-icon-precomposed' href='assets/touchicon_180_pre.png' />
