@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import LitboxEmbedBoundary from './LitboxEmbedBoundary';
+
 // Lazy so the heavy LitBox package only loads when the user opens Files.
 const LitboxEmbed = lazy(() => import('./LitboxEmbed'));
 
@@ -108,9 +110,11 @@ const LitboxFilesView = () => {
 					</Box>
 				)}
 				{showEmbed && (
-					<Suspense fallback={<Throbber />}>
-						<LitboxEmbed authToken={authToken} workspaceId={workspaceId} />
-					</Suspense>
+					<LitboxEmbedBoundary>
+						<Suspense fallback={<Throbber />}>
+							<LitboxEmbed authToken={authToken} workspaceId={workspaceId} />
+						</Suspense>
+					</LitboxEmbedBoundary>
 				)}
 			</PageScrollableContent>
 		</Page>
