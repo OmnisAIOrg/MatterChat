@@ -235,6 +235,16 @@ const STUB_EXPENSES: CaseProRow[] = [
 	{ id: 'stub-exp-2', matter_id: STUB_MATTER_ID, amount: '850.25', status: 'active' },
 ];
 
+// Org users referenced by the matter's team-role columns (principal_attorney /
+// case_manager / paralegal above). Real CasePro reads these from the CRM's
+// read-only user directory (GET /api/v1/auth/users[/:id]); CentralizedAuth stores
+// a single `name` display column. Seeded so demo mode shows names, not raw UUIDs.
+const STUB_USERS: CaseProRow[] = [
+	{ id: 'stub-user-attorney', name: 'Alex Marshall', email: 'alex.marshall@example.com', status: 'active' },
+	{ id: 'stub-user-casemgr', name: 'Bianca Torres', email: 'bianca.torres@example.com', status: 'active' },
+	{ id: 'stub-user-paralegal', name: 'Chris Nguyen', email: 'chris.nguyen@example.com', status: 'active' },
+];
+
 // litigations: one scheduling-order row per matter once in suit (39 cols in real
 // CasePro). Only the docket date columns the board mirrors are seeded here; the rest
 // are null. `discovery`/`mediation_date` and the filing-class dates feed board deadlines.
@@ -379,6 +389,7 @@ const STUB_TABLES: Record<string, CaseProRow[]> = {
 	liens: STUB_LIENS,
 	reductions: STUB_REDUCTIONS,
 	expenses: STUB_EXPENSES,
+	users: STUB_USERS,
 	litigations: STUB_LITIGATIONS,
 	intake_stages: STUB_INTAKE_STAGES,
 	intake_questionnaires: STUB_INTAKE_QUESTIONNAIRES,
@@ -770,6 +781,8 @@ function sanitizeIntakeWrite(data: CaseProRow): CaseProRow {
  *   liens                 query  POST liens/list                       update PATCH liens/update/:id
  *   reductions            query  GET liens/details/:lienId → `.reductions` per lien (requires reducible_type 'Lien' + reducible_id)
  *   expenses / litigations / insurances — POST {entity}/list (matterId pushed), POST {entity}/find-one/:id, create/update
+ *   users                 query  GET auth/users?organizationId=…       get GET auth/users/:id   (CRM read-only user directory;
+ *                                CentralizedAuth-session-guarded → may reject service auth; callers degrade to raw ids)
  *
  * Anything else → `{ data: [], total: 0 }` + ONE warn per entity per process.
  */
@@ -1035,6 +1048,18 @@ export class NativeRestTransport implements ICaseProTransport {
 				const { rows } = await this.fetchPaged('intake-form-templates', {}, maxRows, 'GET');
 				return { rows: this.setLookup('intake_form_templates', rows), pushed: [], truncated: false };
 			}
+			case 'users': {
+				// CRM read-only user directory (team-role name resolution): GET /api/v1/auth/users
+				// ?organizationId=… — paginated { data, total } envelope. Org-stable enough to
+				// micro-cache. NOTE: this route is CentralizedAuth-session-guarded, so it can reject
+				// service-key/MCP auth — callers degrade to raw ids (see client.resolveTeamNames).
+				const cached = this.cachedLookup('users');
+				if (cached) {
+					return { rows: cached, pushed: [], truncated: false };
+				}
+				const { rows } = await this.fetchPaged('auth/users', { organizationId: this.cfg.orgId }, maxRows, 'GET');
+				return { rows: this.setLookup('users', rows), pushed: [], truncated: false };
+			}
 			case 'case_types':
 			case 'settlement_types': {
 				const cached = this.cachedLookup(entity);
@@ -1171,6 +1196,7 @@ export class NativeRestTransport implements ICaseProTransport {
 			matter_stages: { method: 'GET', path: `matter-stages/find-one/${eid}` },
 			matter_sub_stages: { method: 'GET', path: `matter-sub-stages/find-one/${eid}` },
 			intake_stages: { method: 'GET', path: `intake-stages/find-one/${eid}` },
+			users: { method: 'GET', path: `auth/users/${eid}` },
 			case_types: { method: 'POST', path: `case-types/find-one/${eid}` },
 			settlement_types: { method: 'POST', path: `settlement-types/find-one/${eid}` },
 			medical_providers: { method: 'GET', path: `medical-providers/get-one/${eid}` },
@@ -1203,6 +1229,10 @@ export class NativeRestTransport implements ICaseProTransport {
 		}
 		if (entity === 'intake_stages') {
 			return normalizeIntakeStageRow(row);
+		}
+		if (entity === 'users' && isObj(row.user)) {
+			// GET /auth/users/:id may wrap the record as { user: {...} }.
+			return row.user as CaseProRow;
 		}
 		return row;
 	}

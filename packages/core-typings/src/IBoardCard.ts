@@ -80,11 +80,14 @@ export interface IMatterSnapshot {
 	subStageId?: string; // matters.sub_stage -> matter_sub_stages
 	subStageName?: string;
 	incidentDate?: Date; // matters.incident_date (DOI)
+	incidentDescription?: string; // matters.description — read-only CasePro incident narrative (distinct from the editable board-card `description`)
 	solDate?: Date; // matters.statute_of_limitations
 	liabilityStatus?: string;
 	providerCount?: number; // count medical_providers where matter_id
+	providers?: { name: string; type?: string }[]; // medical_providers → related party.party_name + party.provider_type (backs the "Medical treatment" section)
 	totalBilled?: number; // Σ bills.total_amount (query-then-sum in JS)
 	totalBalance?: number; // Σ bills.amount_due
+	expensesTotal?: number; // Σ expenses.amount (case costs advanced)
 	lastDemandAmount?: number; // negotiations row type LIKE '%Demand%'
 	lastOfferAmount?: number; // negotiations row type LIKE '%Offer%'
 	demandExpiration?: Date; // negotiations.expiration_date
