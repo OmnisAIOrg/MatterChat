@@ -11,13 +11,14 @@ import {
 	Tag,
 	Throbber,
 } from '@rocket.chat/fuselage';
-import { useEndpoint, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useSetModal, useSetting, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import AiAssistSection from './AiAssistSection';
+import MatterFilesModal from './MatterFilesModal';
 import { CaseProStatusChip, CaseProStubBanner } from '../casepro';
 
 /**
@@ -104,9 +105,16 @@ const Field = ({ label, children }: { label: string; children?: ReactNode }): Re
 	);
 };
 
-const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='p2b' color='default' mbs={16} mbe={8}>
-		{children}
+const SectionTitle = ({ children, aside }: { children: ReactNode; aside?: ReactNode }): ReactElement => (
+	<Box display='flex' alignItems='center' justifyContent='space-between' mbs={16} mbe={8} style={{ gap: '8px' }}>
+		<Box fontScale='p2b' color='default'>
+			{children}
+		</Box>
+		{aside !== undefined && aside !== null && aside !== '' ? (
+			<Box fontScale='c1' color='hint' style={{ flexShrink: 0 }}>
+				{aside}
+			</Box>
+		) : null}
 	</Box>
 );
 
@@ -436,6 +444,7 @@ const DeadlinesSection = ({ cardId }: { cardId: string }): ReactElement => {
 const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 	const { t } = useTranslation();
 	const caseProWebUrl = useSetting('CasePro_Web_URL', '');
+	const setModal = useSetModal();
 
 	const matterId = card.link?.kind === 'matter' ? card.link.matterId : undefined;
 
@@ -474,16 +483,29 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 	// "Open in" deep links. CasePro links resolve against the admin-configured
 	// CasePro_Web_URL (the human web app, not the MCP gateway) — when it is not
 	// configured the button is HIDDEN rather than rendered as a dead href.
-	// LitBox/MedChron stay handle-based/relative for now.
+	// LitBox is now browsed IN-CARD via a scoped modal (see openMatterFiles below);
+	// MedChron stays handle-based/relative for now.
 	const caseProWebBase = (typeof caseProWebUrl === 'string' ? caseProWebUrl : '').trim().replace(/\/+$/, '');
 	const caseProHref = caseProWebBase ? `${caseProWebBase}/matters/${matterId}` : undefined;
-	const litboxHref = snapshot?.litboxWorkspaceId ? `/admin/litbox/workspaces/${snapshot.litboxWorkspaceId}` : undefined;
 	const medchronHref = snapshot?.medchronMatterId ? `/admin/medchron/matters/${snapshot.medchronMatterId}` : undefined;
+
+	// Real LitBox access from inside the card: browse this matter's CasePro files in a
+	// modal scoped to its LitBox workspace (no page nav). Gated on litboxWorkspaceId.
+	const litboxWorkspaceId = snapshot?.litboxWorkspaceId;
+	const openMatterFiles = (): void => {
+		if (!litboxWorkspaceId) {
+			return;
+		}
+		setModal(<MatterFilesModal workspaceId={litboxWorkspaceId} label={snapshot?.clientName} onClose={() => setModal(null)} />);
+	};
 
 	const team = snapshot?.team ?? [];
 	const findRole = (re: RegExp): string | undefined => team.find((m) => re.test(m.role))?.name;
 	const attorney = findRole(/attorney|lawyer/i);
 	const caseManager = findRole(/case\s*manager|paralegal|cm/i);
+
+	const providers: { name: string; type?: string }[] = snapshot?.providers ?? [];
+	const providerCount = snapshot?.providerCount ?? providers.length;
 
 	return (
 		<Box mbs={16}>
@@ -545,6 +567,20 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 					<Field label={t('Boards_Matters_SOL', { defaultValue: 'SOL' })}>{fmtDate(snapshot.solDate)}</Field>
 					<Field label={t('Boards_Matters_Liability', { defaultValue: 'Liability' })}>{snapshot.liabilityStatus}</Field>
 
+					{/* Incident narrative — read-only, from CasePro (matters.description). Distinct
+					    from the editable board-card Description, which lives in CardDetail. Rendered
+					    full-width (not a right-aligned Field) so a paragraph reads cleanly. */}
+					{snapshot.incidentDescription && (
+						<Box mbs={4} mbe={6}>
+							<Box fontScale='c1' color='hint' mbe={2}>
+								{t('Boards_Matters_Incident', { defaultValue: 'Incident' })}
+							</Box>
+							<Box fontScale='p2' color='default' style={{ whiteSpace: 'pre-wrap' }}>
+								{snapshot.incidentDescription}
+							</Box>
+						</Box>
+					)}
+
 					{/* Team */}
 					{(attorney || caseManager || team.length > 0) && (
 						<>
@@ -561,17 +597,49 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 						</>
 					)}
 
-					{/* Medical / damages */}
-					<SectionTitle>{t('Boards_Matters_Medical', { defaultValue: 'Medical' })}</SectionTitle>
-					<Field label={t('Boards_Matters_Providers', { defaultValue: 'Providers' })}>{snapshot.providerCount}</Field>
-					<Field label={t('Boards_Matters_Total_Billed', { defaultValue: 'Total billed' })}>
-						{fmtCurrency(snapshot.totalBilled)}
-					</Field>
-					<Field label={t('Boards_Matters_Total_Balance', { defaultValue: 'Total balance' })}>
-						{fmtCurrency(snapshot.totalBalance)}
-					</Field>
+					{/* Medical treatment — the provider list (CasePro has no per-visit detail, so
+					    the providers ARE the treatment representation). Count shown in the header. */}
+					<SectionTitle aside={providerCount > 0 ? providerCount : undefined}>
+						🩺 {t('Boards_Matters_Medical_Treatment', { defaultValue: 'Medical treatment' })}
+					</SectionTitle>
+					{providers.length > 0 ? (
+						<Box mbe={6}>
+							{providers.map((p, i) => (
+								<Box key={`${p.name}-${i}`} fontScale='p2' color='default' mbe={4}>
+									{p.name}
+									{p.type ? (
+										<Box is='span' fontScale='c1' color='hint'>
+											{' · '}
+											{p.type}
+										</Box>
+									) : null}
+								</Box>
+							))}
+						</Box>
+					) : (
+						<Box fontScale='c1' color='hint' mbe={6}>
+							{t('Boards_Matters_No_Providers', { defaultValue: 'No providers on record' })}
+						</Box>
+					)}
 
-					{/* Negotiation / resolution */}
+					{/* Medical bills — billed vs balance. */}
+					{(snapshot.totalBilled !== undefined || snapshot.totalBalance !== undefined) && (
+						<>
+							<SectionTitle>💵 {t('Boards_Matters_Medical_Bills', { defaultValue: 'Medical bills' })}</SectionTitle>
+							<Field label={t('Boards_Matters_Billed', { defaultValue: 'Billed' })}>{fmtCurrency(snapshot.totalBilled)}</Field>
+							<Field label={t('Boards_Matters_Balance', { defaultValue: 'Balance' })}>{fmtCurrency(snapshot.totalBalance)}</Field>
+						</>
+					)}
+
+					{/* Expenses — case costs advanced (0 when none). */}
+					{snapshot.expensesTotal !== undefined && (
+						<>
+							<SectionTitle>📄 {t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })}</SectionTitle>
+							<Field label={t('Boards_Matters_Case_Costs', { defaultValue: 'Case costs' })}>{fmtCurrency(snapshot.expensesTotal)}</Field>
+						</>
+					)}
+
+					{/* Negotiation / resolution — damages side (demand / offer / settlement). */}
 					<SectionTitle>{t('Boards_Matters_Negotiation', { defaultValue: 'Negotiation' })}</SectionTitle>
 					<Field label={t('Boards_Matters_Demand', { defaultValue: 'Demand' })}>
 						{fmtCurrency(snapshot.lastDemandAmount)}
@@ -608,10 +676,10 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 								{t('Boards_Matters_Open_In_CasePro', { defaultValue: 'Open in CasePro' })}
 							</Button>
 						)}
-						{litboxHref && (
-							<Button small is='a' href={litboxHref} target='_blank' rel='noopener noreferrer'>
+						{litboxWorkspaceId && (
+							<Button small onClick={openMatterFiles}>
 								<Icon name='clip' size='x16' mie={4} />
-								{t('Boards_Matters_Open_In_LitBox', { defaultValue: 'Open in LitBox' })}
+								{t('Boards_Matters_Files', { defaultValue: 'Files' })}
 							</Button>
 						)}
 						{medchronHref && (

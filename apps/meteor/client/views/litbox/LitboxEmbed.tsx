@@ -20,12 +20,20 @@ const LITBOX_API_BASE = '/_litbox/v1';
 
 type LitboxEmbedProps = {
 	authToken: string;
+	// When set, scope the browser to a SINGLE LitBox workspace (e.g. a CasePro
+	// matter's `litboxWorkspaceId`). When omitted, fall back to the org-wide view
+	// (the default /litbox "Files" behavior).
+	workspaceId?: string;
 };
 
-const LitboxEmbed = ({ authToken }: LitboxEmbedProps) => (
+const LitboxEmbed = ({ authToken, workspaceId }: LitboxEmbedProps) => (
 	<Box display='flex' flexDirection='column' height='100%' width='100%' style={{ minHeight: 0 }}>
 		<LitboxProvider config={{ apiBaseUrl: LITBOX_API_BASE, authToken, appSlug: 'matterchat' }}>
-			<LitboxFileBrowser orgWide className='litbox-embed-root' />
+			{workspaceId ? (
+				<LitboxFileBrowser workspaceId={workspaceId} className='litbox-embed-root' />
+			) : (
+				<LitboxFileBrowser orgWide className='litbox-embed-root' />
+			)}
 		</LitboxProvider>
 	</Box>
 );
