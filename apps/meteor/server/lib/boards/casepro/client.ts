@@ -5,6 +5,8 @@ import {
 	mapMatterListItem,
 	mapStage,
 	mapLitigationDates,
+	buildUserNameMap,
+	MATTER_TEAM_ROLE_COLUMNS,
 	type MatterListItem,
 	type MatterRowBundle,
 	type StageDescriptor,
@@ -25,6 +27,7 @@ import {
 import { resolveTransportFromConfig, type ICaseProTransport, type CaseProRow, type CaseProCallContext } from './transport';
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+const asObj = (v: unknown): CaseProRow | undefined => (v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as CaseProRow) : undefined);
 const onlyStrings = (rows: CaseProRow[], key = 'id'): string[] =>
 	rows.map((r) => str(r[key])).filter((id): id is string => Boolean(id));
 
@@ -121,6 +124,14 @@ export class CaseProClient {
 			? await this.queryAll('reductions', { reducible_type: 'Lien', reducible_id: { $in: lienIds } })
 			: [];
 
+		// Resolve provider display names (via each provider's party) and team-role
+		// user ids (via the users entity). Both DEGRADE to raw values on failure so
+		// a snapshot never hard-fails on the enrichment reads.
+		const [providerPartyById, teamNameById] = await Promise.all([
+			this.resolveProviderParties(providers),
+			this.resolveTeamNames(matter),
+		]);
+
 		const bundle: MatterRowBundle = {
 			matter,
 			caseTypes,
@@ -129,15 +140,77 @@ export class CaseProClient {
 			settlementTypes,
 			clientParty,
 			providerCount: providers.length,
+			providers,
+			providerPartyById,
 			bills,
 			negotiations,
 			resolutions,
 			liens,
 			reductions,
 			expenses,
+			teamNameById,
 		};
 
 		return mapMatterSnapshot(bundle);
+	}
+
+	/**
+	 * Resolve the party (name + provider_type) behind each `medical_providers`
+	 * row. Native list rows hydrate a nested `party`; leaner rows (and the stub)
+	 * carry a `party_id`/`provider_party_id` fetched here. Missing/404 parties are
+	 * simply omitted — `mapProviders` falls back to any inline name.
+	 */
+	private async resolveProviderParties(providers: CaseProRow[]): Promise<Map<string, CaseProRow>> {
+		const map = new Map<string, CaseProRow>();
+		const toFetch = new Set<string>();
+		for (const provider of providers) {
+			const nested = asObj(provider.party);
+			const partyId = str(nested?.id) ?? str(provider.party_id) ?? str(provider.provider_party_id);
+			if (!partyId) {
+				continue;
+			}
+			if (nested) {
+				map.set(partyId, nested);
+			} else if (!map.has(partyId)) {
+				toFetch.add(partyId);
+			}
+		}
+		const ids = [...toFetch];
+		const fetched = await Promise.all(ids.map((id) => this.tx.get('parties', id)));
+		ids.forEach((id, i) => {
+			const party = fetched[i];
+			if (party) {
+				map.set(id, party);
+			}
+		});
+		return map;
+	}
+
+	/**
+	 * Resolve the matter's team-role user-id UUIDs (see MATTER_TEAM_ROLE_COLUMNS)
+	 * to display names via the `users` transport entity. Returns undefined when
+	 * there are no team ids OR the users endpoint is unavailable (e.g. the CRM's
+	 * users route is session-guarded and rejects service auth) — `mapTeam` then
+	 * falls back to the raw ids. Never throws.
+	 */
+	private async resolveTeamNames(matter: CaseProRow): Promise<Map<string, string> | undefined> {
+		const ids = new Set<string>();
+		for (const { column } of MATTER_TEAM_ROLE_COLUMNS) {
+			const raw = str(matter[column]);
+			if (raw) {
+				ids.add(raw);
+			}
+		}
+		if (ids.size === 0) {
+			return undefined;
+		}
+		try {
+			const users = await Promise.all([...ids].map((id) => this.tx.get('users', id)));
+			const map = buildUserNameMap(users.filter((u): u is CaseProRow => Boolean(u)));
+			return map.size ? map : undefined;
+		} catch {
+			return undefined;
+		}
 	}
 
 	async listMatters(opts: ListMattersOpts = {}): Promise<ListMattersResult> {
