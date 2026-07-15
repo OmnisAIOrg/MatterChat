@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import CardButtonsRow from './CardButtonsRow';
+import CardErrorBoundary from './CardErrorBoundary';
 import CardLabelsControl from './CardLabelsControl';
 import ChecklistPanel from './ChecklistPanel';
 import LeadPanel from './LeadPanel';
@@ -185,14 +186,20 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 
 				{!isLoading && card && tab === 'detail' && (
 					<Box>
+						{/* Typed panels render inside a local error boundary: a panel bug degrades to an
+						    inline callout with retry instead of white-screening the entire client. */}
 						{card.cardType === 'lead' && card.link?.kind === 'lead' && (
 							<Box mbe={16}>
-								<LeadPanel leadId={card.link.leadId} boardId={boardId} cardId={cardId} />
+								<CardErrorBoundary>
+									<LeadPanel leadId={card.link.leadId} boardId={boardId} cardId={cardId} />
+								</CardErrorBoundary>
 							</Box>
 						)}
 						{card.cardType === 'matter' && (
 							<Box mbe={16}>
-								<MatterPanel card={card} />
+								<CardErrorBoundary>
+									<MatterPanel card={card} />
+								</CardErrorBoundary>
 							</Box>
 						)}
 						<Box mbe={12}>
