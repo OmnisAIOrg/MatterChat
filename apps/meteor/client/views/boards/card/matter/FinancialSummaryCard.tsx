@@ -1,5 +1,5 @@
 import type { IMatterSnapshot, Serialized } from '@rocket.chat/core-typings';
-import { Box, Icon } from '@rocket.chat/fuselage';
+import { Box } from '@rocket.chat/fuselage';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -11,12 +11,24 @@ type FinancialSummaryCardProps = {
 	snapshot: Serialized<IMatterSnapshot>;
 };
 
+// Shared props for the emphasized label above each group inside the tinted card.
+// (Kept as a props object rather than a component so the file stays one-component.)
+const groupLabelProps = { fontScale: 'c1', color: 'default', mbe: 6, style: { fontWeight: 600 } } as const;
+
 /**
- * Financial summary — the money picture of the matter in one tinted card:
- * medicals (billed/balance + provider count) and the negotiation ladder
- * (demand → top offer → settlement). All values are read-only CasePro
- * snapshot fields; empty fields render nothing, and the whole card hides
- * when there is no financial data at all.
+ * Financial summary — the money picture of the matter in one tinted card, split
+ * into four labeled groups:
+ *  - 🩺 Medical treatment — the matter's medical providers (name · type), with
+ *    the provider count in the header. Providers ARE the treatment
+ *    representation: CasePro has no per-visit detail, so this is the finest
+ *    grain available (empty state when none are on file).
+ *  - 💵 Medical bills — total billed + outstanding balance.
+ *  - 📄 Expenses — case costs advanced ($0 when none, hidden only when the field
+ *    is absent from the snapshot entirely).
+ *  - 🤝 Negotiation — the demand → top offer → settlement ladder.
+ *
+ * All values are read-only CasePro snapshot fields; empty groups render nothing
+ * and the whole card hides when there is no financial data at all.
  */
 const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactElement | null => {
 	const { t } = useTranslation();
@@ -26,25 +38,80 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 	const demand = fmtCurrency(snapshot.lastDemandAmount);
 	const offer = fmtCurrency(snapshot.lastOfferAmount);
 	const settlement = fmtCurrency(snapshot.settlementAmount);
-	const providers = typeof snapshot.providerCount === 'number' ? snapshot.providerCount : undefined;
 
-	if (!billed && !balance && !demand && !offer && !settlement && providers === undefined) {
+	const providers = snapshot.providers ?? [];
+	const providerCount = typeof snapshot.providerCount === 'number' ? snapshot.providerCount : undefined;
+
+	// Expenses is `0 when none`, so guard on presence — a real $0 must still show.
+	const hasExpenses = snapshot.expensesTotal !== undefined && snapshot.expensesTotal !== null;
+	const expenses = hasExpenses ? fmtCurrency(snapshot.expensesTotal) : undefined;
+
+	const hasMedical = providerCount !== undefined || providers.length > 0;
+	const hasBills = Boolean(billed || balance);
+	const hasNegotiation = Boolean(demand || offer || settlement);
+
+	if (!hasMedical && !hasBills && !hasExpenses && !hasNegotiation) {
 		return null;
 	}
 
 	return (
 		<MatterSection title={t('Boards_Matters_Report_Financial', { defaultValue: 'Financial' })} icon='card'>
 			<Box bg='tint' p={12} borderRadius='x4'>
-				<MoneyRow label={t('Boards_Matters_Total_Billed', { defaultValue: 'Total billed' })} value={billed} />
-				<MoneyRow label={t('Boards_Matters_Total_Balance', { defaultValue: 'Total balance' })} value={balance} />
-				<MoneyRow label={t('Boards_Matters_Demand', { defaultValue: 'Demand' })} value={demand} />
-				<MoneyRow label={t('Boards_Matters_Top_Offer', { defaultValue: 'Top offer' })} value={offer} />
-				<MoneyRow label={t('Boards_Matters_Settlement', { defaultValue: 'Settlement' })} value={settlement} emphasis />
-				{providers !== undefined && (
-					<Box display='flex' alignItems='center' fontScale='micro' color='hint' mbs={6}>
-						<Icon name='team' size='x12' mie={4} />
-						{providers} {t('Boards_Matters_Providers', { defaultValue: 'Providers' }).toLowerCase()}
+				{/* 🩺 Medical treatment — providers are the treatment representation. */}
+				<Box {...groupLabelProps} mbs={0}>
+					{`🩺 ${t('Boards_Matters_Medical_Treatment', { defaultValue: 'Medical treatment' })}`}
+					{providerCount !== undefined ? ` (${providerCount})` : ''}
+				</Box>
+				{providers.length > 0 ? (
+					// Array.from (not providers.map) so the call resolves against Array even when the
+					// snapshot's `providers` field is not yet in the resolved core-typings dist.
+					Array.from(providers, (provider: { name: string; type?: string }, index: number) => (
+						<Box key={`${provider.name}-${index}`} fontScale='p2' color='default' mbe={4}>
+							{provider.name}
+							{provider.type ? (
+								<Box is='span' color='hint'>
+									{` · ${provider.type}`}
+								</Box>
+							) : null}
+						</Box>
+					))
+				) : (
+					<Box fontScale='c1' color='hint' mbe={4}>
+						{t('Boards_Matters_No_Providers', { defaultValue: 'No providers on file' })}
 					</Box>
+				)}
+
+				{/* 💵 Medical bills */}
+				{hasBills && (
+					<>
+						<Box {...groupLabelProps} mbs={14}>
+							{`💵 ${t('Boards_Matters_Medical_Bills', { defaultValue: 'Medical bills' })}`}
+						</Box>
+						<MoneyRow label={t('Boards_Matters_Billed', { defaultValue: 'Billed' })} value={billed} />
+						<MoneyRow label={t('Boards_Matters_Balance', { defaultValue: 'Balance' })} value={balance} />
+					</>
+				)}
+
+				{/* 📄 Expenses (case costs advanced) — $0 shown when zero. */}
+				{hasExpenses && (
+					<>
+						<Box {...groupLabelProps} mbs={14}>
+							{`📄 ${t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })}`}
+						</Box>
+						<MoneyRow label={t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })} value={expenses} />
+					</>
+				)}
+
+				{/* 🤝 Negotiation ladder (demand → top offer → settlement) */}
+				{hasNegotiation && (
+					<>
+						<Box {...groupLabelProps} mbs={14}>
+							{`🤝 ${t('Boards_Matters_Negotiation', { defaultValue: 'Negotiation' })}`}
+						</Box>
+						<MoneyRow label={t('Boards_Matters_Demand', { defaultValue: 'Demand' })} value={demand} />
+						<MoneyRow label={t('Boards_Matters_Top_Offer', { defaultValue: 'Top offer' })} value={offer} />
+						<MoneyRow label={t('Boards_Matters_Settlement', { defaultValue: 'Settlement' })} value={settlement} emphasis />
+					</>
 				)}
 			</Box>
 		</MatterSection>
