@@ -1,5 +1,6 @@
 import type { IBoardActivity, IBoardCard, Serialized } from '@rocket.chat/core-typings';
-import { Box, Button, Divider, Icon, Tabs, TextAreaInput, TextInput, Throbber } from '@rocket.chat/fuselage';
+import { css } from '@rocket.chat/css-in-js';
+import { Box, Button, ContextualbarV2, Divider, Icon, IconButton, Tabs, TextAreaInput, TextInput, Throbber } from '@rocket.chat/fuselage';
 import {
 	ContextualbarClose,
 	ContextualbarDialog,
@@ -9,6 +10,7 @@ import {
 } from '@rocket.chat/ui-client';
 import { useEndpoint, useMethod, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,9 +28,23 @@ type CardDetailProps = {
 	boardId: string;
 	cardId: string;
 	onClose: () => void;
+	// When true (matter cards), the panel opens EXPANDED — a majority-width detail beside a
+	// shrunken kanban — instead of the narrow right drawer. See BoardRouter.
+	defaultExpanded?: boolean;
 };
 
 type CardTab = 'detail' | 'activity';
+
+// The expanded shell reuses Fuselage's ContextualbarV2 (same styled column as the drawer) but
+// escapes ContextualbarResizable's hard 50% cap: it takes the majority of the board area,
+// clamped so it never gets absurdly wide, and drops to full-width on a narrow viewport.
+const expandedBarClass = css`
+	width: clamp(560px, 62%, 980px);
+	max-width: 100%;
+	@media (max-width: 767px) {
+		width: 100%;
+	}
+`;
 
 const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 	const { t } = useTranslation();
@@ -101,7 +117,7 @@ const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string })
 	);
 };
 
-const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
+const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardDetailProps) => {
 	const { t } = useTranslation();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
@@ -113,12 +129,39 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 	const [title, setTitle] = useState('');
 	const [description, setDescription] = useState('');
 
+	// undefined = follow the default (matter → expanded, else drawer); a boolean = user override.
+	const [expandedOverride, setExpandedOverride] = useState<boolean | undefined>(undefined);
+
 	const { data, isLoading } = useQuery({
 		queryKey: ['boards', 'card', cardId],
 		queryFn: () => getCard({ cardId }),
 	});
 
 	const card = data?.card;
+
+	// A card's own type is the source of truth once loaded; the board-level hint drives the
+	// first paint. Reset any manual toggle when the open card changes.
+	const expandedByDefault = card ? card.cardType === 'matter' : defaultExpanded;
+	const expanded = expandedOverride ?? expandedByDefault;
+	const toggleExpanded = (): void => setExpandedOverride(!expanded);
+
+	useEffect(() => {
+		setExpandedOverride(undefined);
+	}, [cardId]);
+
+	// ContextualbarDialog wires ESC-to-close itself; the expanded shell doesn't, so mirror it.
+	useEffect(() => {
+		if (!expanded) {
+			return undefined;
+		}
+		const onKeyDown = (e: KeyboardEvent): void => {
+			if (e.key === 'Escape') {
+				onClose();
+			}
+		};
+		document.addEventListener('keydown', onKeyDown);
+		return () => document.removeEventListener('keydown', onKeyDown);
+	}, [expanded, onClose]);
 
 	useEffect(() => {
 		if (card) {
@@ -158,12 +201,18 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 		}
 	};
 
-	return (
-		<ContextualbarDialog onClose={onClose}>
+	const body: ReactNode = (
+		<>
 			<ContextualbarHeader>
 				{card && <Icon name={getCardTypeIcon(card.cardType)} size='x20' mie={4} />}
 				<ContextualbarTitle>{card?.title ?? t('Loading')}</ContextualbarTitle>
 				{card && <WatchToggle cardId={cardId} />}
+				<IconButton
+					small
+					icon={expanded ? 'arrow-collapse' : 'arrow-expand'}
+					title={expanded ? t('Collapse', { defaultValue: 'Collapse' }) : t('Expand', { defaultValue: 'Expand' })}
+					onClick={toggleExpanded}
+				/>
 				<ContextualbarClose onClick={onClose} />
 			</ContextualbarHeader>
 
@@ -243,8 +292,22 @@ const CardDetail = ({ boardId, cardId, onClose }: CardDetailProps) => {
 
 				{!isLoading && card && tab === 'activity' && <ActivityBlock boardId={boardId} cardId={cardId} />}
 			</ContextualbarScrollableContent>
-		</ContextualbarDialog>
+		</>
 	);
+
+	// Expanded (matter default / user toggle): render the same styled column at majority width
+	// via a plain ContextualbarV2 — NOT the ContextualbarDialog, whose resizable wrapper is hard-
+	// capped at 50%. position='static' makes it a normal flex sibling so the kanban Page shrinks
+	// beside it. Drawer mode keeps the original ContextualbarDialog (ESC + focus handling intact).
+	if (expanded) {
+		return (
+			<ContextualbarV2 className={expandedBarClass} position='static'>
+				{body}
+			</ContextualbarV2>
+		);
+	}
+
+	return <ContextualbarDialog onClose={onClose}>{body}</ContextualbarDialog>;
 };
 
 export default CardDetail;

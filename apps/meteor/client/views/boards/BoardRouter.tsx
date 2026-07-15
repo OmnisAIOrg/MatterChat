@@ -128,9 +128,16 @@ const BoardRouter = () => {
 		}
 	};
 
+	// A matter card opens EXPANDED (majority width) by default; leads/other cards keep the
+	// drawer. Keyed off the board's pipeline so the layout is right on first paint (before the
+	// card fetch resolves) — CardDetail refines by the card's own cardType once it loads, and
+	// the user can always toggle. minWidth={0} lets the kanban Page shrink left of the wide
+	// detail (its columns scroll horizontally) instead of forcing the flex row to overflow.
+	const cardExpandedByDefault = board.pipelineType === 'matters';
+
 	return (
 		<Page flexDirection='row'>
-			<Page>
+			<Page minWidth={0}>
 				<BoardHeader
 					board={board}
 					view={view}
@@ -150,7 +157,7 @@ const BoardRouter = () => {
 			</Page>
 			{cardId && (
 				<Suspense fallback={null}>
-					<CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />
+					<CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} defaultExpanded={cardExpandedByDefault} />
 				</Suspense>
 			)}
 		</Page>
