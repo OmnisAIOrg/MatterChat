@@ -44,6 +44,7 @@ export type * from './IBoardSubscription';
 export type * from './IBoardNotification';
 export type * from './ISavedView';
 export type * from './IBoardForm';
+export type * from './IFirmFeedEntry'; // MATTERCHAT: Firm Feed (My Day bulletin)
 export type * from './ICustomSound';
 export type * from './ICloud';
 export * from './IServerEvent';

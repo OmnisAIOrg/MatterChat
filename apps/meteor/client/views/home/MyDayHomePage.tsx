@@ -1,11 +1,28 @@
-import type { IBoardCard, IDirectoryUserResult, Serialized } from '@rocket.chat/core-typings';
-import { Box, Button, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
+import type { FirmFeedKind, IBoardCard, IDirectoryUserResult, IFirmFeedEntry, Serialized } from '@rocket.chat/core-typings';
+import {
+	Box,
+	Button,
+	CheckBox,
+	Field,
+	FieldLabel,
+	FieldRow,
+	FieldError,
+	Icon,
+	IconButton,
+	InputBox,
+	Tag,
+	TextAreaInput,
+	TextInput,
+	Throbber,
+} from '@rocket.chat/fuselage';
 import { UserAvatar } from '@rocket.chat/ui-avatar';
-import { Page, PageScrollableContent } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouter, useUser } from '@rocket.chat/ui-contexts';
-import { useQuery } from '@tanstack/react-query';
+import { GenericModal, Page, PageScrollableContent } from '@rocket.chat/ui-client';
+import { usePermission, useEndpoint, useRouter, useSetModal, useToastMessageDispatch, useUser } from '@rocket.chat/ui-contexts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ComponentProps, ReactNode } from 'react';
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 
 /**
  * MyDayHomePage — the MatterChat "My Day" command center (Wave 2).
@@ -79,7 +96,19 @@ const decorate = (card: MatterCard): DecoratedMatter => {
 	return { card };
 };
 
-const SectionCard = ({ icon, title, count, children }: { icon: string; title: string; count?: number; children: ReactNode }) => (
+const SectionCard = ({
+	icon,
+	title,
+	count,
+	action,
+	children,
+}: {
+	icon: string;
+	title: string;
+	count?: number;
+	action?: ReactNode;
+	children: ReactNode;
+}) => (
 	<Box bg='light' borderRadius='x12' borderWidth='default' borderColor='extra-light' p={16} mbe={16}>
 		<Box display='flex' alignItems='center' mbe={12}>
 			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x18' mie={8} color='hint' />
@@ -91,6 +120,7 @@ const SectionCard = ({ icon, title, count, children }: { icon: string; title: st
 					{count}
 				</Box>
 			)}
+			{action && <Box mis='auto'>{action}</Box>}
 		</Box>
 		{children}
 	</Box>
@@ -102,6 +132,294 @@ const EmptyLine = ({ children }: { children: ReactNode }) => (
 	</Box>
 );
 
+// ---------------------------------------------------------------------------
+// MATTERCHAT: Firm Feed — the admin-managed My Day bulletin
+// (📣 announcements, 🎂 birthdays, 🎉 shout-outs). Everyone reads it; only holders
+// of the `firm-feed-manage` permission see the inline add / edit / delete controls.
+// The list endpoint already orders each kind sensibly (birthdays by upcoming date).
+// ---------------------------------------------------------------------------
+
+type FirmFeedEntrySer = Serialized<IFirmFeedEntry>;
+
+/** The three sections rendered on the dashboard; `update` entries live under announcements. */
+type FeedSectionKind = 'announcement' | 'birthday' | 'shoutout';
+
+const FIRM_FEED_QUERY_KEY = ['my-day', 'firm-feed'] as const;
+
+const KIND_META: Record<FeedSectionKind, { icon: string; titleKey: string; emptyKey: string; newKey: string }> = {
+	announcement: {
+		icon: 'balloon-text',
+		titleKey: 'Firm_Feed_Announcements',
+		emptyKey: 'Firm_Feed_Empty_Announcements',
+		newKey: 'Firm_Feed_New_Announcement',
+	},
+	birthday: { icon: 'balloons', titleKey: 'Firm_Feed_Birthdays', emptyKey: 'Firm_Feed_Empty_Birthdays', newKey: 'Firm_Feed_New_Birthday' },
+	shoutout: { icon: 'star', titleKey: 'Firm_Feed_Shoutouts', emptyKey: 'Firm_Feed_Empty_Shoutouts', newKey: 'Firm_Feed_New_Shoutout' },
+};
+
+/** Days until the next month/day occurrence of a date (year-agnostic; for birthdays). */
+const daysUntilAnniversary = (date: Date): number => {
+	const now = new Date();
+	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	let next = new Date(now.getFullYear(), date.getMonth(), date.getDate());
+	if (next.getTime() < today.getTime()) {
+		next = new Date(now.getFullYear() + 1, date.getMonth(), date.getDate());
+	}
+	return Math.round((next.getTime() - today.getTime()) / 86400000);
+};
+
+const birthdayLabel = (iso: string): string => {
+	const d = new Date(iso);
+	const md = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	const days = daysUntilAnniversary(d);
+	if (days === 0) {
+		return `${md} · today 🎉`;
+	}
+	if (days === 1) {
+		return `${md} · tomorrow`;
+	}
+	if (days <= 14) {
+		return `${md} · in ${days} days`;
+	}
+	return md;
+};
+
+const dateLabel = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+type FirmFeedFormValues = { title: string; body: string; eventDate: string; pinned: boolean };
+
+/** Create/edit modal for a single feed entry. `kind` is fixed per section. */
+// eslint-disable-next-line react/no-multi-comp -- local presentational subcomponents, kept in-file per the fork-safe confinement rule
+const FirmFeedEditorModal = ({ kind, entry, onClose }: { kind: FirmFeedKind; entry?: FirmFeedEntrySer; onClose: () => void }) => {
+	const { t } = useTranslation();
+	const queryClient = useQueryClient();
+	const dispatchToast = useToastMessageDispatch();
+	const createEntry = useEndpoint('POST', '/v1/firm-feed.create');
+	const updateEntry = useEndpoint('POST', '/v1/firm-feed.update');
+
+	const isBirthday = kind === 'birthday';
+	// Narrow the (possibly 'update') kind to a section key for KIND_META lookups.
+	const sectionKind: FeedSectionKind = kind === 'birthday' || kind === 'shoutout' ? kind : 'announcement';
+
+	const {
+		register,
+		handleSubmit,
+		formState: { errors, isSubmitting },
+	} = useForm<FirmFeedFormValues>({
+		defaultValues: {
+			title: entry?.title ?? '',
+			body: entry?.body ?? '',
+			eventDate: entry?.eventDate ? String(entry.eventDate).slice(0, 10) : '',
+			pinned: entry?.pinned ?? false,
+		},
+	});
+
+	const titleId = useId();
+	const bodyId = useId();
+	const dateId = useId();
+	const pinId = useId();
+
+	const onSubmit = async (values: FirmFeedFormValues): Promise<void> => {
+		try {
+			if (entry) {
+				await updateEntry({
+					entryId: entry._id,
+					title: values.title,
+					body: values.body,
+					eventDate: values.eventDate,
+					pinned: values.pinned,
+				});
+			} else {
+				await createEntry({
+					kind,
+					title: values.title,
+					...(values.body ? { body: values.body } : {}),
+					...(values.eventDate ? { eventDate: values.eventDate } : {}),
+					pinned: values.pinned,
+				});
+			}
+			await queryClient.invalidateQueries({ queryKey: FIRM_FEED_QUERY_KEY });
+			dispatchToast({ type: 'success', message: t('Firm_Feed_Entry_Saved') });
+			onClose();
+		} catch (error) {
+			dispatchToast({ type: 'error', message: error });
+		}
+	};
+
+	return (
+		<GenericModal
+			wrapperFunction={(props) => <Box is='form' onSubmit={handleSubmit(onSubmit)} {...props} />}
+			title={entry ? t('Firm_Feed_Edit') : t(KIND_META[sectionKind].newKey)}
+			confirmText={t('Firm_Feed_Save')}
+			cancelText={t('Firm_Feed_Cancel')}
+			onCancel={onClose}
+			onClose={onClose}
+			confirmDisabled={isSubmitting}
+		>
+			<Field>
+				<FieldLabel htmlFor={titleId}>{isBirthday ? t('Name') : t('Firm_Feed_Title')}</FieldLabel>
+				<FieldRow>
+					<TextInput
+						id={titleId}
+						{...register('title', { required: t('Required_field', { field: t('Firm_Feed_Title') }) })}
+						placeholder={t('Firm_Feed_Title_Placeholder')}
+						aria-invalid={errors.title ? 'true' : 'false'}
+					/>
+				</FieldRow>
+				{errors.title && <FieldError>{errors.title.message}</FieldError>}
+			</Field>
+
+			<Field mbs={12}>
+				<FieldLabel htmlFor={bodyId}>{t('Firm_Feed_Body')}</FieldLabel>
+				<FieldRow>
+					<TextAreaInput id={bodyId} rows={3} {...register('body')} placeholder={t('Firm_Feed_Body_Placeholder')} />
+				</FieldRow>
+			</Field>
+
+			<Field mbs={12}>
+				<FieldLabel htmlFor={dateId}>{t('Firm_Feed_Date')}</FieldLabel>
+				<FieldRow>
+					<InputBox
+						id={dateId}
+						type='date'
+						{...register('eventDate', isBirthday ? { required: t('Required_field', { field: t('Firm_Feed_Date') }) } : {})}
+						aria-invalid={errors.eventDate ? 'true' : 'false'}
+					/>
+				</FieldRow>
+				{errors.eventDate && <FieldError>{errors.eventDate.message}</FieldError>}
+			</Field>
+
+			<Field mbs={12}>
+				<FieldRow justifyContent='flex-start'>
+					<CheckBox id={pinId} {...register('pinned')} />
+					<FieldLabel htmlFor={pinId} mis={8} style={{ cursor: 'pointer' }}>
+						{t('Firm_Feed_Pin')}
+					</FieldLabel>
+				</FieldRow>
+			</Field>
+		</GenericModal>
+	);
+};
+
+// eslint-disable-next-line react/no-multi-comp -- local presentational subcomponent, kept in-file per the fork-safe confinement rule
+const FeedEntryRow = ({
+	entry,
+	kind,
+	canManage,
+	onEdit,
+	onDelete,
+}: {
+	entry: FirmFeedEntrySer;
+	kind: FeedSectionKind;
+	canManage: boolean;
+	onEdit: () => void;
+	onDelete: () => void;
+}) => {
+	const { t } = useTranslation();
+	const isBirthday = kind === 'birthday';
+
+	return (
+		<Box display='flex' alignItems='flex-start' pb={10} style={{ gap: '8px' }}>
+			{entry.pinned && <Icon name='pin-filled' size='x14' color='hint' mbs={2} />}
+			<Box flexGrow={1} style={{ minWidth: 0 }}>
+				<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '8px' }}>
+					<Box fontScale='p2b' color='default' withTruncatedText>
+						{entry.title}
+					</Box>
+					{isBirthday && entry.eventDate && (
+						<Tag variant={daysUntilAnniversary(new Date(entry.eventDate)) <= 7 ? 'primary' : undefined}>
+							{birthdayLabel(entry.eventDate)}
+						</Tag>
+					)}
+				</Box>
+				{entry.body && (
+					<Box fontScale='c1' color='hint' mbs={2} style={{ whiteSpace: 'pre-wrap' }}>
+						{entry.body}
+					</Box>
+				)}
+				{!isBirthday && entry.eventDate && (
+					<Box fontScale='micro' color='hint' mbs={2}>
+						{dateLabel(entry.eventDate)}
+					</Box>
+				)}
+			</Box>
+			{canManage && (
+				<Box display='flex' style={{ gap: '2px', flexShrink: 0 }}>
+					<IconButton tiny icon='pencil' aria-label={t('Firm_Feed_Edit')} onClick={onEdit} />
+					<IconButton tiny icon='trash' aria-label={t('Firm_Feed_Delete')} onClick={onDelete} />
+				</Box>
+			)}
+		</Box>
+	);
+};
+
+// eslint-disable-next-line react/no-multi-comp -- local presentational subcomponent, kept in-file per the fork-safe confinement rule
+const FeedSection = ({ kind, entries, canManage }: { kind: FeedSectionKind; entries: FirmFeedEntrySer[]; canManage: boolean }) => {
+	const { t } = useTranslation();
+	const setModal = useSetModal();
+	const queryClient = useQueryClient();
+	const dispatchToast = useToastMessageDispatch();
+	const deleteEntry = useEndpoint('POST', '/v1/firm-feed.delete');
+	const meta = KIND_META[kind];
+
+	const openEditor = (entry?: FirmFeedEntrySer): void => {
+		setModal(<FirmFeedEditorModal kind={kind} entry={entry} onClose={() => setModal(null)} />);
+	};
+
+	const confirmDelete = (entry: FirmFeedEntrySer): void => {
+		const doDelete = async (): Promise<void> => {
+			try {
+				await deleteEntry({ entryId: entry._id });
+				await queryClient.invalidateQueries({ queryKey: FIRM_FEED_QUERY_KEY });
+				dispatchToast({ type: 'success', message: t('Firm_Feed_Entry_Saved') });
+			} catch (error) {
+				dispatchToast({ type: 'error', message: error });
+			} finally {
+				setModal(null);
+			}
+		};
+		setModal(
+			<GenericModal
+				variant='danger'
+				title={t('Firm_Feed_Delete')}
+				confirmText={t('Firm_Feed_Delete')}
+				cancelText={t('Firm_Feed_Cancel')}
+				onConfirm={doDelete}
+				onCancel={() => setModal(null)}
+				onClose={() => setModal(null)}
+			>
+				{t('Firm_Feed_Delete_Confirm')}
+			</GenericModal>,
+		);
+	};
+
+	const addButton = canManage ? (
+		<Button small onClick={() => openEditor()} title={t(meta.newKey)}>
+			<Icon name='plus' size='x16' mie={4} />
+			{t('Firm_Feed_Add')}
+		</Button>
+	) : undefined;
+
+	return (
+		<SectionCard icon={meta.icon} title={t(meta.titleKey)} count={entries.length} action={addButton}>
+			{entries.length === 0 ? (
+				<EmptyLine>{t(meta.emptyKey)}</EmptyLine>
+			) : (
+				entries.map((entry) => (
+					<FeedEntryRow
+						key={entry._id}
+						entry={entry}
+						kind={kind}
+						canManage={canManage}
+						onEdit={() => openEditor(entry)}
+						onDelete={() => confirmDelete(entry)}
+					/>
+				))
+			)}
+		</SectionCard>
+	);
+};
+
 const MyDayHomePage = () => {
 	const router = useRouter();
 	const user = useUser();
@@ -110,11 +428,30 @@ const MyDayHomePage = () => {
 	const listBoards = useEndpoint('GET', '/v1/boards.list');
 	const getCards = useEndpoint('GET', '/v1/boards.cards');
 	const directory = useEndpoint('GET', '/v1/directory');
+	const listFeed = useEndpoint('GET', '/v1/firm-feed.list');
+
+	// MATTERCHAT: Firm Feed — admin-managed bulletin. Everyone can read; only holders of
+	// `firm-feed-manage` see the add/edit/delete controls (server also enforces this).
+	const canManageFeed = usePermission('firm-feed-manage');
 
 	const { data: boardsData, isLoading: boardsLoading } = useQuery({
 		queryKey: ['my-day', 'boards'],
 		queryFn: () => listBoards({}),
 	});
+
+	const { data: feedData, isLoading: feedLoading } = useQuery({
+		queryKey: FIRM_FEED_QUERY_KEY,
+		queryFn: () => listFeed({}),
+	});
+
+	const feed = useMemo(() => {
+		const entries = (feedData?.entries ?? []) as FirmFeedEntrySer[];
+		return {
+			announcements: entries.filter((e) => e.kind === 'announcement' || e.kind === 'update'),
+			birthdays: entries.filter((e) => e.kind === 'birthday'),
+			shoutouts: entries.filter((e) => e.kind === 'shoutout'),
+		};
+	}, [feedData]);
 
 	const mattersBoard = useMemo(() => {
 		const boards = boardsData?.boards ?? [];
@@ -134,7 +471,26 @@ const MyDayHomePage = () => {
 	});
 
 	const staff = useMemo(
-		() => (usersData?.result ?? []).filter((r): r is Serialized<IDirectoryUserResult> => 'username' in r && Boolean(r.username)),
+		() =>
+			(usersData?.result ?? []).filter((r): r is Serialized<IDirectoryUserResult> => {
+				if (!('username' in r) || !r.username) {
+					return false;
+				}
+				// MATTERCHAT: keep system bots out of the Team roster (founder saw "Rocket.Cat"
+				// leaking in). rocket.cat is filtered by id/username; roles/type are checked
+				// defensively in case the directory payload carries them.
+				if (r._id === 'rocket.cat' || r.username === 'rocket.cat') {
+					return false;
+				}
+				const meta = r as Serialized<IDirectoryUserResult> & { roles?: string[]; type?: string };
+				if (meta.roles?.includes('bot') || meta.roles?.includes('app')) {
+					return false;
+				}
+				if (meta.type === 'bot' || meta.type === 'app') {
+					return false;
+				}
+				return true;
+			}),
 		[usersData],
 	);
 
@@ -326,6 +682,25 @@ const MyDayHomePage = () => {
 							)}
 						</SectionCard>
 					</>
+				)}
+
+				{/* MATTERCHAT: Firm Feed — admin-managed bulletin (announcements / birthdays / shout-outs) */}
+				{feedLoading ? (
+					<Box display='flex' justifyContent='center' p={16}>
+						<Throbber />
+					</Box>
+				) : (
+					<Box display='flex' flexWrap='wrap' style={{ gap: '16px' }}>
+						<Box flexGrow={2} flexShrink={1} style={{ flexBasis: '360px', minWidth: '280px' }}>
+							<FeedSection kind='announcement' entries={feed.announcements} canManage={canManageFeed} />
+						</Box>
+						<Box flexGrow={1} flexShrink={1} style={{ flexBasis: '260px', minWidth: '240px' }}>
+							<FeedSection kind='birthday' entries={feed.birthdays} canManage={canManageFeed} />
+						</Box>
+						<Box flexGrow={1} flexShrink={1} style={{ flexBasis: '260px', minWidth: '240px' }}>
+							<FeedSection kind='shoutout' entries={feed.shoutouts} canManage={canManageFeed} />
+						</Box>
+					</Box>
 				)}
 
 				<SectionCard icon='team' title='Team' count={staff.length}>
