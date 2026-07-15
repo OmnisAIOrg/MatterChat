@@ -4,6 +4,19 @@ MatterChat is a **Rocket.Chat 8.6 fork** (Meteor 3 + React/Fuselage) we extend i
 team‑comms + **cross‑firm** + **project‑management ("Omnis Boards")** product, with an AI assistant
 ("CHI") powered by the existing OmnisAI AI‑Agents platform. Active branch: `feature/matterchat-cross-firm`.
 
+## ⚠️ Designing or changing ANY UI? Read the customization guide first
+Because this is a **fork of Rocket.Chat**, the ceiling on UI customization is "anything" — but the
+cost is **upstream mergeability**. Before you design, redesign, restyle, theme, or add any UI/feature,
+read **`docs/design/MATTERCHAT-UI-CUSTOMIZATION-GUIDE.md`** and follow its one rule:
+
+> **Additive, in our own files — NOT in-place edits to Rocket.Chat core.** New component in a new
+> dir merges clean forever; a line changed inside a core RC file conflicts on every upstream merge.
+
+That guide has the customization ladder (theme → restyle → new feature → core), the map of which
+dirs are *ours*, the theming (Fuselage/palette, no hardcoded colors) and branding-asset homes, the
+`// MATTERCHAT:` marker for unavoidable core edits, and the PR checklist. It is not optional — it is
+what keeps future Rocket.Chat updates cheap to merge.
+
 ## Two commands run every session (plain English — this is all you type)
 - **"resume matterchat"** → *catch me up and get ready to build.* Reads `CLAUDE.md` → `HANDOFF.md` → `DECISIONS.md` (+ any open PRs), boots or locates the stack, then gives a tight brief and proposes the **single next safest task**. Does not scan the whole repo.
 - **"checkpoint matterchat"** → *save & ship before I stop.* Commits everything (clear messages, a feature branch per repo we touched), pushes to **OmnisAIOrg** and opens/refreshes a **PR per repo**, updates `HANDOFF.md` (today's date + what changed + next task), appends dated entries to `DECISIONS.md` (what/why, **no secrets**), refreshes the `matterchat` omnis‑os skill if we learned something, and reports every PR link + what's left. Starts no new work.
