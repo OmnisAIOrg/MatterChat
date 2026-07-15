@@ -211,7 +211,13 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 				<IconButton
 					small
 					icon={expanded ? 'arrow-collapse' : 'arrow-expand'}
+					// The expanded shell (ContextualbarV2) and the drawer (ContextualbarDialog) reuse this
+					// button's DOM node across the switch, and Fuselage applies `title` imperatively on
+					// mount — so on the collapse→drawer transition the tooltip title went stale/empty,
+					// leaving the drawer's Expand button with NO accessible name. An explicit `aria-label`
+					// (a plainly React-managed attribute) guarantees a stable accessible name in both states.
 					title={expanded ? t('Collapse', { defaultValue: 'Collapse' }) : t('Expand', { defaultValue: 'Expand' })}
+					aria-label={expanded ? t('Collapse', { defaultValue: 'Collapse' }) : t('Expand', { defaultValue: 'Expand' })}
 					onClick={toggleExpanded}
 				/>
 				<ContextualbarClose onClick={onClose} />
