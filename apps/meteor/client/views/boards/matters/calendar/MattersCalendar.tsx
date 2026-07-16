@@ -1,15 +1,5 @@
 import type { IBoardDeadline, Serialized } from '@rocket.chat/core-typings';
-import {
-	Box,
-	Button,
-	Icon,
-	States,
-	StatesIcon,
-	StatesTitle,
-	StatesSubtitle,
-	Tag,
-	Throbber,
-} from '@rocket.chat/fuselage';
+import { Box, Button, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +8,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CaseProStubBanner } from '../../casepro';
+import { heatDot, heatPill, monoLabel, serifCaption, smallTag, tabularNums, useLedgerTones } from '../../lib/ledgerTheme';
 
 /**
  * MattersCalendar — the `/boards/matters/calendar` view (M5 client).
@@ -35,6 +26,11 @@ import { CaseProStubBanner } from '../../casepro';
  *
  * Date fields arrive JSON-serialized (ISO strings), hence `Serialized<IBoardDeadline>`
  * and string-tolerant date helpers — mirrors MatterPanel.tsx.
+ *
+ * LEDGER-DENSE SKIN (style-only): paper ground, serif caption + bucket heads,
+ * compact deadline cards with a heat rail (red/amber for risk, green when on
+ * plan, khaki when resolved) and small ledger tags. The escalation logic
+ * (`variantOf`) is untouched — only its colors are remapped.
  *
  * Wiring: register at route name `boards-matters-calendar`
  * (path `/boards/matters/calendar`) gated by `boards-matters-view`.
@@ -134,6 +130,7 @@ const DeadlineCard = ({
 	acknowledging: boolean;
 }): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const variant = variantOf(deadline);
 	const days = daysUntil(deadline.dueDate);
 	const isHighRisk = deadline.highRisk ?? HIGH_RISK_KINDS.includes(deadline.kind);
@@ -154,55 +151,66 @@ const DeadlineCard = ({
 		return t('Boards_Matters_SOL_In_Days', { date: datePart, days, defaultValue: '{{date}} ({{days}}d)' });
 	})();
 
-	const borderColor =
-		variant === 'danger' ? 'status-font-on-danger' : variant === 'warning' ? 'status-font-on-warning' : 'extra-light';
+	// Ledger heat rail: risk reds/ambers stay semantic; on-plan reads green;
+	// resolved recedes to the khaki stroke.
+	const heatOf = (): { heat: string; heatSoft: string } => {
+		if (variant === 'danger') {
+			return { heat: tones.red, heatSoft: tones.redSoft };
+		}
+		if (variant === 'warning') {
+			return { heat: tones.amber, heatSoft: tones.amberSoft };
+		}
+		return { heat: isResolved ? tones.stroke : tones.green, heatSoft: tones.greenSoft };
+	};
+	const { heat, heatSoft } = heatOf();
 
 	return (
 		<Box
 			display='flex'
 			alignItems='flex-start'
 			justifyContent='space-between'
-			pb={12}
-			pi={12}
-			mbe={8}
-			bg='tint'
-			borderRadius='x4'
-			borderInlineStartWidth='x4'
-			borderInlineStartStyle='solid'
-			borderInlineStartColor={borderColor}
-			style={{ gap: '12px' }}
+			pb={8}
+			pi={10}
+			mbe={6}
+			style={{
+				gap: '12px',
+				background: tones.card,
+				border: `1px solid ${tones.strokeSoft}`,
+				borderRadius: 6,
+				boxShadow: `inset 3px 0 0 0 ${heat}`,
+			}}
 		>
-			<Box display='flex' flexDirection='column' style={{ gap: '4px', minWidth: 0 }}>
-				<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '6px' }}>
-					<Tag variant={variant === 'secondary' ? 'secondary' : variant}>
+			<Box display='flex' flexDirection='column' style={{ gap: '3px', minWidth: 0 }}>
+				<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '5px' }}>
+					<Box is='span' style={isResolved ? smallTag(tones) : heatPill(heat, heatSoft)}>
 						{t(kindLabelKey(deadline.kind), { defaultValue: kindLabelDefault[deadline.kind] })}
-					</Tag>
+					</Box>
 					{isHighRisk && (
-						<Tag variant='secondary-danger' medium>
+						<Box is='span' style={heatPill(tones.red, tones.redSoft)}>
 							{t('Boards_Matters_Deadline_High_Risk', { defaultValue: 'High risk' })}
-						</Tag>
+						</Box>
 					)}
 					{deadline.acknowledged && (
-						<Tag variant='secondary-info' medium>
-							<Icon name='check' size='x12' mie={2} />
+						<Box is='span' style={smallTag(tones)}>
+							<Icon name='check' size='x12' />
 							{t('Boards_Matters_Deadline_Acknowledged', { defaultValue: 'Acknowledged' })}
-						</Tag>
+						</Box>
 					)}
 					{isResolved && (
-						<Tag variant='secondary' medium>
+						<Box is='span' style={smallTag(tones)}>
 							{t(`Boards_Matters_Deadline_Status_${deadline.status}`, { defaultValue: deadline.status })}
-						</Tag>
+						</Box>
 					)}
 				</Box>
 				<Box fontScale='p2b' color='default' withTruncatedText>
 					{deadline.label || t(kindLabelKey(deadline.kind), { defaultValue: kindLabelDefault[deadline.kind] })}
 				</Box>
-				<Box fontScale='c1' color='hint'>
+				<Box fontScale='c1' style={{ ...tabularNums, color: tones.inkMuted }}>
 					<Icon name='calendar' size='x14' mie={4} />
 					{t('Boards_Matters_Deadline_Due', { defaultValue: 'Due' })}: {dueLabel ?? '—'}
 				</Box>
 				{deadline.notes && (
-					<Box fontScale='micro' color='hint' withTruncatedText>
+					<Box fontScale='micro' withTruncatedText style={{ color: tones.inkMuted }}>
 						{deadline.notes}
 					</Box>
 				)}
@@ -215,7 +223,11 @@ const DeadlineCard = ({
 				</Button>
 				{canAcknowledge && (
 					<Button small primary disabled={acknowledging} onClick={() => onAcknowledge(deadline._id)}>
-						{acknowledging ? <Throbber inheritColor size='x12' /> : t('Boards_Matters_Deadline_Acknowledge', { defaultValue: 'Acknowledge' })}
+						{acknowledging ? (
+							<Throbber inheritColor size='x12' />
+						) : (
+							t('Boards_Matters_Deadline_Acknowledge', { defaultValue: 'Acknowledge' })
+						)}
 					</Button>
 				)}
 			</Box>
@@ -224,8 +236,8 @@ const DeadlineCard = ({
 };
 
 const BucketSection = ({ title, children }: { title: ReactNode; children: ReactNode }): ReactElement => (
-	<Box mbs={20}>
-		<Box fontScale='h4' color='default' mbe={8}>
+	<Box mbs={16}>
+		<Box fontScale='h4' color='default' mbe={6} style={serifCaption}>
 			{title}
 		</Box>
 		{children}
@@ -234,6 +246,7 @@ const BucketSection = ({ title, children }: { title: ReactNode; children: ReactN
 
 const MattersCalendar = (): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const dispatchToastMessage = useToastMessageDispatch();
@@ -304,20 +317,22 @@ const MattersCalendar = (): ReactElement => {
 	];
 
 	return (
-		<Page>
+		<Page style={{ background: tones.paper }}>
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='calendar' size='x24' mie={8} color='hint' />
-						<Box withTruncatedText>{t('Boards_Matters_Deadlines', { defaultValue: 'Deadlines' })}</Box>
+						<Icon name='calendar' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
+							{t('Boards_Matters_Deadlines', { defaultValue: 'Deadlines' })}
+						</Box>
 					</Box>
 				}
 			>
 				{atRisk > 0 && (
-					<Tag variant='secondary-danger'>
-						<Icon name='clock' size='x12' mie={4} />
+					<Box is='span' style={heatPill(tones.red, tones.redSoft)}>
+						<Box is='span' style={heatDot(tones.red)} />
 						{t('Boards_Matters_SOL_At_Risk', { defaultValue: 'SOL at risk' })}: {atRisk}
-					</Tag>
+					</Box>
 				)}
 			</PageHeader>
 			<PageScrollableContentWithShadow>
@@ -356,7 +371,17 @@ const MattersCalendar = (): ReactElement => {
 					deadlines.length > 0 &&
 					sections.map(({ bucket, title }) =>
 						buckets[bucket].length > 0 ? (
-							<BucketSection key={bucket} title={`${title} (${buckets[bucket].length})`}>
+							<BucketSection
+								key={bucket}
+								title={
+									<>
+										{title}{' '}
+										<Box is='span' style={{ ...monoLabel(tones), fontWeight: 400 }}>
+											({buckets[bucket].length})
+										</Box>
+									</>
+								}
+							>
 								{buckets[bucket].map((d) => (
 									<DeadlineCard
 										key={d._id}
