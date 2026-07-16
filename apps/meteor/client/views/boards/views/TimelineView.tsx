@@ -1,10 +1,11 @@
-import { Box, Button, ButtonGroup, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup, Icon, Throbber } from '@rocket.chat/fuselage';
 import { useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getCardTypeIcon } from '../lib/icons';
+import { LEDGER_MONO, heatPill, monoLabel, serifCaption, smallTag, tabularNums, useLedgerTones } from '../lib/ledgerTheme';
 import GanttChart from './gantt/GanttChart';
 import { useBoardViewCards } from './lib/useBoardViewCards';
 import { asTime, cardDateValue, fmtDate, isOverdue, type SerializedBoard, type SerializedCard } from './lib/viewModel';
@@ -21,6 +22,9 @@ import { asTime, cardDateValue, fmtDate, isOverdue, type SerializedBoard, type S
  *    end; overdue, not-yet-complete dates render in danger.
  *
  * Clicking a card (node or bar) deep-links it. The mode toggle is local state.
+ *
+ * LEDGER-DENSE SKIN (style-only): paper ground, serif month heads, a khaki
+ * timeline rail, dense card rows on paper cards, red heat only when overdue.
  */
 
 type TimelineViewProps = {
@@ -39,6 +43,7 @@ const monthLabel = (ms: number): string => new Date(ms).toLocaleDateString(undef
 
 const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const router = useRouter();
 	const [mode, setMode] = useState<'gantt' | 'list'>('gantt');
 
@@ -91,11 +96,9 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 
 	if (mode === 'gantt') {
 		return (
-			<Box display='flex' flexDirection='column' style={{ minWidth: 0 }}>
+			<Box display='flex' flexDirection='column' style={{ minWidth: 0, background: tones.paper, minHeight: '100%' }}>
 				<Box display='flex' alignItems='center' justifyContent='space-between' pi={24} style={{ gap: '12px', paddingBottom: 0 }}>
-					<Box fontScale='c1' color='hint'>
-						{t('Boards_Gantt_PlottedBy', { defaultValue: 'Plotted by start → due date' })}
-					</Box>
+					<Box style={monoLabel(tones)}>{t('Boards_Gantt_PlottedBy', { defaultValue: 'Plotted by start → due date' })}</Box>
 					<ButtonGroup small>
 						<Button small primary onClick={() => setMode('gantt')}>
 							{t('Boards_Gantt_Mode_Gantt', { defaultValue: 'Gantt' })}
@@ -111,9 +114,9 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 	}
 
 	return (
-		<Box pi={24} pb={16} style={{ maxWidth: 760 }}>
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={16} style={{ gap: '12px' }}>
-				<Box fontScale='c1' color='hint'>
+		<Box pi={24} pb={16} style={{ background: tones.paper, minHeight: '100%' }}>
+			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={16} style={{ gap: '12px', maxWidth: 760 }}>
+				<Box style={monoLabel(tones)}>
 					<Icon name='clock' size='x14' mie={4} />
 					{t('Boards_Views_Timeline_PlottedBy', { field: dateFieldLabel, defaultValue: 'Plotted by {{field}}' })}
 				</Box>
@@ -127,21 +130,77 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 				</ButtonGroup>
 			</Box>
 
-			{months.length === 0 && undated.length === 0 && (
-				<Box fontScale='c1' color='hint'>
-					{t('No_results_found')}
-				</Box>
-			)}
-
-			{months.map((month) => (
-				<Box key={month.key} mbe={24}>
-					<Box fontScale='h5' color='default' mbe={12}>
-						{month.label}
+			<Box style={{ maxWidth: 760 }}>
+				{months.length === 0 && undated.length === 0 && (
+					<Box fontScale='c1' color='hint'>
+						{t('No_results_found')}
 					</Box>
-					<Box pis={8} style={{ borderInlineStart: '2px solid var(--rcx-color-stroke-extra-light, #e4e7ea)' }}>
-						{month.items.map(({ card, date }) => {
-							const overdue = isOverdue(date, card.dueComplete);
-							return (
+				)}
+
+				{months.map((month) => (
+					<Box key={month.key} mbe={20}>
+						<Box fontScale='h5' color='default' mbe={8} style={serifCaption}>
+							{month.label}
+						</Box>
+						<Box pis={8} style={{ borderInlineStart: `2px solid ${tones.stroke}` }}>
+							{month.items.map(({ card, date }) => {
+								const overdue = isOverdue(date, card.dueComplete);
+								return (
+									<Box
+										key={card._id}
+										role='button'
+										tabIndex={0}
+										onClick={() => openCard(card._id)}
+										onKeyDown={(e) => {
+											if (e.key === 'Enter') {
+												openCard(card._id);
+											}
+										}}
+										display='flex'
+										alignItems='center'
+										mbe={6}
+										pb={6}
+										pi={10}
+										style={{
+											cursor: 'pointer',
+											gap: '10px',
+											background: tones.card,
+											border: `1px solid ${tones.strokeSoft}`,
+											borderRadius: 4,
+										}}
+									>
+										<Box style={{ flexShrink: 0, minWidth: 84 }}>
+											{overdue ? (
+												<Box is='span' style={heatPill(tones.red, tones.redSoft)}>
+													{fmtDate(date)}
+												</Box>
+											) : (
+												<Box is='span' style={{ ...smallTag(tones), ...tabularNums }}>
+													{fmtDate(date)}
+												</Box>
+											)}
+										</Box>
+										<Icon name={getCardTypeIcon(card.cardType)} size='x16' style={{ color: tones.inkMuted }} />
+										<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
+											{card.title}
+										</Box>
+										{card.cardNumber ? (
+											<Box style={{ flexShrink: 0, fontFamily: LEDGER_MONO, fontSize: 10, color: tones.inkMuted }}>#{card.cardNumber}</Box>
+										) : null}
+									</Box>
+								);
+							})}
+						</Box>
+					</Box>
+				))}
+
+				{undated.length > 0 && (
+					<Box mbe={20}>
+						<Box fontScale='h5' mbe={8} style={{ ...serifCaption, color: tones.inkMuted }}>
+							{t('Boards_Views_Timeline_Undated', { defaultValue: 'Undated' })}
+						</Box>
+						<Box pis={8} style={{ borderInlineStart: `2px solid ${tones.strokeSoft}` }}>
+							{undated.map((card) => (
 								<Box
 									key={card._id}
 									role='button'
@@ -154,71 +213,27 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 									}}
 									display='flex'
 									alignItems='center'
-									mbe={8}
-									pb={8}
-									pi={12}
-									bg='light'
-									borderRadius='x4'
-									borderWidth='default'
-									borderColor='extra-light'
-									style={{ cursor: 'pointer', gap: '10px' }}
+									mbe={6}
+									pb={6}
+									pi={10}
+									style={{
+										cursor: 'pointer',
+										gap: '10px',
+										background: tones.card,
+										border: `1px solid ${tones.strokeSoft}`,
+										borderRadius: 4,
+									}}
 								>
-									<Box style={{ flexShrink: 0, minWidth: 84 }}>
-										<Tag variant={overdue ? 'danger' : 'secondary'}>{fmtDate(date)}</Tag>
-									</Box>
-									<Icon name={getCardTypeIcon(card.cardType)} size='x16' color='hint' />
+									<Icon name={getCardTypeIcon(card.cardType)} size='x16' style={{ color: tones.inkMuted }} />
 									<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
 										{card.title}
 									</Box>
-									{card.cardNumber ? (
-										<Box fontScale='micro' color='hint' style={{ flexShrink: 0 }}>
-											#{card.cardNumber}
-										</Box>
-									) : null}
 								</Box>
-							);
-						})}
+							))}
+						</Box>
 					</Box>
-				</Box>
-			))}
-
-			{undated.length > 0 && (
-				<Box mbe={24}>
-					<Box fontScale='h5' color='hint' mbe={12}>
-						{t('Boards_Views_Timeline_Undated', { defaultValue: 'Undated' })}
-					</Box>
-					<Box pis={8} style={{ borderInlineStart: '2px solid var(--rcx-color-stroke-extra-light, #e4e7ea)' }}>
-						{undated.map((card) => (
-							<Box
-								key={card._id}
-								role='button'
-								tabIndex={0}
-								onClick={() => openCard(card._id)}
-								onKeyDown={(e) => {
-									if (e.key === 'Enter') {
-										openCard(card._id);
-									}
-								}}
-								display='flex'
-								alignItems='center'
-								mbe={8}
-								pb={8}
-								pi={12}
-								bg='light'
-								borderRadius='x4'
-								borderWidth='default'
-								borderColor='extra-light'
-								style={{ cursor: 'pointer', gap: '10px' }}
-							>
-								<Icon name={getCardTypeIcon(card.cardType)} size='x16' color='hint' />
-								<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
-									{card.title}
-								</Box>
-							</Box>
-						))}
-					</Box>
-				</Box>
-			)}
+				)}
+			</Box>
 		</Box>
 	);
 };

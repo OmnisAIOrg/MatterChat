@@ -8,15 +8,16 @@ import { useTranslation } from 'react-i18next';
 import {
 	DAY_MS,
 	ZOOM_DAY_WIDTH,
-	barPalette,
 	buildGanttModel,
 	dependencyEdges,
 	monthBands,
 	startOfDay,
+	type BarPalette,
 	type GanttRow,
 	type GanttZoom,
 } from './ganttModel';
 import { getCardTypeIcon } from '../../lib/icons';
+import { LEDGER_MONO, LEDGER_SERIF, monoLabel, useLedgerTones, type LedgerTones } from '../../lib/ledgerTheme';
 import { asTime, fmtDate, type SerializedBoard, type SerializedCard } from '../lib/viewModel';
 
 /**
@@ -33,7 +34,35 @@ import { asTime, fmtDate, type SerializedBoard, type SerializedCard } from '../l
  *
  * No third-party Gantt dependency — geometry lives in the pure `ganttModel` so the
  * feature stays MIT/proprietary and themed to the fork.
+ *
+ * LEDGER-DENSE SKIN (style-only): paper ground, khaki structure/grid lines,
+ * serif month bands + small-caps mono axis labels, dense rows, and the ledger
+ * bar palette — green is the primary series, amber/red reserved for risk
+ * (high priority / overdue), done recedes to khaki. The bar-state PRIORITY
+ * ORDER (completed → overdue → priority → default) mirrors ganttModel's
+ * `barPalette`; only the colors are remapped here. Gantt math untouched.
  */
+
+// Ledger remap of ganttModel.barPalette — same decision order, brand colors.
+const ledgerBarPalette = (row: GanttRow, tones: LedgerTones): BarPalette => {
+	if (row.completed) {
+		return { fill: tones.strokeSoft, accent: tones.stroke };
+	}
+	if (row.overdue) {
+		return { fill: tones.redSoft, accent: tones.red };
+	}
+	switch (row.card.priority) {
+		case 'urgent':
+			return { fill: tones.redSoft, accent: tones.red };
+		case 'high':
+			return { fill: tones.amberSoft, accent: tones.amber };
+		case 'low':
+			return { fill: tones.strokeSoft, accent: tones.stroke };
+		case 'medium':
+		default:
+			return { fill: tones.greenSoft, accent: tones.green };
+	}
+};
 
 type GanttChartProps = {
 	board: SerializedBoard;
@@ -63,14 +92,16 @@ type DragContext = {
 };
 
 const GUTTER = 248;
-const ROW_H = 36;
-const HEADER_H = 48;
-const BAR_H = 20;
+// Ledger density: tighter rows/bars (pure spacing — all geometry derives from these constants).
+const ROW_H = 30;
+const HEADER_H = 40;
+const BAR_H = 16;
 const BAR_TOP = (ROW_H - BAR_H) / 2;
 const CLICK_SLOP_PX = 4;
 
 const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const dispatchToast = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 	const cardUpdate = useMethod('boards.cardUpdate');
@@ -280,7 +311,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 		const isDragged = active !== null;
 		const startMs = active ? active.startMs : row.startMs;
 		const endMs = active ? active.endMs : row.endMs;
-		const palette = barPalette(row);
+		const palette = ledgerBarPalette(row, tones);
 		const tooltip = `${row.card.title}${row.hasStart ? ` · ${fmtDate(row.card.startDate)}` : ''}${
 			row.hasDue ? ` → ${fmtDate(row.card.dueDate)}` : ''
 		}`;
@@ -294,13 +325,13 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 					onPointerDown={(e) => beginDrag(e, row, 'move')}
 					position='absolute'
 					style={{
-						left: cx - 9,
-						top: ROW_H / 2 - 9,
-						width: 18,
-						height: 18,
+						left: cx - 7,
+						top: ROW_H / 2 - 7,
+						width: 14,
+						height: 14,
 						transform: 'rotate(45deg)',
 						background: palette.accent,
-						borderRadius: 3,
+						borderRadius: 2,
 						cursor: 'grab',
 						touchAction: 'none',
 					}}
@@ -328,7 +359,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 					height: BAR_H,
 					background: palette.fill,
 					border: `1px solid ${palette.accent}`,
-					borderRadius: 6,
+					borderRadius: 4,
 					cursor: 'grab',
 					overflow: 'hidden',
 					touchAction: 'none',
@@ -362,24 +393,24 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 	const empty = model.rows.length === 0 && model.undated.length === 0;
 
 	return (
-		<Box pi={24} pb={16} display='flex' flexDirection='column' style={{ minWidth: 0 }}>
+		<Box pi={24} pb={16} display='flex' flexDirection='column' style={{ minWidth: 0, background: tones.paper }}>
 			{/* toolbar */}
 			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={12} style={{ gap: '12px', flexWrap: 'wrap' }}>
-				<Box display='flex' alignItems='center' fontScale='c1' color='hint' style={{ gap: '14px', flexWrap: 'wrap' }}>
+				<Box display='flex' alignItems='center' fontScale='c1' style={{ gap: '14px', flexWrap: 'wrap', color: tones.inkMuted }}>
 					<Box display='flex' alignItems='center' style={{ gap: '5px' }}>
-						<Box style={{ width: 11, height: 11, borderRadius: 3, background: '#095ad2' }} />{' '}
+						<Box style={{ width: 10, height: 10, borderRadius: 3, background: tones.green }} />{' '}
 						{t('Boards_Gantt_Legend_Scheduled', { defaultValue: 'Scheduled' })}
 					</Box>
 					<Box display='flex' alignItems='center' style={{ gap: '5px' }}>
-						<Box style={{ width: 11, height: 11, borderRadius: 3, background: '#e02b2b' }} />{' '}
+						<Box style={{ width: 10, height: 10, borderRadius: 3, background: tones.red }} />{' '}
 						{t('Boards_Gantt_Legend_Overdue', { defaultValue: 'Overdue' })}
 					</Box>
 					<Box display='flex' alignItems='center' style={{ gap: '5px' }}>
-						<Box style={{ width: 11, height: 11, borderRadius: 3, background: '#148660' }} />{' '}
+						<Box style={{ width: 10, height: 10, borderRadius: 3, background: tones.stroke }} />{' '}
 						{t('Boards_Gantt_Legend_Done', { defaultValue: 'Done' })}
 					</Box>
 					<Box display='flex' alignItems='center' style={{ gap: '5px' }}>
-						<Box style={{ width: 11, height: 11, transform: 'rotate(45deg)', background: '#095ad2' }} />{' '}
+						<Box style={{ width: 10, height: 10, transform: 'rotate(45deg)', background: tones.green }} />{' '}
 						{t('Boards_Gantt_Legend_Milestone', { defaultValue: 'Milestone' })}
 					</Box>
 				</Box>
@@ -401,18 +432,16 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 					style={{
 						overflow: 'auto',
 						maxHeight: '70vh',
-						border: '1px solid var(--rcx-color-stroke-extra-light, #e4e7ea)',
+						border: `1px solid ${tones.stroke}`,
 						borderRadius: 6,
 						position: 'relative',
+						background: tones.card,
 						userSelect: drag ? 'none' : undefined,
 					}}
 				>
 					<Box style={{ width: GUTTER + chartWidth, position: 'relative' }}>
 						{/* sticky header: corner + month bands */}
-						<Box
-							display='flex'
-							style={{ position: 'sticky', top: 0, zIndex: 5, height: HEADER_H, background: 'var(--rcx-color-surface-light, #fff)' }}
-						>
+						<Box display='flex' style={{ position: 'sticky', top: 0, zIndex: 5, height: HEADER_H, background: tones.card }}>
 							<Box
 								style={{
 									width: GUTTER,
@@ -420,19 +449,18 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 									position: 'sticky',
 									left: 0,
 									zIndex: 6,
-									background: 'var(--rcx-color-surface-light, #fff)',
-									borderInlineEnd: '1px solid var(--rcx-color-stroke-extra-light, #e4e7ea)',
-									borderBlockEnd: '1px solid var(--rcx-color-stroke-extra-light, #e4e7ea)',
+									background: tones.card,
+									borderInlineEnd: `1px solid ${tones.stroke}`,
+									borderBlockEnd: `1px solid ${tones.stroke}`,
+									...monoLabel(tones),
 								}}
 								display='flex'
 								alignItems='center'
 								pi={12}
-								fontScale='c2'
-								color='hint'
 							>
 								{t('Boards_Gantt_Task', { defaultValue: 'Task' })}
 							</Box>
-							<Box display='flex' style={{ width: chartWidth, borderBlockEnd: '1px solid var(--rcx-color-stroke-extra-light, #e4e7ea)' }}>
+							<Box display='flex' style={{ width: chartWidth, borderBlockEnd: `1px solid ${tones.stroke}` }}>
 								{bands.map((b) => (
 									<Box
 										key={b.startMs}
@@ -444,7 +472,9 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 										style={{
 											width: b.days * dayWidth,
 											flexShrink: 0,
-											borderInlineStart: '1px solid var(--rcx-color-stroke-extra-light, #eef0f2)',
+											borderInlineStart: `1px solid ${tones.strokeSoft}`,
+											fontFamily: LEDGER_SERIF,
+											fontWeight: 600,
 										}}
 									>
 										{b.label}
@@ -476,7 +506,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 											top: 0,
 											bottom: 0,
 											width: 1,
-											background: 'var(--rcx-color-stroke-extra-light, #eef0f2)',
+											background: tones.strokeSoft,
 										}}
 									/>
 								))}
@@ -488,8 +518,8 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 											top: 0,
 											bottom: 0,
 											width: 2,
-											background: 'var(--rcx-color-status-font-info, #095ad2)',
-											opacity: 0.55,
+											background: tones.green,
+											opacity: 0.6,
 										}}
 									/>
 								)}
@@ -517,18 +547,18 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 											zIndex: 2,
 											gap: '8px',
 											cursor: 'pointer',
-											background: 'var(--rcx-color-surface-light, #fff)',
-											borderInlineEnd: '1px solid var(--rcx-color-stroke-extra-light, #e4e7ea)',
-											borderBlockEnd: '1px solid var(--rcx-color-stroke-extra-light, #f2f3f5)',
+											background: tones.card,
+											borderInlineEnd: `1px solid ${tones.stroke}`,
+											borderBlockEnd: `1px solid ${tones.strokeSoft}`,
 										}}
 										pi={12}
 									>
-										<Icon name={getCardTypeIcon(row.card.cardType)} size='x16' color='hint' />
-										<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
+										<Icon name={getCardTypeIcon(row.card.cardType)} size='x16' style={{ color: tones.inkMuted }} />
+										<Box fontScale='c1' color='default' withTruncatedText flexGrow={1}>
 											{row.card.title}
 										</Box>
 										{row.card.cardNumber ? (
-											<Box fontScale='micro' color='hint' style={{ flexShrink: 0 }}>
+											<Box style={{ flexShrink: 0, fontFamily: LEDGER_MONO, fontSize: 10, color: tones.inkMuted }}>
 												#{row.card.cardNumber}
 											</Box>
 										) : null}
@@ -537,7 +567,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 										style={{
 											width: chartWidth,
 											position: 'relative',
-											borderBlockEnd: '1px solid var(--rcx-color-stroke-extra-light, #f2f3f5)',
+											borderBlockEnd: `1px solid ${tones.strokeSoft}`,
 										}}
 									>
 										{renderBar(row)}
@@ -554,10 +584,10 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 								>
 									<defs>
 										<marker id='omnis-gantt-arrow' markerWidth='8' markerHeight='8' refX='6' refY='3' orient='auto'>
-											<path d='M0,0 L6,3 L0,6 Z' fill='#9aa3ad' />
+											<path d='M0,0 L6,3 L0,6 Z' fill={tones.inkMuted} />
 										</marker>
 										<marker id='omnis-gantt-arrow-conflict' markerWidth='8' markerHeight='8' refX='6' refY='3' orient='auto'>
-											<path d='M0,0 L6,3 L0,6 Z' fill='#e02b2b' />
+											<path d='M0,0 L6,3 L0,6 Z' fill={tones.red} />
 										</marker>
 									</defs>
 									{edges.map((edge) => {
@@ -578,7 +608,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 												key={`${edge.fromId}->${edge.toId}`}
 												d={`M ${x1} ${y1} C ${x1 + 26} ${y1}, ${x2 - 26} ${y2}, ${x2} ${y2}`}
 												fill='none'
-												stroke={conflict ? '#e02b2b' : '#9aa3ad'}
+												stroke={conflict ? tones.red : tones.inkMuted}
 												strokeWidth={1.5}
 												strokeDasharray={conflict ? '4 3' : undefined}
 												markerEnd={`url(#omnis-gantt-arrow${conflict ? '-conflict' : ''})`}
@@ -595,10 +625,10 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 			{/* undated cards */}
 			{model.undated.length > 0 && (
 				<Box mbs={16}>
-					<Box fontScale='c1' color='hint' mbe={8}>
+					<Box mbe={8} style={monoLabel(tones)}>
 						{t('Boards_Gantt_Undated', { defaultValue: 'Undated' })} ({model.undated.length})
 					</Box>
-					<Box display='flex' style={{ gap: '8px', flexWrap: 'wrap' }}>
+					<Box display='flex' style={{ gap: '6px', flexWrap: 'wrap' }}>
 						{model.undated.map((card) => (
 							<Box
 								key={card._id}
@@ -614,13 +644,16 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 								alignItems='center'
 								pi={8}
 								pb={4}
-								bg='light'
-								borderRadius='x4'
-								borderWidth='default'
-								borderColor='extra-light'
-								style={{ cursor: 'pointer', gap: '6px', maxWidth: 220 }}
+								style={{
+									cursor: 'pointer',
+									gap: '6px',
+									maxWidth: 220,
+									background: tones.card,
+									border: `1px solid ${tones.stroke}`,
+									borderRadius: 4,
+								}}
 							>
-								<Icon name={getCardTypeIcon(card.cardType)} size='x14' color='hint' />
+								<Icon name={getCardTypeIcon(card.cardType)} size='x14' style={{ color: tones.inkMuted }} />
 								<Box fontScale='c1' color='default' withTruncatedText>
 									{card.title}
 								</Box>

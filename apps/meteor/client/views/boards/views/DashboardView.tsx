@@ -1,8 +1,9 @@
-import { Box, ProgressBar, Throbber } from '@rocket.chat/fuselage';
+import { Box, Throbber } from '@rocket.chat/fuselage';
 import type { ReactElement, ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { monoLabel, serifCaption, tabularNums, useLedgerTones } from '../lib/ledgerTheme';
 import { useBoardViewCards } from './lib/useBoardViewCards';
 import { asTime, isOverdue, type SerializedBoard, type SerializedCard } from './lib/viewModel';
 
@@ -16,6 +17,11 @@ import { asTime, isOverdue, type SerializedBoard, type SerializedCard } from './
  * board-scoped counterpart to the cross-pipeline reports — pure read, graceful on
  * empty boards. For matters/leads boards the richer financial/funnel reports live
  * under /boards/matters/reports and /boards/leads/reports.
+ *
+ * LEDGER-DENSE SKIN (style-only): paper ground, metric paper cards with a rail
+ * (green primary; amber/red only when the metric flags risk), serif section
+ * head, and hand-drawn green distribution bars on a khaki track (same
+ * percentage math as before).
  */
 
 type DashboardViewProps = {
@@ -23,21 +29,41 @@ type DashboardViewProps = {
 	viewId?: string;
 };
 
-const Metric = ({ label, value, tone }: { label: string; value: ReactNode; tone?: 'danger' | 'warning' | 'default' }): ReactElement => (
-	<Box pb={16} pi={16} bg='tint' borderRadius='x4' minWidth={150} flexGrow={1} flexBasis={150}>
-		<Box fontScale='c1' color='hint' mbe={4}>
-			{label}
+const Metric = ({ label, value, tone }: { label: string; value: ReactNode; tone?: 'danger' | 'warning' | 'default' }): ReactElement => {
+	const tones = useLedgerTones();
+	// Green primary rail; amber/red only when the metric flags risk.
+	const risk = tone === 'danger' ? tones.red : undefined;
+	const warn = tone === 'warning' ? tones.amber : undefined;
+	const rail = risk ?? warn ?? tones.green;
+	return (
+		<Box
+			pb={10}
+			pi={12}
+			minWidth={150}
+			flexGrow={1}
+			flexBasis={150}
+			style={{
+				background: tones.card,
+				border: `1px solid ${tones.stroke}`,
+				borderRadius: 6,
+				boxShadow: `inset 3px 0 0 0 ${rail}`,
+			}}
+		>
+			<Box mbe={4} style={monoLabel(tones)}>
+				{label}
+			</Box>
+			<Box fontScale='h2' style={{ ...tabularNums, color: risk ?? warn }}>
+				{value}
+			</Box>
 		</Box>
-		<Box fontScale='h2' color={tone === 'danger' ? 'status-font-on-danger' : tone === 'warning' ? 'status-font-on-warning' : 'default'}>
-			{value}
-		</Box>
-	</Box>
-);
+	);
+};
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 
 	const { data, isLoading } = useBoardViewCards(board._id, 'dashboard', viewId);
 
@@ -93,10 +119,14 @@ const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 	}
 
 	return (
-		<Box pi={24} pb={16}>
-			<Box display='flex' flexWrap='wrap' mbe={24} style={{ gap: '12px' }}>
+		<Box pi={24} pb={16} style={{ background: tones.paper, minHeight: '100%' }}>
+			<Box display='flex' flexWrap='wrap' mbe={24} style={{ gap: '10px' }}>
 				<Metric label={t('Boards_Views_Dash_Total', { defaultValue: 'Total cards' })} value={stats.total} />
-				<Metric label={t('Boards_Views_Dash_Overdue', { defaultValue: 'Overdue' })} value={stats.overdue} tone={stats.overdue > 0 ? 'danger' : 'default'} />
+				<Metric
+					label={t('Boards_Views_Dash_Overdue', { defaultValue: 'Overdue' })}
+					value={stats.overdue}
+					tone={stats.overdue > 0 ? 'danger' : 'default'}
+				/>
 				<Metric
 					label={t('Boards_Views_Dash_DueThisWeek', { defaultValue: 'Due this week' })}
 					value={stats.dueThisWeek}
@@ -105,7 +135,7 @@ const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 				<Metric label={t('Boards_Views_Dash_Completed', { defaultValue: 'Completed (dated)' })} value={stats.completedDue} />
 			</Box>
 
-			<Box fontScale='h4' color='default' mbe={12}>
+			<Box fontScale='h4' color='default' mbe={12} style={serifCaption}>
 				{t('Boards_Views_Dash_Distribution', { defaultValue: 'Distribution' })}
 			</Box>
 
@@ -116,16 +146,21 @@ const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 			)}
 
 			{distribution.map((d) => (
-				<Box key={d.label} mbe={12}>
-					<Box display='flex' justifyContent='space-between' mbe={4}>
+				<Box key={d.label} mbe={10}>
+					<Box display='flex' justifyContent='space-between' mbe={3}>
 						<Box fontScale='p2b' color='default' withTruncatedText>
 							{d.label}
 						</Box>
-						<Box fontScale='c1' color='hint'>
+						<Box fontScale='c1' style={{ ...tabularNums, color: tones.inkMuted }}>
 							{d.count}
 						</Box>
 					</Box>
-					<ProgressBar percentage={Math.round((d.count / maxCount) * 100)} />
+					{/* Green primary series on a khaki track (same percentage math as the old ProgressBar). */}
+					<Box style={{ height: 6, borderRadius: 3, background: tones.strokeSoft, overflow: 'hidden' }}>
+						<Box
+							style={{ height: '100%', width: `${Math.round((d.count / maxCount) * 100)}%`, background: tones.green, borderRadius: 3 }}
+						/>
+					</Box>
 				</Box>
 			))}
 		</Box>

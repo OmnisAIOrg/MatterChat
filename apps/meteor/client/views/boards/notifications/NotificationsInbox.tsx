@@ -6,6 +6,7 @@ import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { notificationIcon, relativeTime, type ClientNotification } from './lib/presentation';
+import { serifCaption, tabularNums, useLedgerTones } from '../lib/ledgerTheme';
 
 /**
  * NotificationsInbox — the panel the Boards NavBar bell drops down.
@@ -20,6 +21,10 @@ import { notificationIcon, relativeTime, type ClientNotification } from './lib/p
  * The bell badge count comes from a separate, cheap `unreadCount` poll in the
  * bell itself; this panel shares the same react-query cache keys so a markRead
  * here updates the badge immediately.
+ *
+ * LEDGER-DENSE SKIN (style-only): paper panel, serif caption, khaki row rules,
+ * dense rows, and green (the brand accent) for the unread tint/dot/icon. Works
+ * both as the bell dropdown and the full-page /boards/inbox route.
  */
 
 export const NOTIFICATIONS_LIST_KEY = ['boards', 'notifications', 'list'];
@@ -36,6 +41,7 @@ type NotificationsInboxProps = {
 
 const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const dispatchToastMessage = useToastMessageDispatch();
@@ -85,9 +91,16 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 	const hasUnread = notifications.some((n) => !n.read);
 
 	return (
-		<Box display='flex' flexDirection='column' width={360} maxWidth='100vw'>
-			<Box display='flex' alignItems='center' justifyContent='space-between' p={12} pbe={8}>
-				<Box fontScale='h5' color='default'>
+		<Box display='flex' flexDirection='column' width={360} maxWidth='100vw' style={{ background: tones.paper }}>
+			<Box
+				display='flex'
+				alignItems='center'
+				justifyContent='space-between'
+				p={12}
+				pbe={8}
+				style={{ borderBlockEnd: `1px solid ${tones.strokeSoft}` }}
+			>
+				<Box fontScale='h5' color='default' style={serifCaption}>
 					{t('Boards_Notifications', { defaultValue: 'Notifications' })}
 				</Box>
 				<Button
@@ -128,12 +141,16 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 						display='flex'
 						alignItems='flex-start'
 						pi={12}
-						pb={10}
-						bg={notification.read ? undefined : 'tint'}
-						style={{ cursor: 'pointer', gap: '10px' }}
+						pb={8}
+						style={{
+							cursor: 'pointer',
+							gap: '10px',
+							background: notification.read ? undefined : tones.greenSoft,
+							borderBlockEnd: `1px solid ${tones.strokeSoft}`,
+						}}
 						className='rcx-box--animated'
 					>
-						<Box mbs={2} color={notification.read ? 'hint' : 'primary'} style={{ flexShrink: 0 }}>
+						<Box mbs={2} style={{ flexShrink: 0, color: notification.read ? tones.inkMuted : tones.green }}>
 							<Icon name={notificationIcon(notification.kind)} size='x18' />
 						</Box>
 						<Box minWidth={0} flexGrow={1}>
@@ -141,19 +158,19 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 								<Box fontScale={notification.read ? 'p2' : 'p2b'} color='default' withTruncatedText>
 									{notification.title}
 								</Box>
-								<Box fontScale='micro' color='hint' style={{ flexShrink: 0 }}>
+								<Box fontScale='micro' style={{ flexShrink: 0, ...tabularNums, color: tones.inkMuted }}>
 									{relativeTime(notification.createdAt)}
 								</Box>
 							</Box>
 							{notification.body && (
-								<Box fontScale='c1' color='hint' mbs={2} withTruncatedText>
+								<Box fontScale='c1' mbs={2} withTruncatedText style={{ color: tones.inkMuted }}>
 									{notification.body}
 								</Box>
 							)}
 						</Box>
 						{!notification.read && (
 							<Box mbs={6} style={{ flexShrink: 0 }}>
-								<Box width={8} height={8} bg='status-background-info' borderRadius='full' />
+								<Box width={8} height={8} borderRadius='full' style={{ background: tones.green }} />
 							</Box>
 						)}
 					</Box>
