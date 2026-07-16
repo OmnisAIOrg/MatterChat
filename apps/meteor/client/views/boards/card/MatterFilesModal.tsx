@@ -3,6 +3,8 @@ import { useUserId } from '@rocket.chat/ui-contexts';
 import { Suspense, lazy } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import LitboxEmbedBoundary from '../../litbox/LitboxEmbedBoundary';
+
 /**
  * MatterFilesModal — browse ONE matter's CasePro LitBox files without leaving the
  * board card.
@@ -15,7 +17,9 @@ import { useTranslation } from 'react-i18next';
  *
  * The browser-side token is the caller's own MatterChat session token; the
  * `/_litbox` proxy validates it and injects the real LitBox credential server-side
- * (same contract as LitboxEmbed / LitboxFilesView).
+ * (same contract as LitboxEmbed / LitboxFilesView). The embed is wrapped in
+ * LitboxEmbedBoundary so a failure to load it degrades to an inline callout inside
+ * the modal instead of white-screening the whole client.
  */
 const LitboxEmbed = lazy(() => import('../../litbox/LitboxEmbed'));
 
@@ -44,15 +48,17 @@ const MatterFilesModal = ({ workspaceId, label, onClose }: MatterFilesModalProps
 			</ModalHeader>
 			<ModalContent>
 				<Box display='flex' flexDirection='column' height='100%' style={{ minHeight: 0 }}>
-					<Suspense
-						fallback={
-							<Box display='flex' justifyContent='center' alignItems='center' height='100%'>
-								<Throbber />
-							</Box>
-						}
-					>
-						<LitboxEmbed authToken={authToken} workspaceId={workspaceId} />
-					</Suspense>
+					<LitboxEmbedBoundary>
+						<Suspense
+							fallback={
+								<Box display='flex' justifyContent='center' alignItems='center' height='100%'>
+									<Throbber />
+								</Box>
+							}
+						>
+							<LitboxEmbed authToken={authToken} workspaceId={workspaceId} />
+						</Suspense>
+					</LitboxEmbedBoundary>
 				</Box>
 			</ModalContent>
 		</Modal>

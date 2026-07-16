@@ -23,6 +23,7 @@ import MatterPanel from './MatterPanel';
 import SubtasksPanel from './SubtasksPanel';
 import TimePanel from './TimePanel';
 import WatchToggle from './WatchToggle';
+import { ledgerHead, ledgerRule, serifCaption, tabularFigures, useLedgerTone } from './ledgerStyles';
 import { getCardTypeIcon } from '../lib/icons';
 
 type CardDetailProps = {
@@ -49,9 +50,10 @@ const expandedBarClass = css`
 
 const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 	const { t } = useTranslation();
+	const tone = useLedgerTone();
 	return (
-		<Box mbs={16}>
-			<Box fontScale='p2b' color='default' mbe={8}>
+		<Box mbs={12}>
+			<Box mbe={6} pbe={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
 				{t('Comment')}
 			</Box>
 			{card.comments.length === 0 && (
@@ -60,8 +62,15 @@ const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 				</Box>
 			)}
 			{card.comments.map((comment) => (
-				<Box key={comment.id} mbe={8} pb={8} pi={8} bg='tint' borderRadius='x4'>
-					<Box fontScale='micro' color='hint' mbe={2}>
+				<Box
+					key={comment.id}
+					mbe={6}
+					pb={8}
+					pi={8}
+					borderRadius='x4'
+					style={{ backgroundColor: tone.card, boxShadow: `inset 0 0 0 1px ${tone.rule}` }}
+				>
+					<Box fontScale='micro' color='hint' mbe={2} style={tabularFigures}>
 						{comment.author} · {new Date(comment.ts).toLocaleString()}
 					</Box>
 					<Box fontScale='p2' color='default'>
@@ -75,6 +84,7 @@ const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 
 const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string }) => {
 	const { t } = useTranslation();
+	const tone = useLedgerTone();
 	const getActivities = useEndpoint('GET', '/v1/boards.activities');
 	const { data, isLoading } = useQuery({
 		queryKey: ['boards', 'activities', cardId],
@@ -102,13 +112,13 @@ const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string })
 	return (
 		<Box>
 			{activities.map((activity) => (
-				<Box key={activity._id} display='flex' alignItems='flex-start' mbe={8}>
+				<Box key={activity._id} display='flex' alignItems='flex-start' mbe={6} pbe={4} style={ledgerRule(tone)}>
 					<Icon name='clock' size='x16' mie={8} mbs={2} color='hint' />
 					<Box>
 						<Box fontScale='p2' color='default'>
 							{activity.verb}
 						</Box>
-						<Box fontScale='micro' color='hint'>
+						<Box fontScale='micro' color='hint' style={tabularFigures}>
 							{activity.actor} · {new Date(activity.ts).toLocaleString()}
 						</Box>
 					</Box>
@@ -120,6 +130,7 @@ const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string })
 
 const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardDetailProps) => {
 	const { t } = useTranslation();
+	const tone = useLedgerTone();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 
@@ -206,12 +217,23 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 		<>
 			<ContextualbarHeader>
 				{card && <Icon name={getCardTypeIcon(card.cardType)} size='x20' mie={4} />}
-				<ContextualbarTitle>{card?.title ?? t('Loading')}</ContextualbarTitle>
+				{/* Serif "case caption" title — same treatment as the room-header caption. */}
+				<ContextualbarTitle>
+					<Box is='span' style={serifCaption}>
+						{card?.title ?? t('Loading')}
+					</Box>
+				</ContextualbarTitle>
 				{card && <WatchToggle cardId={cardId} />}
 				<IconButton
 					small
 					icon={expanded ? 'arrow-collapse' : 'arrow-expand'}
+					// The expanded shell (ContextualbarV2) and the drawer (ContextualbarDialog) reuse this
+					// button's DOM node across the switch, and Fuselage applies `title` imperatively on
+					// mount — so on the collapse→drawer transition the tooltip title went stale/empty,
+					// leaving the drawer's Expand button with NO accessible name. An explicit `aria-label`
+					// (a plainly React-managed attribute) guarantees a stable accessible name in both states.
 					title={expanded ? t('Collapse', { defaultValue: 'Collapse' }) : t('Expand', { defaultValue: 'Expand' })}
+					aria-label={expanded ? t('Collapse', { defaultValue: 'Collapse' }) : t('Expand', { defaultValue: 'Expand' })}
 					onClick={toggleExpanded}
 				/>
 				<ContextualbarClose onClick={onClose} />
@@ -226,7 +248,8 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 				</Tabs.Item>
 			</Tabs>
 
-			<ContextualbarScrollableContent>
+			{/* Paper treatment: warm paper (light) / calm dense dark surface behind the card body. */}
+			<ContextualbarScrollableContent style={{ backgroundColor: tone.paper }}>
 				{isLoading && (
 					<Box display='flex' justifyContent='center' p={24}>
 						<Throbber />
@@ -251,15 +274,15 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 								</CardErrorBoundary>
 							</Box>
 						)}
-						<Box mbe={12}>
-							<Box fontScale='c1' color='hint' mbe={4}>
+						<Box mbe={10}>
+							<Box mbe={4} style={ledgerHead(tone)}>
 								{t('Title')}
 							</Box>
 							<TextInput value={title} onChange={(e) => setTitle((e.target as HTMLInputElement).value)} />
 						</Box>
 
-						<Box mbe={12}>
-							<Box fontScale='c1' color='hint' mbe={4}>
+						<Box mbe={10}>
+							<Box mbe={4} style={ledgerHead(tone)}>
 								{t('Description')}
 							</Box>
 							<TextAreaInput
@@ -286,7 +309,7 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 
 						<Divider />
 
-						<Box fontScale='c1' color='hint'>
+						<Box fontScale='c1' color='hint' style={tabularFigures}>
 							#{card.cardNumber} · {card.cardType}
 						</Box>
 

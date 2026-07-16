@@ -12,11 +12,12 @@ const MatterField = ({ label, children }: MatterFieldProps): ReactElement | null
 		return null;
 	}
 	return (
-		<Box display='flex' justifyContent='space-between' alignItems='flex-start' mbe={6} style={{ gap: '12px' }}>
+		// Ledger-dense: tighter rows + tabular figures so dates/amounts align down the column.
+		<Box display='flex' justifyContent='space-between' alignItems='flex-start' mbe={4} style={{ gap: '12px' }}>
 			<Box fontScale='c1' color='hint' style={{ flexShrink: 0 }}>
 				{label}
 			</Box>
-			<Box fontScale='p2' color='default' style={{ textAlign: 'right' }}>
+			<Box fontScale='p2' color='default' style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
 				{children}
 			</Box>
 		</Box>

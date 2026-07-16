@@ -92,7 +92,7 @@ const MattersBoardRoute = () => {
 
 	if (isLoading) {
 		return (
-			<Page>
+			<Page background='room'>
 				<Box display='flex' justifyContent='center' alignItems='center' height='100%'>
 					<Throbber />
 				</Box>
@@ -102,7 +102,7 @@ const MattersBoardRoute = () => {
 
 	if (isError || !data || !board) {
 		return (
-			<Page>
+			<Page background='room'>
 				<States>
 					<StatesIcon name='warning' variation='danger' />
 					<StatesTitle>{t('Something_went_wrong')}</StatesTitle>
@@ -118,10 +118,16 @@ const MattersBoardRoute = () => {
 
 	const { lists } = data;
 
+	// LEDGER CHROME (style only): background='room' puts the page shell on the
+	// ledger paper surface (the chat-restyle palette re-points
+	// --rcx-color-surface-room to paper light / calm dark), and the
+	// 'mc-board-header' class pulls the serif case-caption + single dense
+	// strip CSS from BoardsChromeStyleTags. Wiring is untouched.
 	return (
-		<Page flexDirection='row'>
-			<Page>
+		<Page flexDirection='row' background='room'>
+			<Page background='room'>
 				<PageHeader
+					className='mc-board-header'
 					title={
 						<Box display='flex' alignItems='center'>
 							<Icon name='bag' size='x24' mie={8} color='hint' />
@@ -129,7 +135,7 @@ const MattersBoardRoute = () => {
 						</Box>
 					}
 				>
-					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={8} />
+					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={4} />
 					<ButtonGroup>
 						<BoardAutomationsButton boardId={board._id} small={false} />
 					</ButtonGroup>

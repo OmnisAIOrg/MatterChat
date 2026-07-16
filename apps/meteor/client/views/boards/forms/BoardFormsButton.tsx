@@ -1,4 +1,4 @@
-import { Button, Icon } from '@rocket.chat/fuselage';
+import { IconButton } from '@rocket.chat/fuselage';
 import { useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,9 @@ import { useTranslation } from 'react-i18next';
  *
  *   <BoardFormsButton boardId={board._id} />
  *
- * Navigates to the 'forms' view of the board route (BoardRouter renders
+ * Ledger chrome: a compact ICON button (tooltip + aria-label carry the
+ * "Forms" label) instead of the wide labelled button. Navigation target is
+ * unchanged — the 'forms' view of the board route (BoardRouter renders
  * FormsManager for view === 'forms').
  */
 
@@ -23,14 +25,13 @@ const BoardFormsButton = ({ boardId, small = true }: BoardFormsButtonProps): Rea
 	const router = useRouter();
 
 	return (
-		<Button
+		<IconButton
 			small={small}
+			icon='clipboard'
 			onClick={() => router.navigate({ name: 'boards-board', params: { id: boardId, view: 'forms' } })}
 			title={t('Boards_Forms_Title', { defaultValue: 'Forms' })}
-		>
-			<Icon name='clipboard' size='x16' mie={4} />
-			{t('Boards_Forms_Title', { defaultValue: 'Forms' })}
-		</Button>
+			aria-label={t('Boards_Forms_Title', { defaultValue: 'Forms' })}
+		/>
 	);
 };
 

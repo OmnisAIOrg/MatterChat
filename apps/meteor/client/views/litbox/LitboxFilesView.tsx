@@ -5,6 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import LitboxEmbedBoundary from './LitboxEmbedBoundary';
+import { LEDGER_CAPTION_STYLE, LEDGER_PAPER } from '../boards/lib/ledger';
+
 // Lazy so the heavy LitBox package only loads when the user opens Files.
 const LitboxEmbed = lazy(() => import('./LitboxEmbed'));
 
@@ -66,10 +69,20 @@ const LitboxFilesView = () => {
 	const showEmbed = scope === 'org' || (scope === 'matter' && Boolean(workspaceId));
 
 	return (
-		<Page data-qa='litbox-files'>
-			<PageHeader title={t('Files', { defaultValue: 'Files' })}>
-				<Box display='flex' alignItems='center' style={{ gap: '8px' }}>
-					<Box width='x180'>
+		// Ledger paper treatment on OUR chrome only (the embedded LitboxFileBrowser package
+		// renders its own internals and is not restyled from here).
+		<Page data-qa='litbox-files' style={{ backgroundColor: LEDGER_PAPER }}>
+			<PageHeader
+				title={
+					// Serif "case caption" page title — the ledger heading voice.
+					<Box is='span' style={LEDGER_CAPTION_STYLE}>
+						{t('Files', { defaultValue: 'Files' })}
+					</Box>
+				}
+			>
+				{/* Compact single-row filter strip (org/matter scope + matter picker). */}
+				<Box display='flex' alignItems='center' style={{ gap: '6px' }}>
+					<Box width='x160'>
 						<Select
 							options={scopeOptions}
 							value={scope}
@@ -79,7 +92,7 @@ const LitboxFilesView = () => {
 						/>
 					</Box>
 					{scope === 'matter' && (
-						<Box width='x240'>
+						<Box width='x220'>
 							<Select
 								placeholder={mattersLoading ? t('Loading') : t('Boards_Litbox_Pick_Matter', { defaultValue: 'Select a matter…' })}
 								options={matterOptions}
@@ -108,9 +121,11 @@ const LitboxFilesView = () => {
 					</Box>
 				)}
 				{showEmbed && (
-					<Suspense fallback={<Throbber />}>
-						<LitboxEmbed authToken={authToken} workspaceId={workspaceId} />
-					</Suspense>
+					<LitboxEmbedBoundary>
+						<Suspense fallback={<Throbber />}>
+							<LitboxEmbed authToken={authToken} workspaceId={workspaceId} />
+						</Suspense>
+					</LitboxEmbedBoundary>
 				)}
 			</PageScrollableContent>
 		</Page>

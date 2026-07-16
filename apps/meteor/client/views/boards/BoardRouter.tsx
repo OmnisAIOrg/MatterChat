@@ -73,7 +73,7 @@ const BoardRouter = () => {
 
 	if (!boardId) {
 		return (
-			<Page>
+			<Page background='room'>
 				<States>
 					<StatesIcon name='warning' variation='danger' />
 					<StatesTitle>{t('Something_went_wrong')}</StatesTitle>
@@ -84,7 +84,7 @@ const BoardRouter = () => {
 
 	if (isLoading) {
 		return (
-			<Page>
+			<Page background='room'>
 				<Box display='flex' justifyContent='center' alignItems='center' height='100%'>
 					<Throbber />
 				</Box>
@@ -94,7 +94,7 @@ const BoardRouter = () => {
 
 	if (isError || !data) {
 		return (
-			<Page>
+			<Page background='room'>
 				<States>
 					<StatesIcon name='warning' variation='danger' />
 					<StatesTitle>{t('Something_went_wrong')}</StatesTitle>
@@ -135,9 +135,13 @@ const BoardRouter = () => {
 	// detail (its columns scroll horizontally) instead of forcing the flex row to overflow.
 	const cardExpandedByDefault = board.pipelineType === 'matters';
 
+	// LEDGER CHROME (style only): background='room' = the paper page shell (the
+	// chat-restyle palette re-points --rcx-color-surface-room to paper light /
+	// calm dark). The expand-by-default logic above and every handler/query in
+	// this file are untouched.
 	return (
-		<Page flexDirection='row'>
-			<Page minWidth={0}>
+		<Page flexDirection='row' background='room'>
+			<Page minWidth={0} background='room'>
 				<BoardHeader
 					board={board}
 					view={view}

@@ -3,6 +3,7 @@ import { memo } from 'react';
 
 import BoardsSidebarPages from './BoardsSidebarPages';
 import Sidebar from '../../../components/Sidebar';
+import BoardsChromeStyleTags from '../BoardsChromeStyleTags';
 
 const BoardsSidebar = () => {
 	const t = useTranslation();
@@ -11,13 +12,20 @@ const BoardsSidebar = () => {
 
 	const currentPath = useCurrentRoutePath();
 
+	// BoardsChromeStyleTags mounts here because BoardsLayout portals this
+	// sidebar on EVERY /boards route — one mount point puts the Ledger boards
+	// chrome CSS (mc-* classes) in reach of the board headers, page shells,
+	// CasePro strip, and this nav. Style only; nothing behavioral.
 	return (
-		<Sidebar aria-label={t('Boards')}>
-			<Sidebar.Header onClose={sidebar.close} title={t('Boards')} />
-			<Sidebar.Content>
-				<BoardsSidebarPages currentPath={currentPath || ''} />
-			</Sidebar.Content>
-		</Sidebar>
+		<>
+			<BoardsChromeStyleTags />
+			<Sidebar className='mc-boards-sidebar' aria-label={t('Boards')}>
+				<Sidebar.Header onClose={sidebar.close} title={t('Boards')} />
+				<Sidebar.Content>
+					<BoardsSidebarPages currentPath={currentPath || ''} />
+				</Sidebar.Content>
+			</Sidebar>
+		</>
 	);
 };
 

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import BulkActionBar from './BulkActionBar';
 import CardTile from './CardTile';
 import Column, { listSortableId } from './Column';
+import { LEDGER_PAPER } from '../lib/ledger';
 import { applyOptimisticMove, computeMovePlan, groupCardsByList, sortCards } from '../lib/optimistic';
 
 // Endpoint data is JSON-serialized over the wire (Date -> string).
@@ -335,7 +336,8 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 				<BulkActionBar boardId={board._id} selectedIds={selectedIdsList} lists={lists} onClearSelection={clearSelection} />
 			)}
 			<DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-				<Box display='flex' alignItems='flex-start' height='100%' style={{ overflowX: 'auto' }}>
+				{/* Ledger paper ground behind the columns (calm dense dark surface in dark theme). */}
+				<Box display='flex' alignItems='flex-start' height='100%' style={{ overflowX: 'auto', backgroundColor: LEDGER_PAPER }}>
 					<SortableContext items={sortableListIds} strategy={horizontalListSortingStrategy}>
 						{sortedLists.map((list) => (
 							<Column

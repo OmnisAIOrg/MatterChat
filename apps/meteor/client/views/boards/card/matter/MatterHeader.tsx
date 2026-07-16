@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { fmtDate } from './matterFormatters';
 import { useMatterChannel } from './useMatterChannel';
 import { CaseProStatusChip } from '../../casepro';
+import { LEDGER_CAPTION_STYLE, LEDGER_LABEL_STYLE } from '../../lib/ledger';
 
 // "Open in CasePro" resolves against the admin-configured CasePro_Web_URL (the human web app,
 // not the MCP gateway). Kept at module scope so its branching stays out of the component's
@@ -61,7 +62,8 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={8}>
 				<Box display='flex' alignItems='center'>
 					<Icon name='bag' size='x16' mie={6} color='hint' />
-					<Box fontScale='c1' color='hint'>
+					{/* Small-caps eyebrow — the ledger section-label voice. */}
+					<Box fontScale='c1' color='hint' style={LEDGER_LABEL_STYLE}>
 						{t('Boards_Matters_Linked_Matter', { defaultValue: 'Linked Matter' })}
 					</Box>
 					<CaseProStatusChip mis={8} />
@@ -71,9 +73,9 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 				</Button>
 			</Box>
 
-			{/* Identity */}
+			{/* Identity — serif "case caption" matter name (the ledger heading voice). */}
 			{displayName && (
-				<Box fontScale='h4' color='default' withTruncatedText mbe={2}>
+				<Box fontScale='h4' color='default' withTruncatedText mbe={2} style={LEDGER_CAPTION_STYLE}>
 					{displayName}
 				</Box>
 			)}

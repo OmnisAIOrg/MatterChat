@@ -11,6 +11,7 @@ import { MessageList } from '../MessageList';
 import DropTargetOverlay from './DropTargetOverlay';
 import JumpToRecentMessageButton from './JumpToRecentMessageButton';
 import UnreadMessagesIndicator from './UnreadMessagesIndicator';
+import MatterHeaderBanner from '../MatterHeaderBanner/MatterHeaderBanner';
 import MessageListErrorBoundary from '../MessageList/MessageListErrorBoundary';
 import RoomAnnouncement from '../RoomAnnouncement';
 import UploadProgressIndicator from './UploadProgress';
@@ -161,6 +162,7 @@ const RoomBody = () => {
 	return (
 		<>
 			{!isLayoutEmbedded && room.announcement && <RoomAnnouncement announcement={room.announcement} />}
+			{/* MATTERCHAT: matter banner (fork-owned) */ !isLayoutEmbedded && room.matterId && <MatterHeaderBanner room={room} />}
 			<Box key={room._id} className={['main-content-flex', listStyle]}>
 				<section
 					role='presentation'

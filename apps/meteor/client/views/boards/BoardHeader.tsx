@@ -66,8 +66,16 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 		seedMutation.mutate();
 	}, [seedMutation]);
 
+	// LEDGER CHROME — one dense strip, no chip pile: serif case-caption title
+	// (CSS via the 'mc-board-header' hooks in BoardsChromeStyleTags), the
+	// scrollable ViewSwitcher as the flexible middle, then a right-aligned
+	// compact cluster (CasePro dot+word + last-sync + icon actions, lifecycle
+	// stamp, Forms/buttons/automations). The strip itself never wraps
+	// (flex-wrap: nowrap in the scoped CSS); the last-sync figure degrades
+	// first at narrow widths. All mounts, handlers, and queries are unchanged.
 	return (
 		<PageHeader
+			className='mc-board-header mc-board-header--tabs'
 			title={
 				<Box display='flex' alignItems='center'>
 					<Icon name={getPipelineTypeIcon(board.pipelineType)} size='x24' mie={8} color='hint' />
@@ -76,7 +84,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 			}
 			onClickBack={goHome}
 		>
-			<Box display='flex' alignItems='center' justifyContent='space-between' width='100%' style={{ gap: '12px' }}>
+			<Box display='flex' alignItems='center' flexGrow={1} minWidth={0} style={{ gap: '8px' }}>
 				{/* The ViewSwitcher tab strip must live in its OWN scroll container: Fuselage
 				    Tabs.Item buttons don't flex-shrink, so at narrow widths (~1280px viewport
 				    with the boards sidebar open) the 5-tab strip painted OVER the CasePro
@@ -94,9 +102,9 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 					/>
 				</Box>
 				{board.pipelineType === 'matters' && (
-					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={8} />
+					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} />
 				)}
-				{board.pipelineType === 'leads' && <CaseProStatusChip mie={8} />}
+				{board.pipelineType === 'leads' && <CaseProStatusChip />}
 				<ButtonGroup>
 					<BoardStatusControl board={board} />
 					<BoardFormsButton boardId={board._id} />

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import MatterSection from './MatterSection';
 import MoneyRow from './MoneyRow';
 import { fmtCurrency } from './matterFormatters';
+import { LEDGER_CARD_TINT, LEDGER_RULE } from '../../lib/ledger';
 
 type FinancialSummaryCardProps = {
 	snapshot: Serialized<IMatterSnapshot>;
@@ -13,7 +14,7 @@ type FinancialSummaryCardProps = {
 
 // Shared props for the emphasized label above each group inside the tinted card.
 // (Kept as a props object rather than a component so the file stays one-component.)
-const groupLabelProps = { fontScale: 'c1', color: 'default', mbe: 6, style: { fontWeight: 600 } } as const;
+const groupLabelProps = { fontScale: 'c1', color: 'default', mbe: 4, style: { fontWeight: 600 } } as const;
 
 /**
  * Financial summary — the money picture of the matter in one tinted card, split
@@ -56,7 +57,8 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 
 	return (
 		<MatterSection title={t('Boards_Matters_Report_Financial', { defaultValue: 'Financial' })} icon='card'>
-			<Box bg='tint' p={12} borderRadius='x4'>
+			{/* Warm ledger tint (the chat "own message" card color) + khaki hairline. */}
+			<Box bg='tint' p={10} borderRadius='x4' borderWidth='default' style={{ backgroundColor: LEDGER_CARD_TINT, borderColor: LEDGER_RULE }}>
 				{/* 🩺 Medical treatment — providers are the treatment representation. */}
 				<Box {...groupLabelProps} mbs={0}>
 					{`🩺 ${t('Boards_Matters_Medical_Treatment', { defaultValue: 'Medical treatment' })}`}
@@ -84,7 +86,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 				{/* 💵 Medical bills */}
 				{hasBills && (
 					<>
-						<Box {...groupLabelProps} mbs={14}>
+						<Box {...groupLabelProps} mbs={10}>
 							{`💵 ${t('Boards_Matters_Medical_Bills', { defaultValue: 'Medical bills' })}`}
 						</Box>
 						<MoneyRow label={t('Boards_Matters_Billed', { defaultValue: 'Billed' })} value={billed} />
@@ -95,7 +97,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 				{/* 📄 Expenses (case costs advanced) — $0 shown when zero. */}
 				{hasExpenses && (
 					<>
-						<Box {...groupLabelProps} mbs={14}>
+						<Box {...groupLabelProps} mbs={10}>
 							{`📄 ${t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })}`}
 						</Box>
 						<MoneyRow label={t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })} value={expenses} />
@@ -105,7 +107,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 				{/* 🤝 Negotiation ladder (demand → top offer → settlement) */}
 				{hasNegotiation && (
 					<>
-						<Box {...groupLabelProps} mbs={14}>
+						<Box {...groupLabelProps} mbs={10}>
 							{`🤝 ${t('Boards_Matters_Negotiation', { defaultValue: 'Negotiation' })}`}
 						</Box>
 						<MoneyRow label={t('Boards_Matters_Demand', { defaultValue: 'Demand' })} value={demand} />

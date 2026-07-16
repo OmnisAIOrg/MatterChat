@@ -1,10 +1,12 @@
 import type { IBoardCard, Serialized } from '@rocket.chat/core-typings';
-import { Box, Button, CheckBox, IconButton, ProgressBar, TextInput, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, CheckBox, IconButton, TextInput, Throbber } from '@rocket.chat/fuselage';
 import { useEndpoint, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { LedgerProgress, ledgerHead, ledgerRule, tabularFigures, useLedgerTone } from './ledgerStyles';
 
 /**
  * SubtasksPanel — nested subtasks (Asana/Trello-style) on the card detail view.
@@ -29,6 +31,7 @@ type SubtasksPanelProps = {
 
 const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElement => {
 	const { t } = useTranslation();
+	const tone = useLedgerTone();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 	const router = useRouter();
@@ -119,21 +122,20 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 	};
 
 	return (
-		<Box mbs={16}>
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={8}>
-				<Box fontScale='p2b' color='default'>
-					{t('Boards_Subtasks', { defaultValue: 'Subtasks' })}
-				</Box>
+		<Box mbs={12}>
+			{/* Compact small-caps section head + tabular counter over a khaki rule. */}
+			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={6} pbe={2} style={ledgerRule(tone)}>
+				<Box style={ledgerHead(tone)}>{t('Boards_Subtasks', { defaultValue: 'Subtasks' })}</Box>
 				{total > 0 && (
-					<Box fontScale='c1' color='hint'>
+					<Box fontScale='c1' color='hint' style={tabularFigures}>
 						{done}/{total}
 					</Box>
 				)}
 			</Box>
 
 			{total > 0 && (
-				<Box mbe={8}>
-					<ProgressBar percentage={percent} />
+				<Box mbe={6}>
+					<LedgerProgress percent={percent} tone={tone} />
 				</Box>
 			)}
 
@@ -144,7 +146,7 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 			)}
 
 			{children.map((child) => (
-				<Box key={child._id} display='flex' alignItems='center' mbe={2}>
+				<Box key={child._id} display='flex' alignItems='center' mbe={2} pbe={2} style={ledgerRule(tone)}>
 					<CheckBox
 						checked={Boolean(child.completed)}
 						disabled={busy}
