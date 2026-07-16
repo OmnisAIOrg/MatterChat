@@ -6,6 +6,7 @@ import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
 import { useMemo } from 'react';
 
 import { getCardTypeIcon } from '../lib/icons';
+import { LEDGER_CAPTION_STYLE, LEDGER_CARD, solHeatColor } from '../lib/ledger';
 
 type CardTileProps = {
 	card: Serialized<IBoardCard>;
@@ -52,6 +53,12 @@ const resolveCoverImage = (cover: ICardCover, attachments: Serialized<IBoardCard
 	return undefined;
 };
 
+// Ledger heat input: a matter card's snapshot SOL date, if any. Module-scope so the
+// branching stays out of the component's cyclomatic complexity. (Endpoint data is
+// JSON-serialized, so the snapshot's solDate arrives as an ISO string.)
+const matterSolDate = (card: Serialized<IBoardCard>): string | Date | undefined =>
+	card.link?.kind === 'matter' ? (card.link.snapshot?.solDate as string | Date | undefined) : undefined;
+
 const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTileProps) => {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
 		id: card._id,
@@ -60,11 +67,15 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 
 	const selectable = Boolean(onToggleSelect);
 
+	// Ledger-dense: paper card face + a 3px LEFT heat rule — SOL green/amber/red on
+	// matter cards with a snapshot solDate, khaki otherwise (matches My Day / the panel).
 	const style: CSSProperties = {
 		transform: CSS.Translate.toString(transform),
 		transition,
 		opacity: isDragging ? 0.4 : 1,
 		overflow: 'hidden',
+		backgroundColor: LEDGER_CARD,
+		borderInlineStart: `3px solid ${solHeatColor(matterSolDate(card))}`,
 		...(selected ? { boxShadow: '0 0 0 2px var(--rcx-color-stroke-highlight, #1d74f5)' } : {}),
 	};
 
@@ -116,7 +127,7 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 					onOpen(card._id);
 				}
 			}}
-			mbe={8}
+			mbe={6}
 			bg='light'
 			borderRadius='x4'
 			borderWidth='default'
@@ -128,7 +139,8 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 				<Box style={{ height: 40, backgroundImage: `url(${coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
 			)}
 
-			<Box pi={12} pbs={8} pbe={8}>
+			{/* Denser card body (founder demand: less chrome, more cards in view). */}
+			<Box pi={10} pbs={6} pbe={6}>
 				{cardLabels.length > 0 && (
 					<Box display='flex' alignItems='center' flexWrap='wrap' mbe={6} style={{ gap: '4px' }}>
 						{/* Compact: show up to 3 chips (named -> pill, unnamed -> dot), then a +N overflow tag. */}
@@ -169,7 +181,14 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 						/>
 					)}
 					<Icon name={getCardTypeIcon(card.cardType)} size='x16' mie={4} color='hint' />
-					<Box fontScale='p2' color='default' withTruncatedText flexGrow={1}>
+					{/* Matter cards carry the serif "case caption" title; other card types stay sans. */}
+					<Box
+						fontScale='p2'
+						color='default'
+						withTruncatedText
+						flexGrow={1}
+						style={card.cardType === 'matter' ? LEDGER_CAPTION_STYLE : undefined}
+					>
 						{card.title}
 					</Box>
 				</Box>

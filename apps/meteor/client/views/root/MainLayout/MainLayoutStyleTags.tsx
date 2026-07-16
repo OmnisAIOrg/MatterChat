@@ -128,6 +128,19 @@ type LedgerTokens = {
 	typing: string;
 	// paper texture (light only; empty in dark for a calm flat surface)
 	ruledLines: string;
+	// ---- app-wide ledger custom properties (Wave 2b) ----
+	// Consumed as `var(--mc-*)` by the fork-owned screens (My Day / Boards / Matter
+	// Workspace / LitBox Files) via client/views/boards/lib/ledger.ts. Values REUSE the
+	// chat-surface palette above — one language, no drift. `--mc-ledger-card`/`-tint`
+	// are the SOLID equivalents of the (translucent) message-card tints.
+	appPaper: string; // page ground (= surfaceRoom)
+	appCard: string; // paper card face (#fffdf6 / #1A2029)
+	appCardTint: string; // warm tinted card (#f2efe2 / #182420)
+	appRule: string; // khaki (light) / slate (dark) hairline (= railOther)
+	appAccent: string; // green ACTION accent, theme-corrected (= link)
+	solGreen: string; // SOL heat >90d
+	solAmber: string; // SOL heat ≤90d
+	solRed: string; // SOL heat ≤30d / passed
 };
 
 // Brand green stays the ACTION color in both themes. White labels keep >= 5.4:1 on this fill.
@@ -153,6 +166,14 @@ const LIGHT_LEDGER: LedgerTokens = {
 		rgba(150, 130, 80, 0.09) 27px,
 		rgba(150, 130, 80, 0.09) 28px
 	)`,
+	appPaper: '#FAF7EE', // = surfaceRoom
+	appCard: '#FFFDF6', // solid cardOtherBg
+	appCardTint: '#F2EFE2', // solid cardOwnBg
+	appRule: '#C9BE9A', // = railOther (warm khaki)
+	appAccent: '#15692A', // = link (~6.8:1 on paper)
+	solGreen: '#1B7A2E', // brand green
+	solAmber: '#B45309', // warm amber, ~4.9:1 on paper
+	solRed: '#C0212E', // docket red, ~5.9:1 on paper
 };
 
 const DARK_LEDGER: LedgerTokens = {
@@ -169,6 +190,14 @@ const DARK_LEDGER: LedgerTokens = {
 	mentionYouBg: '#1B7A2E',
 	typing: '#7FD79A',
 	ruledLines: 'none', // dark = flat, no paper texture
+	appPaper: '#12161D', // = surfaceRoom (calm dense dark, never inverted paper)
+	appCard: '#1A2029', // = cardOtherBg
+	appCardTint: '#182420', // = cardOwnBg
+	appRule: '#3A414D', // = railOther (slate)
+	appAccent: '#5BD07E', // = link (~8:1 on the dark surface)
+	solGreen: '#3FA85C', // = railOwn — reads on dark cards
+	solAmber: '#E8A33D',
+	solRed: '#E4586D',
 };
 
 /**
@@ -187,7 +216,27 @@ const buildLedgerPalette = (t: LedgerTokens): string => `.rcx-content--main {
 	--rcx-color-button-background-primary-press: ${BRAND.press};
 	--rcx-color-button-background-primary-focus: ${BRAND.default};
 	--rcx-color-button-background-primary-keyfocus: ${BRAND.default};
+	--mc-ledger-paper: ${t.appPaper};
+	--mc-ledger-card: ${t.appCard};
+	--mc-ledger-card-tint: ${t.appCardTint};
+	--mc-ledger-rule: ${t.appRule};
+	--mc-ledger-accent: ${t.appAccent};
+	--mc-sol-green: ${t.solGreen};
+	--mc-sol-amber: ${t.solAmber};
+	--mc-sol-red: ${t.solRed};
 }`;
+
+/*
+ * LOGIN SCREEN — deliberately NOT styled from here (Wave 2b decision, kept as a comment so
+ * the next person doesn't re-attempt it): this component mounts inside LayoutWithSidebar,
+ * which only renders in the LOGGED-IN chain (AuthenticationCheck → LoggedInArea →
+ * TwoFactorAuthSetupCheck → LayoutWithSidebar). The logged-out login route renders
+ * LoginPage → RegistrationRoute straight from the @rocket.chat/web-ui-registration package,
+ * with NO fork-owned component in that tree — so a scoped CSS block here can never reach it,
+ * and reaching it would require editing a core RC file (AppLayout/LoginPage), which the
+ * fork-discipline guide reserves for last resorts. Revisit only as a marked one-line
+ * core mount of a fork-owned style tag if the founder asks for the login skin explicitly.
+ */
 
 /**
  * Ledger raw CSS — the paper texture, serif caption title, left-rail message cards, density tighten,

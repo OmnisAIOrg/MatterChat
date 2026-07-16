@@ -24,6 +24,18 @@ import { useId, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 
+import {
+	LEDGER_ACCENT,
+	LEDGER_CAPTION_STYLE,
+	LEDGER_CARD,
+	LEDGER_LABEL_STYLE,
+	LEDGER_NUMERIC_STYLE,
+	LEDGER_PAPER,
+	LEDGER_RULE,
+	SOL_HEAT_COLORS,
+	solHeatColor,
+} from '../boards/lib/ledger';
+
 /**
  * MyDayHomePage — the MatterChat "My Day" command center (Wave 2).
  *
@@ -31,9 +43,11 @@ import { useTranslation } from 'react-i18next';
  * dashboard: what's due today, approaching deadlines (SOL), a pipeline snapshot, and a
  * "My matters" quick-jump list. All derived from the Matters pipeline board's cards +
  * their CasePro matter snapshots (single board.cards fetch — no extra endpoints).
+ *
+ * Wave 2b look: the "Ledger-dense" language (paper ground, serif case-caption headings,
+ * one dense tabular stat-bar, SOL heat dots) via the shared `--mc-*` tokens declared in
+ * MainLayoutStyleTags.tsx — styling only, all queries/behavior untouched.
  */
-
-const BRAND_GREEN = '#1B7A2E';
 
 const timeGreeting = (): string => {
 	const h = new Date().getHours();
@@ -70,7 +84,16 @@ const formatCountdown = (days: number): string => {
 	return `${Math.round(days / 30)} months`;
 };
 
-const countdownVariant = (days: number): 'danger' | undefined => (days <= 30 ? 'danger' : undefined);
+// Same SOL heat tiers as the boards/panel: red ≤30d, amber ≤90d.
+const countdownVariant = (days: number): 'danger' | 'warning' | undefined => {
+	if (days <= 30) {
+		return 'danger';
+	}
+	if (days <= 90) {
+		return 'warning';
+	}
+	return undefined;
+};
 
 type MatterCard = Serialized<IBoardCard>;
 
@@ -96,6 +119,8 @@ const decorate = (card: MatterCard): DecoratedMatter => {
 	return { card };
 };
 
+// Ledger paper card: #fffdf6 face, khaki hairline, serif "case caption" section head,
+// tighter padding than the stock card (density is a founder demand).
 const SectionCard = ({
 	icon,
 	title,
@@ -109,20 +134,63 @@ const SectionCard = ({
 	action?: ReactNode;
 	children: ReactNode;
 }) => (
-	<Box bg='light' borderRadius='x12' borderWidth='default' borderColor='extra-light' p={16} mbe={16}>
-		<Box display='flex' alignItems='center' mbe={12}>
-			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x18' mie={8} color='hint' />
-			<Box fontScale='p2b' color='default'>
+	<Box borderRadius='x8' borderWidth='default' p={12} mbe={12} style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE }}>
+		<Box display='flex' alignItems='center' mbe={8}>
+			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x16' mie={6} color='hint' />
+			<Box fontScale='p2b' color='default' style={LEDGER_CAPTION_STYLE}>
 				{title}
 			</Box>
 			{typeof count === 'number' && count > 0 && (
-				<Box mis={8} fontScale='micro' color='hint'>
+				<Box mis={8} fontScale='micro' color='hint' style={LEDGER_NUMERIC_STYLE}>
 					{count}
 				</Box>
 			)}
 			{action && <Box mis='auto'>{action}</Box>}
 		</Box>
 		{children}
+	</Box>
+);
+
+// One dense stat-bar — bordered segments, tabular numerals, small-caps labels; the
+// SOL ≤30d segment is red-accented (number + a 3px heat rule) whenever it is non-zero.
+// eslint-disable-next-line react/no-multi-comp -- local presentational subcomponent, kept in-file per the fork-safe confinement rule
+const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red' }[] }) => (
+	<Box
+		display='flex'
+		mbe={12}
+		borderWidth='default'
+		borderRadius='x8'
+		style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE, overflow: 'hidden' }}
+	>
+		{stats.map((stat, index) => {
+			const accent = stat.heat === 'red' && stat.value > 0 ? SOL_HEAT_COLORS.red : undefined;
+			return (
+				<Box
+					key={stat.label}
+					flexGrow={1}
+					flexBasis='0'
+					pi={12}
+					pbs={8}
+					pbe={8}
+					style={{
+						borderInlineStart: index > 0 ? `1px solid ${LEDGER_RULE}` : undefined,
+						boxShadow: accent ? `inset 3px 0 0 0 ${accent}` : undefined,
+						minWidth: 0,
+					}}
+				>
+					<Box
+						fontScale='h3'
+						color={accent ? undefined : 'default'}
+						style={{ ...LEDGER_NUMERIC_STYLE, ...(accent ? { color: accent } : {}) }}
+					>
+						{stat.value}
+					</Box>
+					<Box color='hint' withTruncatedText style={LEDGER_LABEL_STYLE}>
+						{stat.label}
+					</Box>
+				</Box>
+			);
+		})}
 	</Box>
 );
 
@@ -531,11 +599,12 @@ const MyDayHomePage = () => {
 	const displayName = user?.name || user?.username || '';
 
 	return (
-		<Page color='default' background='tint'>
+		<Page color='default' background='tint' style={{ backgroundColor: LEDGER_PAPER }}>
 			<PageScrollableContent>
-				<Box display='flex' alignItems='flex-end' justifyContent='space-between' flexWrap='wrap' mbe={20} style={{ gap: '12px' }}>
+				<Box display='flex' alignItems='flex-end' justifyContent='space-between' flexWrap='wrap' mbe={16} style={{ gap: '12px' }}>
 					<Box>
-						<Box is='h1' fontScale='h1' color='default'>
+						{/* Serif "case caption" greeting — the ledger heading voice. */}
+						<Box is='h1' fontScale='h1' color='default' style={LEDGER_CAPTION_STYLE}>
 							{timeGreeting()}
 							{displayName ? `, ${displayName}` : ''}
 						</Box>
@@ -562,7 +631,17 @@ const MyDayHomePage = () => {
 					</Box>
 				) : (
 					<>
-						<Box display='flex' flexWrap='wrap' style={{ gap: '16px' }}>
+						{/* The DENSE stat-bar — replaces the stacked "Pipeline" stat tiles (same derived
+						    numbers, one bordered tabular strip; SOL ≤30d segment red-accented). */}
+						<StatBar
+							stats={[
+								{ label: 'Active matters', value: derived.activeMatters },
+								{ label: 'Due today', value: derived.dueToday.length },
+								{ label: 'Due this week', value: derived.dueThisWeek.length },
+								{ label: 'SOL ≤ 30d', value: derived.solRisk, heat: 'red' },
+							]}
+						/>
+						<Box display='flex' flexWrap='wrap' style={{ gap: '12px' }}>
 							<Box flexGrow={2} flexShrink={1} style={{ flexBasis: '320px', minWidth: '280px' }}>
 								<SectionCard icon='circle-check' title='Due today' count={derived.dueToday.length}>
 									{derived.dueToday.length === 0 ? (
@@ -595,10 +674,19 @@ const MyDayHomePage = () => {
 												key={m.card._id}
 												display='flex'
 												alignItems='center'
-												pb={8}
+												pb={6}
 												style={{ cursor: 'pointer', gap: '8px' }}
 												onClick={() => openCard(m.card._id)}
 											>
+												{/* SOL heat dot — same thresholds as the boards/panel. */}
+												<Box
+													width='x8'
+													height='x8'
+													borderRadius='full'
+													flexShrink={0}
+													aria-hidden='true'
+													style={{ backgroundColor: solHeatColor(m.solDate) }}
+												/>
 												<Box fontScale='p2' color='default' flexGrow={1} withTruncatedText>
 													SOL — {m.card.title}
 												</Box>
@@ -610,41 +698,9 @@ const MyDayHomePage = () => {
 							</Box>
 
 							<Box flexGrow={1} flexShrink={1} style={{ flexBasis: '240px', minWidth: '240px' }}>
-								<SectionCard icon='dashboard' title='Pipeline'>
-									<Box display='flex' justifyContent='space-between' style={{ textAlign: 'center' }}>
-										<Box>
-											<Box fontScale='h2' color='default'>
-												{derived.activeMatters}
-											</Box>
-											<Box fontScale='micro' color='hint'>
-												Active matters
-											</Box>
-										</Box>
-										<Box>
-											<Box fontScale='h2' color='default'>
-												{derived.dueThisWeek.length}
-											</Box>
-											<Box fontScale='micro' color='hint'>
-												Due this week
-											</Box>
-										</Box>
-										<Box>
-											<Box fontScale='h2' style={{ color: BRAND_GREEN }}>
-												{derived.solRisk}
-											</Box>
-											<Box fontScale='micro' color='hint'>
-												SOL ≤ 30d
-											</Box>
-										</Box>
-									</Box>
-								</SectionCard>
-
+								{/* Pipeline numbers moved up into the dense StatBar; green stays the action color. */}
 								<SectionCard icon='bell' title='Activity'>
-									<Box
-										fontScale='p2'
-										style={{ color: BRAND_GREEN, cursor: 'pointer' }}
-										onClick={() => router.navigate('/boards/inbox')}
-									>
+									<Box fontScale='p2' style={{ color: LEDGER_ACCENT, cursor: 'pointer' }} onClick={() => router.navigate('/boards/inbox')}>
 										Open your activity inbox →
 									</Box>
 								</SectionCard>
@@ -656,21 +712,29 @@ const MyDayHomePage = () => {
 								<EmptyLine>No matters yet. Create one to get started.</EmptyLine>
 							) : (
 								derived.myMatters.slice(0, 8).map((m) => (
+									// Compact single-row strip: SOL heat dot (green >90d / amber ≤90 / red ≤30,
+									// khaki when no SOL on file) + title with the practice area inline.
 									<Box
 										key={m.card._id}
 										display='flex'
 										alignItems='center'
-										pb={10}
-										style={{ cursor: 'pointer', gap: '12px' }}
+										pb={6}
+										style={{ cursor: 'pointer', gap: '8px' }}
 										onClick={() => openCard(m.card._id)}
 									>
-										<Box flexGrow={1} style={{ minWidth: 0 }}>
-											<Box fontScale='p2' color='default' withTruncatedText>
-												{m.card.title}
-											</Box>
+										<Box
+											width='x8'
+											height='x8'
+											borderRadius='full'
+											flexShrink={0}
+											aria-hidden='true'
+											style={{ backgroundColor: solHeatColor(m.solDate) }}
+										/>
+										<Box fontScale='p2' color='default' flexGrow={1} withTruncatedText>
+											{m.card.title}
 											{m.practiceArea && (
-												<Box fontScale='micro' color='hint'>
-													{m.practiceArea}
+												<Box is='span' fontScale='c1' color='hint'>
+													{` · ${m.practiceArea}`}
 												</Box>
 											)}
 										</Box>
@@ -690,7 +754,7 @@ const MyDayHomePage = () => {
 						<Throbber />
 					</Box>
 				) : (
-					<Box display='flex' flexWrap='wrap' style={{ gap: '16px' }}>
+					<Box display='flex' flexWrap='wrap' style={{ gap: '12px' }}>
 						<Box flexGrow={2} flexShrink={1} style={{ flexBasis: '360px', minWidth: '280px' }}>
 							<FeedSection kind='announcement' entries={feed.announcements} canManage={canManageFeed} />
 						</Box>

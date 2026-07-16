@@ -8,6 +8,7 @@ import type { ComponentProps, CSSProperties, MouseEvent } from 'react';
 import CardTile from './CardTile';
 import ListColorMenu from './ListColorMenu';
 import QuickAddCard from './QuickAddCard';
+import { LEDGER_LABEL_STYLE, LEDGER_NUMERIC_STYLE } from '../lib/ledger';
 
 // Sortable id for the COLUMN itself. Prefixed so it can never collide with the column-body
 // droppable (`id: list._id`, which card-drag resolves as the target list) or a card id.
@@ -92,10 +93,11 @@ const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, o
 				{accent && (
 					<Box width='x10' height='x10' borderRadius='full' mie={6} flexShrink={0} style={{ backgroundColor: accent }} />
 				)}
-				<Box fontScale='p2b' color='default' withTruncatedText flexGrow={1}>
+				{/* Ledger column header: small-caps mono-ish label + tabular count. */}
+				<Box fontScale='p2b' color='default' withTruncatedText flexGrow={1} style={LEDGER_LABEL_STYLE}>
 					{list.title}
 				</Box>
-				<Box fontScale='c1' color='hint' mis={4}>
+				<Box fontScale='c1' color='hint' mis={4} style={LEDGER_NUMERIC_STYLE}>
 					{cards.length}
 					{list.wipLimit ? `/${list.wipLimit}` : ''}
 				</Box>

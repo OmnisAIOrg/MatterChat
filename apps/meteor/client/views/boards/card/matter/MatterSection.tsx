@@ -1,6 +1,8 @@
 import { Box, Icon } from '@rocket.chat/fuselage';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 
+import { LEDGER_LABEL_STYLE } from '../../lib/ledger';
+
 type MatterSectionProps = {
 	title: string;
 	icon?: ComponentProps<typeof Icon>['name'];
@@ -9,13 +11,16 @@ type MatterSectionProps = {
 	children: ReactNode;
 };
 
-/** Uniform section shell for the Matter Workspace: icon + title row (+ optional action) above the body. */
+/**
+ * Uniform section shell for the Matter Workspace: icon + title row (+ optional action)
+ * above the body. Ledger-dense: compact small-caps section heads + tighter spacing.
+ */
 const MatterSection = ({ title, icon, action, children }: MatterSectionProps): ReactElement => (
-	<Box mbs={20}>
-		<Box display='flex' alignItems='center' justifyContent='space-between' mbe={8}>
+	<Box mbs={14}>
+		<Box display='flex' alignItems='center' justifyContent='space-between' mbe={6}>
 			<Box display='flex' alignItems='center'>
 				{icon && <Icon name={icon} size='x16' mie={6} color='hint' />}
-				<Box fontScale='p2b' color='default'>
+				<Box fontScale='p2b' color='default' style={LEDGER_LABEL_STYLE}>
 					{title}
 				</Box>
 			</Box>
