@@ -1,4 +1,15 @@
-import { Box, Button, ButtonGroup, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
+import {
+	Box,
+	Button,
+	ButtonGroup,
+	Icon,
+	IconButton,
+	States,
+	StatesIcon,
+	StatesTitle,
+	StatesSubtitle,
+	Throbber,
+} from '@rocket.chat/fuselage';
 import { Page, PageHeader } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouteParameter, useRouter, useSetModal, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -101,7 +112,7 @@ const LeadsBoardRoute = () => {
 
 	if (isLoading) {
 		return (
-			<Page>
+			<Page background='room'>
 				<Box display='flex' justifyContent='center' alignItems='center' height='100%'>
 					<Throbber />
 				</Box>
@@ -111,7 +122,7 @@ const LeadsBoardRoute = () => {
 
 	if (isError || !data || !board) {
 		return (
-			<Page>
+			<Page background='room'>
 				<States>
 					<StatesIcon name='warning' variation='danger' />
 					<StatesTitle>{t('Something_went_wrong')}</StatesTitle>
@@ -127,10 +138,16 @@ const LeadsBoardRoute = () => {
 
 	const { lists } = data;
 
+	// LEDGER CHROME (style only): paper page shell (background='room' — the
+	// chat-restyle palette re-points --rcx-color-surface-room to paper light /
+	// calm dark) + the 'mc-board-header' dense-strip CSS. The CasePro sync
+	// action collapses to a compact icon button (tooltip + aria-label); New
+	// Lead keeps its label as the page's primary action. Wiring is untouched.
 	return (
-		<Page flexDirection='row'>
-			<Page>
+		<Page flexDirection='row' background='room'>
+			<Page background='room'>
 				<PageHeader
+					className='mc-board-header'
 					title={
 						<Box display='flex' alignItems='center'>
 							<Icon name={getPipelineTypeIcon('leads')} size='x24' mie={8} color='hint' />
@@ -138,13 +155,17 @@ const LeadsBoardRoute = () => {
 						</Box>
 					}
 				>
-					<CaseProStatusChip mie={8} />
+					<CaseProStatusChip mie={4} />
 					<ButtonGroup>
 						{!caseProStub && (
-							<Button small onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
-								{syncMutation.isPending ? <Throbber inheritColor size='x12' mie={4} /> : <Icon name='reload' size='x16' mie={4} />}
-								{t('Boards_Leads_SyncFromCasePro', { defaultValue: 'Sync from CasePro' })}
-							</Button>
+							<IconButton
+								small
+								icon='reload'
+								onClick={() => syncMutation.mutate()}
+								disabled={syncMutation.isPending}
+								title={t('Boards_Leads_SyncFromCasePro', { defaultValue: 'Sync from CasePro' })}
+								aria-label={t('Boards_Leads_SyncFromCasePro', { defaultValue: 'Sync from CasePro' })}
+							/>
 						)}
 						<BoardAutomationsButton boardId={board._id} />
 						<Button primary small onClick={handleNewLead}>
