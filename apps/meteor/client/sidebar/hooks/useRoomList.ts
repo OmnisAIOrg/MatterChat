@@ -35,10 +35,10 @@ type useRoomListReturnType = {
 	roomList: Array<SubscriptionWithRoom>;
 	groupsCount: number[];
 	groupsList: TranslationKey[];
-	groupedUnreadInfo: Pick<
+	groupedUnreadInfo: (Pick<
 		SubscriptionWithRoom,
 		'userMentions' | 'groupMentions' | 'unread' | 'tunread' | 'tunreadUser' | 'tunreadGroup' | 'alert' | 'hideUnreadStatus'
-	>[];
+	> & { groupSize: number })[];
 };
 export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] }): useRoomListReturnType => {
 	const showOmnichannel = useOmnichannelEnabled();
@@ -163,7 +163,17 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 			sidebarGroupByType && isDiscussionEnabled && discussion.size && groups.set('Discussions', discussion);
 
-			sidebarGroupByType && matters.size && groups.set('Matters', matters);
+			// Matters group: sort alphabetically (case-insensitive) by the human matter/client name —
+			// the `topic` set at link time, falling back to fname/raw name. For firms with 50+ matter
+			// channels a stable name-sorted list is the most scannable (you look a matter up by client
+			// name); activity ordering would make a long list shuffle on every message. A sorted Set
+			// keeps `.size` and iterability intact for the group-assembly reduce below.
+			const matterSortName = (room: SubscriptionWithRoom): string => String(room.topic || room.fname || room.name || '').toLowerCase();
+			const sortedMatters = new Set(
+				([...matters] as SubscriptionWithRoom[]).sort((a, b) => matterSortName(a).localeCompare(matterSortName(b))),
+			);
+
+			sidebarGroupByType && matters.size && groups.set('Matters', sortedMatters);
 
 			sidebarGroupByType && channels.size && groups.set('Channels', channels);
 
@@ -201,6 +211,12 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 						tunread: [],
 						tunreadUser: [],
 						unread: 0,
+						// Total members of this group, carried alongside the unread aggregates so the
+						// collapser can render a stable "(N)" count (e.g. "Matters (12)"). Unlike
+						// `groupsCount` this is NOT zeroed when the group is collapsed, so the header
+						// count stays truthful in both states. RoomList already forwards this object to
+						// the collapser, so no extra prop plumbing is needed.
+						groupSize: value.size,
 					};
 
 					if (isCollapsed(key)) {
