@@ -20,6 +20,7 @@ import '../app/slashcommands-omnis/client';
 import '../app/slashcommands-open/client';
 import '../app/slashcommands-topic/client';
 import '../app/slashcommands-unarchiveroom/client';
+import '../app/composer-tools-omnis/client'; // MATTERCHAT: canned replies + LitBox attach composer tools (Wave 2)
 import '../app/wordpress/client';
 import '../app/utils/client';
 import '../app/ui-utils/client';
