@@ -1,7 +1,7 @@
 import { isOmnichannelRoom } from '@rocket.chat/core-typings';
 import { SidebarV2Action, SidebarV2Actions, SidebarV2ItemIcon } from '@rocket.chat/fuselage';
 import type { SubscriptionWithRoom } from '@rocket.chat/ui-contexts';
-import { useLayout } from '@rocket.chat/ui-contexts';
+import { useLayout, useUserPreference } from '@rocket.chat/ui-contexts';
 import type { TFunction } from 'i18next';
 import type { AllHTMLAttributes, ComponentType, ReactNode } from 'react';
 import { memo, useMemo } from 'react';
@@ -69,9 +69,16 @@ const SidebarItemTemplateWithData = ({
 	videoConfActions,
 }: RoomListRowProps) => {
 	const { sidebar } = useLayout();
+	const sidebarGroupByType = useUserPreference('sidebarGroupByType');
 
 	const href = roomCoordinator.getRouteLink(room.t, room) || '';
-	const title = roomCoordinator.getRoomName(room.t, room) || '';
+	const rawTitle = roomCoordinator.getRoomName(room.t, room) || '';
+	// Omnis matter channels store the raw `matter-<matterNumber>` slug as their room name but the
+	// human matter/client name in `topic` (set by boards linkMatterChannel). When type-grouping is on
+	// — the same opt-in that surfaces the "Matters" group — show that friendly name in the sidebar
+	// list. Navigation (href), the room menu identity and search are unaffected: they key off the
+	// real room, not this label. Falls back to the raw name when no topic was captured at link time.
+	const title = sidebarGroupByType && room.matterCardId && room.topic ? room.topic : rawTitle;
 
 	const { unreadTitle, showUnread, unreadCount, highlightUnread: highlighted } = useUnreadDisplay(room);
 
