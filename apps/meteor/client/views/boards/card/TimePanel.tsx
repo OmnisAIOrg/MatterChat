@@ -1,10 +1,12 @@
 import type { ITimeEntry, Serialized } from '@rocket.chat/core-typings';
-import { Box, Button, IconButton, ProgressBar, TextInput, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, IconButton, TextInput, Throbber } from '@rocket.chat/fuselage';
 import { useEndpoint, useMethod, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { LedgerProgress, ledgerHead, ledgerRule, tabularFigures, useLedgerTone } from './ledgerStyles';
 
 /**
  * TimePanel — time tracking on the card detail view: a per-card estimate plus
@@ -40,6 +42,7 @@ const hoursToMinutes = (str: string): number => {
 
 const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps): ReactElement => {
 	const { t } = useTranslation();
+	const tone = useLedgerTone();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 
@@ -121,12 +124,11 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 	};
 
 	return (
-		<Box mbs={16}>
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={8}>
-				<Box fontScale='p2b' color='default'>
-					{t('Boards_Time', { defaultValue: 'Time' })}
-				</Box>
-				<Box fontScale='c1' color='hint'>
+		<Box mbs={12}>
+			{/* Compact small-caps section head + tabular rollup figures over a khaki rule. */}
+			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={6} pbe={2} style={ledgerRule(tone)}>
+				<Box style={ledgerHead(tone)}>{t('Boards_Time', { defaultValue: 'Time' })}</Box>
+				<Box fontScale='c1' color='hint' style={tabularFigures}>
 					{t('Boards_Time_Rollup', {
 						logged: fmtMinutes(logged),
 						estimate: estimate > 0 ? fmtMinutes(estimate) : '—',
@@ -136,8 +138,8 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 			</Box>
 
 			{estimate > 0 && (
-				<Box mbe={8}>
-					<ProgressBar percentage={percent} />
+				<Box mbe={6}>
+					<LedgerProgress percent={percent} tone={tone} />
 				</Box>
 			)}
 
@@ -161,13 +163,13 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 				/>
 			</Box>
 
-			{/* Logged entries */}
+			{/* Logged entries — tabular time figures aligned in a column, khaki-ruled rows */}
 			{entries.map((entry) => (
-				<Box key={entry.id} display='flex' alignItems='center' mbe={2} style={{ gap: '8px' }}>
-					<Box fontScale='p2' color='default' style={{ minWidth: 64 }}>
+				<Box key={entry.id} display='flex' alignItems='center' mbe={2} pbe={2} style={{ gap: '8px', ...ledgerRule(tone) }}>
+					<Box fontScale='p2' color='default' style={{ minWidth: 64, ...tabularFigures }}>
 						{fmtMinutes(entry.minutes)}
 					</Box>
-					<Box fontScale='c1' color='hint' flexGrow={1} withTruncatedText>
+					<Box fontScale='c1' color='hint' flexGrow={1} withTruncatedText style={tabularFigures}>
 						{entry.note ? `${entry.note} · ` : ''}
 						{new Date(entry.spentAt).toLocaleDateString()}
 					</Box>

@@ -6,7 +6,6 @@ import {
 	ButtonGroup,
 	Callout,
 	CheckBox,
-	Chip,
 	Divider,
 	Field,
 	FieldLabel,
@@ -26,6 +25,9 @@ import type { ReactElement } from 'react';
 import { useId, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+
+import type { LedgerHeat } from './ledgerStyles';
+import { heatChipStyle, heatColor, heatDotStyle, ledgerHead, ledgerRule, serifCaption, tabularFigures, useLedgerTone } from './ledgerStyles';
 
 /**
  * LEAD PANEL — the Intake face of a `cardType:'lead'` card. The integrator wires
@@ -60,22 +62,27 @@ type LeadPanelProps = {
 const fmtDate = (d?: string | Date): string => (d ? new Date(d).toLocaleDateString() : '—');
 const fmtDateTime = (d?: string | Date): string => (d ? new Date(d).toLocaleString() : '—');
 
+// Ledger-dense rows: figures/dates align via tabular-nums, ~15-20% tighter rhythm.
 const Row = ({ label, children }: { label: string; children: React.ReactNode }): ReactElement => (
-	<Box display='flex' justifyContent='space-between' alignItems='flex-start' mbe={6}>
+	<Box display='flex' justifyContent='space-between' alignItems='flex-start' mbe={4}>
 		<Box fontScale='c1' color='hint' mie={8} flexShrink={0}>
 			{label}
 		</Box>
-		<Box fontScale='p2' color='default' textAlign='end' withTruncatedText>
+		<Box fontScale='p2' color='default' textAlign='end' withTruncatedText style={tabularFigures}>
 			{children}
 		</Box>
 	</Box>
 );
 
-const SectionTitle = ({ children }: { children: React.ReactNode }): ReactElement => (
-	<Box fontScale='p2b' color='default' mbs={16} mbe={8}>
-		{children}
-	</Box>
-);
+// Compact small-caps section head over a khaki rule (the "ledger" section break).
+const SectionTitle = ({ children }: { children: React.ReactNode }): ReactElement => {
+	const tone = useLedgerTone();
+	return (
+		<Box mbs={13} mbe={6} pbe={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
+			{children}
+		</Box>
+	);
+};
 
 const commIcon = (kind: ICommunication['kind']): 'phone' | 'message' | 'mail' | 'edit' | 'cog' => {
 	switch (kind) {
@@ -449,6 +456,8 @@ const ScoreChip = ({ leadId }: { leadId: string }): ReactElement | null => {
 		queryFn: () => computeScore({ leadId }),
 	});
 
+	const tone = useLedgerTone();
+
 	if (!data) {
 		return null;
 	}
@@ -456,10 +465,14 @@ const ScoreChip = ({ leadId }: { leadId: string }): ReactElement | null => {
 	const factorsTitle = data.factors.map((f) => `${f.label}: ${f.points > 0 ? '+' : ''}${f.points}`).join('\n');
 
 	return (
-		<Chip title={`${t('Boards_Leads_Score_Factors', { defaultValue: 'Score factors' })}\n${factorsTitle}`}>
-			<Icon name='discover' size='x12' mie={4} />
-			{t('Boards_Leads_Score', { defaultValue: 'Lead score' })}: {data.score}
-		</Chip>
+		<Box
+			is='span'
+			style={heatChipStyle(tone, 'green')}
+			title={`${t('Boards_Leads_Score_Factors', { defaultValue: 'Score factors' })}\n${factorsTitle}`}
+		>
+			<span aria-hidden='true' style={heatDotStyle(heatColor(tone, 'green'))} />
+			{t('Boards_Leads_Score', { defaultValue: 'Lead score' })}: <b>{data.score}</b>
+		</Box>
 	);
 };
 
@@ -471,6 +484,8 @@ const SolChip = ({ leadId }: { leadId: string }): ReactElement | null => {
 		queryKey: ['boards', 'leads', 'sol', leadId],
 		queryFn: () => computeSol({ leadId }),
 	});
+
+	const tone = useLedgerTone();
 
 	if (!data?.solDate) {
 		return null;
@@ -484,11 +499,19 @@ const SolChip = ({ leadId }: { leadId: string }): ReactElement | null => {
 			? t('Boards_Leads_SOL_At_Risk', { defaultValue: 'SOL at risk' })
 			: t('Boards_Leads_SOL', { defaultValue: 'Statute of limitations' });
 
+	// SOL heat: green (clear) / amber (at risk) / red (expired) — ledger heat scale.
+	let heat: LedgerHeat = 'green';
+	if (expired) {
+		heat = 'red';
+	} else if (data.atRisk) {
+		heat = 'amber';
+	}
+
 	return (
-		<Tag variant={expired || data.atRisk ? 'secondary-danger' : 'secondary'} medium>
-			<Icon name='clock' size='x12' mie={4} />
+		<Box is='span' style={heatChipStyle(tone, heat)}>
+			<span aria-hidden='true' style={heatDotStyle(heatColor(tone, heat))} />
 			{label}: {sol.toLocaleDateString()}
-		</Tag>
+		</Box>
 	);
 };
 
@@ -544,7 +567,7 @@ const TasksSection = ({ leadId }: { leadId: string }): ReactElement => {
 				</Box>
 			)}
 			{[...open, ...done].map((task) => (
-				<Box key={task._id} display='flex' alignItems='flex-start' mbe={8}>
+				<Box key={task._id} display='flex' alignItems='flex-start' mbe={6}>
 					<Box mie={8} mbs={2}>
 						<CheckBox
 							checked={task.done}
@@ -562,7 +585,7 @@ const TasksSection = ({ leadId }: { leadId: string }): ReactElement => {
 								<Tag medium>{t(`Boards_Leads_Task_Origin_${task.autoCreatedBy}` as Parameters<typeof t>[0], { defaultValue: task.autoCreatedBy })}</Tag>
 							)}
 						</Box>
-						<Box fontScale='micro' color='hint'>
+						<Box fontScale='micro' color='hint' style={tabularFigures}>
 							{task.dueAt ? `${t('Boards_Leads_Task_Due', { defaultValue: 'Due' })}: ${fmtDateTime(task.dueAt)}` : t('Boards_Leads_Task_NoDue', { defaultValue: 'No due date' })}
 							{task.done && task.doneAt ? ` · ${t('Boards_Leads_Task_DoneAt', { defaultValue: 'Done' })} ${fmtDateTime(task.doneAt)}` : ''}
 						</Box>
@@ -782,6 +805,7 @@ const DisqualifyModal = ({
 
 const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement => {
 	const { t } = useTranslation();
+	const tone = useLedgerTone();
 	const router = useRouter();
 	const setModal = useSetModal();
 	const dispatchToastMessage = useToastMessageDispatch();
@@ -961,19 +985,33 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 
 	return (
 		<Box pi={4}>
-			{/* Header: ref + name + qualification chip */}
-			<Box display='flex' alignItems='center' mbe={8}>
-				<Box fontScale='h4' color='default' mie={8} withTruncatedText>
-					{fullName}
+			{/* Serif "case caption" lead name (mirrors the room-header caption treatment). */}
+			<Box fontScale='h4' color='default' withTruncatedText mbe={2} style={serifCaption}>
+				{fullName}
+			</Box>
+
+			{/* Dense single-strip identity row — ref · practice area · qualification ·
+			    recomputed score · SOL heat, all on one wrapped line (less chrome, more data). */}
+			<Box display='flex' alignItems='center' flexWrap='wrap' mbe={8} style={{ gap: '6px', rowGap: '4px' }}>
+				<Box is='span' fontScale='c1' color='hint' style={tabularFigures}>
+					#{lead.refNo}
+				</Box>
+				<Box is='span' fontScale='c1' color='hint'>
+					·
+				</Box>
+				<Box is='span' fontScale='c1' color='hint' withTruncatedText>
+					{lead.practiceArea ?? t('Boards_PracticeArea', { defaultValue: 'Practice area' })}
 				</Box>
 				{typeof qualified === 'boolean' && (
-					<Tag variant={qualified ? 'primary' : 'danger'} medium>
-						{qualified ? t('Boards_Lead_Qualified', { defaultValue: 'Qualified' }) : t('Boards_Lead_Disqualified', { defaultValue: 'Disqualified' })}
-					</Tag>
+					<Box is='span' style={heatChipStyle(tone, qualified ? 'green' : 'red')}>
+						<span aria-hidden='true' style={heatDotStyle(heatColor(tone, qualified ? 'green' : 'red'))} />
+						{qualified
+							? t('Boards_Lead_Qualified', { defaultValue: 'Qualified' })
+							: t('Boards_Lead_Disqualified', { defaultValue: 'Disqualified' })}
+					</Box>
 				)}
-			</Box>
-			<Box fontScale='c1' color='hint' mbe={8}>
-				#{lead.refNo} · {lead.practiceArea ?? t('Boards_PracticeArea', { defaultValue: 'Practice area' })}
+				<ScoreChip leadId={leadId} />
+				<SolChip leadId={leadId} />
 			</Box>
 
 			{/* Disqualify reason (item 1): show why a disqualified lead was declined. */}
@@ -984,12 +1022,6 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 					</Callout>
 				</Box>
 			)}
-
-			{/* Depth chips: recomputed score + SOL */}
-			<Box display='flex' flexWrap='wrap' alignItems='center' mbe={8} style={{ gap: '6px' }}>
-				<ScoreChip leadId={leadId} />
-				<SolChip leadId={leadId} />
-			</Box>
 
 			{/* Depth banners: conflict + duplicates (degrade gracefully) */}
 			<ConflictBanner leadId={leadId} />
@@ -1064,10 +1096,8 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 			<SignupPacketSection leadId={leadId} onArmedChange={setPacketArmed} onInvalidateLead={invalidate} />
 
 			{/* Communications timeline + depth actions */}
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbs={16} mbe={8}>
-				<Box fontScale='p2b' color='default'>
-					{t('Boards_Leads_Timeline', { defaultValue: 'Communication timeline' })}
-				</Box>
+			<Box display='flex' alignItems='center' justifyContent='space-between' mbs={13} mbe={6} pbe={2} style={ledgerRule(tone)}>
+				<Box style={ledgerHead(tone)}>{t('Boards_Leads_Timeline', { defaultValue: 'Communication timeline' })}</Box>
 				<ButtonGroup>
 					<Button tiny onClick={openLogComm}>
 						<Icon name='plus' size='x12' mie={4} />
@@ -1085,7 +1115,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 				</Box>
 			)}
 			{communications.map((comm) => (
-				<Box key={comm._id} display='flex' alignItems='flex-start' mbe={10}>
+				<Box key={comm._id} display='flex' alignItems='flex-start' mbe={6} pbe={4} style={ledgerRule(tone)}>
 					<Icon name={commIcon(comm.kind)} size='x16' mie={8} mbs={2} color='hint' />
 					<Box minWidth={0} flexGrow={1}>
 						<Box display='flex' alignItems='center'>
@@ -1099,7 +1129,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 								{comm.body}
 							</Box>
 						)}
-						<Box fontScale='micro' color='hint'>
+						<Box fontScale='micro' color='hint' style={tabularFigures}>
 							{fmtDateTime(comm.ts)}
 							{comm.callDisposition ? ` · ${comm.callDisposition}` : ''}
 							{comm.deliveryStatus ? ` · ${comm.deliveryStatus}` : ''}
