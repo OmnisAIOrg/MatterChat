@@ -11,9 +11,15 @@ export const TOTP = {
 	},
 
 	generateOtpauthURL(secret: speakeasy.GeneratedSecret, username: string): string {
+		// Rebrand: authenticator entries are labeled from the workspace name
+		// (upstream hardcoded "Rocket.Chat"). `issuer` is what most apps show
+		// as the entry title; the label keeps the issuer prefix per the
+		// otpauth convention so bare-label apps render the same name.
+		const siteName = (settings.get<string>('Site_Name') || 'MatterChat').trim();
 		return speakeasy.otpauthURL({
 			secret: secret.ascii,
-			label: `Rocket.Chat:${username}`,
+			label: `${siteName}:${username}`,
+			issuer: siteName,
 		});
 	},
 
