@@ -57,14 +57,23 @@ function getLitboxBase(): URL | null {
 	}
 }
 
-// CentralizedAuth OIDC token endpoint, used for the refresh-on-401 grant below. Mirrors the
-// shape the OIDC callback (./index.ts) uses: issuer from OMNISAI_OIDC_ISSUER, client_id from
-// OMNISAI_OIDC_CLIENT_ID, `${issuer}/api/auth/mcp/token`. Returns null if not configured.
+// CentralizedAuth OIDC token endpoint, used for the refresh-on-401 grant below. Resolves the
+// issuer/client_id settings-FIRST with env fallback — EXACTLY the getConfig() order in ./index.ts,
+// so the proxy's refresh grant and the login flow can never disagree. Why settings-first matters:
+// staging seeds OmnisAI_OIDC_* via OVERWRITE_SETTING_* into Mongo while the pod env may not carry
+// the OMNISAI_OIDC_* vars at all (see the getConfig comment) — the previous env-only read left
+// refresh-on-401 dead there, so files silently stopped loading once the login token expired.
+// Endpoint path follows better-auth's mcp plugin layout: `${issuer}/api/auth/mcp/token`.
+// Returns null if not configured.
 // NOTE: not runtime-verified here — the refresh grant only resolves against a real
 // CentralizedAuth issuer (live/alpha), not the local mock OIDC. See header KNOWN LIMITATION.
 function getOidcTokenEndpoint(): { url: string; clientId: string } | null {
-	const issuer = (process.env.OMNISAI_OIDC_ISSUER || '').trim().replace(/\/+$/, '');
-	const clientId = (process.env.OMNISAI_OIDC_CLIENT_ID || '').trim();
+	const settingStr = (id: string): string => {
+		const v = settings.get(id);
+		return typeof v === 'string' ? v.trim() : '';
+	};
+	const issuer = (settingStr('OmnisAI_OIDC_Issuer') || (process.env.OMNISAI_OIDC_ISSUER || '').trim()).replace(/\/+$/, '');
+	const clientId = settingStr('OmnisAI_OIDC_Client_Id') || (process.env.OMNISAI_OIDC_CLIENT_ID || '').trim();
 	if (!issuer || !clientId) {
 		return null;
 	}
@@ -306,12 +315,18 @@ async function handle(req: any, res: any): Promise<void> {
 		return unauthorized(res);
 	}
 
-	// 2. The user's LitBox credential (captured at OIDC login). No credential → 401 (the
-	//    browser shows LitBox's unauth/empty state). If LitBox later 401s because the token
-	//    expired, we refresh-on-401 below (step 4) using the stored refresh_token.
+	// 2. The user's LitBox credential (captured at OIDC login). No credential = a regular
+	//    username/password login that never went through "Sign in with OmnisAI" — a DIFFERENT
+	//    401 from a bad MatterChat token, so say which: `litbox_not_connected` lets the Files
+	//    surface render a "Connect your OmnisAI account" CTA instead of a silent empty list.
+	//    (Still a 401, still reached only after the Authorization-header auth above — the error
+	//    string leaks nothing.) If LitBox later 401s because the token expired, we
+	//    refresh-on-401 below (step 4) using the stored refresh_token.
 	const litboxToken: string | undefined = user.litbox?.sessionToken;
 	if (!litboxToken) {
-		return unauthorized(res);
+		res.writeHead(401, { 'Content-Type': 'application/json' });
+		res.end(JSON.stringify({ success: false, error: 'litbox_not_connected' }));
+		return;
 	}
 	const refreshToken: string | undefined = user.litbox?.refreshToken;
 
