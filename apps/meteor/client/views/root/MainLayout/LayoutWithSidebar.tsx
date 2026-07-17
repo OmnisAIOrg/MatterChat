@@ -10,6 +10,7 @@ import AppLeftRail from './AppLeftRail';
 import ExternalErrorBoundary from './ExternalErrorBoundary';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
+import MobileTabBar from './MobileTabBar';
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
@@ -182,6 +183,10 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 					<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
 						{children}
 					</ShellBody>
+					{/* MATTERCHAT: mobile-only bottom tab bar (renders null on desktop/embedded). Mounted
+					    inside OrgSwitcherProvider so its Chats tab can act as the way back from an external
+					    workspace; position:fixed, so DOM placement here has no layout effect. */}
+					{!removeSidenav && <MobileTabBar />}
 				</OrgSwitcherProvider>
 			</Box>
 		</>

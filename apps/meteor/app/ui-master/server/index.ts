@@ -33,6 +33,21 @@ Meteor.startup(() => {
 		injectIntoHead('Use_RC_SDK', `<meta name="rc-sdk-transport-enabled" content="${value ? 'on' : 'off'}" />`);
 	});
 
+	// MATTERCHAT: mobile PWA head. The served HTML carried NO viewport meta (so iOS rendered the app
+	// at desktop width and shrink-scaled it into illegibility) and never linked the web-app manifest —
+	// an "installed PWA" was a desktop-scaled bookmark. One-time static injection of the mobile-web
+	// fundamentals: proper viewport (viewport-fit=cover unlocks env(safe-area-inset-*) for the
+	// MobileTabBar/NavBar), the manifest link, the iOS standalone-mode metas, and the touch icon.
+	injectIntoHead(
+		'matterchat-mobile-pwa',
+		`<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<link rel="manifest" href="${getURL('images/manifest.json')}" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<link rel="apple-touch-icon" sizes="180x180" href="${getURL('images/pwa/apple-touch-icon.png')}" />`,
+	);
+
 	if (process.env.DISABLE_ANIMATION) {
 		injectIntoHead(
 			'disable-animation',

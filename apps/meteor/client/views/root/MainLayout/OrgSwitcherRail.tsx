@@ -2,7 +2,7 @@ import { css } from '@rocket.chat/css-in-js';
 import { Box } from '@rocket.chat/fuselage';
 import { GenericMenu } from '@rocket.chat/ui-client';
 import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
-import { useCurrentRoutePath, useRouter } from '@rocket.chat/ui-contexts';
+import { useCurrentRoutePath, useLayout, useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -299,6 +299,7 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 
 const OrgSwitcherRail = (): ReactElement | null => {
 	const { t } = useTranslation();
+	const { isMobile } = useLayout();
 	const { orgs, switchOrg, connectSlack, connectTeams, connectGoogle, teamsEnabled, googleEnabled } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
 	const router = useRouter();
@@ -364,6 +365,12 @@ const OrgSwitcherRail = (): ReactElement | null => {
 	}, [t, connectSlack, connectTeams, connectGoogle, teamsEnabled, googleEnabled]);
 
 	if (!orgs.length) {
+		return null;
+	}
+
+	// MATTERCHAT: on phones the MobileTabBar is the primary nav and every horizontal pixel counts —
+	// the workspace-switcher column is desktop chrome.
+	if (isMobile) {
 		return null;
 	}
 
