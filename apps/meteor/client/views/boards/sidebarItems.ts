@@ -34,7 +34,8 @@ export const {
 	{
 		href: '/boards/leads',
 		i18nLabel: 'Boards_Leads',
-		icon: 'magnifier',
+		// new prospective clients — NOT 'magnifier' (that reads as Search)
+		icon: 'user-plus',
 		permissionGranted: (): boolean => hasPermission('boards-leads-view'),
 	},
 	{
@@ -46,13 +47,15 @@ export const {
 	{
 		href: '/boards/leads/referrals',
 		i18nLabel: 'Boards_Leads_Referrals_Out',
-		icon: 'user-plus',
+		// a client being sent OUT to another firm
+		icon: 'user-arrow-right',
 		permissionGranted: (): boolean => hasPermission('boards-leads-referrals-manage'),
 	},
 	{
 		href: '/boards/leads/marketing',
 		i18nLabel: 'Boards_Leads_Marketing_ROI',
-		icon: 'dashboard',
+		// ROI = return percentage ('dashboard' was shared by three items)
+		icon: 'percentage',
 		permissionGranted: (): boolean => hasPermission('boards-leads-marketing-manage'),
 	},
 	{
@@ -64,7 +67,8 @@ export const {
 	{
 		href: '/boards/reports/source-to-settlement',
 		i18nLabel: 'Boards_Reports_SourceToSettlement',
-		icon: 'dashboard',
+		// conversion pipeline trending toward settlement ('dashboard' stays with Matters Reports)
+		icon: 'arrow-rise',
 		permissionGranted: (): boolean => hasPermission('boards-view-reports'),
 	},
 	{

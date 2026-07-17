@@ -1,6 +1,8 @@
 import { useThemeMode } from '@rocket.chat/ui-client';
 import type { CSSProperties } from 'react';
 
+import { HEAT_DARK, HEAT_LIGHT, HEAT_SOFT_DARK, HEAT_SOFT_LIGHT } from './heatScale';
+
 /**
  * ledgerTheme — the founder-approved "Ledger-dense" brand tokens for the Boards
  * DEPTH screens (Caseload / Reports / Calendars / Table / Timeline / Gantt /
@@ -11,7 +13,7 @@ import type { CSSProperties } from 'react';
  *   paper #FAF7EE light / #12161D dark, cards #fffdf6 + #f2efe2 light / #1A2029
  *   dark, khaki strokes, brand green #1B7A2E (links #15692A light / #5BD07E
  *   dark), serif 'Iowan Old Style' captions, tabular-nums figures, and the SOL
- *   heat scale green / amber #e0a63c / red #e35d5d.
+ *   heat scale shared from lib/heatScale.ts (the `--mc-sol-*` values).
  *
  * Dark is a calm dense dark surface — never inverted paper. High-contrast (the
  * a11y theme) resolves to the light (paper) tones, which keep AA contrast.
@@ -58,13 +60,13 @@ export const LIGHT_LEDGER: LedgerTones = {
 	stroke: '#C9BE9A',
 	strokeSoft: 'rgba(150, 130, 80, 0.22)',
 	inkMuted: '#6E6852',
-	green: '#1B7A2E',
-	greenSoft: 'rgba(27, 122, 46, 0.10)',
+	green: HEAT_LIGHT.green,
+	greenSoft: HEAT_SOFT_LIGHT.green,
 	link: '#15692A',
-	amber: '#e0a63c',
-	amberSoft: 'rgba(224, 166, 60, 0.16)',
-	red: '#e35d5d',
-	redSoft: 'rgba(227, 93, 93, 0.14)',
+	amber: HEAT_LIGHT.amber,
+	amberSoft: HEAT_SOFT_LIGHT.amber,
+	red: HEAT_LIGHT.red,
+	redSoft: HEAT_SOFT_LIGHT.red,
 	todayTint: '#E4F3E8',
 };
 
@@ -75,13 +77,13 @@ export const DARK_LEDGER: LedgerTones = {
 	stroke: '#3A414D',
 	strokeSoft: 'rgba(255, 255, 255, 0.07)',
 	inkMuted: '#8E96A3',
-	green: '#3FA85C',
-	greenSoft: 'rgba(63, 168, 92, 0.14)',
+	green: HEAT_DARK.green,
+	greenSoft: HEAT_SOFT_DARK.green,
 	link: '#5BD07E',
-	amber: '#e0a63c',
-	amberSoft: 'rgba(224, 166, 60, 0.18)',
-	red: '#e35d5d',
-	redSoft: 'rgba(227, 93, 93, 0.18)',
+	amber: HEAT_DARK.amber,
+	amberSoft: HEAT_SOFT_DARK.amber,
+	red: HEAT_DARK.red,
+	redSoft: HEAT_SOFT_DARK.red,
 	todayTint: '#24352A',
 };
 

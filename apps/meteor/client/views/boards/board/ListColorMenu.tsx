@@ -6,6 +6,8 @@ import { useMutation } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { BOARD_ACCENT_SWATCHES } from '../lib/boardSwatches';
+
 /**
  * ListColorMenu — the per-list (column) accent-color picker in the board header.
  *
@@ -21,17 +23,9 @@ import { useTranslation } from 'react-i18next';
  * with its new accent) — the parent owns the `['boards','info',boardId]` query.
  */
 
-// Curated accent palette — raw CSS hex strings. Mirrors the colorful-but-muted
-// swatch sets used for labels/covers; kept small so the menu stays a quick pick.
-export const LIST_COLOR_SWATCHES: { id: string; value: string; label: string }[] = [
-	{ id: 'red', value: '#f5455c', label: 'Red' },
-	{ id: 'orange', value: '#f38c39', label: 'Orange' },
-	{ id: 'yellow', value: '#f3be08', label: 'Yellow' },
-	{ id: 'green', value: '#2de0a5', label: 'Green' },
-	{ id: 'blue', value: '#1d74f5', label: 'Blue' },
-	{ id: 'purple', value: '#7a5bff', label: 'Purple' },
-	{ id: 'gray', value: '#9ea2a8', label: 'Gray' },
-];
+// Curated accent palette — the shared brand-derived accent set
+// (lib/boardSwatches.ts); kept small so the menu stays a quick pick.
+export const LIST_COLOR_SWATCHES: { id: string; value: string; label: string }[] = BOARD_ACCENT_SWATCHES;
 
 type ListColorMenuProps = {
 	listId: string;
@@ -84,14 +78,7 @@ const ListColorMenu = ({ listId, color, onUpdated }: ListColorMenuProps): ReactE
 		},
 	];
 
-	return (
-		<GenericMenu
-			title={t('Boards_List_Color', { defaultValue: 'List color' })}
-			icon='palette'
-			items={items}
-			placement='bottom-end'
-		/>
-	);
+	return <GenericMenu title={t('Boards_List_Color', { defaultValue: 'List color' })} icon='palette' items={items} placement='bottom-end' />;
 };
 
 export default ListColorMenu;

@@ -240,12 +240,21 @@ const AppLeftRail = () => {
 					aria-label={t('Files', { defaultValue: 'Files' })}
 					aria-current={filesActive ? 'page' : undefined}
 				>
-					{/* The LitBox brand wordmark, 'Lit' white, 'Box' in LitBox's own original blue (#5b7cff), so it reads on the
-					    dark rail, with a "Files" label below to match the other nav items. */}
+					{/* The LitBox brand wordmark — 'Lit' white, 'Box' in LitBox's own original blue (#5b7cff) — with a
+					    "Files" label below to match the other nav items. Drawn 1:1 (viewBox == rendered px, 13px type,
+					    the UI system-font stack) so the browser kerns it natively instead of squeezing down scaled
+					    Arial; same optical weight as the "MatterChat" mark at the top of the rail. */}
 					<Box display='flex' alignItems='center' justifyContent='center' style={{ height: '24px' }}>
-						<svg width='52' height='13' viewBox='0 0 160 40' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
-							{/* text-anchor=middle + x at viewBox center so the wordmark is truly centered, not left-hugging. */}
-							<text x='80' y='30' textAnchor='middle' fontFamily='Arial, Helvetica, sans-serif' fontSize='28' fontWeight='bold'>
+						<svg width='48' height='16' viewBox='0 0 48 16' xmlns='http://www.w3.org/2000/svg' aria-hidden focusable='false'>
+							<text
+								x='24'
+								y='12.5'
+								textAnchor='middle'
+								fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+								fontSize='13'
+								fontWeight='800'
+								letterSpacing='0.2'
+							>
 								<tspan fill='#ffffff'>Lit</tspan>
 								<tspan fill='#5b7cff'>Box</tspan>
 							</text>

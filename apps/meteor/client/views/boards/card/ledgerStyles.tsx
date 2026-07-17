@@ -2,6 +2,8 @@ import { Box } from '@rocket.chat/fuselage';
 import { useThemeMode } from '@rocket.chat/ui-client';
 import type { CSSProperties, ReactElement } from 'react';
 
+import { HEAT_DARK, HEAT_LIGHT } from '../lib/heatScale';
+
 /**
  * "Ledger-dense" style helpers for the card-detail chrome (Wave 2 — leads +
  * card drawer). The same brand language MainLayoutStyleTags applies to the chat
@@ -15,7 +17,7 @@ import type { CSSProperties, ReactElement } from 'react';
  *   cards  #f2efe2 light / #1A2029 dark        (cardOwnBg / cardOtherBg)
  *   rules  khaki rgba(150,130,80,…) / slate     (ruledLines / railOther)
  *   green  #15692A light / #5BD07E dark         (link greens; base #1B7A2E)
- *   heat   green / amber #e0a63c / red #e35d5d  (SOL heat)
+ *   heat   the shared scale in ../lib/heatScale.ts (SOL heat — `--mc-sol-*` values)
  */
 
 export type LedgerHeat = 'green' | 'amber' | 'red';
@@ -44,8 +46,8 @@ const LIGHT_TONE: LedgerTone = {
 	rule: 'rgba(150, 130, 80, 0.30)',
 	head: '#6E6650',
 	green: '#15692A',
-	amber: '#e0a63c',
-	red: '#e35d5d',
+	amber: HEAT_LIGHT.amber,
+	red: HEAT_LIGHT.red,
 };
 
 const DARK_TONE: LedgerTone = {
@@ -55,8 +57,8 @@ const DARK_TONE: LedgerTone = {
 	rule: '#2E3540',
 	head: '#8C94A3',
 	green: '#5BD07E',
-	amber: '#e0a63c',
-	red: '#e35d5d',
+	amber: HEAT_DARK.amber,
+	red: HEAT_DARK.red,
 };
 
 // High-contrast (a11y) stays essentially stock, mirroring the `branded` gate in
