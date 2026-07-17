@@ -2696,7 +2696,6 @@
   "Event_notifications": "Event notifications",
   "Event_notifications_description": "By disabling this setting you’ll prevent the app from notifying you of upcoming events.",
   "Everyone_can_access_this_channel": "Everyone can access this channel",
-  "EvidenceHunt": "EvidenceHunt",
   "Exact": "Exact",
   "Example_payload": "Example payload",
   "Example_s": "Example: <code>{{value}}</code>",

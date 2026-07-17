@@ -24,8 +24,6 @@ import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
  *  • Files    → /litbox        (the LitBox wordmark, recolored for the dark rail)
  *  • Activity → /boards/inbox  (icon 'bell' — the Boards notifications inbox route)
  *  • Search   → focuses the existing NavBar search combobox (icon 'magnifier')
- *  • EvidenceHunt → evidencehunt://open (icon 'document-eye') — a REAL anchor so the
- *                   browser natively offers to open the EvidenceHunt desktop app.
  *  • Admin    → /admin         (icon 'cog' — admins only)
  *
  * Bottom reuses the existing `UserMenu` (avatar + account menu) from the NavBar — kept here (not in the
@@ -189,17 +187,6 @@ const AppLeftRail = () => {
 		}
 	});
 
-	// EvidenceHunt deep link — a REAL anchor (not window.open) so desktop browsers
-	// natively prompt "Open EvidenceHunt.app?" and tests can assert the href.
-	const renderLinkItem = (icon: ComponentProps<typeof Icon>['name'], label: string, href: string): ReactElement => (
-		<Box is='a' href={href} className={itemClass} title={label} aria-label={label} style={{ textDecoration: 'none' }}>
-			<Icon name={icon} size='x24' />
-			<Box is='span' className='rail-label'>
-				{label}
-			</Box>
-		</Box>
-	);
-
 	const renderItem = (icon: ComponentProps<typeof Icon>['name'], label: string, onClick: () => void, active: boolean): ReactElement => (
 		<Box
 			is='button'
@@ -268,10 +255,9 @@ const AppLeftRail = () => {
 						{t('Files', { defaultValue: 'Files' })}
 					</Box>
 				</Box>
-				{/* Activity / Search / EvidenceHunt / Admin are MatterChat-native — hidden in external-workspace mode. */}
+				{/* Activity / Search / Admin are MatterChat-native — hidden in external-workspace mode. */}
 				{!inExternalMode && canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
 				{!inExternalMode && renderItem('magnifier', t('Search'), handleSearch, false)}
-				{!inExternalMode && renderLinkItem('document-eye', t('EvidenceHunt'), 'evidencehunt://open')}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
 			{user && (
