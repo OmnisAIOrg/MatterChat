@@ -104,3 +104,25 @@ Nothing is enabled by this change. To flip staging live:
   org from the key's context (the CarePro gateway honors the header; harmless either way).
 - `query_entities` behavior at large `limit` values (offset is emulated client-side
   because the gateway paginates by limit only).
+
+## Sibling lanes (built + deployed dark, same enablement gate)
+
+Beyond the read/write live wire above, four adjacent CasePro flows are built, merged, and
+deployed **dark** on staging — each stays inert until its own env/setting is set **and**
+the matching CasePro PR is merged + migrated. None has carried live traffic yet; each
+needs a first-run verification pass:
+
+- **Comms-log ingest** (channel messages → matter communication notes) — needs
+  `CasePro_Comms_Log_Ingest_URL` + CasePro PR #1234 (`POST /matterchat-messages/ingest`).
+- **Case-update webhooks** (CasePro entity change → matter channel) — needs
+  `CASEPRO_WEBHOOK_SECRET` **and** an admin-created `webhook_subscriptions` row, plus
+  CasePro PR #1235. Secret-mismatch fails **silently closed** — verify via MatterChat
+  receiver logs, not CasePro delivery counters.
+- **Task sync** (board cards ↔ CasePro tasks) — needs CasePro PR #1233 (the
+  `Source.MatterChat` enum + `tasks.external_ref`) deployed first, or writes 400.
+- **Client-sync** (per-matter client↔firm thread) — gated by `CasePro_Client_Sync_Enabled`
+  + `CasePro_Client_Sync_API_URL`, needs CasePro PR #1236 (service-authed
+  `/service/matters/:id/client-messages`).
+
+The consolidated go-live sequence, env block, and per-lane smoke tests live in the
+operator go-live runbook (kept out of this repository; ask the founder/ops for access).
