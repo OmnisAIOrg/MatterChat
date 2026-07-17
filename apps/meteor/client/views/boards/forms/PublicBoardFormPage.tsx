@@ -11,6 +11,17 @@ import { useEffect, useState } from 'react';
  * (boards.forms.public.get / .submit) and native HTML inputs with inline styles
  * — no Fuselage/theme/provider coupling on a page external people load. The
  * slug in the URL is the only capability; the page never learns board/list ids.
+ *
+ * LEDGER-DENSE SKIN (Wave 2 UI-polish, style-only): the page carries the
+ * MatterChat identity — warm paper ground, paper card with khaki hairline,
+ * serif "case caption" form title, green submit, the Matter+red-Chat wordmark
+ * — using the SAME literal tokens as MainLayoutStyleTags.tsx / ledgerTheme.ts
+ * (paper #FAF7EE, card #FFFDF6, khaki #C9BE9A, green #1B7A2E, red #e1140a).
+ * Literals on purpose: this page renders logged-out with no theme providers.
+ * Single light (paper) look regardless of OS theme — a letterhead, not an app
+ * surface. Hover/focus states live in the small static <style> tag below
+ * (inline styles can't express them); inputs go 16px on small screens so iOS
+ * doesn't zoom the viewport on focus.
  */
 
 type PublicField = {
@@ -28,39 +39,83 @@ type PublicForm = {
 	fields: PublicField[];
 };
 
+// The serif "case caption" stack — identical to the chat/boards ledger skins.
+const LEDGER_SERIF = "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif";
+
 const styles: Record<string, CSSProperties> = {
-	page: { minHeight: '100vh', background: '#f4f6f8', padding: '32px 16px', fontFamily: 'system-ui, -apple-system, sans-serif' },
-	card: { maxWidth: 560, margin: '0 auto', background: '#fff', borderRadius: 12, padding: 32, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' },
-	title: { margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#1f2329' },
-	description: { margin: '0 0 24px', color: '#6c737a', fontSize: 14, whiteSpace: 'pre-wrap' },
-	label: { display: 'block', fontSize: 14, fontWeight: 600, color: '#2f343d', marginBottom: 4 },
-	required: { color: '#d40c26', marginLeft: 2 },
+	page: { minHeight: '100vh', background: '#FAF7EE', padding: '24px 16px', fontFamily: 'system-ui, -apple-system, sans-serif' },
+	// The MatterChat wordmark above the card — 'Matter' warm ink + the brand red 'Chat'.
+	brand: { maxWidth: 560, margin: '0 auto 10px', fontSize: 18, fontWeight: 800, letterSpacing: 0.2, color: '#232012' },
+	brandChat: { color: '#e1140a' },
+	card: {
+		maxWidth: 560,
+		margin: '0 auto',
+		background: '#FFFDF6',
+		border: '1px solid rgba(201, 190, 154, 0.6)',
+		borderRadius: 8,
+		padding: 24,
+		boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+	},
+	title: { margin: '0 0 6px', fontSize: 22, fontWeight: 600, letterSpacing: '0.005em', fontFamily: LEDGER_SERIF, color: '#232012' },
+	description: { margin: '0 0 18px', color: '#6E6852', fontSize: 14, whiteSpace: 'pre-wrap' },
+	label: { display: 'block', fontSize: 13, fontWeight: 600, color: '#3F3A2B', marginBottom: 3 },
+	required: { color: '#C0212E', marginLeft: 2 },
 	input: {
 		width: '100%',
 		boxSizing: 'border-box',
-		padding: '10px 12px',
+		padding: '8px 10px',
 		fontSize: 14,
-		border: '1px solid #cbced1',
-		borderRadius: 6,
-		marginBottom: 16,
+		border: '1px solid #C9BE9A',
+		borderRadius: 5,
+		marginBottom: 12,
 		background: '#fff',
-		color: '#1f2329',
+		color: '#232012',
 	},
-	checkboxRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 },
+	checkboxRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
 	button: {
 		width: '100%',
-		padding: '12px 16px',
+		padding: '10px 14px',
 		fontSize: 15,
 		fontWeight: 600,
 		color: '#fff',
-		background: '#156ff5',
+		background: '#1B7A2E',
 		border: 'none',
-		borderRadius: 6,
+		borderRadius: 5,
 		cursor: 'pointer',
 	},
-	error: { background: '#ffeaed', color: '#9b1325', padding: '10px 12px', borderRadius: 6, marginBottom: 16, fontSize: 14 },
-	center: { textAlign: 'center', color: '#6c737a', padding: 48, fontSize: 15 },
+	error: { background: 'rgba(227, 93, 93, 0.14)', color: '#C0212E', padding: '8px 10px', borderRadius: 5, marginBottom: 12, fontSize: 13 },
+	center: { textAlign: 'center', color: '#6E6852', padding: 40, fontSize: 15 },
+	footer: { maxWidth: 560, margin: '12px auto 0', textAlign: 'center', fontSize: 12, color: '#6E6852' },
 };
+
+/**
+ * Hover/focus/mobile states inline styles can't express. Static constant string,
+ * no user input — same precedent as the app-side ledger style tags.
+ */
+const PUBLIC_FORM_CSS = `
+.mcPublicForm input:focus,
+.mcPublicForm textarea:focus,
+.mcPublicForm select:focus {
+	outline: none;
+	border-color: #1B7A2E;
+	box-shadow: 0 0 0 3px #D6EFDC;
+}
+.mcPublicForm button[type='submit']:hover:not(:disabled) {
+	background: #176B2C;
+}
+.mcPublicForm button[type='submit']:disabled {
+	opacity: 0.7;
+	cursor: default;
+}
+/* iOS zooms the viewport on focus when an input is under 16px — go 16px on phones. */
+@media (max-width: 480px) {
+	.mcPublicForm input,
+	.mcPublicForm textarea,
+	.mcPublicForm select {
+		font-size: 16px;
+	}
+}
+`;
 
 const PublicBoardFormPage = (): ReactElement => {
 	const slug = useRouteParameter('slug') ?? '';
@@ -133,7 +188,10 @@ const PublicBoardFormPage = (): ReactElement => {
 
 	if (state === 'loading') {
 		return (
-			<div style={styles.page}>
+			<div style={styles.page} className='mcPublicForm'>
+				<div style={styles.brand}>
+					Matter<span style={styles.brandChat}>Chat</span>
+				</div>
 				<div style={styles.card}>
 					<div style={styles.center}>Loading…</div>
 				</div>
@@ -143,7 +201,10 @@ const PublicBoardFormPage = (): ReactElement => {
 
 	if (state === 'missing' || !form) {
 		return (
-			<div style={styles.page}>
+			<div style={styles.page} className='mcPublicForm'>
+				<div style={styles.brand}>
+					Matter<span style={styles.brandChat}>Chat</span>
+				</div>
 				<div style={styles.card}>
 					<div style={styles.center}>This form is not available.</div>
 				</div>
@@ -153,10 +214,13 @@ const PublicBoardFormPage = (): ReactElement => {
 
 	if (state === 'done') {
 		return (
-			<div style={styles.page}>
+			<div style={styles.page} className='mcPublicForm'>
+				<div style={styles.brand}>
+					Matter<span style={styles.brandChat}>Chat</span>
+				</div>
 				<div style={styles.card}>
 					<div style={styles.center}>
-						<div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
+						<div style={{ fontSize: 40, marginBottom: 12, color: '#1B7A2E' }}>✓</div>
 						Thank you — your submission has been received.
 					</div>
 				</div>
@@ -165,7 +229,12 @@ const PublicBoardFormPage = (): ReactElement => {
 	}
 
 	return (
-		<div style={styles.page}>
+		<div style={styles.page} className='mcPublicForm'>
+			{/* Static, no user input — hover/focus/mobile rules for the native controls. */}
+			<style dangerouslySetInnerHTML={{ __html: PUBLIC_FORM_CSS }} />
+			<div style={styles.brand}>
+				Matter<span style={styles.brandChat}>Chat</span>
+			</div>
 			<div style={styles.card}>
 				<h1 style={styles.title}>{form.title}</h1>
 				{form.description && <p style={styles.description}>{form.description}</p>}
@@ -256,6 +325,9 @@ const PublicBoardFormPage = (): ReactElement => {
 						{state === 'submitting' ? 'Submitting…' : 'Submit'}
 					</button>
 				</form>
+			</div>
+			<div style={styles.footer}>
+				Secure intake · powered by Matter<span style={styles.brandChat}>Chat</span>
 			</div>
 		</div>
 	);
