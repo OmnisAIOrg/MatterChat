@@ -6,6 +6,8 @@ import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { BOARD_ACCENT_SWATCHES } from '../lib/boardSwatches';
+
 /**
  * CardLabelsControl — the card-detail surface for viewing and managing a card's labels.
  *
@@ -29,17 +31,9 @@ import { useTranslation } from 'react-i18next';
  * CardButtonsRow (useEndpoint + useMutation + query invalidation).
  */
 
-// Curated swatch palette for new labels — raw CSS hex strings, mirroring LIST_COLOR_SWATCHES
-// so labels and list accents share one visual vocabulary.
-export const LABEL_COLOR_SWATCHES: { id: string; value: string }[] = [
-	{ id: 'red', value: '#f5455c' },
-	{ id: 'orange', value: '#f38c39' },
-	{ id: 'yellow', value: '#f3be08' },
-	{ id: 'green', value: '#2de0a5' },
-	{ id: 'blue', value: '#1d74f5' },
-	{ id: 'purple', value: '#7a5bff' },
-	{ id: 'gray', value: '#9ea2a8' },
-];
+// Curated swatch palette for new labels — the shared brand-derived accent set
+// (lib/boardSwatches.ts), so labels and list accents share one visual vocabulary.
+export const LABEL_COLOR_SWATCHES: { id: string; value: string }[] = BOARD_ACCENT_SWATCHES;
 
 type CardLabelsControlProps = {
 	boardId: string;
@@ -51,10 +45,7 @@ type CardLabelsControlProps = {
 // A single label chip — colored pill with the label name, or a bare dot when unnamed.
 const LabelChip = ({ label }: { label: IBoardLabelDef }): ReactElement =>
 	label.name ? (
-		<Box
-			fontScale='micro'
-			style={{ backgroundColor: label.color, color: '#ffffff', borderRadius: '4px', padding: '1px 7px' }}
-		>
+		<Box fontScale='micro' style={{ backgroundColor: label.color, color: '#ffffff', borderRadius: '4px', padding: '1px 7px' }}>
 			{label.name}
 		</Box>
 	) : (
@@ -134,8 +125,7 @@ const CardLabelsControl = ({ boardId, cardId, cardLabelIds }: CardLabelsControlP
 		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
 	});
 
-	const anyPending =
-		setMutation.isPending || createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
+	const anyPending = setMutation.isPending || createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
 	// toggle a label on/off this card (wholesale replace of the id list)
 	const toggleLabel = (labelId: string): void => {
@@ -248,11 +238,7 @@ const CardLabelsControl = ({ boardId, cardId, cardLabelIds }: CardLabelsControlP
 									{t('Boards_Label_New', { defaultValue: 'New label' })}
 								</Box>
 								<Box display='flex' alignItems='center' style={{ gap: '6px' }} mbe={6}>
-									<TextInput
-										value={newName}
-										placeholder={t('Name')}
-										onChange={(e) => setNewName((e.target as HTMLInputElement).value)}
-									/>
+									<TextInput value={newName} placeholder={t('Name')} onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
 									<Button small primary disabled={anyPending || !newName.trim()} onClick={handleCreate}>
 										{t('Create')}
 									</Button>
@@ -271,7 +257,8 @@ const CardLabelsControl = ({ boardId, cardId, cardLabelIds }: CardLabelsControlP
 											style={{
 												backgroundColor: s.value,
 												cursor: 'pointer',
-												boxShadow: newColor === s.value ? '0 0 0 2px var(--rcx-color-stroke-highlight, #1d74f5)' : 'none',
+												// selected ring in the ledger accent green (not the stock RC blue highlight)
+												boxShadow: newColor === s.value ? '0 0 0 2px var(--mc-ledger-accent, #15692A)' : 'none',
 											}}
 										/>
 									))}
