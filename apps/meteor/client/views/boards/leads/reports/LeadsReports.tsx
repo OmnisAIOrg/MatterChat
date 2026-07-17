@@ -19,6 +19,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CaseProStubBanner } from '../../casepro';
+import LedgerPageStyleTag from '../../lib/LedgerPageStyleTag';
+import { monoLabel, serifCaption, tabularNums, useLedgerTones } from '../../lib/ledgerTheme';
 
 /**
  * LeadsReports — the `/boards/leads/reports` dashboards (M6 client).
@@ -64,24 +66,36 @@ const fmtMinutes = (value?: number): string => {
 	return `${Math.round(value)}m`;
 };
 
-const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }): ReactElement => (
-	<Box pb={16} pi={16} bg='tint' borderRadius='x4' minWidth={160} flexGrow={1} flexBasis={160}>
-		<Box fontScale='c1' color='hint' mbe={4}>
-			{label}
-		</Box>
-		<Box fontScale='h3' color='default'>
-			{value}
-		</Box>
-		{hint !== undefined && hint !== null && hint !== '' && (
-			<Box fontScale='micro' color='hint' mbs={4}>
-				{hint}
+// Ledger stat tile: paper card face, mono "docket stamp" label, tabular figure.
+const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }): ReactElement => {
+	const tones = useLedgerTones();
+	return (
+		<Box
+			pb={10}
+			pi={12}
+			minWidth={160}
+			flexGrow={1}
+			flexBasis={160}
+			style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
+		>
+			<Box mbe={4} style={monoLabel(tones)}>
+				{label}
 			</Box>
-		)}
-	</Box>
-);
+			<Box fontScale='h3' color='default' style={tabularNums}>
+				{value}
+			</Box>
+			{hint !== undefined && hint !== null && hint !== '' && (
+				<Box fontScale='micro' color='hint' mbs={4}>
+					{hint}
+				</Box>
+			)}
+		</Box>
+	);
+};
 
+// Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={24} mbe={12}>
+	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -126,8 +140,15 @@ const FunnelPanel = (): ReactElement => {
 			<Box display='flex' flexWrap='wrap' mbe={16} style={{ gap: '12px' }}>
 				<Metric label={t('Boards_Leads_Funnel_New', { defaultValue: 'New' })} value={data.totalLeads} />
 				<Metric label={t('Boards_Leads_Conversion_Rate', { defaultValue: 'Conversion rate' })} value={fmtPct(data.overallConversionPct)} />
-				<Metric label={t('Boards_Leads_Task_Speed_To_Lead', { defaultValue: 'First contact (SLA)' })} value={fmtHours(data.avgHoursToContact)} />
-				<Metric label={t('Boards_Leads_Funnel_Signed', { defaultValue: 'Signed' })} value={fmtHours(data.avgHoursToSigned)} hint={t('Boards_Leads_Time_To_Signed', { defaultValue: 'avg time to signed' })} />
+				<Metric
+					label={t('Boards_Leads_Task_Speed_To_Lead', { defaultValue: 'First contact (SLA)' })}
+					value={fmtHours(data.avgHoursToContact)}
+				/>
+				<Metric
+					label={t('Boards_Leads_Funnel_Signed', { defaultValue: 'Signed' })}
+					value={fmtHours(data.avgHoursToSigned)}
+					hint={t('Boards_Leads_Time_To_Signed', { defaultValue: 'avg time to signed' })}
+				/>
 			</Box>
 
 			<Box mbe={20}>
@@ -262,18 +283,24 @@ const ScoreboardPanel = (): ReactElement => {
 
 const LeadsReports = (): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 
 	return (
-		<Page>
+		// Ledger-dense skin (style-only): paper page ground + serif caption title.
+		<Page className='mcLedgerPage' style={{ background: tones.paper }}>
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='dashboard' size='x24' mie={8} color='hint' />
-						<Box withTruncatedText>{t('Boards_Leads_Report_Funnel', { defaultValue: 'Intake reports' })}</Box>
+						<Icon name='dashboard' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
+							{t('Boards_Leads_Report_Funnel', { defaultValue: 'Intake reports' })}
+						</Box>
 					</Box>
 				}
 			/>
 			<PageScrollableContentWithShadow>
+				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
+				<LedgerPageStyleTag />
 				<CaseProStubBanner mbe={16} />
 
 				<SectionTitle>{t('Boards_Leads_Report_Funnel', { defaultValue: 'Intake funnel' })}</SectionTitle>

@@ -3,9 +3,11 @@ import { VerticalWizardLayout, VerticalWizardLayoutTitle, VerticalWizardLayoutFo
 import { useSetting, useAssetWithDarkModePath } from '@rocket.chat/ui-contexts';
 import type { ReactNode } from 'react';
 
+import LoginLedgerStyleTag from '../components/LoginLedgerStyleTag';
 import LoginPoweredBy from '../components/LoginPoweredBy';
 import LoginSwitchLanguageFooter from '../components/LoginSwitchLanguageFooter';
 import LoginTerms from '../components/LoginTerms';
+import MatterChatWordmark from '../components/MatterChatWordmark';
 import { RegisterTitle } from '../components/RegisterTitle';
 
 const VerticalTemplate = ({ children }: { children: ReactNode }) => {
@@ -14,20 +16,31 @@ const VerticalTemplate = ({ children }: { children: ReactNode }) => {
 	const customBackground = useAssetWithDarkModePath('background');
 
 	return (
-		<VerticalWizardLayout
-			background={customBackground}
-			logo={!hideLogo && customLogo ? <Box is='img' maxHeight='x40' mi='neg-x8' src={customLogo} alt='Logo' /> : <></>}
-		>
-			<VerticalWizardLayoutTitle>
-				<RegisterTitle />
-			</VerticalWizardLayoutTitle>
-			<LoginPoweredBy />
-			{children}
-			<VerticalWizardLayoutFooter>
-				<LoginTerms />
-				<LoginSwitchLanguageFooter />
-			</VerticalWizardLayoutFooter>
-		</VerticalWizardLayout>
+		// MatterChat ledger skin scope (presentation only) — see LoginLedgerStyleTag.
+		<div className='mc-login'>
+			<LoginLedgerStyleTag />
+			<VerticalWizardLayout
+				background={customBackground}
+				// An admin-uploaded logo asset still wins; the MatterChat wordmark is the branded fallback.
+				logo={
+					hideLogo ? (
+						<></>
+					) : (
+						(customLogo && <Box is='img' maxHeight='x40' mi='neg-x8' src={customLogo} alt='Logo' />) || <MatterChatWordmark />
+					)
+				}
+			>
+				<VerticalWizardLayoutTitle>
+					<RegisterTitle />
+				</VerticalWizardLayoutTitle>
+				<LoginPoweredBy />
+				{children}
+				<VerticalWizardLayoutFooter>
+					<LoginTerms />
+					<LoginSwitchLanguageFooter />
+				</VerticalWizardLayoutFooter>
+			</VerticalWizardLayout>
+		</div>
 	);
 };
 

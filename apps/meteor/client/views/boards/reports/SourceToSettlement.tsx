@@ -1,16 +1,4 @@
-import {
-	Box,
-	Button,
-	Callout,
-	Icon,
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableRow,
-	Tag,
-	Throbber,
-} from '@rocket.chat/fuselage';
+import { Box, Button, Callout, Icon, Table, TableBody, TableCell, TableHead, TableRow, Tag, Throbber } from '@rocket.chat/fuselage';
 import type { SourceToSettlementResultDTO, SourceToSettlementRowDTO } from '@rocket.chat/rest-typings';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
@@ -19,6 +7,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CaseProStubBanner } from '../casepro';
+import LedgerPageStyleTag from '../lib/LedgerPageStyleTag';
+import { monoLabel, serifCaption, tabularNums, useLedgerTones } from '../lib/ledgerTheme';
 
 /**
  * SourceToSettlement — the `/boards/reports/source-to-settlement` cross-pipeline
@@ -62,24 +52,36 @@ const fmtRoas = (value?: number): string => {
 	return `${value.toFixed(1)}×`;
 };
 
-const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }): ReactElement => (
-	<Box pb={16} pi={16} bg='tint' borderRadius='x4' minWidth={150} flexGrow={1} flexBasis={150}>
-		<Box fontScale='c1' color='hint' mbe={4}>
-			{label}
-		</Box>
-		<Box fontScale='h3' color='default'>
-			{value}
-		</Box>
-		{hint !== undefined && hint !== null && hint !== '' && (
-			<Box fontScale='micro' color='hint' mbs={4}>
-				{hint}
+// Ledger stat tile: paper card face, mono "docket stamp" label, tabular figure.
+const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }): ReactElement => {
+	const tones = useLedgerTones();
+	return (
+		<Box
+			pb={10}
+			pi={12}
+			minWidth={150}
+			flexGrow={1}
+			flexBasis={150}
+			style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
+		>
+			<Box mbe={4} style={monoLabel(tones)}>
+				{label}
 			</Box>
-		)}
-	</Box>
-);
+			<Box fontScale='h3' color='default' style={tabularNums}>
+				{value}
+			</Box>
+			{hint !== undefined && hint !== null && hint !== '' && (
+				<Box fontScale='micro' color='hint' mbs={4}>
+					{hint}
+				</Box>
+			)}
+		</Box>
+	);
+};
 
+// Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={24} mbe={12}>
+	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -137,6 +139,7 @@ const SourceRow = ({ row, indented }: { row: SourceToSettlementRowDTO; indented?
 
 const SourceToSettlement = (): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 
 	const getReport = useEndpoint('GET', '/v1/boards.reports.sourceToSettlement');
 
@@ -157,18 +160,21 @@ const SourceToSettlement = (): ReactElement => {
 		}, {});
 
 	return (
-		<Page>
+		// Ledger-dense skin (style-only): paper page ground + serif caption title.
+		<Page className='mcLedgerPage' style={{ background: tones.paper }}>
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='dashboard' size='x24' mie={8} color='hint' />
-						<Box withTruncatedText>
+						<Icon name='dashboard' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Reports_SourceToSettlement', { defaultValue: 'Source-to-settlement' })}
 						</Box>
 					</Box>
 				}
 			/>
 			<PageScrollableContentWithShadow>
+				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
+				<LedgerPageStyleTag />
 				<Box fontScale='c1' color='hint' mbe={16}>
 					{t('Boards_Reports_SourceToSettlement_Subtitle', {
 						defaultValue: 'Marketing source → signed case → settlement. The closed loop most CRMs lose at "signed".',
@@ -179,7 +185,11 @@ const SourceToSettlement = (): ReactElement => {
 
 				{report && !report.revenueResolved && (
 					<Box mbe={16}>
-						<Callout type='warning' icon='warning' title={t('Boards_Reports_Revenue_Partial_Title', { defaultValue: 'Revenue is partial' })}>
+						<Callout
+							type='warning'
+							icon='warning'
+							title={t('Boards_Reports_Revenue_Partial_Title', { defaultValue: 'Revenue is partial' })}
+						>
 							{t('Boards_Reports_Revenue_Partial', {
 								defaultValue: 'Some matters could not be read from CasePro, so revenue, ROAS and ROI below are incomplete.',
 							})}
@@ -211,7 +221,10 @@ const SourceToSettlement = (): ReactElement => {
 								value={report.totals.signed}
 								hint={fmtPct(report.totals.conversionPct)}
 							/>
-							<Metric label={t('Boards_Reports_CostPerLead', { defaultValue: 'Cost / lead' })} value={fmtCurrency(report.totals.costPerLead)} />
+							<Metric
+								label={t('Boards_Reports_CostPerLead', { defaultValue: 'Cost / lead' })}
+								value={fmtCurrency(report.totals.costPerLead)}
+							/>
 							<Metric
 								label={t('Boards_Reports_CostPerSigned', { defaultValue: 'Cost / signed' })}
 								value={fmtCurrency(report.totals.costPerSigned)}
@@ -296,7 +309,8 @@ const SourceToSettlement = (): ReactElement => {
 							<Box mbs={16} fontScale='c1' color='hint'>
 								<Icon name='info' size='x14' mie={4} />
 								{t('Boards_Reports_SignedAwaitingRevenue', {
-									defaultValue: 'Signed cases are in the pipeline but have no settlement/demand value yet — revenue will populate as matters resolve.',
+									defaultValue:
+										'Signed cases are in the pipeline but have no settlement/demand value yet — revenue will populate as matters resolve.',
 								})}
 							</Box>
 						)}

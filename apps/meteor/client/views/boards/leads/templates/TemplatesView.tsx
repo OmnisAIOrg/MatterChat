@@ -9,6 +9,7 @@ import {
 	FieldRow,
 	FieldError,
 	FieldHint,
+	Icon,
 	Select,
 	Table,
 	TableBody,
@@ -27,6 +28,9 @@ import type { ReactElement } from 'react';
 import { useId, useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+
+import LedgerPageStyleTag from '../../lib/LedgerPageStyleTag';
+import { serifCaption, useLedgerTones } from '../../lib/ledgerTheme';
 
 /**
  * TemplatesView — the `/boards/leads/templates` screen (M6 client).
@@ -184,7 +188,9 @@ const TemplateEditorModal = ({ template, onClose, onSaved }: TemplateEditorModal
 						placeholder='Hi {lead.firstName}, this is {firm.name}…'
 					/>
 				</FieldRow>
-				<FieldHint>{t('Boards_Leads_Template_VarsHint', { defaultValue: 'Tokens: {lead.firstName}, {lead.refNo}, {firm.name}' })}</FieldHint>
+				<FieldHint>
+					{t('Boards_Leads_Template_VarsHint', { defaultValue: 'Tokens: {lead.firstName}, {lead.refNo}, {firm.name}' })}
+				</FieldHint>
 				{errors.body && <FieldError>{errors.body.message}</FieldError>}
 			</Field>
 
@@ -380,25 +386,33 @@ const SequencesPanel = (): ReactElement => {
 	);
 };
 
+// Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: React.ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={24} mbe={12}>
+	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
 		{children}
 	</Box>
 );
 
 const TemplatesView = (): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 
 	return (
-		<Page>
+		// Ledger-dense skin (style-only): paper page ground + serif caption title.
+		<Page className='mcLedgerPage' style={{ background: tones.paper }}>
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Box withTruncatedText>{t('Boards_Leads_Templates', { defaultValue: 'Templates' })}</Box>
+						<Icon name='mail' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
+							{t('Boards_Leads_Templates', { defaultValue: 'Templates' })}
+						</Box>
 					</Box>
 				}
 			/>
 			<PageScrollableContentWithShadow>
+				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
+				<LedgerPageStyleTag />
 				<SectionTitle>{t('Boards_Leads_Templates', { defaultValue: 'Templates' })}</SectionTitle>
 				<TemplatesPanel />
 

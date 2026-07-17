@@ -30,6 +30,8 @@ import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { serifCaption, useLedgerTones } from '../lib/ledgerTheme';
+
 /**
  * FormsManager — the per-board "Forms" management surface (parity P0.7), mounted
  * by BoardRouter at /boards/board/:id/forms. Lists the board's intake forms,
@@ -118,7 +120,7 @@ const toPayloadFields = (fields: EditorField[]) =>
 						.split(',')
 						.map((o) => o.trim())
 						.filter(Boolean),
-			  }
+				}
 			: {}),
 		...(f.placeholder.trim() ? { placeholder: f.placeholder.trim() } : {}),
 	}));
@@ -132,6 +134,7 @@ type FormsManagerProps = {
 
 const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
 
@@ -214,9 +217,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 	};
 
 	const patchField = (index: number, patch: Partial<EditorField>) => {
-		setEditor((prev) =>
-			prev ? { ...prev, fields: prev.fields.map((f, i) => (i === index ? { ...f, ...patch } : f)) } : prev,
-		);
+		setEditor((prev) => (prev ? { ...prev, fields: prev.fields.map((f, i) => (i === index ? { ...f, ...patch } : f)) } : prev));
 	};
 
 	const moveField = (index: number, delta: -1 | 1) => {
@@ -270,9 +271,13 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 	const forms = data?.forms ?? [];
 
 	return (
-		<Box padding={24} overflow='auto' height='100%'>
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={16}>
-				<Box fontScale='h3'>{t('Boards_Forms_Title', { defaultValue: 'Forms' })}</Box>
+		// Ledger-dense skin (style-only): paper ground + serif caption + card-tone
+		// panels — parity with the redesigned board views around this surface.
+		<Box padding={16} overflow='auto' height='100%' style={{ background: tones.paper }}>
+			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={12}>
+				<Box fontScale='h3' style={serifCaption}>
+					{t('Boards_Forms_Title', { defaultValue: 'Forms' })}
+				</Box>
 				{!editor && (
 					<Button
 						primary
@@ -307,11 +312,9 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 
 			{/* ------------------------------------------------ editor */}
 			{editor && (
-				<Box mbe={24} padding={16} borderWidth={1} borderColor='extra-light' borderRadius={8}>
-					<Box fontScale='h4' mbe={12}>
-						{editor.formId
-							? t('Boards_Forms_Edit', { defaultValue: 'Edit form' })
-							: t('Boards_Forms_New', { defaultValue: 'New form' })}
+				<Box mbe={20} padding={16} style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}>
+					<Box fontScale='h4' mbe={12} style={serifCaption}>
+						{editor.formId ? t('Boards_Forms_Edit', { defaultValue: 'Edit form' }) : t('Boards_Forms_New', { defaultValue: 'New form' })}
 					</Box>
 
 					<Field mbe={8}>
@@ -360,7 +363,6 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 						{t('Boards_Forms_Fields', { defaultValue: 'Fields (in order)' })}
 					</Box>
 					{editor.fields.map((field, index) => (
-						// eslint-disable-next-line react/no-array-index-key
 						<Box key={field.id ?? `new-${index}`} display='flex' alignItems='flex-start' mbe={8} style={{ gap: '8px' }}>
 							<Box flexGrow={2} minWidth={0}>
 								<TextInput
@@ -385,7 +387,13 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 									/>
 								</Box>
 							)}
-							<Box display='flex' alignItems='center' flexShrink={0} mbs={8} title={t('Boards_Forms_FieldRequired', { defaultValue: 'Required' })}>
+							<Box
+								display='flex'
+								alignItems='center'
+								flexShrink={0}
+								mbs={8}
+								title={t('Boards_Forms_FieldRequired', { defaultValue: 'Required' })}
+							>
 								<CheckBox checked={field.required} onChange={() => patchField(index, { required: !field.required })} />
 							</Box>
 							<ButtonGroup>
@@ -422,17 +430,17 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 					</Field>
 
 					{editor.intakeRouting !== 'none' && (
-						<Box mbe={16} padding={12} borderWidth={1} borderColor='extra-light' borderRadius={8}>
+						<Box mbe={16} padding={12} style={{ background: tones.cardAlt, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}>
 							<Box fontScale='c1' color='hint' mbe={8}>
 								{editor.intakeRouting === 'lead'
 									? t('Boards_Forms_Intake_Lead_Help', {
 											defaultValue:
 												'Each submission also creates a lead on the Leads board (and syncs to CasePro when the CasePro connection is on). Map at least one contact field.',
-									  })
+										})
 									: t('Boards_Forms_Intake_CaseProDirect_Help', {
 											defaultValue:
 												'Each submission is also posted to your CasePro intake capture endpoint. Needs the workspace capture URL (admin setting) plus this form’s CasePro org id and source token.',
-									  })}
+										})}
 							</Box>
 
 							{MAPPING_KEYS.map(({ key, label }) => (
@@ -508,11 +516,9 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 					display='flex'
 					alignItems='center'
 					justifyContent='space-between'
-					padding={12}
-					mbe={8}
-					borderWidth={1}
-					borderColor='extra-light'
-					borderRadius={8}
+					padding={10}
+					mbe={6}
+					style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
 				>
 					<Box minWidth={0}>
 						<Box display='flex' alignItems='center' style={{ gap: '8px' }}>
@@ -539,9 +545,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 							{t('Boards_Forms_CopyLink', { defaultValue: 'Copy link' })}
 						</Button>
 						<Button small onClick={() => toggleMutation.mutate(form)} disabled={toggleMutation.isPending}>
-							{form.enabled
-								? t('Boards_Forms_Disable', { defaultValue: 'Disable' })
-								: t('Boards_Forms_Enable', { defaultValue: 'Enable' })}
+							{form.enabled ? t('Boards_Forms_Disable', { defaultValue: 'Disable' }) : t('Boards_Forms_Enable', { defaultValue: 'Enable' })}
 						</Button>
 						<Button small onClick={() => setEditor(toEditor(form))}>
 							{t('Edit', { defaultValue: 'Edit' })}

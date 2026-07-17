@@ -1,5 +1,17 @@
 import type { IBoard, BoardsPipelineType } from '@rocket.chat/core-typings';
-import { Box, Button, Card, CardBody, CardTitle, Icon, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber } from '@rocket.chat/fuselage';
+import {
+	Box,
+	Button,
+	Card,
+	CardBody,
+	CardTitle,
+	Icon,
+	States,
+	StatesIcon,
+	StatesTitle,
+	StatesSubtitle,
+	Throbber,
+} from '@rocket.chat/fuselage';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
 import { useEndpoint, useMethod, useRouter, useSetModal, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +20,9 @@ import { useTranslation } from 'react-i18next';
 
 import NewBoardModal from './NewBoardModal';
 import type { NewBoardFormValues } from './NewBoardModal';
+import LedgerPageStyleTag from './lib/LedgerPageStyleTag';
 import { getPipelineTypeIcon } from './lib/icons';
+import { monoLabel, serifCaption, useLedgerTones } from './lib/ledgerTheme';
 
 const PIPELINE_GROUPS: { type: BoardsPipelineType; labelKey: 'Boards_General' | 'Boards_Matters' | 'Boards_Leads' }[] = [
 	{ type: 'matters', labelKey: 'Boards_Matters' },
@@ -18,6 +32,7 @@ const PIPELINE_GROUPS: { type: BoardsPipelineType; labelKey: 'Boards_General' | 
 
 const BoardsHome = () => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const router = useRouter();
 	const setModal = useSetModal();
 	const dispatchToastMessage = useToastMessageDispatch();
@@ -26,12 +41,7 @@ const BoardsHome = () => {
 	const listBoards = useEndpoint('GET', '/v1/boards.list');
 	const createBoard = useMethod('boards.createBoard');
 
-	const {
-		data,
-		isLoading,
-		isError,
-		refetch,
-	} = useQuery({
+	const { data, isLoading, isError, refetch } = useQuery({
 		queryKey: ['boards', 'list'],
 		queryFn: () => listBoards({ count: 100 }),
 	});
@@ -71,14 +81,27 @@ const BoardsHome = () => {
 	})).filter((group) => group.boards.length > 0);
 
 	return (
-		<Page>
-			<PageHeader title={t('Boards')}>
+		// Ledger-dense skin (style-only): paper page ground + serif caption title —
+		// parity with the redesigned Caseload/Reports/Calendars siblings.
+		<Page className='mcLedgerPage' style={{ background: tones.paper }}>
+			<PageHeader
+				title={
+					<Box display='flex' alignItems='center'>
+						<Icon name='squares' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
+							{t('Boards')}
+						</Box>
+					</Box>
+				}
+			>
 				<Button primary onClick={handleNewBoard} disabled={createMutation.isPending}>
 					<Icon name='plus' size='x16' mie={4} />
 					{t('Boards_New_Board')}
 				</Button>
 			</PageHeader>
 			<PageScrollableContentWithShadow>
+				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
+				<LedgerPageStyleTag />
 				{isLoading && (
 					<Box display='flex' justifyContent='center' p={24}>
 						<Throbber />
@@ -112,11 +135,12 @@ const BoardsHome = () => {
 				)}
 
 				{grouped.map((group) => (
-					<Box key={group.type} mbe={24}>
-						<Box fontScale='h4' mbe={12} color='default'>
+					<Box key={group.type} mbe={20}>
+						{/* Mono "docket stamp" group eyebrow — replaces the airy stock h4. */}
+						<Box mbe={8} style={monoLabel(tones)}>
 							{t(group.labelKey)}
 						</Box>
-						<Box display='flex' flexWrap='wrap' style={{ gap: '16px' }}>
+						<Box display='flex' flexWrap='wrap' style={{ gap: '10px' }}>
 							{group.boards.map((board) => (
 								<Card
 									key={board._id}
