@@ -8,6 +8,7 @@ import {
 	FieldLabel,
 	FieldRow,
 	FieldError,
+	Icon,
 	Select,
 	Table,
 	TableBody,
@@ -28,6 +29,8 @@ import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 
 import { CaseProStubBanner } from '../../casepro';
+import LedgerPageStyleTag from '../../lib/LedgerPageStyleTag';
+import { serifCaption, useLedgerTones } from '../../lib/ledgerTheme';
 
 /**
  * ReferralsView — the `/boards/leads/referrals` screen (M6 client).
@@ -82,8 +85,9 @@ const fmtCurrency = (value?: number): string => {
 	return value.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 };
 
+// Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={24} mbe={12}>
+	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -280,7 +284,15 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 		reset,
 		formState: { errors, isSubmitting },
 	} = useForm<ReferOutFormValues>({
-		defaultValues: { leadId: '', toFirmName: '', arrangement: 'referral-fee', agreedFeePct: '', expectedFee: '', contactName: '', notes: '' },
+		defaultValues: {
+			leadId: '',
+			toFirmName: '',
+			arrangement: 'referral-fee',
+			agreedFeePct: '',
+			expectedFee: '',
+			contactName: '',
+			notes: '',
+		},
 	});
 
 	// the lead the form is scoped to — drives the "existing outbound referrals" read.
@@ -446,7 +458,15 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 							mbs={8}
 							onClick={() => {
 								setCreated(null);
-								reset({ leadId, toFirmName: '', arrangement: 'referral-fee', agreedFeePct: '', expectedFee: '', contactName: '', notes: '' });
+								reset({
+									leadId,
+									toFirmName: '',
+									arrangement: 'referral-fee',
+									agreedFeePct: '',
+									expectedFee: '',
+									contactName: '',
+									notes: '',
+								});
 							}}
 						>
 							{t('Boards_Leads_Referral_Out_New', { defaultValue: 'Refer out' })}
@@ -470,7 +490,12 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 						control={control}
 						name='arrangement'
 						render={({ field: { onChange, value } }) => (
-							<Select id={arrangementId} value={value} onChange={(next) => onChange(next as ReferralArrangement)} options={arrangementOptions} />
+							<Select
+								id={arrangementId}
+								value={value}
+								onChange={(next) => onChange(next as ReferralArrangement)}
+								options={arrangementOptions}
+							/>
 						)}
 					/>
 				</FieldRow>
@@ -513,12 +538,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 					<Field>
 						<FieldLabel htmlFor={statusId}>{t('Boards_Leads_Referral_Out_Status', { defaultValue: 'Referral status' })}</FieldLabel>
 						<FieldRow>
-							<Select
-								id={statusId}
-								value={status}
-								onChange={(next) => setStatusValue(next as ReferralOutStatus)}
-								options={statusOptions}
-							/>
+							<Select id={statusId} value={status} onChange={(next) => setStatusValue(next as ReferralOutStatus)} options={statusOptions} />
 						</FieldRow>
 					</Field>
 					<Button small mbs={8} onClick={() => statusMutation.mutate()} disabled={statusMutation.isPending}>
@@ -611,7 +631,9 @@ const SourcesPanel = (): ReactElement => {
 							</TableCell>
 							<TableCell>
 								{row.kind ? (
-									<Tag variant='secondary'>{t(`Boards_Leads_Source_Kind_${row.kind}` as Parameters<typeof t>[0], { defaultValue: row.kind })}</Tag>
+									<Tag variant='secondary'>
+										{t(`Boards_Leads_Source_Kind_${row.kind}` as Parameters<typeof t>[0], { defaultValue: row.kind })}
+									</Tag>
 								) : (
 									<Box color='hint'>—</Box>
 								)}
@@ -638,17 +660,24 @@ const SourcesPanel = (): ReactElement => {
 
 const ReferralsView = (): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 
 	return (
-		<Page>
+		// Ledger-dense skin (style-only): paper page ground + serif caption title.
+		<Page className='mcLedgerPage' style={{ background: tones.paper }}>
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Box withTruncatedText>{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referrals' })}</Box>
+						<Icon name='user-plus' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
+							{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referrals' })}
+						</Box>
 					</Box>
 				}
 			/>
 			<PageScrollableContentWithShadow>
+				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
+				<LedgerPageStyleTag />
 				<CaseProStubBanner mbe={16} />
 
 				<SectionTitle>{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referral sources' })}</SectionTitle>

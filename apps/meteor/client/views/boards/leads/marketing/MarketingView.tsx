@@ -24,6 +24,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CaseProStubBanner } from '../../casepro';
+import LedgerPageStyleTag from '../../lib/LedgerPageStyleTag';
+import { monoLabel, serifCaption, tabularNums, useLedgerTones } from '../../lib/ledgerTheme';
 
 /**
  * MarketingView — the `/boards/leads/marketing` ROI dashboard (M6 client).
@@ -88,21 +90,32 @@ const fmtRoas = (value?: number): string => {
 	return `${value.toFixed(2)}×`;
 };
 
-const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }): ReactElement => (
-	<Box pb={16} pi={16} bg='tint' borderRadius='x4' minWidth={140} flexGrow={1} flexBasis={140}>
-		<Box fontScale='c1' color='hint' mbe={4}>
-			{label}
-		</Box>
-		<Box fontScale='h3' color='default'>
-			{value}
-		</Box>
-		{hint !== undefined && hint !== null && hint !== '' && (
-			<Box fontScale='micro' color='hint' mbs={4}>
-				{hint}
+// Ledger stat tile: paper card face, mono "docket stamp" label, tabular figure.
+const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }): ReactElement => {
+	const tones = useLedgerTones();
+	return (
+		<Box
+			pb={10}
+			pi={12}
+			minWidth={140}
+			flexGrow={1}
+			flexBasis={140}
+			style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
+		>
+			<Box mbe={4} style={monoLabel(tones)}>
+				{label}
 			</Box>
-		)}
-	</Box>
-);
+			<Box fontScale='h3' color='default' style={tabularNums}>
+				{value}
+			</Box>
+			{hint !== undefined && hint !== null && hint !== '' && (
+				<Box fontScale='micro' color='hint' mbs={4}>
+					{hint}
+				</Box>
+			)}
+		</Box>
+	);
+};
 
 const RoiRow = ({ row, isCampaign }: { row: SourceRoiRow; isCampaign: boolean }): ReactElement => {
 	const { t } = useTranslation();
@@ -115,7 +128,9 @@ const RoiRow = ({ row, isCampaign }: { row: SourceRoiRow; isCampaign: boolean })
 						{isCampaign ? row.campaignName : row.sourceName}
 					</Box>
 					{!isCampaign && row.kind && (
-						<Tag variant='secondary'>{t(`Boards_Leads_Source_Kind_${row.kind}` as Parameters<typeof t>[0], { defaultValue: row.kind })}</Tag>
+						<Tag variant='secondary'>
+							{t(`Boards_Leads_Source_Kind_${row.kind}` as Parameters<typeof t>[0], { defaultValue: row.kind })}
+						</Tag>
 					)}
 				</Box>
 			</TableCell>
@@ -135,6 +150,7 @@ const RoiRow = ({ row, isCampaign }: { row: SourceRoiRow; isCampaign: boolean })
 
 const MarketingView = (): ReactElement => {
 	const { t } = useTranslation();
+	const tones = useLedgerTones();
 	const getRoi = useEndpoint('GET', '/v1/boards.leads.marketing.sourceRoi');
 
 	const [from, setFrom] = useState('');
@@ -159,21 +175,30 @@ const MarketingView = (): ReactElement => {
 	}, {});
 
 	return (
-		<Page>
+		// Ledger-dense skin (style-only): paper page ground + serif caption title.
+		<Page className='mcLedgerPage' style={{ background: tones.paper }}>
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='dashboard' size='x24' mie={8} color='hint' />
-						<Box withTruncatedText>{t('Boards_Leads_Marketing_ROI', { defaultValue: 'Marketing ROI' })}</Box>
+						<Icon name='dashboard' size='x24' mie={8} style={{ color: tones.green }} />
+						<Box withTruncatedText style={serifCaption}>
+							{t('Boards_Leads_Marketing_ROI', { defaultValue: 'Marketing ROI' })}
+						</Box>
 					</Box>
 				}
 			/>
 			<PageScrollableContentWithShadow>
+				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
+				<LedgerPageStyleTag />
 				<CaseProStubBanner mbe={16} />
 
 				{!revenueResolved && (
 					<Box mbe={16}>
-						<Callout type='warning' icon='warning' title={t('Boards_Leads_Marketing_CrmUnavailable_Title', { defaultValue: 'CRM unavailable' })}>
+						<Callout
+							type='warning'
+							icon='warning'
+							title={t('Boards_Leads_Marketing_CrmUnavailable_Title', { defaultValue: 'CRM unavailable' })}
+						>
 							{t('Boards_Leads_Marketing_CrmUnavailable_Description', {
 								defaultValue: 'CasePro could not be reached, so revenue and ROAS are partial.',
 							})}
