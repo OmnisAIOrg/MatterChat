@@ -107,11 +107,19 @@ runs:
     - name: yarn install
       if: inputs.install && inputs.type == 'development'
       shell: bash
+      # NPM_TOKEN must be in this step's process env: .yarnrc.yml resolves the
+      # @omnisaiorg scope (npm.pkg.github.com) via "${NPM_TOKEN-}", and composite
+      # inputs are NOT exported as env — without this the private
+      # litbox-file-browser fetch goes anonymous and the install 401s.
+      env:
+        NPM_TOKEN: ${{ inputs.NPM_TOKEN }}
       run: YARN_ENABLE_HARDENED_MODE=${{ inputs.HARDENED_MODE }} yarn
 
     - name: yarn install production
       if: inputs.install && inputs.type == 'production'
       shell: bash
+      env:
+        NPM_TOKEN: ${{ inputs.NPM_TOKEN }}
       run: YARN_ENABLE_HARDENED_MODE=${{ inputs.HARDENED_MODE }} yarn workspaces focus --all --production
 
     - name: restore yarn config file
