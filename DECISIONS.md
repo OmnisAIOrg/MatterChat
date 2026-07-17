@@ -3,6 +3,11 @@
 
 ---
 
+### 2026-07-17 — CasePro sync reads must page fully (50-row cap bug)
+**Chose:** dedicated `listAllMatters()` / `listAllIntakes()` on the CasePro client (full pagination via `queryAll`, 200/page) and pointed the bulk consumers at them: `seedFromCasePro` (was silently seeding only the FIRST 50 matters — the transport default) and the leads `pullFromCasePro` (was capped at 500 intakes).
+**Rejected:** raising the `listMatters` default limit — the paged default is correct for the browse/list REST endpoints; only bulk sync should fetch everything. `MAX_MATTERS_SCANNED=200` in `mattersSnapshotMemo` left alone on purpose: it is a cost cap on a per-matter snapshot fan-out, not a sync completeness bug.
+**Why:** orgs with >50 matters lost the rest of their caseload on seed; the returned `total` was never used to page.
+
 ### 2026-06-25 — STAGING IS DEPLOYED BY ARGOCD (from MatterChat-New), NOT this repo's GitHub Actions deploy
 **Discovered after hours of deploying into a void.** The running staging app is owned by an **ArgoCD Application `matterchat-staging`** (namespace `argocd`, automated + prune + selfHeal) that syncs from **`OmnisAIOrg/MatterChat-New`**, path `kubernetes/staging/`. ArgoCD owns the Deployment, Service(s), and **Ingress**. The image is still built by THIS repo's GHA (push to staging → ECR `matterchat:staging-latest`), so **code** changes reach the running pod, but **manifest/env** changes in this repo's `kubernetes/staging/*.yaml` do NOT — ArgoCD reverts them.
 **Chose:** make this repo's deploy pipeline **BUILD-ONLY** (PR #16) — build + push the image, then `kubectl delete pod -l app=matterchat` so the ArgoCD-managed Deployment recreates it on the new image. **Rejected:** the prior `kubectl apply -f kubernetes/staging/*` + `kubectl set image` + rollout.
