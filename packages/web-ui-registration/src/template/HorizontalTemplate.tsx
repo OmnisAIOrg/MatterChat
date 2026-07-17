@@ -9,9 +9,11 @@ import {
 import { useSetting, useAssetWithDarkModePath } from '@rocket.chat/ui-contexts';
 import type { ReactNode } from 'react';
 
+import LoginLedgerStyleTag from '../components/LoginLedgerStyleTag';
 import LoginPoweredBy from '../components/LoginPoweredBy';
 import LoginSwitchLanguageFooter from '../components/LoginSwitchLanguageFooter';
 import LoginTerms from '../components/LoginTerms';
+import MatterChatWordmark from '../components/MatterChatWordmark';
 import { RegisterTitle } from '../components/RegisterTitle';
 
 const HorizontalTemplate = ({ children }: { children: ReactNode }) => {
@@ -20,24 +22,35 @@ const HorizontalTemplate = ({ children }: { children: ReactNode }) => {
 	const customBackground = useAssetWithDarkModePath('background');
 
 	return (
-		<HorizontalWizardLayout
-			background={customBackground}
-			logo={!hideLogo && customLogo ? <Box is='img' maxHeight='x40' mi='neg-x8' src={customLogo} alt='Logo' /> : <></>}
-		>
-			<HorizontalWizardLayoutAside>
-				<HorizontalWizardLayoutTitle>
-					<RegisterTitle />
-				</HorizontalWizardLayoutTitle>
-				<LoginPoweredBy />
-			</HorizontalWizardLayoutAside>
-			<HorizontalWizardLayoutContent>
-				{children}
-				<HorizontalWizardLayoutFooter>
-					<LoginTerms />
-					<LoginSwitchLanguageFooter />
-				</HorizontalWizardLayoutFooter>
-			</HorizontalWizardLayoutContent>
-		</HorizontalWizardLayout>
+		// MatterChat ledger skin scope (presentation only) — see LoginLedgerStyleTag.
+		<div className='mc-login'>
+			<LoginLedgerStyleTag />
+			<HorizontalWizardLayout
+				background={customBackground}
+				// An admin-uploaded logo asset still wins; the MatterChat wordmark is the branded fallback.
+				logo={
+					hideLogo ? (
+						<></>
+					) : (
+						(customLogo && <Box is='img' maxHeight='x40' mi='neg-x8' src={customLogo} alt='Logo' />) || <MatterChatWordmark />
+					)
+				}
+			>
+				<HorizontalWizardLayoutAside>
+					<HorizontalWizardLayoutTitle>
+						<RegisterTitle />
+					</HorizontalWizardLayoutTitle>
+					<LoginPoweredBy />
+				</HorizontalWizardLayoutAside>
+				<HorizontalWizardLayoutContent>
+					{children}
+					<HorizontalWizardLayoutFooter>
+						<LoginTerms />
+						<LoginSwitchLanguageFooter />
+					</HorizontalWizardLayoutFooter>
+				</HorizontalWizardLayoutContent>
+			</HorizontalWizardLayout>
+		</div>
 	);
 };
 
