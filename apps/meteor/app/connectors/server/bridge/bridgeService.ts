@@ -24,6 +24,7 @@ import { SystemLogger } from '../../../../server/lib/logger/system';
 import type { IProviderConnection, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
 import { isSlackEventsConfigured } from '../providers/slack/config';
+import { slackTsToEpochMs } from '../providers/slack/eventMessageMapping';
 import { isTeamsWebhookConfigured } from '../providers/teams/config';
 import type { GraphTokens, RefreshedTokens } from '../providers/teams/graphClient';
 import { createChannelSubscription, deleteSubscription, renewSubscription } from '../providers/teams/subscriptions';
@@ -108,13 +109,21 @@ function graphTokensFor(connection: IProviderConnection): {
 	};
 }
 
-/** Refresh-token death (spec §3.7): flip the connection to `error` so the UI says "reconnect". */
+/**
+ * Error strings that mean the stored token is DEAD (not a transient failure): the OAuth refresh
+ * grant's `invalid_grant` (Teams/Google), plus Slack's auth-death codes — Slack has no refresh
+ * grant, so a revoked/deactivated user token surfaces as `slack_error:invalid_auth` /
+ * `token_revoked` / `account_inactive` on a regular Web API call. (Mirrored in connectionService.)
+ */
+const AUTH_DEATH_MARKERS = ['invalid_grant', 'invalid_auth', 'token_revoked', 'account_inactive'];
+
+/** Token death (spec §3.7): flip the connection to `error` so the UI says "reconnect". */
 async function markAuthDeath(doc: IExternalWorkspaceConnection, err: unknown): Promise<void> {
 	const message = err instanceof Error ? err.message : String(err);
-	if (message.includes('invalid_grant')) {
+	if (AUTH_DEATH_MARKERS.some((marker) => message.includes(marker))) {
 		try {
 			await ExternalWorkspaceConnections.setStatusById(doc._id, 'error');
-			SystemLogger.warn({ msg: 'External connection refresh token dead — marked error (reconnect required)', connectionId: doc._id });
+			SystemLogger.warn({ msg: 'External connection token dead — marked error (reconnect required)', connectionId: doc._id });
 		} catch {
 			// Status write failed — the original error still tells the story.
 		}
@@ -153,8 +162,12 @@ export async function backfillBridge(
 		if (await ingestExternalMessage(doc, bridge, message, ownerExternalId)) {
 			ingested++;
 		}
-		const tsMs = Date.parse(message.ts);
-		if (!Number.isNaN(tsMs) && tsMs > newestMs) {
+		// `ts` is ISO-8601 (Teams/Google) OR a Slack "seconds.micros" ts — Date.parse yields NaN on
+		// the latter, so fall back to the Slack epoch conversion. Without the fallback the cursor
+		// never advances on Slack bridges and every sweep re-reads the full history window.
+		const parsedMs = Date.parse(message.ts);
+		const tsMs = Number.isNaN(parsedMs) ? slackTsToEpochMs(message.ts) : parsedMs;
+		if (tsMs !== undefined && tsMs > newestMs) {
 			newestMs = tsMs;
 		}
 	}
@@ -343,16 +356,16 @@ let runtimeStarted = false;
 let sweepRunning = false;
 
 /** The providers the reconcile sweep covers (the ones with an inbound realtime/poll loop). */
-const RECONCILED_PROVIDERS = new Set<IExternalWorkspaceConnection['provider']>(['teams', 'slack']);
+const RECONCILED_PROVIDERS = new Set<IExternalWorkspaceConnection['provider']>(['teams', 'slack', 'google']);
 
 /**
- * One reconcile pass over every Teams AND Slack connection with bridges:
+ * One reconcile pass over every Teams, Slack AND Google connection with bridges:
  *  - Teams: subscription missing (never created / previously shared / dropped) → try to create;
  *    subscription expiring within RENEW_BEFORE_MS → renew (recreate on 404);
- *  - both: a `since=lastInboundAt` backfill so downtime/missed windows are closed — for Slack this
- *    poll is ALSO the graceful degradation when the Events API signing secret is unset (inbound
- *    still arrives, just on the reconcile cadence instead of realtime).
- * (Google bridges are activation-backfill only for now — deliberately not swept here.)
+ *  - all: a `since=lastInboundAt` backfill so downtime/missed windows are closed — for Slack this
+ *    poll is ALSO the graceful degradation when the Events API signing secret is unset, and for
+ *    Google (which has no per-space push at all yet) it IS the inbound transport (inbound arrives
+ *    on the reconcile cadence instead of realtime).
  */
 export async function reconcileBridges(): Promise<void> {
 	if (sweepRunning) {

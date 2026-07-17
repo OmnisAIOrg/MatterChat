@@ -59,7 +59,7 @@ export async function listMyConnections(userId: string): Promise<ClientConnectio
 /**
  * Build the provider's OAuth authorize URL for a user to begin connecting a workspace.
  *
- * TEAMS (real): returns the server-side `/api/apps/teamsbridge/oauth/start` URL. The client just
+ * TEAMS (real): returns the server-side `/_teams/oauth/start` URL. The client just
  * navigates there; the route mints PKCE + state (bound to the signed-in user via the login-token
  * cookie) and redirects on to Microsoft. PKCE stays entirely server-side — the client never sees a
  * verifier. Returns `authorizeUrl: null, implemented: false` when Teams is disabled or no client
@@ -86,7 +86,8 @@ export async function getProviderAuthUrl(
 			// Disabled or no client secret pasted yet — signal "not ready" without throwing.
 			return { provider, authorizeUrl: null, implemented: false };
 		}
-		return { provider, authorizeUrl: Meteor.absoluteUrl('api/apps/teamsbridge/oauth/start'), implemented: true };
+		// The route mounts at /_teams/oauth (NOT under /api — RC's REST router shadows /api/*).
+		return { provider, authorizeUrl: Meteor.absoluteUrl('_teams/oauth/start'), implemented: true };
 	}
 
 	if (provider === 'google') {
@@ -431,10 +432,19 @@ function providerError(err: unknown, fallbackCode: string): ProviderError {
 }
 
 /**
- * REFRESH-TOKEN DEATH (spec §3.7): external-tenant Conditional Access / admin revoke / password
- * change silently kills the refresh token — the token endpoint answers `invalid_grant` (Teams:
- * thrown as `teams_token_refresh_failed:invalid_grant`). When a provider call died that way, flip
- * the connection to `error` so the rail/list surfaces "reconnect" instead of retrying a dead grant
+ * Error strings that mean the stored token is DEAD (not a transient failure): the OAuth refresh
+ * grant's `invalid_grant` (Teams/Google), plus Slack's auth-death codes — Slack has no refresh
+ * grant, so a revoked/deactivated user token surfaces as `slack_error:invalid_auth` /
+ * `token_revoked` / `account_inactive` on a regular Web API call. (Mirrored in bridgeService.)
+ */
+const AUTH_DEATH_MARKERS = ['invalid_grant', 'invalid_auth', 'token_revoked', 'account_inactive'];
+
+/**
+ * TOKEN DEATH (spec §3.7): external-tenant Conditional Access / admin revoke / password change
+ * silently kills the refresh token — the token endpoint answers `invalid_grant` (Teams: thrown as
+ * `teams_token_refresh_failed:invalid_grant`) — and a revoked Slack user token answers with the
+ * Slack auth-death codes (see AUTH_DEATH_MARKERS). When a provider call died either way, flip the
+ * connection to `error` so the rail/list surfaces "reconnect" instead of retrying a dead token
  * forever. Best-effort (a failed status write never masks the original error), and then normalizes
  * the error exactly like providerError.
  */
@@ -444,10 +454,10 @@ async function providerErrorMarkingAuthDeath(
 	fallbackCode: string,
 ): Promise<ProviderError> {
 	const message = err instanceof Error ? err.message : String(err);
-	if (message.includes('invalid_grant')) {
+	if (AUTH_DEATH_MARKERS.some((marker) => message.includes(marker))) {
 		try {
 			await ExternalWorkspaceConnections.setStatusById(doc._id, 'error');
-			SystemLogger.warn({ msg: 'External connection refresh token dead — marked error (reconnect required)', connectionId: doc._id });
+			SystemLogger.warn({ msg: 'External connection token dead — marked error (reconnect required)', connectionId: doc._id });
 		} catch {
 			// Status write failed — the original provider error below still tells the story.
 		}
