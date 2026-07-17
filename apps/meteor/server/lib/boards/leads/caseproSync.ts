@@ -137,7 +137,7 @@ export async function pullFromCasePro(uid: string): Promise<PullFromCaseProResul
 	const { board } = await ensureLeadsBoard(uid);
 	const lists = await BoardsLists.findByBoard(board._id).toArray();
 
-	const { intakes, total } = await caseProClient.listIntakes({ limit: 500 });
+	const { intakes, total } = await caseProClient.listAllIntakes();
 
 	let created = 0;
 	let updated = 0;

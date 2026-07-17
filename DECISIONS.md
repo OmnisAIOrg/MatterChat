@@ -3,6 +3,11 @@
 
 ---
 
+### 2026-07-17 — CasePro sync reads must page fully (50-row cap bug)
+**Chose:** dedicated `listAllMatters()` / `listAllIntakes()` on the CasePro client (full pagination via `queryAll`, 200/page) and pointed the bulk consumers at them: `seedFromCasePro` (was silently seeding only the FIRST 50 matters — the transport default) and the leads `pullFromCasePro` (was capped at 500 intakes).
+**Rejected:** raising the `listMatters` default limit — the paged default is correct for the browse/list REST endpoints; only bulk sync should fetch everything. `MAX_MATTERS_SCANNED=200` in `mattersSnapshotMemo` left alone on purpose: it is a cost cap on a per-matter snapshot fan-out, not a sync completeness bug.
+**Why:** orgs with >50 matters lost the rest of their caseload on seed; the returned `total` was never used to page.
+
 ### 2026-06-23 — Cross-firm = CFCS multi-tenant trust domain, NOT federation (re-confirmed); going live secure-first
 **Chose:** wire the already-built cross-firm UI to a live CFCS backend deployed INTERNAL-ONLY (ClusterIP, no public ingress), fronted by a new MatterChat `/_crossfirm` server proxy that injects the verified OmnisAI identity (overriding the client-supplied actor `*AttorneyId` fields).
 **Rejected:** (a) Rocket.Chat/Matrix federation for the MatterChat-org case — re-confirmed the prior rejection (E2EE×federation mutually exclusive in RC, EE-only, beta, no deletion enforcement → not legal-grade); (b) a fresh from-scratch design — caught that CFCS already exists (designed + 17/17 POC + the UI already on `staging`); (c) the browser calling CFCS directly with a spoofable identity header (the current POC wiring).

@@ -82,6 +82,8 @@ export interface CaseProLitigationDate {
 export interface ICaseProClient {
 	matterSnapshot(matterId: string): Promise<IMatterSnapshot | null>;
 	listMatters(opts?: CaseProListMattersOpts): Promise<CaseProListMattersResult>;
+	/** Every non-archived matter, fully paged — bulk consumers (seedFromCasePro) use this. */
+	listAllMatters(opts?: Pick<CaseProListMattersOpts, 'stageId' | 'caseTypeId'>): Promise<CaseProListMattersResult>;
 	listStages(): Promise<CaseProStage[]>;
 	/** Litigation scheduling-order docket dates for a matter (M5 mirror). [] if no suit. */
 	listLitigationDates(matterId: string): Promise<CaseProLitigationDate[]>;
