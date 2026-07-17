@@ -1,36 +1,24 @@
 import { NavBarGroup } from '@rocket.chat/fuselage';
-import { useLayout, usePermission } from '@rocket.chat/ui-contexts';
+import { useLayout } from '@rocket.chat/ui-contexts';
 import { useTranslation } from 'react-i18next';
 
-import NavBarItemBoards from './NavBarItemBoards';
-import NavBarItemBoardsNotifications from './NavBarItemBoardsNotifications';
 import NavBarItemCreateNew from './NavBarItemCreateNew';
 import NavBarItemDirectoryPage from './NavBarItemDirectoryPage';
-import NavBarItemHomePage from './NavBarItemHomePage';
-import NavBarItemMarketPlaceMenu from './NavBarItemMarketPlaceMenu';
 import NavBarItemSort from './NavBarItemSort';
 import NavBarPagesStackMenu from './NavBarPagesStackMenu';
 
+// The AppLeftRail owns primary navigation (Chats/Boards/Files/Activity/Search) —
+// the NavBar keeps only what the rail doesn't carry: Directory, sort, create-new
+// and the search box. Home/Boards/notification-bell duplicates and the
+// Rocket.Chat Marketplace menu were removed with the rail's arrival.
 const NavBarPagesGroup = () => {
 	const { t } = useTranslation();
 	const { isTablet, isMobile } = useLayout();
 
-	const hasManageAppsPermission = usePermission('manage-apps');
-	const hasAccessMarketplacePermission = usePermission('access-marketplace');
-	const showMarketplace = hasAccessMarketplacePermission || hasManageAppsPermission;
-
 	return (
 		<NavBarGroup aria-label={t('Pages_and_actions')}>
 			{isTablet && <NavBarPagesStackMenu />}
-			{!isTablet && (
-				<>
-					<NavBarItemHomePage title={t('Home')} />
-					<NavBarItemDirectoryPage title={t('Directory')} />
-					<NavBarItemBoards title={t('Boards')} />
-					<NavBarItemBoardsNotifications />
-				</>
-			)}
-			{showMarketplace && !isMobile && <NavBarItemMarketPlaceMenu />}
+			{!isTablet && <NavBarItemDirectoryPage title={t('Directory')} />}
 			{!isMobile && <NavBarItemSort />}
 			<NavBarItemCreateNew />
 		</NavBarGroup>
