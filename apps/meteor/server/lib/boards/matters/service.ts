@@ -452,7 +452,7 @@ export async function seedFromCasePro(uid: string, boardId: string): Promise<See
 	const byTitle = new Map(lists.map((l) => [normalizeStageName(l.title), l]));
 	const fallback = [...lists].sort((a, b) => a.position - b.position)[0];
 
-	const { matters } = await caseProClient.listMatters();
+	const { matters } = await caseProClient.listAllMatters();
 
 	let bound = 0;
 	let skipped = 0;

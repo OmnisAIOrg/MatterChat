@@ -230,6 +230,24 @@ export class CaseProClient {
 		return { matters: data.map((m) => mapMatterListItem(m, matterStages)), total };
 	}
 
+	/**
+	 * List EVERY non-archived matter, paging under the hood (queryAll, 200/page).
+	 * Bulk consumers (seedFromCasePro) must use this — `listMatters()` without an
+	 * explicit limit returns only the first 50 rows.
+	 */
+	async listAllMatters(opts: Pick<ListMattersOpts, 'stageId' | 'caseTypeId'> = {}): Promise<ListMattersResult> {
+		const filter: Record<string, unknown> = { archived: false };
+		if (opts.stageId) {
+			filter.stage_id = opts.stageId;
+		}
+		if (opts.caseTypeId) {
+			filter.case_type = opts.caseTypeId;
+		}
+		const data = await this.queryAll('matters', filter);
+		const matterStages = await this.queryAll('matter_stages');
+		return { matters: data.map((m) => mapMatterListItem(m, matterStages)), total: data.length };
+	}
+
 	async listStages(): Promise<StageDescriptor[]> {
 		const rows = await this.queryAll('matter_stages');
 		return rows
@@ -297,6 +315,25 @@ export class CaseProClient {
 		const [intakeStages, caseTypes] = await Promise.all([this.queryAll('intake_stages'), this.queryAll('case_types')]);
 		const intakes = await Promise.all(data.map((row) => this.mapIntake(row, { intakeStages, caseTypes })));
 		return { intakes, total };
+	}
+
+	/**
+	 * List EVERY intake questionnaire, paging under the hood (queryAll, 200/page).
+	 * The leads pull sync must use this — `listIntakes()` without an explicit limit
+	 * returns only the first 50 rows.
+	 */
+	async listAllIntakes(opts: Pick<ListIntakesOpts, 'stageId' | 'caseTypeId'> = {}): Promise<ListIntakesResult> {
+		const filter: Record<string, unknown> = {};
+		if (opts.stageId) {
+			filter.intake_stage_id = opts.stageId;
+		}
+		if (opts.caseTypeId) {
+			filter.case_type_id = opts.caseTypeId;
+		}
+		const data = await this.queryAll('intake_questionnaires', filter);
+		const [intakeStages, caseTypes] = await Promise.all([this.queryAll('intake_stages'), this.queryAll('case_types')]);
+		const intakes = await Promise.all(data.map((row) => this.mapIntake(row, { intakeStages, caseTypes })));
+		return { intakes, total: data.length };
 	}
 
 	/** Fetch one intake by `intake_questionnaires.id` -> lead-shaped row (or null). */
