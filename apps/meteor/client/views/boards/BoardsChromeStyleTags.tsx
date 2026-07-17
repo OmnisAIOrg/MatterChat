@@ -1,5 +1,7 @@
 import { useThemeMode } from '@rocket.chat/ui-client';
 
+import { HEAT_DARK, HEAT_LIGHT } from './lib/heatScale';
+
 /**
  * ============================================================================
  * "LEDGER-DENSE" — Boards CHROME skin (board header strip, boards nav, page shells).
@@ -10,7 +12,7 @@ import { useThemeMode } from '@rocket.chat/ui-client';
  * (paper #FAF7EE light / #12161D dark, cards #fffdf6 + #f2efe2 light / #1A2029
  * dark, khaki strokes, brand green #1B7A2E with #15692A/#5BD07E link greens,
  * the Iowan/Palatino serif caption stack, tabular-nums for figures, SOL-heat
- * amber #e0a63c / red #e35d5d). Do not drift from that file.
+ * amber/red from lib/heatScale.ts). Do not drift from those files.
  *
  * FORK-SAFE: presentation only. Every rule is scoped under an `mc-*` class
  * that only the boards chrome files add (BoardHeader, the CasePro strip, the
@@ -32,6 +34,9 @@ type BoardsChromeTokens = {
 	hairline: string;
 	/** Connection dot when CasePro is live+reachable. */
 	dotConnected: string;
+	/** Connection dot for stub (heat amber) / unreachable (heat red). */
+	dotStub: string;
+	dotUnreachable: string;
 	/** Active nav item / active status tag: background, text, left rail. */
 	activeBg: string;
 	activeText: string;
@@ -44,14 +49,12 @@ type BoardsChromeTokens = {
 const CAPTION_SERIF = `'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif`;
 const LABEL_MONO = `ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace`;
 
-// SOL-heat amber/red — connection-state dots for stub/unreachable (both themes).
-const DOT_STUB = '#e0a63c';
-const DOT_UNREACHABLE = '#e35d5d';
-
 const LIGHT: BoardsChromeTokens = {
 	headerBg: '#fffdf6', // card tone on the #FAF7EE paper page
 	hairline: 'rgba(201, 190, 154, 0.6)', // #C9BE9A warm khaki, softened
-	dotConnected: '#1B7A2E', // brand green
+	dotConnected: HEAT_LIGHT.green, // brand green
+	dotStub: HEAT_LIGHT.amber,
+	dotUnreachable: HEAT_LIGHT.red,
 	activeBg: '#E4F3E8',
 	activeText: '#15692A', // link green on paper
 	activeRail: '#1B7A2E',
@@ -62,6 +65,8 @@ const DARK: BoardsChromeTokens = {
 	headerBg: '#1A2029', // dark card on the #12161D page
 	hairline: 'rgba(58, 65, 77, 0.9)', // #3A414D slate
 	dotConnected: '#5BD07E', // link green on dark
+	dotStub: HEAT_DARK.amber,
+	dotUnreachable: HEAT_DARK.red,
 	activeBg: '#24352A',
 	activeText: '#5BD07E',
 	activeRail: '#3FA85C',
@@ -143,10 +148,10 @@ const buildBoardsChromeCss = (t: BoardsChromeTokens): string => `
 	background-color: ${t.dotConnected};
 }
 .mc-cp-dot[data-state='stub'] {
-	background-color: ${DOT_STUB};
+	background-color: ${t.dotStub};
 }
 .mc-cp-dot[data-state='unreachable'] {
-	background-color: ${DOT_UNREACHABLE};
+	background-color: ${t.dotUnreachable};
 }
 .mc-cp-lastsync {
 	font-size: 11px;

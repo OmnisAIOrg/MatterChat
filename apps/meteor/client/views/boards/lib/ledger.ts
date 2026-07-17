@@ -12,6 +12,8 @@
  * FORK-SAFE: this is a new fork-owned file; consumers are all fork-owned components.
  */
 
+import type { HeatLevel } from './heatScale';
+import { HEAT_VARS } from './heatScale';
 import { daysUntil, solRiskVariant } from '../card/matter/matterFormatters';
 
 /** The serif "case caption" stack — identical to the chat restyle's room-title stack. */
@@ -56,13 +58,10 @@ export const LEDGER_NUMERIC_STYLE = { fontVariantNumeric: 'tabular-nums' } as co
  * Matter Workspace's own SOL math (matterFormatters SOL_WARNING_DAYS/SOL_DANGER_DAYS),
  * so My Day, Boards and the panel always agree.
  */
-export type SolHeat = 'green' | 'amber' | 'red';
+export type SolHeat = HeatLevel;
 
-export const SOL_HEAT_COLORS: Record<SolHeat, string> = {
-	green: 'var(--mc-sol-green, #1B7A2E)',
-	amber: 'var(--mc-sol-amber, #B45309)',
-	red: 'var(--mc-sol-red, #C0212E)',
-};
+// The shared heat scale (lib/heatScale.ts), in its theme-following CSS-var flavor.
+export const SOL_HEAT_COLORS: Record<SolHeat, string> = HEAT_VARS;
 
 /** Heat for an ISO/Date SOL value; `undefined` when the matter has no SOL on file. */
 export const solHeatForDate = (solDate?: string | Date): SolHeat | undefined => {
