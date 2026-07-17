@@ -15,8 +15,10 @@ import type { CSSProperties, ChangeEvent, KeyboardEvent, ReactElement } from 're
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import ExternalBridgeControls from './ExternalBridgeControls';
 import { externalConnectionIdFromSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
+import { useExternalBridges } from './useExternalBridges';
 import { useExternalMessages } from './useExternalMessages';
 import { useExternalWorkspaces } from './useExternalWorkspaces';
 import { useFormatDateAndTime } from '../../../hooks/useFormatDateAndTime';
@@ -102,6 +104,15 @@ const sendErrorClass = css`
 	color: var(--rcx-color-status-font-on-danger, #c14444);
 `;
 
+// Thin ride-along error line under the header for a failed bridge/unbridge (real message, dense).
+const bridgeErrorClass = css`
+	flex-shrink: 0;
+	padding: 4px 16px;
+	font-size: 12px;
+	color: var(--rcx-color-status-font-on-danger, #c14444);
+	border-block-end: 1px solid var(--rcx-color-stroke-extra-light, #e4e7ea);
+`;
+
 // Inline style (not a css class) so it applies on a native <textarea> with zero dependence on how
 // css-in-js resolves a class on a non-fuselage element. Placeholder colour is left to the browser.
 const textareaStyle: CSSProperties = {
@@ -120,6 +131,9 @@ const textareaStyle: CSSProperties = {
 
 const initialsOf = (name: string): string => (name.trim().match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase();
 
+// Plain string builder for an envelope error (helper, not component code — keeps the render lean).
+const formatEnvelopeError = (e: { message: string; status?: number }): string => `${e.message}${e.status ? ` (${e.status})` : ''}`;
+
 const ExternalChannelView = (): ReactElement => {
 	const { t } = useTranslation();
 	const formatTime = useFormatTime();
@@ -135,6 +149,16 @@ const ExternalChannelView = (): ReactElement => {
 	const channelExternalId = selectedExternalChannel?.externalId;
 
 	const { messages, error, isLoading, refetch, send, isSending, sendError } = useExternalMessages(connectionId, channelExternalId);
+	// Live-bridge state + actions for THIS channel (the UI over external-workspaces.bridgeChannel /
+	// unbridgeChannel / bridges). Runs unconditionally — same hook-order discipline as messages.
+	const {
+		bridge,
+		bridgeNow,
+		unbridgeNow,
+		isBridging,
+		isUnbridging,
+		actionError: bridgeError,
+	} = useExternalBridges(connectionId, channelExternalId);
 
 	const [draft, setDraft] = useState('');
 	const scrollRef = useRef<HTMLDivElement>(null);
@@ -245,7 +269,19 @@ const ExternalChannelView = (): ReactElement => {
 				<Box is='span' color='hint' fontSize={13} withTruncatedText flexShrink={1}>
 					{selectedExternalChannel.teamName}
 				</Box>
-				<Box marginInlineStart='auto' display='flex' alignItems='center'>
+				<Box marginInlineStart='auto' display='flex' alignItems='center' style={{ gap: '8px' }}>
+					{/* Live-bridge controls: mirror this external channel into a MatterChat room (and back). */}
+					<ExternalBridgeControls
+						bridge={bridge}
+						isBridging={isBridging}
+						isUnbridging={isUnbridging}
+						onBridge={(): void => {
+							void bridgeNow(channelName || undefined);
+						}}
+						onUnbridge={(): void => {
+							void unbridgeNow();
+						}}
+					/>
 					{/* The provider-coloured chip keeps the context unmistakably "in this workspace". */}
 					<Box
 						is='span'
@@ -263,6 +299,14 @@ const ExternalChannelView = (): ReactElement => {
 					</Box>
 				</Box>
 			</Box>
+
+			{/* A failed bridge/unbridge rides its REAL provider/auth message here, plainly (dense line,
+			    not a modal) — same "never swallow the message" discipline as the messages error state. */}
+			{bridgeError && (
+				<Box className={bridgeErrorClass}>
+					{t('External_bridge_failed', { defaultValue: 'Couldn’t update the bridge' })}: {formatEnvelopeError(bridgeError)}
+				</Box>
+			)}
 
 			<Box ref={scrollRef} className={messagesScrollClass}>
 				{isLoading && (
