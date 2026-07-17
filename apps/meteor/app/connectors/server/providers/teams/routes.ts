@@ -1,21 +1,21 @@
 /**
  * Microsoft Teams OAuth routes — the per-user "Connect Teams" redirect dance.
  *
- * Mounted at  /api/apps/teamsbridge/oauth/*  (the path registered as the Entra redirect URI):
+ * Mounted at  /_teams/oauth/*  (the path registered as the Entra redirect URI):
  *
- *   GET /api/apps/teamsbridge/oauth/start    → resolve the signed-in MatterChat user (login-token
- *                                              cookie), mint PKCE (S256) + state, park the verifier
- *                                              + userId in CredentialTokens (60s TTL), set a
- *                                              one-time HttpOnly state cookie, then redirect to
- *                                              `${authority}/oauth2/v2.0/authorize` with the
- *                                              delegated scopes + offline_access.
- *   GET /api/apps/teamsbridge/oauth/callback → verify state (cookie + parked token), exchange
- *                                              code + verifier + client_secret at
- *                                              `${authority}/oauth2/v2.0/token`, read the id_token
- *                                              `tid` (external tenant) + `sub`, persist a per-user
- *                                              IExternalWorkspaceConnection (status 'connected'),
- *                                              and bounce back to the app. On admin-consent errors,
- *                                              persist 'consent_required' + surface the admin URL.
+ *   GET /_teams/oauth/start    → resolve the signed-in MatterChat user (login-token
+ *                                cookie), mint PKCE (S256) + state, park the verifier
+ *                                + userId in CredentialTokens (60s TTL), set a
+ *                                one-time HttpOnly state cookie, then redirect to
+ *                                `${authority}/oauth2/v2.0/authorize` with the
+ *                                delegated scopes + offline_access.
+ *   GET /_teams/oauth/callback → verify state (cookie + parked token), exchange
+ *                                code + verifier + client_secret at
+ *                                `${authority}/oauth2/v2.0/token`, read the id_token
+ *                                `tid` (external tenant) + `sub`, persist a per-user
+ *                                IExternalWorkspaceConnection (status 'connected'),
+ *                                and bounce back to the app. On admin-consent errors,
+ *                                persist 'consent_required' + surface the admin URL.
  *
  * This is a clean-room clone of the proven `/_omnisai` PKCE pattern
  * (apps/meteor/app/omnisai-oauth/server/index.ts): server-owned redirect dance, PKCE S256, state

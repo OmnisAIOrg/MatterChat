@@ -59,7 +59,7 @@ import {
 	redirectUri,
 	GOOGLE_DELEGATED_SCOPES,
 } from './google/config';
-import type { GoogleTokens } from './google/googleApi';
+import type { GoogleTokens, RefreshedTokens } from './google/googleApi';
 import { googleFetch, googleGetAll } from './google/googleApi';
 import { SystemLogger } from '../../../../server/lib/logger/system';
 
@@ -88,6 +88,37 @@ function tokensFromCredentials(credentials: IProviderCredentials): GoogleTokens 
 		refreshToken: credentials.refreshToken,
 		expiresAt: typeof credentials.expiresAt === 'number' ? credentials.expiresAt : undefined,
 	};
+}
+
+/** The googleApi refresh callback shape, forwarded to the connection's persistence hook. */
+type OnRefreshed = (t: RefreshedTokens) => void | Promise<void>;
+
+/**
+ * Build BOTH the mutable GoogleTokens bundle AND the refresh-persistence hook for one call chain
+ * (mirrors TeamsProvider's tokensAndHook). When the caller attached `connection.onCredentialsRefreshed`
+ * (connectionService / runtimeConnection do), every googleFetch/googleGetAll in the chain gets a hook
+ * that forwards the refreshed fields (new access token, expiresAt) so the caller can merge +
+ * re-encrypt + persist them. The provider itself still never touches Mongo. No hook attached →
+ * undefined (in-memory refresh only — the stored access token stays expired, so every later call
+ * pays a 401 + refresh round-trip; that's why every connection-taking method uses THIS, not
+ * tokensFromCredentials directly).
+ */
+function tokensAndHook(connection: IProviderConnection): { tokens: GoogleTokens; onRefreshed?: OnRefreshed } {
+	const tokens = tokensFromCredentials(connection.credentials);
+	const { onCredentialsRefreshed } = connection;
+	if (!onCredentialsRefreshed) {
+		return { tokens };
+	}
+	const onRefreshed: OnRefreshed = async (t) => {
+		try {
+			await onCredentialsRefreshed({ accessToken: t.accessToken, refreshToken: t.refreshToken, expiresAt: t.expiresAt });
+		} catch (err) {
+			// Persistence is best-effort: the in-memory refresh already succeeded, so the live call
+			// proceeds; the only cost of a failed persist is a re-refresh on a later call.
+			SystemLogger.warn({ msg: 'Google refreshed-token persistence failed (call continues)', err: String(err) });
+		}
+	};
+	return { tokens, onRefreshed };
 }
 
 /**
@@ -154,11 +185,12 @@ const MEMBER_PAGE_SIZE = 100;
  * which have no per-person id, are dropped). Requires the delegated `chat.memberships.readonly` scope —
  * a missing-scope/permission failure rides back UNSWALLOWED via googleGetAll (`google_error:...`).
  */
-async function fetchSpaceMembers(space: string, tokens: GoogleTokens): Promise<GoogleChatUser[]> {
+async function fetchSpaceMembers(space: string, tokens: GoogleTokens, onRefreshed?: OnRefreshed): Promise<GoogleChatUser[]> {
 	const memberships = await googleGetAll<GoogleMembership>(
 		`${CHAT_BASE}/${space}/members?pageSize=${MEMBER_PAGE_SIZE}`,
 		'memberships',
 		tokens,
+		onRefreshed,
 	);
 	const users: GoogleChatUser[] = [];
 	for (const m of memberships) {
@@ -272,9 +304,9 @@ export class GoogleChatProvider implements IChatProvider {
 		if (!isGoogleConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 
-		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens, onRefreshed);
 
 		const channels: IProviderChannel[] = [];
 		for (const space of spaces) {
@@ -327,9 +359,9 @@ export class GoogleChatProvider implements IChatProvider {
 		if (!isGoogleConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 
-		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens, onRefreshed);
 
 		const out: IProviderDirectChat[] = [];
 		for (const space of spaces) {
@@ -347,7 +379,7 @@ export class GoogleChatProvider implements IChatProvider {
 			// Name the DM by its members. spaces.list does not inline members, so look them up per space.
 			let members: GoogleChatUser[] = [];
 			try {
-				members = await fetchSpaceMembers(space.name, tokens);
+				members = await fetchSpaceMembers(space.name, tokens, onRefreshed);
 			} catch (err) {
 				// A per-space membership read can fail (e.g. a space we can no longer enumerate members of);
 				// don't drop the whole DM list for one space — fall back to the space's own label below.
@@ -399,9 +431,9 @@ export class GoogleChatProvider implements IChatProvider {
 		if (!isGoogleConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 
-		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens);
+		const spaces = await googleGetAll<GoogleSpace>(`${CHAT_BASE}/spaces?pageSize=100`, 'spaces', tokens, onRefreshed);
 
 		// Dedupe people across spaces by their `users/{id}` resource name (one person is in many spaces).
 		const byUserId = new Map<string, IProviderMember>();
@@ -412,7 +444,7 @@ export class GoogleChatProvider implements IChatProvider {
 			}
 			let members: GoogleChatUser[];
 			try {
-				members = await fetchSpaceMembers(space.name, tokens);
+				members = await fetchSpaceMembers(space.name, tokens, onRefreshed);
 				surfacedFirst = true;
 			} catch (err) {
 				// Surface the FIRST failure unswallowed (likely the chat.memberships.readonly scope not yet
@@ -462,7 +494,7 @@ export class GoogleChatProvider implements IChatProvider {
 		if (!isGoogleConfigured()) {
 			return notConfigured();
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 		const space = toSpaceName(channelExternalId);
 
 		type GoogleSender = { name?: string; displayName?: string; type?: string };
@@ -487,7 +519,7 @@ export class GoogleChatProvider implements IChatProvider {
 				url.searchParams.set('pageToken', pageToken);
 			}
 
-			const page = await googleFetch<{ messages?: GoogleMessage[]; nextPageToken?: string }>(url.toString(), tokens);
+			const page = await googleFetch<{ messages?: GoogleMessage[]; nextPageToken?: string }>(url.toString(), tokens, {}, onRefreshed);
 			pages++;
 
 			for (const msg of page.messages || []) {
@@ -564,13 +596,18 @@ export class GoogleChatProvider implements IChatProvider {
 		if (typeof text !== 'string' || !text.trim()) {
 			throw new Error('google_empty_message');
 		}
-		const tokens = tokensFromCredentials(connection.credentials);
+		const { tokens, onRefreshed } = tokensAndHook(connection);
 		const space = toSpaceName(channelExternalId);
 
-		const created = await googleFetch<{ name?: string }>(`${CHAT_BASE}/${space}/messages`, tokens, {
-			method: 'POST',
-			body: { text },
-		});
+		const created = await googleFetch<{ name?: string }>(
+			`${CHAT_BASE}/${space}/messages`,
+			tokens,
+			{
+				method: 'POST',
+				body: { text },
+			},
+			onRefreshed,
+		);
 		if (!created?.name) {
 			throw new Error('google_post_no_message_id');
 		}
