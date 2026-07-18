@@ -55,6 +55,8 @@ const barClass = css`
 	justify-content: space-around;
 	height: calc(${MOBILE_TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom, 0px));
 	padding-block-end: env(safe-area-inset-bottom, 0px);
+	/* landscape notch: keep the outer tabs clear of the sensor housing */
+	padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
 	background-color: ${NAV_RAIL_BG};
 	border-block-start: 1px solid ${NAV_RAIL_BORDER};
 
@@ -148,6 +150,10 @@ const MOBILE_GLOBAL_STYLE = `
 	}
 	.rcx-navbar {
 		padding-block-start: env(safe-area-inset-top, 0px);
+		padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+	}
+	#rocket-chat {
+		padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
 	}
 	.mc-mobile-tab-bar {
 		-webkit-touch-callout: none;
@@ -160,6 +166,18 @@ const MOBILE_GLOBAL_STYLE = `
 	.rcx-vertical-bar figure {
 		max-width: 140px !important;
 		max-height: 140px !important;
+	}
+	/* Message actions (reply / edit / delete / create-task) are HOVER-gated by Fuselage —
+	   display:none until :hover/:focus-within — which makes them completely unreachable on a
+	   touch screen. On coarse pointers keep the toolbar mounted and visible; the kebab and
+	   actions already work on tap once shown. */
+	@media (hover: none), (pointer: coarse) {
+		.rcx-message-toolbar__wrapper {
+			display: inline-block;
+		}
+		.rcx-message-toolbar {
+			opacity: 1;
+		}
 	}
 	.mc-keyboard-open .mc-mobile-tab-bar {
 		display: none;

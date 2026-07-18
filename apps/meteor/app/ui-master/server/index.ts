@@ -44,13 +44,31 @@ Meteor.startup(() => {
 		// mobile web ship): it kills iOS's focus-an-input auto-zoom and double-tap/pinch zoom that
 		// leave the app frame panned and "unlocked". This is an installed app surface, not a
 		// document — zooming the chrome is never intended.
-		`<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+		`<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 		<link rel="manifest" href="${getURL('images/manifest.json')}" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<meta name="theme-color" content="#1A212C" />
-		<link rel="apple-touch-icon" sizes="180x180" href="${getURL('images/pwa/apple-touch-icon.png')}" />`,
+		<link rel="apple-touch-icon" sizes="180x180" href="${getURL('images/pwa/apple-touch-icon.png')}" />
+		${[
+			// iOS standalone launch splash (chrome-color, no white flash). device-width/height are
+			// CSS points; each PNG is that size × the pixel ratio. Covers the modern iPhone range;
+			// unmatched devices just keep the default launch behavior.
+			[430, 932, 3, '1290x2796'],
+			[393, 852, 3, '1179x2556'],
+			[390, 844, 3, '1170x2532'],
+			[428, 926, 3, '1284x2778'],
+			[375, 812, 3, '1125x2436'],
+			[414, 896, 2, '828x1792'],
+			[414, 896, 3, '1242x2688'],
+			[375, 667, 2, '750x1334'],
+		]
+			.map(
+				([w, h, r, file]) =>
+					`<link rel="apple-touch-startup-image" media="(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)" href="${getURL(`images/pwa/splash/splash-${file}.png`)}" />`,
+			)
+			.join('\n\t\t')}`,
 	);
 
 	if (process.env.DISABLE_ANIMATION) {
