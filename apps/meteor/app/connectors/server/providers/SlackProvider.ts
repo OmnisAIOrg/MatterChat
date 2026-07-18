@@ -662,6 +662,19 @@ export class SlackProvider implements IChatProvider {
 		return id;
 	}
 
+	/**
+	 * Contract hook: canonicalize an id before it is PERSISTED (bridge records). A People-directory
+	 * USER id resolves to its im CONVERSATION id — a bridge keyed by the user id can never match the
+	 * event fan-out (events address the `D…` id), so it would silently receive nothing.
+	 */
+	async resolveBridgeChannelId(connection: IProviderConnection, channelExternalId: string): Promise<string> {
+		if (!isSlackConfigured() || !channelExternalId) {
+			return channelExternalId;
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		return this.resolveConversationId(connection, channelExternalId, tokens);
+	}
+
 	// ─── sync (read) — REAL ──────────────────────────────────────────────────────────────────────
 
 	/**
