@@ -135,7 +135,11 @@ const MOBILE_GLOBAL_STYLE = `
 	button, a, [role='button'], input, textarea, select, label {
 		touch-action: manipulation;
 	}
-	input, textarea, select, [contenteditable='true'] {
+	/* :is() takes the specificity of its strongest argument — the #mc-specificity-boost id
+	   argument (never matched, purely a specificity donor) lifts this to (1,0,0) so it beats
+	   Fuselage's css-in-js class rules that set control fonts !important at (0,1,0) — e.g. the
+	   message composer's 0.875rem, which is exactly what made iOS zoom on tap. */
+	:is(input, textarea, select, [contenteditable='true'], #mc-specificity-boost) {
 		font-size: 16px !important;
 	}
 	#rocket-chat {
@@ -148,6 +152,14 @@ const MOBILE_GLOBAL_STYLE = `
 	.mc-mobile-tab-bar {
 		-webkit-touch-callout: none;
 		user-select: none;
+	}
+	/* Contextual bars (channel info / user card) render their desktop-width avatar at FULL
+	   viewport width on phones — a 375px-tall letter tile. Cap it to a sane card size. */
+	.rcx-vertical-bar .rcx-avatar,
+	.rcx-vertical-bar .rcx-avatar > img,
+	.rcx-vertical-bar figure {
+		max-width: 140px !important;
+		max-height: 140px !important;
 	}
 	.mc-keyboard-open .mc-mobile-tab-bar {
 		display: none;
@@ -242,6 +254,21 @@ const MobileTabBar = (): ReactElement | null => {
 			router.navigate('/home');
 		}
 		navbar.expandSearch?.();
+		// Focus the combobox once the expanded search has rendered (retry briefly — the
+		// expansion and a possible route change both re-render the navbar) so the tap
+		// immediately pops the keyboard, like a native app's Search tab.
+		let attempts = 0;
+		const focusSearch = (): void => {
+			const searchInput = document.querySelector<HTMLInputElement>('[role="search"] input[role="combobox"]');
+			if (searchInput) {
+				searchInput.focus();
+				return;
+			}
+			if (++attempts < 10) {
+				setTimeout(focusSearch, 100);
+			}
+		};
+		focusSearch();
 	});
 
 	// Desktop, embedded/iframe layouts, and printing keep their existing chrome.
