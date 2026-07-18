@@ -58,7 +58,12 @@ export const useExternalBridges = (
 		retry: false,
 	});
 
-	const bridge = query.data?.bridges?.find((b) => b.connectionId === connectionId && b.channelExternalId === channelExternalId);
+	// Match by the canonical id OR the raw id the bridge was created from — a Slack DM bridged from
+	// the People row stores the resolved im id as canonical and the user id as sourceExternalId,
+	// while the sidebar selection still carries the user id.
+	const bridge = query.data?.bridges?.find(
+		(b) => b.connectionId === connectionId && (b.channelExternalId === channelExternalId || b.sourceExternalId === channelExternalId),
+	);
 
 	// Shared envelope-unwrap for both actions: an ok:false ride-back is thrown as a real Error so
 	// the mutation's error state carries the provider's message + status.

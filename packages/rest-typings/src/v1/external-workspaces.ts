@@ -153,6 +153,8 @@ export type ExternalWorkspaceBridge = {
 	connectionId: string;
 	provider: ExternalProvider;
 	channelExternalId: string;
+	/** The raw id the bridge was created from when it differed (Slack People user id) — client match aid. */
+	sourceExternalId?: string;
 	name: string;
 	rid: string;
 	realtime: 'webhook' | 'shared' | 'none';

@@ -46,6 +46,12 @@ export interface IBridgedChannel {
 	 * (Teams: the `teamId|channelId` composite from listChannels, or a bare chat id).
 	 */
 	channelExternalId: string;
+	/**
+	 * The RAW id the bridge was created from, when it differed from the canonical one — e.g. a Slack
+	 * People-directory USER id (`U…`) that was resolved to its im conversation id (`D…`) before
+	 * persisting. Lets the client match a bridge back to the sidebar selection that created it.
+	 */
+	sourceExternalId?: string;
 	/** Display label captured at bridge time (e.g. `Team / Channel`). */
 	name: string;
 	/** The MatterChat room this channel is mirrored into. */
