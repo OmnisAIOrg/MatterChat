@@ -1,7 +1,7 @@
 import type { ExternalWorkspaceMessage } from '@rocket.chat/rest-typings';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 /**
  * useExternalMessages — REAL read + post for one channel/space of the caller's OWN external connection.
@@ -66,6 +66,15 @@ export const useExternalMessages = (
 	const enabled = Boolean(connectionId && channelExternalId);
 	const queryKey = ['external-workspaces.messages', connectionId ?? '', channelExternalId ?? ''];
 
+	// Recently-sent echoes, kept OUTSIDE the react-query cache and merged into the output below.
+	// The cache-prepend alone is not enough: the reconciling refetch REPLACES the cached list, and
+	// Slack's conversations.history often omits a just-posted message for a few seconds — which made
+	// a sent DM appear and then VANISH until some later refetch. An echo survives here until the
+	// server list actually contains it (by id, or same text within 2 min for local-fallback ids),
+	// with a retention ceiling as the safety valve. Keyed per channel so echoes never leak across.
+	const recentEchoesRef = useRef<Map<string, { msg: EnrichedExternalMessage; at: number }[]>>(new Map());
+	const echoKey = `${connectionId ?? ''}:${channelExternalId ?? ''}`;
+
 	const query = useQuery({
 		queryKey,
 		queryFn: () => getMessages({ connectionId: connectionId as string, channelExternalId: channelExternalId as string }),
@@ -123,6 +132,10 @@ export const useExternalMessages = (
 				// The list is stored newest-FIRST (the view reverses for display), so prepend.
 				return { ...current, messages: [echo, ...current.messages] };
 			});
+			// Remember the echo OUTSIDE the cache too — the reconciling refetch replaces the cached
+			// list, and provider history may not include the just-posted message yet (see merge below).
+			const held = recentEchoesRef.current.get(echoKey) ?? [];
+			recentEchoesRef.current.set(echoKey, [...held, { msg: echo, at: Date.now() }]);
 			// Reconciliation: refetch in the background WITHOUT awaiting — the optimistic echo is already
 			// on screen, and react-query keeps showing the cached data until the fresh list lands.
 			void queryClient.invalidateQueries({ queryKey });
@@ -140,8 +153,35 @@ export const useExternalMessages = (
 			}
 		: undefined;
 
+	// Merge surviving echoes into the output. An echo is confirmed (and dropped) once the server
+	// list carries its externalId — or, for local-fallback ids, a message with the same text within
+	// 2 minutes. Unconfirmed echoes stay visible up to the retention ceiling.
+	const ECHO_RETENTION_MS = 10 * 60_000;
+	const serverMessages = data?.ok === true ? data.messages : undefined;
+	let mergedMessages = serverMessages;
+	if (Array.isArray(serverMessages)) {
+		const held = recentEchoesRef.current.get(echoKey) ?? [];
+		if (held.length > 0) {
+			const now = Date.now();
+			const confirmed = (echo: EnrichedExternalMessage): boolean =>
+				serverMessages.some(
+					(m) =>
+						m.externalId === echo.externalId ||
+						(m.text === echo.text && Math.abs(Date.parse(m.createdAt) - Date.parse(echo.createdAt)) < 120_000),
+				);
+			const surviving = held.filter((e) => now - e.at < ECHO_RETENTION_MS && !confirmed(e.msg));
+			if (surviving.length !== held.length) {
+				recentEchoesRef.current.set(echoKey, surviving);
+			}
+			if (surviving.length > 0) {
+				// Newest-first list: echoes are the newest — most recent echo first, then the server list.
+				mergedMessages = [...surviving.map((e) => e.msg).reverse(), ...serverMessages];
+			}
+		}
+	}
+
 	return {
-		messages: data?.ok === true ? data.messages : undefined,
+		messages: mergedMessages,
 		// Defensive read — the field only exists once the server lane's payload enrichment ships.
 		mentions: data?.ok === true ? (data as { mentions?: Record<string, string> }).mentions : undefined,
 		error: providerError ?? transportError,
