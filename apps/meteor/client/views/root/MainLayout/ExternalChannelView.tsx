@@ -12,15 +12,19 @@ import {
 	Button,
 } from '@rocket.chat/fuselage';
 import type { CSSProperties, ChangeEvent, KeyboardEvent, ReactElement } from 'react';
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import ExternalBridgeControls from './ExternalBridgeControls';
+import ExternalMessageAvatar from './ExternalMessageAvatar';
 import { externalConnectionIdFromSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
+import { classifyDay, dayKeyOf, isSameMessageGroup } from './externalMessageList';
 import { externalProviderBranding } from './externalProviders';
+import { parseSlackMrkdwn } from './slackMrkdwn';
 import { useExternalBridges } from './useExternalBridges';
 import { useExternalMessages } from './useExternalMessages';
 import { useExternalWorkspaces } from './useExternalWorkspaces';
+import { useFormatDate } from '../../../hooks/useFormatDate';
 import { useFormatDateAndTime } from '../../../hooks/useFormatDateAndTime';
 import { useFormatTime } from '../../../hooks/useFormatTime';
 
@@ -33,9 +37,19 @@ import { useFormatTime } from '../../../hooks/useFormatTime';
  * `external-workspaces.messages` and shows them chat-style — author, text, time, newest-AT-BOTTOM. A
  * Throbber covers the load; a real provider/auth error (e.g. an admin-consent 403) shows the plain
  * `{ message + status }` with Retry. A composer at the bottom posts AS the user via
- * `external-workspaces.sendMessage`, then refetches so the new message appears. The avatar colour +
- * the context chip come from the SELECTED connection's provider branding (purple Teams, green Google
- * Chat), so this never hardcodes a single provider.
+ * `external-workspaces.sendMessage`; the sent message appears INSTANTLY (optimistic cache append in
+ * useExternalMessages, background refetch as reconciliation). The avatar colour + the context chip
+ * come from the SELECTED connection's provider branding (purple Teams, green Google Chat, aubergine
+ * Slack), so this never hardcodes a single provider.
+ *
+ * Slack-style reading experience:
+ *  - message bodies render through `parseSlackMrkdwn` — links/mentions/#channels/bold/italic/strike/
+ *    code as real React nodes; the parser is a NO-OP for plain text, so Teams/Google messages pass
+ *    through unchanged;
+ *  - consecutive same-author messages within 5 minutes group into dense rows (avatar + name once);
+ *  - light Today/Yesterday/date separator lines split the days;
+ *  - 22px avatars: `authorAvatarUrl` image when the server sends it (the ExternalSidebar Box is='img'
+ *    pattern — NEVER String(cssFn)), else the provider-coloured initials dot.
  *
  * With no channel open it shows a quiet "pick a channel" placeholder. Being "in a workspace" is its
  * own mode: this is the whole main content, not an overlay over the MatterChat room.
@@ -89,8 +103,31 @@ const messagesInnerClass = css`
 const messageRowClass = css`
 	display: flex;
 	gap: 10px;
-	padding: 6px 0;
+	padding: 3px 0 1px;
 	align-items: flex-start;
+`;
+
+// Dense continuation row of a same-author group: no avatar/name, body indented past the 22px avatar.
+const messageContinuationRowClass = css`
+	padding: 1px 0;
+	padding-inline-start: 32px;
+`;
+
+// Light day-separator: thin rules either side of a small Today/Yesterday/date label.
+const daySeparatorClass = css`
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 10px 0 4px;
+	color: var(--rcx-color-font-hint, #6c737a);
+	font-size: 11px;
+	font-weight: 600;
+	user-select: none;
+`;
+
+const daySeparatorLineClass = css`
+	flex: 1;
+	border-block-start: 1px solid var(--rcx-color-stroke-extra-light, #e4e7ea);
 `;
 
 const composerWrapClass = css`
@@ -129,8 +166,6 @@ const textareaStyle: CSSProperties = {
 	width: '100%',
 };
 
-const initialsOf = (name: string): string => (name.trim().match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase();
-
 // Plain string builder for an envelope error (helper, not component code — keeps the render lean).
 const formatEnvelopeError = (e: { message: string; status?: number }): string => `${e.message}${e.status ? ` (${e.status})` : ''}`;
 
@@ -138,6 +173,7 @@ const ExternalChannelView = (): ReactElement => {
 	const { t } = useTranslation();
 	const rawFormatTime = useFormatTime();
 	const rawFormatDateAndTime = useFormatDateAndTime();
+	const rawFormatDate = useFormatDate();
 	// Crash-safe formatters: date-fns THROWS on an invalid date, and one malformed provider
 	// timestamp must degrade to blank text — never crash the whole workspace view (that is
 	// exactly what happened when Slack's seconds.micros ts reached the formatter).
@@ -155,6 +191,13 @@ const ExternalChannelView = (): ReactElement => {
 			return '';
 		}
 	};
+	const formatDate = (value: unknown): string => {
+		try {
+			return rawFormatDate(value as never);
+		} catch {
+			return '';
+		}
+	};
 	const { selectedOrgId, selectedExternalChannel } = useOrgSwitcherSelection();
 	const { getConnectionById } = useExternalWorkspaces();
 
@@ -165,7 +208,16 @@ const ExternalChannelView = (): ReactElement => {
 	const connectionId = connection?._id;
 	const channelExternalId = selectedExternalChannel?.externalId;
 
-	const { messages, error, isLoading, refetch, send, isSending, sendError } = useExternalMessages(connectionId, channelExternalId);
+	const {
+		messages,
+		mentions: connectionMentions,
+		error,
+		isLoading,
+		refetch,
+		send,
+		isSending,
+		sendError,
+	} = useExternalMessages(connectionId, channelExternalId);
 	// Live-bridge state + actions for THIS channel (the UI over external-workspaces.bridgeChannel /
 	// unbridgeChannel / bridges). Runs unconditionally — same hook-order discipline as messages.
 	const {
@@ -202,7 +254,8 @@ const ExternalChannelView = (): ReactElement => {
 	// A channel reads with a leading #; a chat/DM is a person/group, so no hash. Drives both the header
 	// icon and the composer placeholder (provider-agnostic — just a render hint, never a data branch).
 	const isDirect = selectedExternalChannel?.kind === 'chat' || selectedExternalChannel?.kind === 'dm';
-	const headerIcon = isDirect ? 'balloons' : selectedExternalChannel?.isPrivate ? 'lock' : 'hash';
+	const channelIcon = selectedExternalChannel?.isPrivate ? 'lock' : 'hash';
+	const headerIcon = isDirect ? 'balloons' : channelIcon;
 	const composerPlaceholder = isDirect
 		? t('Message_person', { defaultValue: 'Message {{name}}', name: channelName })
 		: t('Message_channel', { defaultValue: 'Message #{{name}}', name: channelName });
@@ -229,23 +282,19 @@ const ExternalChannelView = (): ReactElement => {
 		}
 	};
 
-	// Provider-coloured avatar + composer focus (kept inline so they track the brand colour).
-	const avatarClass = css`
-		flex-shrink: 0;
-		width: 36px;
-		height: 36px;
-		border-radius: 4px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: ${branding.color};
-		color: #ffffff;
-		font-weight: 600;
-		font-size: 15px;
-		line-height: 1;
-		user-select: none;
-	`;
+	// Today/Yesterday/date label for a day separator (crash-safe like the other formatters).
+	const dayLabelOf = (value: unknown): string => {
+		const bucket = classifyDay(value);
+		if (bucket === 'today') {
+			return t('Today', { defaultValue: 'Today' });
+		}
+		if (bucket === 'yesterday') {
+			return t('Yesterday', { defaultValue: 'Yesterday' });
+		}
+		return formatDate(value);
+	};
 
+	// Composer focus ring kept inline so it tracks the provider brand colour.
 	const composerClass = css`
 		display: flex;
 		align-items: flex-end;
@@ -361,26 +410,58 @@ const ExternalChannelView = (): ReactElement => {
 
 				{!isLoading && !error && ordered.length > 0 && (
 					<Box className={messagesInnerClass}>
-						{ordered.map((message) => (
-							<Box key={message.externalId} className={messageRowClass}>
-								<Box className={avatarClass} aria-hidden>
-									{initialsOf(message.author || '?')}
+						{ordered.map((message, index) => {
+							// The server lane's enriched fields (authorDisplayName/authorAvatarUrl/mentions) are
+							// all optional on EnrichedExternalMessage — everything below prefers them when present
+							// but works without them.
+							const prev = index > 0 ? ordered[index - 1] : undefined;
+							const authorName = message.author || message.authorDisplayName || t('Unknown', { defaultValue: 'Unknown' });
+							const grouped = isSameMessageGroup(prev, message);
+							const dayKey = dayKeyOf(message.createdAt);
+							const showDaySeparator = dayKey !== null && (index === 0 || dayKeyOf(prev?.createdAt) !== dayKey);
+							// Connection-wide map first, per-message map (most specific) wins.
+							const mentions = { ...connectionMentions, ...message.mentions };
+							const body = (
+								<Box fontSize={14} color='default' style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+									{parseSlackMrkdwn(message.text, { mentions })}
 								</Box>
-								<Box flexGrow={1} minWidth={0}>
-									<Box display='flex' alignItems='baseline' style={{ gap: '8px' }}>
-										<Box is='span' fontWeight={700} fontSize={14} color='default' withTruncatedText>
-											{message.author || t('Unknown', { defaultValue: 'Unknown' })}
+							);
+							return (
+								<Fragment key={message.externalId}>
+									{showDaySeparator && (
+										<Box className={daySeparatorClass} role='separator' aria-label={dayLabelOf(message.createdAt)}>
+											<Box className={daySeparatorLineClass} />
+											{dayLabelOf(message.createdAt)}
+											<Box className={daySeparatorLineClass} />
 										</Box>
-										<Box is='span' fontSize={11} color='hint' title={formatDateAndTime(message.createdAt)} flexShrink={0}>
-											{formatTime(message.createdAt)}
+									)}
+									{grouped && !showDaySeparator ? (
+										// Dense continuation row: same author within 5 min — body only, indented. Array
+										// className (NEVER String(cssFn) concatenation) so both css-in-js classes resolve.
+										<Box className={[messageRowClass, messageContinuationRowClass]} title={formatDateAndTime(message.createdAt)}>
+											<Box flexGrow={1} minWidth={0}>
+												{body}
+											</Box>
 										</Box>
-									</Box>
-									<Box fontSize={14} color='default' style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-										{message.text}
-									</Box>
-								</Box>
-							</Box>
-						))}
+									) : (
+										<Box className={messageRowClass}>
+											<ExternalMessageAvatar name={authorName} avatarUrl={message.authorAvatarUrl} color={branding.color} />
+											<Box flexGrow={1} minWidth={0}>
+												<Box display='flex' alignItems='baseline' style={{ gap: '8px' }}>
+													<Box is='span' fontWeight={700} fontSize={14} color='default' withTruncatedText>
+														{authorName}
+													</Box>
+													<Box is='span' fontSize={11} color='hint' title={formatDateAndTime(message.createdAt)} flexShrink={0}>
+														{formatTime(message.createdAt)}
+													</Box>
+												</Box>
+												{body}
+											</Box>
+										</Box>
+									)}
+								</Fragment>
+							);
+						})}
 					</Box>
 				)}
 			</Box>

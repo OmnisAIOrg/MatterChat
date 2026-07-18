@@ -15,7 +15,11 @@ import { useCallback } from 'react';
  * swallowed) so the view can show the real message plainly.
  *
  * POST: `external-workspaces.sendMessage` posts AS the user (delegated token) via the provider's
- * `postMessage`. After a successful send we refetch so the new message appears.
+ * `postMessage`. On success the sent message is appended to the cached list IMMEDIATELY (the server's
+ * echoed `message` when present, else a locally-constructed `{ author: 'You', text, createdAt: now }`)
+ * so the send feels instant, and a NON-awaited invalidate refetches in the background as
+ * reconciliation — react-query keeps the cached (optimistic) data on screen until the refetch lands,
+ * so there is no flicker.
  *
  * The channel identity is whatever the channels list provided (`channelExternalId`, the provider-
  * native id — Teams `teamId|channelId`, Google `spaces/{id}`) — passed straight through.
@@ -29,11 +33,24 @@ import { useCallback } from 'react';
  */
 export type ExternalEnvelopeError = { error: string; message: string; status?: number };
 
+/**
+ * The server lane is concurrently enriching the payloads (authorDisplayName / authorAvatarUrl /
+ * mentions on messages, an echoed `message` on sendMessage). The client must work with OR without
+ * those fields, preferring them when present — hence this widened, all-optional view of a message.
+ */
+export type EnrichedExternalMessage = ExternalWorkspaceMessage & {
+	authorDisplayName?: string;
+	authorAvatarUrl?: string;
+	mentions?: Record<string, string>;
+};
+
 export const useExternalMessages = (
 	connectionId: string | undefined,
 	channelExternalId: string | undefined,
 ): {
-	messages: ExternalWorkspaceMessage[] | undefined;
+	messages: EnrichedExternalMessage[] | undefined;
+	/** Optional connection-wide Slack user-id → display-name map (present once the server lane ships it). */
+	mentions: Record<string, string> | undefined;
 	error: ExternalEnvelopeError | undefined;
 	isLoading: boolean;
 	isFetching: boolean;
@@ -84,8 +101,31 @@ export const useExternalMessages = (
 				err.providerError = result.error;
 				throw err;
 			}
-			// Posted — pull the channel again so the new message shows (optimistic-free, simplest correct).
-			await queryClient.invalidateQueries({ queryKey });
+			// INSTANT SEND: append the sent message to the cached list right away. Prefer the server's
+			// echoed message (the server lane is adding it to the payload); construct a local echo
+			// otherwise. Defaults-first spread so a PARTIAL echo still renders something sensible.
+			const serverEcho = (result as { message?: Partial<EnrichedExternalMessage> })?.message;
+			const echo: EnrichedExternalMessage = {
+				externalId: (result as { externalId?: string })?.externalId ?? `local-echo-${Date.now()}`,
+				author: 'You',
+				text,
+				createdAt: new Date().toISOString(),
+				...(serverEcho && typeof serverEcho === 'object' ? serverEcho : {}),
+			};
+			queryClient.setQueryData<{ ok: boolean; messages?: EnrichedExternalMessage[] } | undefined>(queryKey, (current) => {
+				if (current?.ok !== true || !Array.isArray(current.messages)) {
+					return current;
+				}
+				// Guard the (unlikely) case a background refetch already delivered the real message.
+				if (current.messages.some((m) => m.externalId === echo.externalId)) {
+					return current;
+				}
+				// The list is stored newest-FIRST (the view reverses for display), so prepend.
+				return { ...current, messages: [echo, ...current.messages] };
+			});
+			// Reconciliation: refetch in the background WITHOUT awaiting — the optimistic echo is already
+			// on screen, and react-query keeps showing the cached data until the fresh list lands.
+			void queryClient.invalidateQueries({ queryKey });
 		},
 		// queryKey is derived from the same deps; spreading it would add an unstable array identity.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,6 +142,8 @@ export const useExternalMessages = (
 
 	return {
 		messages: data?.ok === true ? data.messages : undefined,
+		// Defensive read — the field only exists once the server lane's payload enrichment ships.
+		mentions: data?.ok === true ? (data as { mentions?: Record<string, string> }).mentions : undefined,
 		error: providerError ?? transportError,
 		isLoading: query.isLoading && enabled,
 		isFetching: query.isFetching,
