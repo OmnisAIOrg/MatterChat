@@ -27,6 +27,7 @@
  */
 import type { ExternalProvider } from '@rocket.chat/core-typings';
 
+import { getConnectorAvailability } from '../../../connectors/server/availability';
 import { bridgeMyChannel, listMyBridges, unbridgeMyChannel } from '../../../connectors/server/bridge/bridgeService';
 import {
 	disconnectMyConnection,
@@ -51,6 +52,16 @@ API.v1.addRoute(
 		async get() {
 			const connections = await listMyConnections(this.userId);
 			return API.v1.success({ connections });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'external-workspaces.availability',
+	{ authRequired: true },
+	{
+		async get() {
+			return API.v1.success({ availability: getConnectorAvailability() });
 		},
 	},
 );

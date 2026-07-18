@@ -1,13 +1,23 @@
+import type { ExternalProvider } from '@rocket.chat/core-typings';
 import { css } from '@rocket.chat/css-in-js';
 import { Box } from '@rocket.chat/fuselage';
 import { GenericMenu } from '@rocket.chat/ui-client';
 import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
-import { useCurrentRoutePath, useEndpoint, useLayout, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import {
+	useCurrentRoutePath,
+	useEndpoint,
+	useLayout,
+	useMethod,
+	useRouter,
+	useSetModal,
+	useToastMessageDispatch,
+} from '@rocket.chat/ui-contexts';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import ConnectWorkspaceModal from './ConnectWorkspaceModal';
 import { isDesktopApp } from '../../../lib/desktop/desktopBridge';
 import { externalConnectionIdFromSelection, externalSelectionId, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
@@ -497,7 +507,7 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactElement | null => {
 	const { t } = useTranslation();
 	const { isMobile, sidebar } = useLayout();
-	const { orgs, switchOrg, connectSlack, connectTeams, connectGoogle, teamsEnabled, googleEnabled } = useOrgSwitcher();
+	const { orgs, switchOrg, connectSlack, connectTeams, connectGoogle } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
 	const router = useRouter();
 	const currentRoutePath = useCurrentRoutePath();
@@ -529,42 +539,28 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 		}
 	};
 
-	// The "+" tile opens a menu of the workspaces you can connect: Slack (admin deep-link, always) +
-	// Teams + Google Chat (per-user OAuth, each shown only when its connector is enabled in admin —
-	// standalone-safe). Per-provider gating keeps a disabled connector entirely out of the UI.
-	const addItems = useMemo<GenericMenuItemProps[]>(() => {
-		const items: GenericMenuItemProps[] = [
-			{
-				id: 'connect-slack',
-				icon: 'hash',
-				content: t('Connect_Slack', { defaultValue: 'Connect Slack' }),
-				onClick: (): void => {
-					void connectSlack();
-				},
-			},
-		];
-		if (teamsEnabled) {
-			items.push({
-				id: 'connect-teams',
-				icon: 'team',
-				content: t('Connect_Teams', { defaultValue: 'Connect Teams' }),
-				onClick: (): void => {
-					void connectTeams();
-				},
-			});
-		}
-		if (googleEnabled) {
-			items.push({
-				id: 'connect-google',
-				icon: 'discussion',
-				content: t('Connect_Google_Chat', { defaultValue: 'Connect Google Chat' }),
-				onClick: (): void => {
-					void connectGoogle();
-				},
-			});
-		}
-		return items;
-	}, [t, connectSlack, connectTeams, connectGoogle, teamsEnabled, googleEnabled]);
+	// The "+" tile opens the ConnectWorkspaceModal: provider CARDS for Slack + Teams + Google Chat,
+	// every provider always listed (disabled ones explain themselves / deep-link admins to setup),
+	// availability computed SERVER-side (env fallbacks included) via useConnectorAvailability.
+	// A modal (not a dropdown) because the old GenericMenu never opened on phones — the modal
+	// portal renders on every layout, drawer or not.
+	const setModal = useSetModal();
+	const handleConnect = useCallback(
+		(provider: ExternalProvider): void => {
+			setModal(null);
+			if (provider === 'slack') {
+				void connectSlack();
+			} else if (provider === 'teams') {
+				void connectTeams();
+			} else {
+				void connectGoogle();
+			}
+		},
+		[setModal, connectSlack, connectTeams, connectGoogle],
+	);
+	const openConnectModal = useCallback((): void => {
+		setModal(<ConnectWorkspaceModal onClose={(): void => setModal(null)} onConnect={handleConnect} />);
+	}, [setModal, handleConnect]);
 
 	if (!orgs.length) {
 		return null;
@@ -607,22 +603,16 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 					/>
 				))}
 				<Box className={dividerClass} />
-				<GenericMenu
+				<Box
+					is='button'
+					type='button'
+					className={addClass}
 					title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-					items={addItems}
-					placement='right-start'
-					button={
-						<Box
-							is='button'
-							type='button'
-							className={addClass}
-							title={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-							aria-label={t('Add_workspace', { defaultValue: 'Add a workspace' })}
-						>
-							+
-						</Box>
-					}
-				/>
+					aria-label={t('Add_workspace', { defaultValue: 'Add a workspace' })}
+					onClick={openConnectModal}
+				>
+					+
+				</Box>
 			</Box>
 		</Box>
 	);
