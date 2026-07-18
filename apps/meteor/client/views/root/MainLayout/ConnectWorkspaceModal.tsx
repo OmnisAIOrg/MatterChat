@@ -1,5 +1,6 @@
 import type { ExternalProvider } from '@rocket.chat/core-typings';
-import { Box, Button, Icon, Modal, Tag, Throbber } from '@rocket.chat/fuselage';
+import { Box, Button, Icon, Tag, Throbber } from '@rocket.chat/fuselage';
+import { GenericModal } from '@rocket.chat/ui-client';
 import { useRole, useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -139,12 +140,13 @@ const ConnectWorkspaceModal = ({ onClose, onConnect }: ConnectWorkspaceModalProp
 	};
 
 	return (
-		<Modal onClose={onClose}>
-			<Modal.Header>
-				<Modal.Title>{t('Connect_A_Workspace', { defaultValue: 'Connect a workspace' })}</Modal.Title>
-				<Modal.Close onClick={onClose} />
-			</Modal.Header>
-			<Modal.Content>
+		<GenericModal
+			icon={null}
+			title={t('Connect_A_Workspace', { defaultValue: 'Connect a workspace' })}
+			onClose={onClose}
+			onCancel={onClose}
+			cancelText={t('Close')}
+		>
 				<Box fontScale='p2' color='hint' mbe={16}>
 					{t('Connect_A_Workspace_Subtitle', { defaultValue: 'Bring the places your contacts already chat into one inbox.' })}
 				</Box>
@@ -181,15 +183,7 @@ const ConnectWorkspaceModal = ({ onClose, onConnect }: ConnectWorkspaceModalProp
 						defaultValue: "You'll be sent to the provider to approve access, then brought right back here.",
 					})}
 				</Box>
-			</Modal.Content>
-			<Modal.Footer>
-				<Modal.FooterControllers>
-					<Button secondary onClick={onClose}>
-						{t('Close')}
-					</Button>
-				</Modal.FooterControllers>
-			</Modal.Footer>
-		</Modal>
+		</GenericModal>
 	);
 };
 

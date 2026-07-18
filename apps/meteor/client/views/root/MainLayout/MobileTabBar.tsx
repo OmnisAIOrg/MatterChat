@@ -38,7 +38,6 @@ import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherConte
  */
 
 // ---- shared chrome tokens (match AppLeftRail) ----
-const BRAND_GREEN = '#1B7A2E';
 const BRAND_GREEN_BRIGHT = '#22B43F';
 const NAV_RAIL_BG = '#1A212C';
 const NAV_RAIL_BORDER = '#2C3644';
