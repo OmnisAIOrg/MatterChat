@@ -471,12 +471,19 @@ export type ClientMessage = {
 	externalId: string;
 	/** Display name of the author (falls back to the provider-native author id). */
 	author: string;
+	/** Author avatar URL, when the provider resolved it. */
+	authorAvatarUrl?: string;
 	/** Plain text (Teams HTML bodies are stripped to text by the provider). */
 	text: string;
 	/** ISO-8601 (or provider-native) creation timestamp. */
 	createdAt: string;
 	/** Set when the message has been edited. */
 	editedAt?: string;
+	/**
+	 * Mentioned users resolved server-side: external user id → display name, for the mention tokens
+	 * in `text` (Slack `<@U123>`). The text is NOT rewritten — the client renderer owns presentation.
+	 */
+	mentions?: Record<string, string>;
 };
 
 /** Same structured-error shape used everywhere a provider/Graph call can fail (alias of ListChannelsError). */
@@ -557,15 +564,69 @@ function toIsoTimestamp(ts: string): string {
 	return ts;
 }
 
-/** Project a provider message to the client shape; prefer the carried display name, fall back to the author id. */
-function toClientMessage(msg: IProviderMessage): ClientMessage {
+/**
+ * Project a provider message to the client shape; prefer the carried display name, fall back to the
+ * author id. Avatar + server-resolved mentions ride through untouched. Exported for unit tests.
+ */
+export function toClientMessage(msg: IProviderMessage): ClientMessage {
 	return {
 		externalId: msg.externalId,
 		author: msg.authorDisplayName || msg.authorExternalId,
+		...(msg.authorAvatarUrl ? { authorAvatarUrl: msg.authorAvatarUrl } : {}),
 		text: msg.text,
 		createdAt: toIsoTimestamp(msg.ts),
 		...(msg.editedTs ? { editedAt: toIsoTimestamp(msg.editedTs) } : {}),
+		...(msg.mentions && Object.keys(msg.mentions).length ? { mentions: msg.mentions } : {}),
 	};
+}
+
+/**
+ * Per-pod cache of the CALLER's own resolved profile (display name + avatar), keyed by
+ * connection + external user id — so the instant-send echo doesn't pay a users.info per send.
+ * Unresolvable profiles are NOT cached, so a transient failure retries on the next send.
+ */
+const selfProfileCache = new Map<string, { author: string; authorAvatarUrl?: string }>();
+
+/** Test hook: reset the per-pod self-profile cache. */
+export function clearSelfProfileCache(): void {
+	selfProfileCache.clear();
+}
+
+/**
+ * Resolve the CALLER's own display name/avatar in the external workspace, for the instant-send
+ * echo. The connection's own external user id (Slack: `externalSlackUserId`, stamped on the
+ * credentials at connect time) is resolved through the provider's contract `resolveIdentity` —
+ * the same capped users.info profile path — and cached per pod. Best-effort: no id / unresolvable
+ * → `author: 'You'` (the client may substitute its own fallback), NEVER fails the send.
+ */
+async function resolveSelfProfile(
+	doc: IExternalWorkspaceConnection,
+	connection: IProviderConnection,
+): Promise<{ author: string; authorAvatarUrl?: string }> {
+	const selfExternalId =
+		typeof connection.credentials.externalSlackUserId === 'string' && connection.credentials.externalSlackUserId
+			? connection.credentials.externalSlackUserId
+			: undefined;
+	if (!selfExternalId) {
+		return { author: 'You' };
+	}
+	const cacheKey = `${doc._id}:${selfExternalId}`;
+	const cached = selfProfileCache.get(cacheKey);
+	if (cached) {
+		return cached;
+	}
+	try {
+		const provider = providerRegistry.get(doc.provider);
+		const identity = await provider.resolveIdentity(connection, selfExternalId);
+		if (identity?.displayName && identity.displayName !== selfExternalId) {
+			const entry = { author: identity.displayName, ...(identity.avatarUrl ? { authorAvatarUrl: identity.avatarUrl } : {}) };
+			selfProfileCache.set(cacheKey, entry);
+			return entry;
+		}
+	} catch {
+		// Attribution is cosmetic — never fail (or delay-retry) the send over it.
+	}
+	return { author: 'You' };
 }
 
 /**
@@ -573,13 +634,17 @@ function toClientMessage(msg: IProviderMessage): ClientMessage {
  *
  * Ownership-scoped (loadOwnedConnection), decrypts creds, and calls the provider's REAL
  * `postMessage` (Microsoft Graph for Teams; Slack stays a clear not_implemented error). Returns the
- * created message id. On any Graph/auth/config error it returns a structured ProviderError (NOT
- * swallowed) so the panel can render it plainly.
+ * created message id PLUS the created message in ClientMessage shape (`message`) so the client can
+ * append it instantly without waiting for a refetch — author = the caller's own resolved external
+ * display name ('You' when unresolvable), createdAt = the provider-echoed creation timestamp
+ * (Slack's chat.postMessage `ts`, normalized to ISO) or now when the provider doesn't echo one.
+ * On any Graph/auth/config error it returns a structured ProviderError (NOT swallowed) so the
+ * panel can render it plainly.
  */
 export async function sendMyMessage(
 	userId: string,
 	opts: { connectionId: string; channelExternalId: string; text: string },
-): Promise<{ externalId: string; connection: ClientConnection } | ProviderError> {
+): Promise<{ externalId: string; message: ClientMessage; connection: ClientConnection } | ProviderError> {
 	if (typeof opts.text !== 'string' || !opts.text.trim()) {
 		return { error: 'empty_message', message: 'A non-empty message is required.', status: 400 };
 	}
@@ -591,8 +656,17 @@ export async function sendMyMessage(
 
 	try {
 		const provider = providerRegistry.get(loaded.doc.provider);
-		const { externalId } = await provider.postMessage(loaded.connection, opts.channelExternalId, { text: opts.text });
-		return { externalId, connection: toClientConnection(loaded.doc) };
+		const created = await provider.postMessage(loaded.connection, opts.channelExternalId, { text: opts.text });
+		// Instant-echo message: the caller's own attribution + the provider-echoed creation ts.
+		const self = await resolveSelfProfile(loaded.doc, loaded.connection);
+		const message: ClientMessage = {
+			externalId: created.externalId,
+			author: self.author,
+			...(self.authorAvatarUrl ? { authorAvatarUrl: self.authorAvatarUrl } : {}),
+			text: opts.text,
+			createdAt: created.ts ? toIsoTimestamp(created.ts) : new Date().toISOString(),
+		};
+		return { externalId: created.externalId, message, connection: toClientConnection(loaded.doc) };
 	} catch (err) {
 		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
 		return providerErrorMarkingAuthDeath(loaded.doc, err, 'send_message_failed');

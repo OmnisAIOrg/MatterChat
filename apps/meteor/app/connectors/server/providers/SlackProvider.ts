@@ -119,8 +119,122 @@ function tokensFromCredentials(credentials: IProviderCredentials): SlackTokens {
 	return { accessToken: credentials.accessToken };
 }
 
+/** A user's resolved profile (users.info): display name + avatar, shared by DMs + message enrichment. */
+type SlackProfile = { name: string; avatarUrl?: string };
+
+/** The users.info response slice the profile resolver reads. */
+type SlackUserInfoResponse = {
+	user?: {
+		real_name?: string;
+		profile?: { display_name?: string; real_name?: string; image_72?: string; image_48?: string };
+		name?: string;
+	};
+};
+
+/** Mention token pattern in raw Slack message text: `<@U123ABC>` / `<@W…>` (user/workspace-user ids). */
+const MENTION_TOKEN = /<@([UW][A-Z0-9]+)>/g;
+
+/**
+ * Extract the UNIQUE mentioned user ids (`U…`/`W…`) from a raw Slack message text. Pure — channel
+ * mentions (`<#C…>`), special mentions (`<!here>`) and plain `@name` text are ignored.
+ */
+export function extractMentionIds(text: string): string[] {
+	const ids = new Set<string>();
+	for (const match of text.matchAll(MENTION_TOKEN)) {
+		ids.add(match[1]);
+	}
+	return [...ids];
+}
+
+/** The raw Slack history message slice syncMessages maps (already filtered to human messages). */
+type SlackHistoryMessage = {
+	ts: string;
+	user: string;
+	text?: string;
+	thread_ts?: string;
+	edited?: { ts?: string };
+};
+
+/**
+ * Map ONE raw Slack history message to the enriched IProviderMessage:
+ *  - author display name + avatar via the (capped, cached) profile resolver — omitted when the
+ *    resolver fell back to the raw id, so the client's own id-fallback stays authoritative;
+ *  - `<@U123>` mention tokens resolved to a { id → display name } map. The text itself is NOT
+ *    rewritten — the client renderer owns presentation — and id-fallback entries are dropped.
+ */
+async function enrichSlackMessage(
+	msg: SlackHistoryMessage,
+	channelExternalId: string,
+	resolveProfile: (userId: string) => Promise<SlackProfile>,
+): Promise<IProviderMessage> {
+	const authorProfile = await resolveProfile(msg.user);
+
+	const text = msg.text || '';
+	const mentions: Record<string, string> = {};
+	for (const mentionId of extractMentionIds(text)) {
+		const profile = await resolveProfile(mentionId);
+		if (profile.name !== mentionId) {
+			mentions[mentionId] = profile.name;
+		}
+	}
+
+	return {
+		externalId: msg.ts,
+		channelExternalId,
+		authorExternalId: msg.user,
+		...(authorProfile.name !== msg.user ? { authorDisplayName: authorProfile.name } : {}),
+		...(authorProfile.avatarUrl ? { authorAvatarUrl: authorProfile.avatarUrl } : {}),
+		text,
+		ts: msg.ts,
+		...(Object.keys(mentions).length ? { mentions } : {}),
+		...(msg.thread_ts && msg.thread_ts !== msg.ts ? { threadExternalId: msg.thread_ts } : {}),
+		...(msg.edited?.ts ? { editedTs: msg.edited.ts } : {}),
+	};
+}
+
 export class SlackProvider implements IChatProvider {
 	readonly provider = 'slack' as const;
+
+	/**
+	 * Build a PER-CALL profile resolver: users.info per user, cached so a user appearing many times
+	 * costs ONE lookup, capped at MAX_PROFILE_LOOKUPS so a huge roster/DM list/history can't fan out
+	 * into hundreds of Slack calls and trip rate limits. Past the cap (or on any per-user error) the
+	 * name falls back to the user id and the avatar stays undefined — a single unresolved user never
+	 * fails the caller. Cache hits never count against the cap.
+	 *
+	 * Shared by listDirectChats (DM names/avatars) and syncMessages (author + mention enrichment) so
+	 * both resolve identically: display_name || real_name || profile.real_name || name || id.
+	 */
+	private createProfileResolver(tokens: SlackTokens): (userId: string) => Promise<SlackProfile> {
+		const profileCache = new Map<string, SlackProfile>();
+		let profileLookups = 0;
+		return async (userId: string): Promise<SlackProfile> => {
+			const cached = profileCache.get(userId);
+			if (cached) {
+				return cached;
+			}
+			if (profileLookups >= MAX_PROFILE_LOOKUPS) {
+				const fallback = { name: userId };
+				profileCache.set(userId, fallback);
+				return fallback;
+			}
+			profileLookups++;
+			try {
+				const info = await slackFetch<SlackUserInfoResponse>('users.info', tokens, { method: 'GET', params: { user: userId } });
+				const u = info.user || {};
+				const name = u.profile?.display_name || u.real_name || u.profile?.real_name || u.name || userId;
+				const avatarUrl = u.profile?.image_72 || u.profile?.image_48 || undefined;
+				const entry: SlackProfile = { name, ...(avatarUrl ? { avatarUrl } : {}) };
+				profileCache.set(userId, entry);
+				return entry;
+			} catch (err) {
+				// A single unresolved user must not fail the whole call — fall back to the id.
+				const fallback = { name: userId };
+				profileCache.set(userId, fallback);
+				return fallback;
+			}
+		};
+	}
 
 	// ─── auth / lifecycle ──────────────────────────────────────────────────────────────────────
 
@@ -298,47 +412,10 @@ export class SlackProvider implements IChatProvider {
 			limit: LIST_PAGE_SIZE,
 		});
 
-		// Richer per-user cache: name+avatar+presence for one user costs one users.info + one
-		// users.getPresence, regardless of how many DMs/groups they appear in.
-		const profileCache = new Map<string, { name: string; avatarUrl?: string }>();
+		// Per-user profile cache (name+avatar) — the SHARED capped users.info resolver, so one user
+		// costs one lookup regardless of how many DMs/groups they appear in.
+		const resolveProfile = this.createProfileResolver(tokens);
 		const presenceCache = new Map<string, 'active' | 'away' | 'dnd' | 'offline' | undefined>();
-		let profileLookups = 0;
-
-		// Resolve (and cache) a user's display name + avatar via users.info. Capped so a giant DM list
-		// can't fan out into hundreds of calls — past the cap the name falls back to the id and the
-		// avatar stays undefined. Cache hits never count against the cap.
-		const resolveProfile = async (userId: string): Promise<{ name: string; avatarUrl?: string }> => {
-			const cached = profileCache.get(userId);
-			if (cached) {
-				return cached;
-			}
-			if (profileLookups >= MAX_PROFILE_LOOKUPS) {
-				const fallback = { name: userId };
-				profileCache.set(userId, fallback);
-				return fallback;
-			}
-			profileLookups++;
-			try {
-				const info = await slackFetch<{
-					user?: {
-						real_name?: string;
-						profile?: { display_name?: string; real_name?: string; image_72?: string; image_48?: string };
-						name?: string;
-					};
-				}>('users.info', tokens, { method: 'GET', params: { user: userId } });
-				const u = info.user || {};
-				const name = u.profile?.display_name || u.real_name || u.profile?.real_name || u.name || userId;
-				const avatarUrl = u.profile?.image_72 || u.profile?.image_48 || undefined;
-				const entry = { name, ...(avatarUrl ? { avatarUrl } : {}) };
-				profileCache.set(userId, entry);
-				return entry;
-			} catch (err) {
-				// A single unresolved peer must not fail the whole list — fall back to the id.
-				const fallback = { name: userId };
-				profileCache.set(userId, fallback);
-				return fallback;
-			}
-		};
 
 		// Name-only resolver kept for group-DM membership (where avatars/presence aren't surfaced).
 		const resolveUserName = async (userId: string): Promise<string> => (await resolveProfile(userId)).name;
@@ -610,6 +687,9 @@ export class SlackProvider implements IChatProvider {
 		const tokens = tokensFromCredentials(connection.credentials);
 		// People-directory DM target: a user id must be resolved to its im conversation id first.
 		const conversationId = await this.resolveConversationId(connection, channelExternalId, tokens);
+		// Author + mention enrichment: the SHARED capped users.info resolver (same pattern as
+		// listDirectChats), per-call cached so an author appearing in 50 messages costs ONE lookup.
+		const resolveProfile = this.createProfileResolver(tokens);
 
 		type SlackMessage = {
 			ts?: string;
@@ -664,15 +744,9 @@ export class SlackProvider implements IChatProvider {
 					}
 				}
 
-				yield {
-					externalId: msg.ts,
-					channelExternalId,
-					authorExternalId: msg.user,
-					text: msg.text || '',
-					ts: msg.ts,
-					...(msg.thread_ts && msg.thread_ts !== msg.ts ? { threadExternalId: msg.thread_ts } : {}),
-					...(msg.edited?.ts ? { editedTs: msg.edited.ts } : {}),
-				};
+				// Author + mention enrichment (capped, cached) — real display names/avatars + a resolved
+				// mentions map instead of raw U-ids. See enrichSlackMessage.
+				yield await enrichSlackMessage(msg as SlackHistoryMessage, channelExternalId, resolveProfile);
 			}
 
 			cursor = (page.response_metadata?.next_cursor as string) || undefined;
@@ -767,7 +841,7 @@ export class SlackProvider implements IChatProvider {
 		connection: IProviderConnection,
 		channelExternalId: string,
 		message: IOutboundMessage,
-	): Promise<{ externalId: string }> {
+	): Promise<{ externalId: string; ts: string }> {
 		if (!isSlackConfigured()) {
 			return notConfigured();
 		}
@@ -793,7 +867,9 @@ export class SlackProvider implements IChatProvider {
 		if (!created?.ts) {
 			throw new Error('slack_post_no_message_ts');
 		}
-		return { externalId: created.ts };
+		// chat.postMessage echoes the created message `ts` — surfaced as BOTH the externalId and the
+		// provider-native creation timestamp so the service can build an instant-echo ClientMessage.
+		return { externalId: created.ts, ts: created.ts };
 	}
 
 	// ─── read state — REAL (best-effort) ──────────────────────────────────────────────────────────

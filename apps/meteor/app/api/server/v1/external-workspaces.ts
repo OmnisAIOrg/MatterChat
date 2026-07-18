@@ -217,7 +217,9 @@ API.v1.addRoute(
 				return API.v1.success({ ok: false as const, error: result.error, message: result.message, status: result.status });
 			}
 
-			return API.v1.success({ ok: true as const, externalId: result.externalId, connection: result.connection });
+			// `message` is the created message in ClientMessage shape — the client appends it instantly
+			// (no refetch): author = the caller's own resolved external display name ('You' fallback).
+			return API.v1.success({ ok: true as const, externalId: result.externalId, message: result.message, connection: result.connection });
 		},
 	},
 );

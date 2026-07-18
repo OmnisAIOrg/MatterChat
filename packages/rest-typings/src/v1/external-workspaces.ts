@@ -97,10 +97,18 @@ export type ExternalWorkspaceMembersResult =
 /** A single message in the "channel messages" view (provider-native ids; newest-first). */
 export type ExternalWorkspaceMessage = {
 	externalId: string;
+	/** Author display name (falls back to the provider-native author id when unresolvable). */
 	author: string;
+	/** Author avatar URL, when the provider resolved it. */
+	authorAvatarUrl?: string;
 	text: string;
 	createdAt: string;
 	editedAt?: string;
+	/**
+	 * Mentioned users resolved server-side: external user id → display name, for the mention tokens
+	 * in `text` (Slack `<@U123>`). The text is NOT rewritten — the client renderer owns presentation.
+	 */
+	mentions?: Record<string, string>;
 };
 
 /**
@@ -112,9 +120,15 @@ export type ExternalWorkspaceMessagesResult =
 	| { ok: true; messages: ExternalWorkspaceMessage[]; connection: ExternalWorkspaceClientConnection }
 	| { ok: false; error: string; message: string; status?: number };
 
-/** The "send message" result. The created provider-native message id, in the same 200 envelope. */
+/**
+ * The "send message" result. The created provider-native message id, PLUS the created message in
+ * the same shape the messages view renders (`message`) so the client can append it instantly
+ * without a refetch — author = the caller's own resolved external display name ('You' when
+ * unresolvable; the client may substitute its own fallback), createdAt = the provider-echoed
+ * creation timestamp (ISO) or the server's now. Same 200 envelope.
+ */
 export type ExternalWorkspaceSendMessageResult =
-	| { ok: true; externalId: string; connection: ExternalWorkspaceClientConnection }
+	| { ok: true; externalId: string; message: ExternalWorkspaceMessage; connection: ExternalWorkspaceClientConnection }
 	| { ok: false; error: string; message: string; status?: number };
 
 /**

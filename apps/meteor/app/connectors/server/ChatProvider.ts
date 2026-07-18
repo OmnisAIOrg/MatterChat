@@ -123,6 +123,11 @@ export interface IProviderMessage {
 	 * Optional: not every provider/message has it (system messages, providers that only ship ids).
 	 */
 	authorDisplayName?: string;
+	/**
+	 * Author avatar URL when the provider resolved it (Slack `users.info` image_72/48). Optional —
+	 * providers without a cheap avatar source simply omit it.
+	 */
+	authorAvatarUrl?: string;
 	/** Plain/normalized text. Provider-specific rich formatting is normalized by the provider. */
 	text: string;
 	/** ISO-8601 (or provider-native) timestamp string. */
@@ -131,6 +136,12 @@ export interface IProviderMessage {
 	threadExternalId?: string;
 	/** Edit timestamp when the message has been edited. */
 	editedTs?: string;
+	/**
+	 * Mentioned users resolved server-side: external user id → display name, for the ids referenced
+	 * by mention tokens in the raw text (Slack `<@U123>`). The text itself is NOT rewritten — the
+	 * client renderer owns presentation. Only ids that actually resolved to a name are included.
+	 */
+	mentions?: Record<string, string>;
 	files?: IProviderFileRef[];
 }
 
@@ -287,8 +298,16 @@ export interface IChatProvider {
 	 * Post a message to an external channel OR a direct chat AS the connection's signed-in user. The id
 	 * may be either a channel `externalId` (from `listChannels`) or a direct chat `externalId` (from
 	 * `listDirectChats`); the provider detects which and posts to the right endpoint.
+	 *
+	 * `ts` is the provider-native creation timestamp echoed by the send (Slack `chat.postMessage`
+	 * echoes the message `ts`), when the provider carries one — ADDITIVE/optional so callers can
+	 * build an instant-echo message without a refetch; providers without it simply omit it.
 	 */
-	postMessage(connection: IProviderConnection, channelExternalId: string, message: IOutboundMessage): Promise<{ externalId: string }>;
+	postMessage(
+		connection: IProviderConnection,
+		channelExternalId: string,
+		message: IOutboundMessage,
+	): Promise<{ externalId: string; ts?: string }>;
 
 	// ─── notifications / "feel-alive" ──────────────────────────────────────────────────────────
 
