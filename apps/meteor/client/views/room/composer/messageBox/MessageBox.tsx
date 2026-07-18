@@ -463,6 +463,10 @@ const MessageBox = ({
 					placeholder={composerPlaceholder}
 					onPaste={handlePaste}
 					aria-activedescendant={popup.focused ? `popup-item-${popup.focused._id}` : undefined}
+					// MATTERCHAT: mobile keyboard ergonomics — virtual keyboards show a Send key and
+					// capitalize sentence starts (both inert on physical keyboards/desktop).
+					enterKeyHint='send'
+					autoCapitalize='sentences'
 				/>
 				<MessageComposerFiles />
 				<MessageComposerToolbar>
