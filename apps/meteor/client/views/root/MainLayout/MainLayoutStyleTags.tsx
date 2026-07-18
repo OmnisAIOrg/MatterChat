@@ -72,6 +72,24 @@ body {
 	background: #1A212C !important;
 	box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 0 0 1px rgba(0, 0, 0, 0.22) !important;
 }
+/* MATTERCHAT: on phones the floating-window frame costs 44px of width (8px body margin +
+   14px react-root inset per side) — go full-bleed edge-to-edge below the md breakpoint.
+   100dvh (with 100vh fallback above it) tracks iOS Safari's collapsing toolbar. */
+@media (max-width: 767.98px) {
+	body {
+		margin: 0 !important;
+		width: 100vw !important;
+		height: 100vh !important;
+		height: 100dvh !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+	}
+	#react-root {
+		inset: 0 !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+	}
+}
 `;
 
 /**
