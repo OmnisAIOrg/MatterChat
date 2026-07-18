@@ -328,8 +328,10 @@ const Avatar = ({
 	const dotColor = presenceColor(presence);
 	return (
 		<Box className={avatarWrapClass}>
+			{/* Box is='img' (not a raw <img>) so the css-in-js class actually resolves — String(cssFn)
+			    yields no class name, which let the image render UNSTYLED at natural size, flooding the row. */}
 			{showImg ? (
-				<img className={String(avatarImgClass)} src={avatarUrl} alt='' onError={(): void => setImgFailed(true)} />
+				<Box is='img' className={avatarImgClass} src={avatarUrl} alt='' onError={(): void => setImgFailed(true)} />
 			) : (
 				<Box className={avatarDotClass} style={{ background: color }} aria-hidden>
 					{initialsOf(name || '?')}

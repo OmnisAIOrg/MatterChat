@@ -541,6 +541,39 @@ export class SlackProvider implements IChatProvider {
 		return out;
 	}
 
+	// ─── conversation-id resolution ──────────────────────────────────────────────────────────────
+
+	/**
+	 * The People directory hands a USER id (`U…`/`W…`) through as a DM target, but Slack's message
+	 * APIs only accept CONVERSATION ids (`C…`/`D…`/`G…`) — conversations.history with a user id answers
+	 * `channel_not_found`. conversations.open resolves (creating if needed) the 1:1 im and returns its
+	 * `D…` id. Cached per (connection, user) so each DM pays the extra call once per pod lifetime.
+	 * Requires the `im:write` user scope (in SLACK_USER_SCOPES); tokens granted before that scope
+	 * landed surface Slack's `missing_scope` — reconnecting re-grants.
+	 */
+	private dmIdCache = new Map<string, string>();
+
+	private async resolveConversationId(connection: IProviderConnection, externalId: string, tokens: SlackTokens): Promise<string> {
+		if (!/^[UW]/.test(externalId)) {
+			return externalId;
+		}
+		const cacheKey = `${connection.connectionId}:${externalId}`;
+		const cached = this.dmIdCache.get(cacheKey);
+		if (cached) {
+			return cached;
+		}
+		const opened = await slackFetch<{ channel?: { id?: string } }>('conversations.open', tokens, {
+			method: 'POST',
+			params: { users: externalId },
+		});
+		const id = opened.channel?.id;
+		if (!id) {
+			throw new Error('slack_dm_open_failed');
+		}
+		this.dmIdCache.set(cacheKey, id);
+		return id;
+	}
+
 	// ─── sync (read) — REAL ──────────────────────────────────────────────────────────────────────
 
 	/**
@@ -564,6 +597,8 @@ export class SlackProvider implements IChatProvider {
 			throw new Error('slack_invalid_channel_id');
 		}
 		const tokens = tokensFromCredentials(connection.credentials);
+		// People-directory DM target: a user id must be resolved to its im conversation id first.
+		const conversationId = await this.resolveConversationId(connection, channelExternalId, tokens);
 
 		type SlackMessage = {
 			ts?: string;
@@ -592,7 +627,7 @@ export class SlackProvider implements IChatProvider {
 			const page = await slackFetch<{ messages?: SlackMessage[] }>('conversations.history', tokens, {
 				method: 'GET',
 				params: {
-					channel: channelExternalId,
+					channel: conversationId,
 					limit: MESSAGE_PAGE_SIZE,
 					...(oldest ? { oldest } : {}),
 					...(cursor ? { cursor } : {}),
@@ -732,11 +767,13 @@ export class SlackProvider implements IChatProvider {
 			throw new Error('slack_empty_message');
 		}
 		const tokens = tokensFromCredentials(connection.credentials);
+		// People-directory DM target: a user id must be resolved to its im conversation id first.
+		const conversationId = await this.resolveConversationId(connection, channelExternalId, tokens);
 
 		const created = await slackFetch<{ ts?: string }>('chat.postMessage', tokens, {
 			method: 'POST',
 			params: {
-				channel: channelExternalId,
+				channel: conversationId,
 				text,
 				...(message.threadExternalId ? { thread_ts: message.threadExternalId } : {}),
 			},
@@ -765,10 +802,12 @@ export class SlackProvider implements IChatProvider {
 		}
 		const tokens = tokensFromCredentials(connection.credentials);
 		try {
+			// People-directory DM target: a user id must be resolved to its im conversation id first.
+			const conversationId = await this.resolveConversationId(connection, externalId, tokens);
 			// Newest message ts to mark up to. limit=1 keeps this cheap.
 			const page = await slackFetch<{ messages?: Array<{ ts?: string }> }>('conversations.history', tokens, {
 				method: 'GET',
-				params: { channel: externalId, limit: 1 },
+				params: { channel: conversationId, limit: 1 },
 			});
 			const latestTs = page.messages?.[0]?.ts;
 			if (!latestTs) {
@@ -777,7 +816,7 @@ export class SlackProvider implements IChatProvider {
 			}
 			await slackFetch('conversations.mark', tokens, {
 				method: 'POST',
-				params: { channel: externalId, ts: latestTs },
+				params: { channel: conversationId, ts: latestTs },
 			});
 		} catch (err) {
 			// Best-effort: swallow (missing scope, channel_not_found, etc.) and resolve void.
