@@ -46,6 +46,8 @@ export type ClientBridge = {
 	connectionId: string;
 	provider: IExternalWorkspaceConnection['provider'];
 	channelExternalId: string;
+	/** The raw id the bridge was created from when it differed (Slack People user id) — client match aid. */
+	sourceExternalId?: string;
 	name: string;
 	rid: string;
 	/** `webhook` = own live subscription; `shared` = riding another connection's subscription; `none` = outbound-only. */
@@ -76,6 +78,7 @@ function toClientBridge(doc: IExternalWorkspaceConnection, bridge: IBridgedChann
 		connectionId: doc._id,
 		provider: doc.provider,
 		channelExternalId: bridge.channelExternalId,
+		...(bridge.sourceExternalId ? { sourceExternalId: bridge.sourceExternalId } : {}),
 		name: bridge.name,
 		rid: bridge.rid,
 		realtime: realtimeModeOf(doc, bridge),
@@ -289,6 +292,9 @@ export async function bridgeMyChannel(
 
 	const bridge: IBridgedChannel = {
 		channelExternalId,
+		// Keep the raw pre-resolution id when it differed (Slack user id → im id) so the client can
+		// match this bridge back to the People-row selection that created it.
+		...(channelExternalId !== opts.channelExternalId ? { sourceExternalId: opts.channelExternalId } : {}),
 		name: label,
 		rid: room._id,
 		createdAt: new Date(),
@@ -324,7 +330,11 @@ export async function unbridgeMyChannel(
 	if (!doc) {
 		return { error: 'connection_not_found', message: 'No connected workspace found for this account.', status: 404 };
 	}
-	const bridge = doc.bridgedChannels?.find((b) => b.channelExternalId === opts.channelExternalId);
+	// Match canonical OR source id — the client may hand back the People-row user id it selected by,
+	// while the record is keyed by the resolved conversation id (see bridgeMyChannel).
+	const bridge = doc.bridgedChannels?.find(
+		(b) => b.channelExternalId === opts.channelExternalId || b.sourceExternalId === opts.channelExternalId,
+	);
 	if (!bridge) {
 		return { error: 'bridge_not_found', message: 'This channel is not bridged on that connection.', status: 404 };
 	}
@@ -341,9 +351,10 @@ export async function unbridgeMyChannel(
 		}
 	}
 
-	await ExternalWorkspaceConnections.removeBridgedChannel(doc._id, opts.channelExternalId);
+	// Remove by the record's CANONICAL id (opts may carry the source/user id — see the match above).
+	await ExternalWorkspaceConnections.removeBridgedChannel(doc._id, bridge.channelExternalId);
 	// Strip the room tag so the outbound callback's cheap gate stops matching this room.
-	await Rooms.updateOne({ _id: bridge.rid }, { $pull: { importIds: roomImportId(doc._id, opts.channelExternalId) } });
+	await Rooms.updateOne({ _id: bridge.rid }, { $pull: { importIds: roomImportId(doc._id, bridge.channelExternalId) } });
 	return { removed: true };
 }
 
