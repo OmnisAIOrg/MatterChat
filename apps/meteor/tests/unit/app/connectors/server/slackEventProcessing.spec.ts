@@ -14,17 +14,21 @@ const CHANNEL = 'C0123456789';
 const findByBridgedChannel = sinon.stub();
 const setBridgedChannelLastInboundAt = sinon.stub();
 const messagesFindOneById = sinon.stub();
+const messagesFindOne = sinon.stub();
+const roomsFindOneById = sinon.stub();
 const usersFindOneById = sinon.stub();
 const ingestExternalMessage = sinon.stub();
 const toProviderConnection = sinon.stub();
 const slackFetch = sinon.stub();
 const deleteMessage = sinon.stub();
 const updateMessage = sinon.stub();
+const setReactionStub = sinon.stub();
 
 const processing = proxyquire.noCallThru().load('../../../../../app/connectors/server/providers/slack/eventProcessing', {
 	'@rocket.chat/models': {
 		ExternalWorkspaceConnections: { findByBridgedChannel, setBridgedChannelLastInboundAt },
-		Messages: { findOneById: messagesFindOneById },
+		Messages: { findOneById: messagesFindOneById, findOne: messagesFindOne },
+		Rooms: { findOneById: roomsFindOneById },
 		Users: { findOneById: usersFindOneById },
 	},
 	'./slackApi': { slackFetch },
@@ -33,6 +37,7 @@ const processing = proxyquire.noCallThru().load('../../../../../app/connectors/s
 	},
 	'../../../../lib/server/functions/deleteMessage': { deleteMessage },
 	'../../../../lib/server/functions/updateMessage': { updateMessage },
+	'../../../../reactions/server/setReaction': { setReaction: setReactionStub },
 	'../../bridge/bridgeCore': { ingestExternalMessage },
 	// Hand the module OUR loaded echoSuppression instance so the singleton the spec seeds via
 	// echoSuppression.add() is the very one the processing code consults (the tsx ESM/CJS dual
@@ -41,7 +46,7 @@ const processing = proxyquire.noCallThru().load('../../../../../app/connectors/s
 	'../../runtimeConnection': { toProviderConnection },
 });
 
-const { acceptSlackEvent, clearProfileCache, processSlackMessageEvent, slackEventDedup } = processing;
+const { acceptSlackEvent, clearProfileCache, processSlackMessageEvent, processSlackReactionEvent, slackEventDedup } = processing;
 
 /** One stored connection doc bridging CHANNEL. */
 const makeDoc = (id: string, userId = `user-${id}`) => ({
@@ -61,12 +66,17 @@ describe('Slack event processing', () => {
 		setBridgedChannelLastInboundAt.reset();
 		setBridgedChannelLastInboundAt.resolves({});
 		messagesFindOneById.reset();
+		messagesFindOne.reset();
+		messagesFindOne.resolves(null);
+		roomsFindOneById.reset();
 		usersFindOneById.reset();
 		ingestExternalMessage.reset();
 		toProviderConnection.reset();
 		slackFetch.reset();
 		deleteMessage.reset();
 		updateMessage.reset();
+		setReactionStub.reset();
+		setReactionStub.resolves(undefined);
 		clearProfileCache();
 
 		// Default: credentials decrypt fine; the owner's own Slack id rides on them.
@@ -299,6 +309,60 @@ describe('Slack event processing', () => {
 
 			await processSlackMessageEvent(TEAM, { kind: 'delete', channel: CHANNEL, ts: '8.000002' });
 			expect(deleteMessage.callCount).to.equal(0);
+		});
+	});
+
+	describe('processSlackReactionEvent', () => {
+		const TS = '9.000001';
+		const reactionAction = (add: boolean) => ({ kind: 'reaction' as const, add, channel: CHANNEL, ts: TS, user: 'U2', reaction: 'thumbsup' });
+
+		it('applies an external reaction to the bridged message as the owner', async () => {
+			const doc = makeDoc('connR');
+			findByBridgedChannel.returns(cursorOf([doc]));
+			const rcId = extMessageId(doc._id, CHANNEL, TS);
+			messagesFindOneById.withArgs(rcId).resolves({ _id: rcId, rid: `rid-${doc._id}`, reactions: {} });
+			usersFindOneById.resolves({ _id: doc.userId, username: 'owner' });
+			roomsFindOneById.resolves({ _id: `rid-${doc._id}` });
+
+			await processSlackReactionEvent(TEAM, reactionAction(true));
+			expect(setReactionStub.callCount).to.equal(1);
+			expect(setReactionStub.firstCall.args[3]).to.equal(':thumbsup:');
+		});
+
+		it('no-ops when RC already matches the target state (toggle safety)', async () => {
+			const doc = makeDoc('connR2');
+			findByBridgedChannel.returns(cursorOf([doc]));
+			const rcId = extMessageId(doc._id, CHANNEL, TS);
+			messagesFindOneById.withArgs(rcId).resolves({
+				_id: rcId,
+				rid: `rid-${doc._id}`,
+				reactions: { ':thumbsup:': { usernames: ['owner'] } },
+			});
+			usersFindOneById.resolves({ _id: doc.userId, username: 'owner' });
+			roomsFindOneById.resolves({ _id: `rid-${doc._id}` });
+
+			await processSlackReactionEvent(TEAM, reactionAction(true));
+			expect(setReactionStub.callCount).to.equal(0);
+		});
+
+		it('drops the echo of its own outbound reaction mirror (pre-armed in: key)', async () => {
+			const doc = makeDoc('connR3');
+			findByBridgedChannel.returns(cursorOf([doc]));
+			echoSuppressionModule.reactionEcho.add(doc._id, echoSuppressionModule.reactionEchoKey('in', TS, 'thumbsup', true));
+
+			await processSlackReactionEvent(TEAM, reactionAction(true));
+			expect(setReactionStub.callCount).to.equal(0);
+			expect(messagesFindOneById.callCount).to.equal(0);
+		});
+
+		it('ignores reactions on messages the bridge does not know', async () => {
+			const doc = makeDoc('connR4');
+			findByBridgedChannel.returns(cursorOf([doc]));
+			messagesFindOneById.resolves(null);
+			messagesFindOne.resolves(null);
+
+			await processSlackReactionEvent(TEAM, reactionAction(true));
+			expect(setReactionStub.callCount).to.equal(0);
 		});
 	});
 });

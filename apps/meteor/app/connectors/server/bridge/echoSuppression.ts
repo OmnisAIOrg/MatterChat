@@ -83,3 +83,23 @@ export class EchoSuppressionSet {
 
 /** Singleton used by the bridge (one per server instance). */
 export const echoSuppression = new EchoSuppressionSet();
+
+/**
+ * Reaction/edit/delete echo suppression — same TTL-set mechanism, separate namespace so a
+ * reaction key can never collide with a message id. Keys are built by the two mirroring
+ * directions to break the loop BOTH ways:
+ *  - `in:…` added by the OUTBOUND mirror (RC → external) so the external event it triggers is
+ *    dropped when it comes back;
+ *  - `out:…` added by the INBOUND apply (external → RC) so the RC callback it triggers does not
+ *    mirror straight back out.
+ * See reactionEchoKey for the canonical key shape.
+ */
+export const reactionEcho = new EchoSuppressionSet();
+
+/** Canonical reaction-echo key: direction + target message + emoji + add/remove. */
+export const reactionEchoKey = (direction: 'in' | 'out', externalMessageId: string, emojiName: string, add: boolean): string =>
+	`${direction}:${externalMessageId}:${emojiName}:${add ? '+' : '-'}`;
+
+/** Canonical edit/delete echo key (same two-direction contract as reactions). */
+export const changeEchoKey = (direction: 'in' | 'out', kind: 'edit' | 'delete', externalMessageId: string): string =>
+	`${direction}:${kind}:${externalMessageId}`;

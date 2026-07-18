@@ -885,6 +885,70 @@ export class SlackProvider implements IChatProvider {
 		return { externalId: created.ts, ts: created.ts };
 	}
 
+	/**
+	 * Edit one of the signed-in user's own messages: chat.update with `ts=` the id postMessage
+	 * returned. Slack rejects edits of other users' messages — exactly the bridge's ownership rule
+	 * (only our own outbound posts are mirrored).
+	 */
+	async updateMessage(connection: IProviderConnection, channelExternalId: string, externalId: string, text: string): Promise<void> {
+		if (!isSlackConfigured()) {
+			return notConfigured();
+		}
+		if (!channelExternalId || !externalId || typeof text !== 'string' || !text.trim()) {
+			throw new Error('slack_invalid_update');
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const conversationId = await this.resolveConversationId(connection, channelExternalId, tokens);
+		await slackFetch('chat.update', tokens, { method: 'POST', params: { channel: conversationId, ts: externalId, text } });
+	}
+
+	/** Delete one of the signed-in user's own messages: chat.delete with the postMessage ts. */
+	async deleteMessage(connection: IProviderConnection, channelExternalId: string, externalId: string): Promise<void> {
+		if (!isSlackConfigured()) {
+			return notConfigured();
+		}
+		if (!channelExternalId || !externalId) {
+			throw new Error('slack_invalid_delete');
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const conversationId = await this.resolveConversationId(connection, channelExternalId, tokens);
+		await slackFetch('chat.delete', tokens, { method: 'POST', params: { channel: conversationId, ts: externalId } });
+	}
+
+	/**
+	 * Add/remove the signed-in user's reaction: reactions.add / reactions.remove with the bare
+	 * emoji name. `already_reacted` / `no_reaction` answers are swallowed — mirroring an
+	 * already-mirrored state is idempotent, not an error.
+	 */
+	async setReaction(
+		connection: IProviderConnection,
+		channelExternalId: string,
+		externalId: string,
+		emojiName: string,
+		add: boolean,
+	): Promise<void> {
+		if (!isSlackConfigured()) {
+			return notConfigured();
+		}
+		if (!channelExternalId || !externalId || !emojiName) {
+			throw new Error('slack_invalid_reaction');
+		}
+		const tokens = tokensFromCredentials(connection.credentials);
+		const conversationId = await this.resolveConversationId(connection, channelExternalId, tokens);
+		try {
+			await slackFetch(add ? 'reactions.add' : 'reactions.remove', tokens, {
+				method: 'POST',
+				params: { channel: conversationId, timestamp: externalId, name: emojiName },
+			});
+		} catch (err) {
+			const msg = String(err);
+			if (msg.includes('already_reacted') || msg.includes('no_reaction')) {
+				return;
+			}
+			throw err;
+		}
+	}
+
 	// ─── read state — REAL (best-effort) ──────────────────────────────────────────────────────────
 
 	/**

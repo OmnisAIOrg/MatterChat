@@ -28,7 +28,9 @@
  *
  * SLACK APP CONFIG this endpoint expects (see MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §2.1a):
  *   Event Subscriptions → Request URL: https://<site>/_slack/events
- *   Subscribe to USER events: message.channels, message.groups, message.im, message.mpim
+ *   Subscribe to USER events: message.channels, message.groups, message.im, message.mpim,
+ *   reaction_added, reaction_removed (reactions sync requires the last two + the reactions:read
+ *   and reactions:write user scopes)
  *   Basic Information → Signing Secret → paste into Admin → Slack → Signing Secret
  *
  * Clean-room: written from the Slack Events API / request-verification docs; nothing under
@@ -38,8 +40,8 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { SLACK_EVENTS_ROUTE_PREFIX, slackSigningSecret } from './config';
-import { extractMessageEvent } from './eventMessageMapping';
-import { acceptSlackEvent, processSlackMessageEvent } from './eventProcessing';
+import { extractMessageEvent, extractReactionEvent } from './eventMessageMapping';
+import { acceptSlackEvent, processSlackMessageEvent, processSlackReactionEvent } from './eventProcessing';
 import { parseEventEnvelope, verifySlackSignature } from './eventsSecurity';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
 
@@ -124,17 +126,22 @@ async function handleEventPost(req: any, res: any): Promise<void> {
 	}
 
 	const action = extractMessageEvent(envelope.event);
+	const reaction = action ? null : extractReactionEvent(envelope.event);
 
 	// 4. Ack FIRST (200 within 3s), process async — Slack disables the subscription on repeated
 	// slow/failed deliveries.
 	ok(res);
 
-	if (!action) {
-		return; // Not a bridgeable message event (bot/system/other event type) — acked + dropped.
+	if (!action && !reaction) {
+		return; // Not a bridgeable message/reaction event (bot/system/other) — acked + dropped.
 	}
 
 	setImmediate(() => {
-		void processSlackMessageEvent(envelope.teamId, action);
+		if (action) {
+			void processSlackMessageEvent(envelope.teamId, action);
+		} else if (reaction) {
+			void processSlackReactionEvent(envelope.teamId, reaction);
+		}
 	});
 }
 

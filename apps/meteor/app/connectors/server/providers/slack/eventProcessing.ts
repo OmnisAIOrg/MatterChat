@@ -27,18 +27,19 @@
  * the raw id) and rides the ALIAS mechanism exactly like Teams inbound (no ghost accounts).
  */
 import type { IBridgedChannel, IExternalWorkspaceConnection, IUser } from '@rocket.chat/core-typings';
-import { ExternalWorkspaceConnections, Messages, Users } from '@rocket.chat/models';
+import { ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
 
-import type { SlackMessageAction } from './eventMessageMapping';
+import type { SlackMessageAction, SlackReactionAction } from './eventMessageMapping';
 import { slackTsToEpochMs, toProviderMessage } from './eventMessageMapping';
 import type { SlackTokens } from './slackApi';
 import { slackFetch } from './slackApi';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
 import { deleteMessage } from '../../../../lib/server/functions/deleteMessage';
 import { updateMessage } from '../../../../lib/server/functions/updateMessage';
+import { setReaction } from '../../../../reactions/server/setReaction';
 import { ingestExternalMessage } from '../../bridge/bridgeCore';
 import { extMessageId } from '../../bridge/bridgeIds';
-import { EchoSuppressionSet, echoSuppression } from '../../bridge/echoSuppression';
+import { EchoSuppressionSet, echoSuppression, reactionEcho, reactionEchoKey } from '../../bridge/echoSuppression';
 import { toProviderConnection } from '../../runtimeConnection';
 
 /**
@@ -229,6 +230,69 @@ async function processDeletedMessage(teamId: string, action: Extract<SlackMessag
 		} catch (err) {
 			SystemLogger.warn({ msg: 'Slack events: delete apply failed', connectionId: doc._id, err: String(err) });
 		}
+	}
+}
+
+/**
+ * A Slack reaction_added/reaction_removed applied to the bridged RC message.
+ *
+ * ATTRIBUTION (v1, documented): RC reactions are keyed by username with no alias mechanism, so
+ * external reactions are applied AS the connection owner — the emoji shows up, the "who" is the
+ * owner. LOOP SAFETY: the apply fires RC's afterSetReaction, which the outbound mirror consumes
+ * via the reactionEcho `out:` key set here; and our own outbound mirrors pre-arm the `in:` key,
+ * dropped at the top. Events authored by the owner's own Slack id are also no-op'd when RC
+ * already matches the target state (toggle-safe).
+ */
+async function processReaction(teamId: string, action: SlackReactionAction): Promise<void> {
+	const targets = await bridgingConnections(teamId, action.channel);
+	const rcReactionName = `:${action.reaction.replace(/::skin-tone-\d$/, '')}:`;
+	const bareName = action.reaction.replace(/::skin-tone-\d$/, '');
+
+	for (const { doc, bridge } of targets) {
+		try {
+			// Our own outbound mirror coming back — pre-armed `in:` key, drop.
+			if (reactionEcho.has(doc._id, reactionEchoKey('in', action.ts, bareName, action.add))) {
+				continue;
+			}
+			// Only bridge-known messages: our outbound posts (stamped) or bridge-inserted `ext-…` ones.
+			const rcId = extMessageId(doc._id, bridge.channelExternalId, action.ts);
+			const existing =
+				(await Messages.findOneById(rcId)) ??
+				(await Messages.findOne({ 'rid': bridge.rid, 'customFields.connectorBridge.externalId': action.ts }));
+			if (!existing) {
+				continue;
+			}
+			const owner = await ownerUserOf(doc);
+			if (!owner?.username) {
+				continue;
+			}
+			// Toggle-safety: setReaction(userAlreadyReacted) TOGGLES; apply only when it changes state.
+			const alreadyReacted = Boolean(existing.reactions?.[rcReactionName]?.usernames?.includes(owner.username));
+			if (action.add === alreadyReacted) {
+				continue;
+			}
+			const room = await Rooms.findOneById(existing.rid);
+			if (!room) {
+				continue;
+			}
+			// Suppress the outbound mirror this apply is about to trigger.
+			reactionEcho.add(doc._id, reactionEchoKey('out', action.ts, bareName, action.add));
+			await setReaction(room, owner, existing, rcReactionName, alreadyReacted);
+		} catch (err) {
+			SystemLogger.warn({ msg: 'Slack events: reaction apply failed', connectionId: doc._id, err: String(err) });
+		}
+	}
+}
+
+/**
+ * Process ONE verified, deduped reaction action (same ack-then-async contract as message events).
+ * Never throws.
+ */
+export async function processSlackReactionEvent(teamId: string, action: SlackReactionAction): Promise<void> {
+	try {
+		await processReaction(teamId, action);
+	} catch (err) {
+		SystemLogger.error({ msg: 'Slack events: reaction processing failed', teamId, err: String(err) });
 	}
 }
 
