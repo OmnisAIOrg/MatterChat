@@ -172,9 +172,22 @@ export type ExternalWorkspaceBridgeChannelResult =
 /** The "unbridge channel" result. Same 200-envelope discriminated union as the other views. */
 export type ExternalWorkspaceUnbridgeChannelResult = { ok: true } | { ok: false; error: string; message: string; status?: number };
 
+/**
+ * Per-provider connect availability, computed SERVER-side from the full provider config
+ * (admin settings AND env fallbacks — e.g. TEAMS_ENABLED). The client must use this, not the
+ * public settings, to decide which "Connect <Provider>" affordances to show: env-enabled
+ * connectors are invisible to `useSetting` and were silently missing from the add menu.
+ * `enabled` = the connector is turned on; `configured` = it also has the credentials to
+ * actually complete an OAuth connect (client id/secret present).
+ */
+export type ExternalWorkspaceAvailability = Record<ExternalProvider, { enabled: boolean; configured: boolean }>;
+
 export type ExternalWorkspacesEndpoints = {
 	'/v1/external-workspaces.list': {
 		GET: () => { connections: ExternalWorkspaceClientConnection[] };
+	};
+	'/v1/external-workspaces.availability': {
+		GET: () => { availability: ExternalWorkspaceAvailability };
 	};
 	'/v1/external-workspaces.authUrl': {
 		GET: (params: { provider: ExternalProvider }) => { provider: ExternalProvider; authorizeUrl: string | null; implemented: boolean };
