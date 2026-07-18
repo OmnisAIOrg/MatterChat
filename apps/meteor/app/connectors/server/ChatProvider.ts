@@ -329,6 +329,16 @@ export interface IChatProvider {
 	 * connection to 0/0 rather than failing the whole summary).
 	 */
 	unreadSummary?(connection: IProviderConnection): Promise<{ unreadCount: number; mentionCount: number }>;
+
+	/**
+	 * Canonicalize a channel/conversation id before it is PERSISTED (e.g. in a bridge record).
+	 *
+	 * Slack: the People directory hands a USER id (`U…`/`W…`) through as a DM target, but inbound
+	 * events address the CONVERSATION id (`D…`) — a bridge keyed by the user id never matches the
+	 * event fan-out, so it silently receives nothing. This resolves user→conversation (creating the
+	 * im if needed). Optional: providers whose ids are already canonical omit it.
+	 */
+	resolveBridgeChannelId?(connection: IProviderConnection, channelExternalId: string): Promise<string>;
 }
 
 /**

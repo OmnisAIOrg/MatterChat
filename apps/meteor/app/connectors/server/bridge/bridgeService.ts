@@ -256,14 +256,27 @@ export async function bridgeMyChannel(
 		return { error: `connection_${doc.status}`, message: 'This connection is not active — reconnect the workspace and try again.' };
 	}
 
-	const existing = doc.bridgedChannels?.find((b) => b.channelExternalId === opts.channelExternalId);
-	if (existing) {
-		return { bridge: toClientBridge(doc, existing) };
-	}
-
 	const connection = toProviderConnection(doc);
 	if (!connection) {
 		return { error: 'credentials_unavailable', message: 'Stored credentials could not be read — reconnect the workspace.', status: 401 };
+	}
+
+	// Canonicalize BEFORE persisting: a Slack People-directory selection carries a USER id, but
+	// inbound events address the CONVERSATION id — a bridge keyed by the user id silently receives
+	// nothing (outbound worked, inbound never matched the fan-out). Best-effort: an unresolvable id
+	// falls through unchanged rather than blocking the bridge.
+	let channelExternalId = opts.channelExternalId;
+	try {
+		const provider = providerRegistry.get(doc.provider);
+		channelExternalId = (await provider.resolveBridgeChannelId?.(connection, opts.channelExternalId)) ?? opts.channelExternalId;
+	} catch (err) {
+		SystemLogger.warn({ msg: 'Bridge channel-id resolution failed — bridging the raw id', connectionId: doc._id, err: String(err) });
+	}
+
+	// Match on BOTH ids so a pre-fix bridge keyed by the raw user id is found rather than duplicated.
+	const existing = doc.bridgedChannels?.find((b) => b.channelExternalId === channelExternalId || b.channelExternalId === opts.channelExternalId);
+	if (existing) {
+		return { bridge: toClientBridge(doc, existing) };
 	}
 
 	const owner = await Users.findOneById(userId);
@@ -271,11 +284,11 @@ export async function bridgeMyChannel(
 		return { error: 'user_not_found', message: 'Owner user not found.', status: 404 };
 	}
 
-	const label = opts.name?.trim() || opts.channelExternalId;
-	const room = await createBridgedRoom(owner, doc, opts.channelExternalId, label);
+	const label = opts.name?.trim() || channelExternalId;
+	const room = await createBridgedRoom(owner, doc, channelExternalId, label);
 
 	const bridge: IBridgedChannel = {
-		channelExternalId: opts.channelExternalId,
+		channelExternalId,
 		name: label,
 		rid: room._id,
 		createdAt: new Date(),
@@ -294,7 +307,7 @@ export async function bridgeMyChannel(
 	}
 
 	const fresh = await ExternalWorkspaceConnections.findOneByIdAndUserId(doc._id, userId);
-	const freshBridge = fresh?.bridgedChannels?.find((b) => b.channelExternalId === opts.channelExternalId);
+	const freshBridge = fresh?.bridgedChannels?.find((b) => b.channelExternalId === channelExternalId);
 	return { bridge: freshBridge && fresh ? toClientBridge(fresh, freshBridge) : { ...toClientBridge(doc, bridge), realtime } };
 }
 
