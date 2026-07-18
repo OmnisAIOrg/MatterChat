@@ -1,9 +1,10 @@
-import { Box, Throbber } from '@rocket.chat/fuselage';
+import { Box, Icon, Throbber } from '@rocket.chat/fuselage';
 import { FeaturePreview, FeaturePreviewOff, FeaturePreviewOn } from '@rocket.chat/ui-client';
 import type { IRouterPaths } from '@rocket.chat/ui-contexts';
 import { useLayout, useSetting, useCurrentRoutePath, useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement, ReactNode } from 'react';
 import { Suspense, lazy, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import AccessibilityShortcut from './AccessibilityShortcut';
 import AppLeftRail from './AppLeftRail';
@@ -83,13 +84,72 @@ const ShellBody = ({
 	removeSidenav: boolean;
 	currentRoutePath: string | undefined;
 }): ReactElement => {
-	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
+	const { t } = useTranslation();
+	const { isMobile } = useLayout();
+	const { selectedOrgId, setSelectedOrgId, selectedExternalChannel, setSelectedExternalChannel } = useOrgSwitcherSelection();
 	const externalSelected = !removeSidenav && isExternalSelection(selectedOrgId);
 	// On a native content route (Boards/LitBox/Admin) we keep the slim rail but render the routed page,
 	// NOT the external channel-view — so those tiles stay fully functional inside the workspace.
 	const showExternalContent = externalSelected && !isNativeContentRoute(currentRoutePath);
 
 	if (externalSelected) {
+		// MATTERCHAT mobile: the desktop side-by-side (85vw sidebar + squeezed channel view) can't
+		// work on a phone. Stack instead — full-width channel LIST (with a "back to MatterChat" bar)
+		// until a conversation is picked, then the full-width CONVERSATION with a back-to-list bar.
+		if (isMobile && showExternalContent) {
+			return (
+				<ExternalErrorBoundary onBack={(): void => setSelectedOrgId('current')}>
+					<Suspense fallback={<Throbber />}>
+						{selectedExternalChannel ? (
+							<MainContent>
+								<Box display='flex' flexDirection='column' height='100%' width='100%'>
+									<Box
+										is='button'
+										type='button'
+										display='flex'
+										alignItems='center'
+										pi={12}
+										pb={8}
+										fontScale='p2b'
+										color='default'
+										onClick={(): void => setSelectedExternalChannel(undefined)}
+										style={{ background: 'transparent', border: 0, cursor: 'pointer', gap: '6px', minHeight: '44px', textAlign: 'start' }}
+									>
+										<Icon name='arrow-back' size='x20' />
+										{t('Back')}
+									</Box>
+									<Box flexGrow={1} style={{ minHeight: 0 }} display='flex' flexDirection='column'>
+										<ExternalChannelView />
+									</Box>
+								</Box>
+							</MainContent>
+						) : (
+							<Box display='flex' flexDirection='column' height='100%' width='100%'>
+								<Box
+									is='button'
+									type='button'
+									display='flex'
+									alignItems='center'
+									pi={12}
+									pb={8}
+									fontScale='p2b'
+									color='default'
+									onClick={(): void => setSelectedOrgId('current')}
+									style={{ background: 'transparent', border: 0, cursor: 'pointer', gap: '6px', minHeight: '44px', textAlign: 'start' }}
+								>
+									<Icon name='arrow-back' size='x20' />
+									MatterChat
+								</Box>
+								<Box flexGrow={1} style={{ minHeight: 0 }} display='flex' flexDirection='column'>
+									<ExternalSidebar />
+								</Box>
+							</Box>
+						)}
+					</Suspense>
+				</ExternalErrorBoundary>
+			);
+		}
+
 		return (
 			<>
 				<OrgSwitcherRail />
