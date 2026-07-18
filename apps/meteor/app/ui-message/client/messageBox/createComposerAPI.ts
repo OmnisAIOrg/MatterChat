@@ -97,6 +97,12 @@ export const createComposerAPI = (
 
 	const clear = (): void => {
 		setText('');
+		// MATTERCHAT: persist the cleared draft SYNCHRONOUSLY. `persist` is debounced (300ms);
+		// clear() is called right after a successful send, and if the composer unmounts inside
+		// that window (route change / layout remount) useDraft.flushDraft persists the PRE-clear
+		// text — the just-sent message comes back as a draft on the next visit.
+		persist.cancel();
+		persistDraft('');
 	};
 
 	const focus = (): void => {
