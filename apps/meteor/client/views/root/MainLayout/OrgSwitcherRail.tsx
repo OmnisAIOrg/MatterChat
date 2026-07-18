@@ -2,11 +2,13 @@ import { css } from '@rocket.chat/css-in-js';
 import { Box } from '@rocket.chat/fuselage';
 import { GenericMenu } from '@rocket.chat/ui-client';
 import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
-import { useCurrentRoutePath, useLayout, useRouter } from '@rocket.chat/ui-contexts';
+import { useCurrentRoutePath, useEndpoint, useLayout, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { isDesktopApp } from '../../../lib/desktop/desktopBridge';
 import { externalConnectionIdFromSelection, externalSelectionId, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
 import type { ExternalUnreadCounts } from './useExternalUnreadSummary';
@@ -139,20 +141,30 @@ const SlackMark = ({ size }: { size: number }): ReactElement => (
  * tile). Selecting it enters WORKSPACE mode (see LayoutWithSidebar): the left sidebar becomes that
  * connection's real channels/spaces and the open channel fills the main content. The M tile returns
  * to MatterChat.
+ *
+ * When the connection is in 'error' or 'consent_required' status, shows a warning badge + context
+ * menu with a "Reconnect" option. The tile also has a context menu with "Disconnect" option.
  */
 const ExternalTile = ({
 	connection,
 	isSelected,
 	unread,
 	onClick,
+	getAuthorizeUrl,
 }: {
 	connection: ConnectedExternalWorkspace;
 	isSelected: boolean;
 	unread: ExternalUnreadCounts;
 	onClick: () => void;
+	getAuthorizeUrl: (provider: string, desktop: boolean) => Promise<string>;
 }): ReactElement => {
+	const { t } = useTranslation();
 	const branding = externalProviderBranding(connection.provider);
 	const name = connection.externalOrgName || branding.defaultName;
+	const dispatchToast = useToastMessageDispatch();
+	const queryClient = useQueryClient();
+	const disconnectEndpoint = useEndpoint('POST', '/v1/external-workspaces.disconnect');
+	const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
 	// Native-app-style unread badge: only when this connection has unread activity. Mention-aware —
 	// when there are mentions, show the mention count (the "you specifically" signal) rather than the
@@ -162,55 +174,234 @@ const ExternalTile = ({
 	const showMentions = unread.mentionCount > 0;
 	const badgeValue = showMentions ? unread.mentionCount : unread.unreadCount;
 
-	return (
-		<Box
-			is='button'
-			type='button'
-			className={tileClass}
-			onClick={onClick}
-			title={name}
-			aria-label={name}
-			aria-current={isSelected ? 'true' : undefined}
-			style={{
-				backgroundColor: branding.color,
-				opacity: isSelected ? 1 : 0.82,
-				boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
-			}}
-		>
-			<branding.Mark size={22} />
+	// Warning badge for error/consent_required status
+	const hasError = connection.status === 'error' || connection.status === 'consent_required';
 
-			{hasUnread && (
+	const handleDisconnect = useCallback(async () => {
+		try {
+			await disconnectEndpoint({ connectionId: connection._id });
+			dispatchToast({
+				type: 'success',
+				message: t('Workspace_Disconnected', {
+					defaultValue: `${branding.defaultName || 'Workspace'} disconnected`,
+				}),
+			});
+			// Invalidate the workspace list so it updates to remove this connection
+			queryClient.invalidateQueries({ queryKey: ['external-workspaces.list'] });
+			setShowDisconnectConfirm(false);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			dispatchToast({
+				type: 'error',
+				message: t('Failed_to_Disconnect', {
+					defaultValue: `Failed to disconnect: ${message}`,
+				}),
+			});
+		}
+	}, [disconnectEndpoint, connection._id, dispatchToast, queryClient, t, branding]);
+
+	const handleReconnect = useCallback(async () => {
+		try {
+			const url = await getAuthorizeUrl(connection.provider, isDesktopApp());
+			window.location.href = url;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			dispatchToast({
+				type: 'error',
+				message: t('Failed_to_Reconnect', {
+					defaultValue: `Failed to reconnect: ${message}`,
+				}),
+			});
+		}
+	}, [getAuthorizeUrl, connection.provider, dispatchToast, t]);
+
+	// Context menu items for the tile
+	const menuItems = useMemo<GenericMenuItemProps[]>(() => {
+		const items: GenericMenuItemProps[] = [];
+
+		if (connection.status === 'error' || connection.status === 'consent_required') {
+			items.push({
+				id: 'reconnect',
+				icon: 'refresh',
+				content: t('Reconnect', { defaultValue: 'Reconnect' }),
+				onClick: () => {
+					void handleReconnect();
+				},
+			});
+		}
+
+		items.push({
+			id: 'disconnect',
+			icon: 'trash',
+			content: t('Disconnect_Workspace', { defaultValue: 'Disconnect workspace' }),
+			onClick: () => {
+				setShowDisconnectConfirm(true);
+			},
+		});
+
+		return items;
+	}, [connection.status, t, handleReconnect]);
+
+	return (
+		<>
+			<GenericMenu
+				items={menuItems}
+				placement='right-start'
+				button={
+					<Box
+						is='button'
+						type='button'
+						className={tileClass}
+						onClick={onClick}
+						title={name}
+						aria-label={name}
+						aria-current={isSelected ? 'true' : undefined}
+						style={{
+							backgroundColor: branding.color,
+							opacity: isSelected ? 1 : 0.82,
+							boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
+						}}
+					>
+						<branding.Mark size={22} />
+
+						{/* Warning badge for error/consent_required status */}
+						{hasError && (
+							<Box
+								aria-label={
+									connection.status === 'error'
+										? t('Connection_Error', { defaultValue: 'Connection error — needs attention' })
+										: t('Consent_Required', { defaultValue: 'Consent required' })
+								}
+								style={{
+									position: 'absolute',
+									top: '-4px',
+									right: '-4px',
+									width: '17px',
+									height: '17px',
+									borderRadius: '50%',
+									background: '#F04747',
+									border: `2px solid ${RAIL_BG}`,
+									display: 'flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									color: '#ffffff',
+									fontSize: '11px',
+									fontWeight: 700,
+									pointerEvents: 'none',
+								}}
+							>
+								!
+							</Box>
+						)}
+
+						{/* Unread badge (displayed when no error) */}
+						{!hasError && hasUnread && (
+							<Box
+								aria-label={
+									showMentions
+										? `${unread.mentionCount} mentions, ${unread.unreadCount} unread`
+										: `${unread.unreadCount} unread`
+								}
+								style={{
+									position: 'absolute',
+									top: '-4px',
+									right: '-4px',
+									minWidth: '17px',
+									height: '17px',
+									borderRadius: '9px',
+									background: UNREAD_BADGE,
+									color: '#ffffff',
+									fontSize: '10px',
+									fontWeight: 600,
+									lineHeight: 1,
+									display: 'flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									border: `2px solid ${RAIL_BG}`,
+									padding: '0 4px',
+									boxSizing: 'border-box',
+									pointerEvents: 'none',
+								}}
+							>
+								{formatBadgeCount(badgeValue)}
+							</Box>
+						)}
+					</Box>
+				}
+			/>
+
+			{/* Disconnect confirmation modal */}
+			{showDisconnectConfirm && (
 				<Box
-					aria-label={
-						showMentions
-							? `${unread.mentionCount} mentions, ${unread.unreadCount} unread`
-							: `${unread.unreadCount} unread`
-					}
 					style={{
-						position: 'absolute',
-						top: '-4px',
-						right: '-4px',
-						minWidth: '17px',
-						height: '17px',
-						borderRadius: '9px',
-						background: UNREAD_BADGE,
-						color: '#ffffff',
-						fontSize: '10px',
-						fontWeight: 600,
-						lineHeight: 1,
+						position: 'fixed',
+						top: 0,
+						left: 0,
+						right: 0,
+						bottom: 0,
+						backgroundColor: 'rgba(0, 0, 0, 0.6)',
 						display: 'flex',
 						alignItems: 'center',
 						justifyContent: 'center',
-						border: `2px solid ${RAIL_BG}`,
-						padding: '0 4px',
-						boxSizing: 'border-box',
-						pointerEvents: 'none',
+						zIndex: 1000,
 					}}
+					onClick={() => setShowDisconnectConfirm(false)}
 				>
-					{formatBadgeCount(badgeValue)}
+					<Box
+						style={{
+							backgroundColor: '#fff',
+							borderRadius: '8px',
+							padding: '24px',
+							maxWidth: '400px',
+							boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+						}}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<Box style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px' }}>
+							{t('Disconnect_Workspace_Confirm_Title', { defaultValue: 'Disconnect workspace?' })}
+						</Box>
+						<Box style={{ fontSize: '14px', marginBottom: '24px', color: '#666' }}>
+							{t('Disconnect_Workspace_Confirm_Message', {
+								defaultValue: `This removes the connection and its synced credentials. Your ${branding.defaultName || 'workspace'} account is not affected.`,
+							})}
+						</Box>
+						<Box style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+							<Box
+								is='button'
+								onClick={() => setShowDisconnectConfirm(false)}
+								style={{
+									padding: '8px 16px',
+									backgroundColor: '#e0e0e0',
+									border: 'none',
+									borderRadius: '4px',
+									cursor: 'pointer',
+									fontSize: '14px',
+								}}
+							>
+								{t('Cancel', { defaultValue: 'Cancel' })}
+							</Box>
+							<Box
+								is='button'
+								onClick={() => {
+									void handleDisconnect();
+								}}
+								style={{
+									padding: '8px 16px',
+									backgroundColor: '#F04747',
+									color: '#fff',
+									border: 'none',
+									borderRadius: '4px',
+									cursor: 'pointer',
+									fontSize: '14px',
+								}}
+							>
+								{t('Disconnect', { defaultValue: 'Disconnect' })}
+							</Box>
+						</Box>
+					</Box>
 				</Box>
 			)}
-		</Box>
+		</>
 	);
 };
 
@@ -316,6 +507,8 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 	const { externalConnections } = useExternalWorkspaces();
 	// Rolled-up unread/mention counts per external connection (polled 30s) — drives the rail badges.
 	const { getCountsForConnection } = useExternalUnreadSummary();
+	// For reconnect functionality in ExternalTile
+	const getAuthorizeUrl = useMethod('connectors:getAuthorizeUrl');
 
 	// The currently-selected external connection id (if any), parsed from the `ext:<id>` sentinel.
 	const selectedExternalId = externalConnectionIdFromSelection(selectedOrgId);
@@ -410,6 +603,7 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 						isSelected={selectedExternalId === connection._id}
 						unread={getCountsForConnection(connection._id)}
 						onClick={(): void => selectExternal(connection._id)}
+						getAuthorizeUrl={getAuthorizeUrl}
 					/>
 				))}
 				<Box className={dividerClass} />
