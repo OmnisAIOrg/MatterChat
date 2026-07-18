@@ -32,7 +32,7 @@
  * apps/meteor/ee/ was read or copied.
  */
 import type { IBridgedChannel, IExternalWorkspaceConnection } from '@rocket.chat/core-typings';
-import { ExternalWorkspaceConnections } from '@rocket.chat/models';
+import { ExternalWorkspaceConnections, Messages, Users } from '@rocket.chat/models';
 import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
@@ -44,7 +44,10 @@ import { mapGraphMessage } from './messageMapping';
 import type { IncomingLifecycleEvent, IncomingNotification, ParsedNotificationResource } from './webhookSecurity';
 import { extractLifecycleEvents, extractNotifications, parseNotificationResource, verifyClientState } from './webhookSecurity';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
+import { deleteMessage } from '../../../../lib/server/functions/deleteMessage';
+import { updateMessage } from '../../../../lib/server/functions/updateMessage';
 import { ingestExternalMessage } from '../../bridge/bridgeCore';
+import { extMessageId } from '../../bridge/bridgeIds';
 import { backfillBridge, reconcileBridges } from '../../bridge/bridgeService';
 import { toProviderConnection } from '../../runtimeConnection';
 
@@ -137,6 +140,48 @@ function graphTokensFor(connection: NonNullable<ReturnType<typeof toProviderConn
  * other connection bridging the same external channel of the same tenant (Graph allows one
  * subscription per app+channel, so this one delivery serves all of them).
  */
+/**
+ * Apply an EDIT of a bridge-inserted message (deterministic `ext-…` _id) for one connection.
+ * Same ownership rule as the Slack path: only messages the bridge itself inserted are edited —
+ * a Teams-side edit of our own outbound post stays local (documented gap, symmetric with Slack).
+ * Not-yet-ingested messages (created while inbound was off) ingest the edited form as new.
+ */
+async function applyTeamsEdit(
+	doc: IExternalWorkspaceConnection,
+	bridge: IBridgedChannel,
+	mapped: NonNullable<ReturnType<typeof mapGraphMessage>>,
+	ownerExternalId: string | undefined,
+): Promise<void> {
+	const rcId = extMessageId(doc._id, bridge.channelExternalId, mapped.externalId);
+	const existing = await Messages.findOneById(rcId);
+	if (!existing) {
+		await ingestExternalMessage(doc, bridge, mapped, ownerExternalId);
+		return;
+	}
+	if (existing.msg === mapped.text) {
+		return; // No visible change — skip the write.
+	}
+	const owner = await Users.findOneById(doc.userId);
+	if (!owner) {
+		return;
+	}
+	await updateMessage({ _id: existing._id, rid: existing.rid, msg: mapped.text, customFields: existing.customFields ?? {} }, owner, existing);
+}
+
+/** Apply a DELETE (Graph soft-delete: deletedDateTime set) of a bridge-inserted message. */
+async function applyTeamsDelete(doc: IExternalWorkspaceConnection, bridge: IBridgedChannel, externalMessageId: string): Promise<void> {
+	const rcId = extMessageId(doc._id, bridge.channelExternalId, externalMessageId);
+	const existing = await Messages.findOneById(rcId);
+	if (!existing) {
+		return;
+	}
+	const owner = await Users.findOneById(doc.userId);
+	if (!owner) {
+		return;
+	}
+	await deleteMessage(existing, owner);
+}
+
 async function processNotification(item: IncomingNotification, parsed: ParsedNotificationResource): Promise<void> {
 	const resolved = await resolveSubscription(item.subscriptionId);
 	if (!resolved) {
@@ -144,8 +189,9 @@ async function processNotification(item: IncomingNotification, parsed: ParsedNot
 	}
 	const { doc, bridge } = resolved;
 
-	// v1: deletes are not mirrored (documented gap) — only created/updated carry a fetchable message.
-	if (item.changeType !== 'created' && item.changeType !== 'updated') {
+	// created + updated carry a fetchable message; Graph deletes arrive as 'updated'/'deleted'
+	// with `deletedDateTime` set on the fetched message (handled below).
+	if (item.changeType !== 'created' && item.changeType !== 'updated' && item.changeType !== 'deleted') {
 		return;
 	}
 
@@ -157,14 +203,63 @@ async function processNotification(item: IncomingNotification, parsed: ParsedNot
 
 	const { tokens, onRefreshed } = graphTokensFor(connection);
 	const graphMessage = await graphFetch<GraphChatMessage>(messageUrlOf(parsed), tokens, {}, onRefreshed);
+
+	// ── DELETE: soft-deleted messages carry deletedDateTime (mapGraphMessage maps them to null) ──
+	if (graphMessage?.id && graphMessage.deletedDateTime) {
+		const externalMessageId = String(graphMessage.id);
+		await applyTeamsDelete(doc, bridge, externalMessageId);
+		const delSharers = await ExternalWorkspaceConnections.findByBridgedChannel('teams', doc.externalOrgId, bridge.channelExternalId).toArray();
+		for (const sharer of delSharers) {
+			if (sharer._id === doc._id) {
+				continue;
+			}
+			const sharerBridge = sharer.bridgedChannels?.find((b) => b.channelExternalId === bridge.channelExternalId);
+			if (!sharerBridge) {
+				continue;
+			}
+			try {
+				await applyTeamsDelete(sharer, sharerBridge, externalMessageId);
+			} catch (err) {
+				SystemLogger.warn({ msg: 'Teams webhook fan-out delete failed', connectionId: sharer._id, err: String(err) });
+			}
+		}
+		return;
+	}
+
 	const mapped = mapGraphMessage(graphMessage, bridge.channelExternalId);
 	if (!mapped) {
-		// System/deleted/authorless message — nothing to mirror.
+		// System/authorless message — nothing to mirror.
 		return;
 	}
 
 	const ownerExternalId =
 		typeof connection.credentials.externalAadUserId === 'string' ? connection.credentials.externalAadUserId : undefined;
+
+	// ── EDIT: 'updated' applies to the already-ingested `ext-…` message (was: fetched + dropped) ──
+	if (item.changeType === 'updated') {
+		await applyTeamsEdit(doc, bridge, mapped, ownerExternalId);
+		const editSharers = await ExternalWorkspaceConnections.findByBridgedChannel('teams', doc.externalOrgId, bridge.channelExternalId).toArray();
+		for (const sharer of editSharers) {
+			if (sharer._id === doc._id) {
+				continue;
+			}
+			const sharerBridge = sharer.bridgedChannels?.find((b) => b.channelExternalId === bridge.channelExternalId);
+			if (!sharerBridge) {
+				continue;
+			}
+			const sharerConnection = toProviderConnection(sharer);
+			const sharerExternalId =
+				sharerConnection && typeof sharerConnection.credentials.externalAadUserId === 'string'
+					? sharerConnection.credentials.externalAadUserId
+					: undefined;
+			try {
+				await applyTeamsEdit(sharer, sharerBridge, mapped, sharerExternalId);
+			} catch (err) {
+				SystemLogger.warn({ msg: 'Teams webhook fan-out edit failed', connectionId: sharer._id, err: String(err) });
+			}
+		}
+		return;
+	}
 
 	// Subscription owner's room first…
 	const inserted = await ingestExternalMessage(doc, bridge, mapped, ownerExternalId);

@@ -309,6 +309,26 @@ export interface IChatProvider {
 		message: IOutboundMessage,
 	): Promise<{ externalId: string; ts?: string }>;
 
+	/**
+	 * Edit a message previously posted AS the connection's signed-in user (Slack `chat.update`).
+	 * `externalId` is the id `postMessage` returned. Optional in the contract: the bridge mirrors
+	 * RC-side edits out only when the provider implements it (others keep the documented v1 gap).
+	 */
+	updateMessage?(connection: IProviderConnection, channelExternalId: string, externalId: string, text: string): Promise<void>;
+
+	/**
+	 * Delete a message previously posted AS the connection's signed-in user (Slack `chat.delete`).
+	 * Optional in the contract — same mirroring rule as `updateMessage`.
+	 */
+	deleteMessage?(connection: IProviderConnection, channelExternalId: string, externalId: string): Promise<void>;
+
+	/**
+	 * Add/remove the signed-in user's emoji reaction on a message (Slack `reactions.add`/`.remove`).
+	 * `emojiName` is the provider-native bare name (no colons). Optional in the contract — the
+	 * bridge mirrors RC reactions out only when implemented.
+	 */
+	setReaction?(connection: IProviderConnection, channelExternalId: string, externalId: string, emojiName: string, add: boolean): Promise<void>;
+
 	// ─── notifications / "feel-alive" ──────────────────────────────────────────────────────────
 
 	/**

@@ -61,9 +61,13 @@ export type CreatedSubscription =
 
 /**
  * Create the change-notification subscription for one bridged channel. `changeType` is
- * `created,updated` — deletes are a documented v1 gap (the bridge does not remove RC messages).
+ * `created,updated,deleted` — the webhook applies edits (updated + a changed body) and deletes
+ * (soft-deleted messages carry `deletedDateTime`) to the bridge-inserted RC messages.
  * clientState is DERIVED per (connectionId, channelExternalId) from the deploy secret, so the
  * webhook can verify it statelessly and fail closed.
+ * NB: pre-existing subscriptions keep their old `created,updated` changeType until their next
+ * renewal cycle re-creates them — deletes there arrive as `updated` and are still handled via
+ * the `deletedDateTime` check.
  */
 export async function createChannelSubscription(
 	tokens: GraphTokens,
@@ -83,7 +87,7 @@ export async function createChannelSubscription(
 			{
 				method: 'POST',
 				body: {
-					changeType: 'created,updated',
+					changeType: 'created,updated,deleted',
 					notificationUrl: webhookNotificationUrl(),
 					lifecycleNotificationUrl: webhookLifecycleUrl(),
 					resource: subscriptionResource(channelExternalId),

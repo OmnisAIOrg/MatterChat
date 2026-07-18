@@ -38,7 +38,7 @@ import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
 import { toProviderConnection } from '../runtimeConnection';
 import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } from './bridgeIds';
-import { echoSuppression } from './echoSuppression';
+import { echoSuppression, reactionEcho, reactionEchoKey } from './echoSuppression';
 
 const CALLBACK_ID = 'ConnectorBridge_Out';
 
@@ -281,12 +281,160 @@ async function onMessageSaved(message: IMessage, room: IRoom | undefined): Promi
 	return message;
 }
 
-/** Register the outbound afterSaveMessage callback (idempotent; called once from the server entry). */
+/**
+ * Shared outbound gates for edit/delete/reaction mirroring: bridged room, loaded doc+bridge,
+ * active connection, readable credentials. Returns null (mirror nothing) on any miss.
+ */
+async function bridgedOutboundContext(
+	room: IRoom | undefined,
+): Promise<{ doc: IExternalWorkspaceConnection; bridge: IBridgedChannel; connection: NonNullable<ReturnType<typeof toProviderConnection>> } | null> {
+	if (!room || !Array.isArray(room.importIds) || !room.importIds.some(isBridgeRoomImportId)) {
+		return null;
+	}
+	const doc = await ExternalWorkspaceConnections.findOneByBridgedRoomId(room._id);
+	const bridge = doc && bridgeForRoom(doc, room._id);
+	if (!doc || !bridge || doc.status !== 'connected') {
+		return null;
+	}
+	const connection = toProviderConnection(doc);
+	if (!connection) {
+		return null;
+	}
+	return { doc, bridge, connection };
+}
+
+/** RC reaction (':thumbsup:', ':thumbsup_tone2:') → provider-native bare name ('thumbsup'). */
+export function rcEmojiToProviderName(reaction: string): string {
+	const bare = reaction.replace(/:/g, '');
+	// Skin-tone variants don't round-trip cleanly (Slack uses '::skin-tone-N'); mirror the base emoji.
+	return bare.replace(/_tone\d$/, '');
+}
+
+/**
+ * OUTBOUND EDIT mirror: an owner-authored edit of a message the bridge posted out
+ * (customFields.connectorBridge stamp with inbound:false) is mirrored via provider.updateMessage.
+ * Bridge-INSERTED messages (`ext-…` ids) never reach here (guard in onMessageSaved), and inbound
+ * never edits our outbound posts, so edit mirroring cannot loop.
+ */
+async function onMessageEdited(message: IMessage, room: IRoom | undefined): Promise<IMessage> {
+	try {
+		const ctx = await bridgedOutboundContext(room);
+		if (!ctx || message.u?._id !== ctx.doc.userId) {
+			return message;
+		}
+		const stamp = message.customFields?.connectorBridge;
+		if (!stamp || stamp.inbound !== false || !stamp.externalId || !message.msg?.trim()) {
+			return message;
+		}
+		const provider = providerRegistry.get(ctx.doc.provider);
+		if (!provider.updateMessage) {
+			return message;
+		}
+		await provider.updateMessage(ctx.connection, ctx.bridge.channelExternalId, stamp.externalId, message.msg);
+	} catch (err) {
+		SystemLogger.error({ msg: 'Connector bridge edit mirror failed (edit stays local)', rid: room?._id, err: String(err) });
+	}
+	return message;
+}
+
+/**
+ * OUTBOUND DELETE mirror: deleting our own outbound post in RC deletes it in the external
+ * channel too. Inbound-applied deletes target `ext-…` messages (no outbound stamp), so this
+ * cannot loop either.
+ */
+async function onMessageDeleted(message: IMessage, room: IRoom | undefined): Promise<void> {
+	try {
+		if (isBridgeMessageId(message._id)) {
+			return;
+		}
+		const ctx = await bridgedOutboundContext(room);
+		if (!ctx || message.u?._id !== ctx.doc.userId) {
+			return;
+		}
+		const stamp = message.customFields?.connectorBridge;
+		if (!stamp || stamp.inbound !== false || !stamp.externalId) {
+			return;
+		}
+		const provider = providerRegistry.get(ctx.doc.provider);
+		if (!provider.deleteMessage) {
+			return;
+		}
+		await provider.deleteMessage(ctx.connection, ctx.bridge.channelExternalId, stamp.externalId);
+	} catch (err) {
+		SystemLogger.error({ msg: 'Connector bridge delete mirror failed', rid: room?._id, err: String(err) });
+	}
+}
+
+/**
+ * OUTBOUND REACTION mirror: the connection OWNER's reaction on any stamped message (our outbound
+ * posts AND bridge-inserted inbound ones) is mirrored via provider.setReaction.
+ *
+ * LOOP SAFETY: the inbound reaction path applies external reactions AS the owner, which fires
+ * this very callback — it sets a reactionEcho `out:` key first, which we consume here and skip.
+ * Our own mirror sets the `in:` key so the provider's resulting reaction event is dropped inbound.
+ */
+async function onReactionChanged(message: IMessage, user: IUser, reaction: string, add: boolean): Promise<void> {
+	try {
+		const room = await Rooms.findOneById(message.rid);
+		const ctx = await bridgedOutboundContext(room ?? undefined);
+		if (!ctx || user._id !== ctx.doc.userId) {
+			return;
+		}
+		const stamp = message.customFields?.connectorBridge;
+		if (!stamp?.externalId) {
+			return;
+		}
+		const provider = providerRegistry.get(ctx.doc.provider);
+		if (!provider.setReaction) {
+			return;
+		}
+		const name = rcEmojiToProviderName(reaction);
+		if (reactionEcho.has(ctx.doc._id, reactionEchoKey('out', stamp.externalId, name, add))) {
+			return; // Inbound-applied reaction — do not mirror it straight back out.
+		}
+		// Drop the provider's coming event for this very mirror (defense; the apply-time no-op
+		// guard in the inbound path catches it too).
+		reactionEcho.add(ctx.doc._id, reactionEchoKey('in', stamp.externalId, name, add));
+		await provider.setReaction(ctx.connection, ctx.bridge.channelExternalId, stamp.externalId, name, add);
+	} catch (err) {
+		SystemLogger.error({ msg: 'Connector bridge reaction mirror failed', mid: message._id, err: String(err) });
+	}
+}
+
+/** Register the outbound bridge callbacks (idempotent; called once from the server entry). */
 export function registerBridgeOutbound(): void {
 	callbacks.add(
 		'afterSaveMessage',
-		(message: IMessage, { room }: { room: IRoom }) => onMessageSaved(message, room),
+		(message: IMessage, { room }: { room: IRoom }) =>
+			isEditedMessage(message) ? onMessageEdited(message, room) : onMessageSaved(message, room),
 		callbacks.priority.LOW,
 		CALLBACK_ID,
+	);
+	callbacks.add(
+		'afterDeleteMessage',
+		async (message: IMessage, { room }: { room: IRoom }) => {
+			await onMessageDeleted(message, room);
+			return message;
+		},
+		callbacks.priority.LOW,
+		`${CALLBACK_ID}_Delete`,
+	);
+	callbacks.add(
+		'afterSetReaction',
+		async (message: IMessage, params: { user: IUser; reaction: string }) => {
+			await onReactionChanged(message, params.user, params.reaction, true);
+			return message;
+		},
+		callbacks.priority.LOW,
+		`${CALLBACK_ID}_SetReaction`,
+	);
+	callbacks.add(
+		'afterUnsetReaction',
+		async (message: IMessage, params: { user: IUser; reaction: string }) => {
+			await onReactionChanged(message, params.user, params.reaction, false);
+			return message;
+		},
+		callbacks.priority.LOW,
+		`${CALLBACK_ID}_UnsetReaction`,
 	);
 }

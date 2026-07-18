@@ -79,6 +79,43 @@ export type SlackMessageAction =
 
 const asBoundedString = (v: unknown): string | undefined => (typeof v === 'string' && v && v.length <= MAX_FIELD_LENGTH ? v : undefined);
 
+/**
+ * A Slack `reaction_added` / `reaction_removed` event normalized for the bridge. `ts` is the
+ * REACTED-TO message's ts (the external id the bridge knows it by); `reaction` is the bare Slack
+ * emoji name (no colons, may carry a `::skin-tone-N` suffix which the bridge strips).
+ */
+export type SlackReactionAction = {
+	kind: 'reaction';
+	add: boolean;
+	channel: string;
+	ts: string;
+	user: string;
+	reaction: string;
+};
+
+/**
+ * Normalize ONE `reaction_added`/`reaction_removed` event, or null when it isn't one (or is
+ * malformed / not on a message). Requires the app to subscribe to the `reaction_added` and
+ * `reaction_removed` USER events (same Event Subscriptions page as the message.* events).
+ */
+export function extractReactionEvent(event: Record<string, unknown>): SlackReactionAction | null {
+	if (event.type !== 'reaction_added' && event.type !== 'reaction_removed') {
+		return null;
+	}
+	const item = event.item as { type?: unknown; channel?: unknown; ts?: unknown } | undefined;
+	if (!item || item.type !== 'message') {
+		return null;
+	}
+	const channel = asBoundedString(item.channel);
+	const ts = asBoundedString(item.ts);
+	const user = asBoundedString(event.user);
+	const reaction = asBoundedString(event.reaction);
+	if (!channel || !ts || !user || !reaction) {
+		return null;
+	}
+	return { kind: 'reaction', add: event.type === 'reaction_added', channel, ts, user, reaction };
+}
+
 /** Extract link-out stubs for the files carried on a message payload (best-effort, never throws). */
 function extractFiles(files: unknown): SlackFileStub[] | undefined {
 	if (!Array.isArray(files) || files.length === 0) {

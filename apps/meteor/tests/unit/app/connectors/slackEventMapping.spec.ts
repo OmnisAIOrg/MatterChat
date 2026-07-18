@@ -3,6 +3,7 @@ import { describe, it } from 'mocha';
 
 import {
 	extractMessageEvent,
+	extractReactionEvent,
 	fileStubLines,
 	slackTsToEpochMs,
 	toProviderMessage,
@@ -297,6 +298,43 @@ describe('Slack event message mapping', () => {
 		it('slackTsToEpochMs converts seconds.micros and rejects junk', () => {
 			expect(slackTsToEpochMs('1700000000.000005')).to.equal(1700000000000);
 			expect(slackTsToEpochMs('junk')).to.equal(undefined);
+		});
+	});
+
+	describe('extractReactionEvent', () => {
+		it('extracts reaction_added on a message', () => {
+			expect(
+				extractReactionEvent({
+					type: 'reaction_added',
+					user: 'U1',
+					reaction: 'thumbsup',
+					item: { type: 'message', channel: CHANNEL, ts: '1.000001' },
+				}),
+			).to.deep.equal({ kind: 'reaction', add: true, channel: CHANNEL, ts: '1.000001', user: 'U1', reaction: 'thumbsup' });
+		});
+
+		it('extracts reaction_removed as add:false', () => {
+			expect(
+				extractReactionEvent({
+					type: 'reaction_removed',
+					user: 'U1',
+					reaction: 'eyes',
+					item: { type: 'message', channel: CHANNEL, ts: '2.000002' },
+				}),
+			).to.deep.equal({ kind: 'reaction', add: false, channel: CHANNEL, ts: '2.000002', user: 'U1', reaction: 'eyes' });
+		});
+
+		it('rejects non-reaction events, non-message items, and malformed payloads', () => {
+			expect(extractReactionEvent({ type: 'message', channel: CHANNEL, user: 'U1', ts: '1.1', text: 'x' })).to.equal(null);
+			expect(
+				extractReactionEvent({ type: 'reaction_added', user: 'U1', reaction: 'x', item: { type: 'file', channel: CHANNEL } }),
+			).to.equal(null);
+			expect(extractReactionEvent({ type: 'reaction_added', user: 'U1', item: { type: 'message', channel: CHANNEL, ts: '1.1' } })).to.equal(
+				null,
+			);
+			expect(extractReactionEvent({ type: 'reaction_added', reaction: 'x', item: { type: 'message', channel: CHANNEL, ts: '1.1' } })).to.equal(
+				null,
+			);
 		});
 	});
 });
