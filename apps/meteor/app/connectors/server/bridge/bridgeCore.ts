@@ -34,7 +34,7 @@ import { callbacks } from '../../../../server/lib/callbacks';
 import { SystemLogger } from '../../../../server/lib/logger/system';
 import { createRoom } from '../../../lib/server/functions/createRoom';
 import { sendMessage } from '../../../lib/server/functions/sendMessage';
-import type { IProviderMessage } from '../ChatProvider';
+import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
 import { toProviderConnection } from '../runtimeConnection';
 import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } from './bridgeIds';
@@ -246,7 +246,7 @@ async function onMessageSaved(message: IMessage, room: IRoom | undefined): Promi
 		// look up the parent's external id and pass it as threadExternalId. Providers support
 		// threading (e.g. Slack `thread_ts`, Teams `replyToId`); if parent has no external id,
 		// post top-level as today.
-		const outboundPayload: any = { text: message.msg };
+		const outboundPayload: IOutboundMessage = { text: message.msg };
 		if (message.tmid) {
 			const parentMsg = await Messages.findOneById(message.tmid, {
 				projection: { 'customFields.connectorBridge.externalId': 1 },
