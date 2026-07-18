@@ -2,7 +2,11 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#0b1220" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/pwa/apple-touch-icon.png" />
 		<title>MatterChat — Offline</title>
 		<style>
 			html,
@@ -20,7 +24,9 @@
 				align-items: center;
 				justify-content: center;
 				text-align: center;
-				padding: 24px;
+				/* Keep content clear of the iOS notch / home indicator in standalone mode. */
+				padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+					max(24px, env(safe-area-inset-left));
 				box-sizing: border-box;
 			}
 			img {
