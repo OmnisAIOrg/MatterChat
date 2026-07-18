@@ -600,7 +600,7 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 						isSelected={selectedExternalId === connection._id}
 						unread={getCountsForConnection(connection._id)}
 						onClick={(): void => selectExternal(connection._id)}
-						getAuthorizeUrl={(provider, desktop): Promise<unknown> => getAuthorizeUrl(provider, desktop)}
+						getAuthorizeUrl={(provider, desktop): Promise<unknown> => getAuthorizeUrl(provider as ExternalProvider, desktop)}
 					/>
 				))}
 				<Box className={dividerClass} />
