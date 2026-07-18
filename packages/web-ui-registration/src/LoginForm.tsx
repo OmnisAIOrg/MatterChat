@@ -10,6 +10,7 @@ import {
 	ButtonGroup,
 	Button,
 	Callout,
+	Box,
 } from '@rocket.chat/fuselage';
 import { Form, ActionLink } from '@rocket.chat/layout';
 import { useDocumentTitle } from '@rocket.chat/ui-client';
@@ -152,6 +153,20 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 		return null;
 	};
 
+	// Handle OmnisAI login with desktop-aware helper if available
+	const handleOmnisaiLogin = () => {
+		// ISSUE 1: Check if the desktop-aware helper is available at window level.
+		// If Meteor.loginWithOmnisai exists (desktop/web capable), use it for desktop deep-linking support.
+		// Otherwise fall back to direct navigation. This pattern avoids coupling the package to apps/meteor.
+		const login = (window as any).Meteor?.loginWithOmnisai as unknown;
+		if (typeof login === 'function') {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-call
+			login();
+		} else {
+			window.location.href = '/_omnisai/authorize';
+		}
+	};
+
 	if (errors.usernameOrEmail?.type === 'invalid-email') {
 		return <EmailConfirmationForm onBackToLogin={() => clearErrors('usernameOrEmail')} email={getValues('usernameOrEmail')} />;
 	}
@@ -169,6 +184,27 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 			<Form.Header>
 				<Form.Title id={formLabelId}>{t('registration.component.login')}</Form.Title>
 			</Form.Header>
+			{/* ISSUE 2: OmnisAI button moved above the form when enabled, making it prominent.
+					When OmnisAI is available, it becomes primary; password login becomes secondary only if shown.
+					This improves UX for OmnisAI-mode workspaces where users have no password. */}
+			{omnisaiOidcEnabled && (
+				<Form.Container>
+					<ButtonGroup vertical stretch>
+						<Button loading={loginMutation.isPending} disabled={loginMutation.isPending} onClick={handleOmnisaiLogin} primary>
+							{omnisaiButtonLabel}
+						</Button>
+					</ButtonGroup>
+				</Form.Container>
+			)}
+			{showFormLogin && omnisaiOidcEnabled && (
+				<Box mbe='x16' display='flex' alignItems='center' gap='x8'>
+					<Box style={{ flex: 1, height: '1px' }} backgroundColor='neutral-200' />
+					<Box mie='x0' mis='x0' fontSize='x12' color='neutral-700' fontWeight='600'>
+						{t('registration.page.login.or')}
+					</Box>
+					<Box style={{ flex: 1, height: '1px' }} backgroundColor='neutral-200' />
+				</Box>
+			)}
 			{showFormLogin && (
 				<>
 					<Form.Container>
@@ -233,35 +269,19 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 						</FieldGroup>
 						{errorOnSubmit && <FieldGroup disabled={loginMutation.isPending}>{renderErrorOnSubmit(errorOnSubmit)}</FieldGroup>}
 					</Form.Container>
-				</>
-			)}
-			{(showFormLogin || omnisaiOidcEnabled) && (
-				<Form.Footer>
-					<ButtonGroup vertical stretch>
-						{showFormLogin && (
-							<Button loading={loginMutation.isPending} type='submit' primary>
+					<Form.Footer>
+						<ButtonGroup vertical stretch>
+							<Button loading={loginMutation.isPending} type='submit' primary={!omnisaiOidcEnabled}>
 								{t('registration.component.login')}
 							</Button>
-						)}
-						{omnisaiOidcEnabled && (
-							<Button
-								disabled={loginMutation.isPending}
-								onClick={(): void => {
-									window.location.href = '/_omnisai/authorize';
-								}}
-							>
-								{omnisaiButtonLabel}
-							</Button>
-						)}
-					</ButtonGroup>
-					{showFormLogin && (
+						</ButtonGroup>
 						<p>
 							<Trans i18nKey='registration.page.login.register'>
 								New here? <ActionLink onClick={(): void => setLoginRoute('register')}>Create an account</ActionLink>
 							</Trans>
 						</p>
-					)}
-				</Form.Footer>
+					</Form.Footer>
+				</>
 			)}
 			<LoginServices disabled={loginMutation.isPending} setError={setErrorOnSubmit} />
 		</Form>
