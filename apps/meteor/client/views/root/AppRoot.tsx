@@ -19,7 +19,9 @@ const AppRoot = () => (
 				<meta httpEquiv='X-UA-Compatible' content='IE=edge' />
 				<meta name='fragment' content='!' />
 				<meta name='distribution' content='global' />
-				<meta name='viewport' content='width=device-width, initial-scale=1, interactive-widget=resizes-content' />
+				{/* NB: no `viewport` meta here — app/ui-master/server injects the canonical one
+				    (with viewport-fit=cover for iOS safe-areas + zoom lockdown). A second client-side
+				    viewport tag duplicates it and browsers pick one unpredictably (PWA notch bugs). */}
 				<meta name='rating' content='general' />
 				<meta name='mobile-web-app-capable' content='yes' />
 				<meta name='apple-mobile-web-app-capable' content='yes' />

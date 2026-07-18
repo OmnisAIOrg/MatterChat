@@ -49,7 +49,6 @@ Meteor.startup(() => {
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<meta name="theme-color" content="#1A212C" />
 		<link rel="apple-touch-icon" sizes="180x180" href="${getURL('images/pwa/apple-touch-icon.png')}" />
 		${[
 			// iOS standalone launch splash (chrome-color, no white flash). device-width/height are
@@ -101,7 +100,10 @@ Meteor.startup(() => {
 	});
 
 	settings.watch<string>('theme-color-sidebar-background', (value) => {
-		const escapedValue = escapeHTML(value);
+		// Single source of truth for theme-color: the static matterchat-mobile-pwa block above
+		// deliberately carries none (two theme-color tags = browser-chrome color flicker), so this
+		// watcher must always emit one — fall back to the brand navy when the setting is unset.
+		const escapedValue = escapeHTML(value || '#1A212C');
 		injectIntoHead(
 			'theme-color-sidebar-background',
 			`<meta name="msapplication-TileColor" content="${escapedValue}" /><meta name="theme-color" content="${escapedValue}" />`,

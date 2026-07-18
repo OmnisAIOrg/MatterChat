@@ -11467,6 +11467,7 @@ __metadata:
     underscore: "npm:^1.13.8"
     universal-perf-hooks: "npm:^1.0.1"
     virtua: "npm:^0.49.0"
+    web-push: "npm:^3.6.7"
     webdav: "npm:^4.11.5"
     webpack: "npm:~5.104.1"
     xml-crypto: "npm:~3.2.1"
@@ -17841,6 +17842,18 @@ __metadata:
     inherits: "npm:^2.0.1"
     minimalistic-assert: "npm:^1.0.0"
   checksum: 10/5a02104b9ba167917c786a3fdac9840a057d29e6b609250e6af924d0529ead1a32417da13eec809cadea8f991eb67782196f3df427c5b4f30eaf22044fc64fda
+  languageName: node
+  linkType: hard
+
+"asn1.js@npm:^5.3.0":
+  version: 5.4.1
+  resolution: "asn1.js@npm:5.4.1"
+  dependencies:
+    bn.js: "npm:^4.0.0"
+    inherits: "npm:^2.0.1"
+    minimalistic-assert: "npm:^1.0.0"
+    safer-buffer: "npm:^2.1.0"
+  checksum: 10/63d57c766f6afc81ff175bbf922626b3778d770c8b91b32cbcf672d7bf73b4198aca66c60a6427bff3aebc48feff1eab4a161f2681b7300b6c5b775a1e6fd791
   languageName: node
   linkType: hard
 
@@ -25546,6 +25559,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"http_ece@npm:1.2.0":
+  version: 1.2.0
+  resolution: "http_ece@npm:1.2.0"
+  checksum: 10/8adced3b9fd33a9999fccba930ddc1c74d46c8c69babb9f7654128fff6ee5d09d6812860667d01f4497f60082991f204bcc4b9e4e0c2d9d456e815cf832b7674
+  languageName: node
+  linkType: hard
+
 "https-browserify@npm:^1.0.0":
   version: 1.0.0
   resolution: "https-browserify@npm:1.0.0"
@@ -25563,7 +25583,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"https-proxy-agent@npm:^7.0.1, https-proxy-agent@npm:^7.0.6":
+"https-proxy-agent@npm:^7.0.0, https-proxy-agent@npm:^7.0.1, https-proxy-agent@npm:^7.0.6":
   version: 7.0.6
   resolution: "https-proxy-agent@npm:7.0.6"
   dependencies:
@@ -35523,7 +35543,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"safer-buffer@npm:>= 2.1.2 < 3, safer-buffer@npm:>= 2.1.2 < 3.0.0, safer-buffer@npm:~2.1.0":
+"safer-buffer@npm:>= 2.1.2 < 3, safer-buffer@npm:>= 2.1.2 < 3.0.0, safer-buffer@npm:^2.1.0, safer-buffer@npm:~2.1.0":
   version: 2.1.2
   resolution: "safer-buffer@npm:2.1.2"
   checksum: 10/7eaf7a0cf37cc27b42fb3ef6a9b1df6e93a1c6d98c6c6702b02fe262d5fcbd89db63320793b99b21cb5348097d0a53de81bd5f4e8b86e20cc9412e3f1cfb4e83
@@ -39451,6 +39471,21 @@ __metadata:
   dependencies:
     defaults: "npm:^1.0.3"
   checksum: 10/182ebac8ca0b96845fae6ef44afd4619df6987fe5cf552fdee8396d3daa1fb9b8ec5c6c69855acb7b3c1231571393bd1f0a4cdc4028d421575348f64bb0a8817
+  languageName: node
+  linkType: hard
+
+"web-push@npm:^3.6.7":
+  version: 3.6.7
+  resolution: "web-push@npm:3.6.7"
+  dependencies:
+    asn1.js: "npm:^5.3.0"
+    http_ece: "npm:1.2.0"
+    https-proxy-agent: "npm:^7.0.0"
+    jws: "npm:^4.0.0"
+    minimist: "npm:^1.2.5"
+  bin:
+    web-push: src/cli.js
+  checksum: 10/c25f427a4d75572cb476835e4fc547b2c1b7a306c9c264d4b6aa2345ae2144a5cd49743320f3cc6df8ef3be9c52ba5c88be5a7f6f9bdb3252768f1bb9e7d1037
   languageName: node
   linkType: hard
 

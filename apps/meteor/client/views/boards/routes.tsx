@@ -74,13 +74,12 @@ export const registerBoardsRoute = createRouteGroup(
 );
 
 // The Boards home (board grid + templates + "New board") lives at /boards.
-// Re-registers the group index so /boards renders BoardsRouter > BoardsHome
-// (the bare group index auto-created by createRouteGroup renders no child).
-// The KanbanUI phase owns ./BoardsHome.tsx (default export).
-registerBoardsRoute('', {
-	name: 'boards-index',
-	component: lazy(() => import('./BoardsHome')),
-});
+// NOTE: do NOT re-register the group index here. router.defineRoutes keeps
+// BOTH routes when the same path is defined twice (routes are a Set and the
+// FIRST match wins), so a second '/boards' registration is unreachable dead
+// code and the bare group index renders a permanent PageSkeleton instead.
+// BoardsRouter renders BoardsHome itself when given no child — that IS the
+// /boards index (see BoardsRouter.tsx).
 
 // A single board view; :view ∈ board|calendar|table, :cardId deep-links the card drawer.
 // The KanbanUI phase owns ./BoardRouter.tsx (default export).
