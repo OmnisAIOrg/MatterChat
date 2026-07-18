@@ -643,8 +643,20 @@ export async function markMyRead(
 		const provider = providerRegistry.get(loaded.doc.provider);
 		// Best-effort: providers without read-state support omit the method, leaving this a clean no-op.
 		await provider.markRead?.(loaded.connection, opts.externalId);
-	} catch {
-		// Provider couldn't mark read (not implemented / Graph error) — still ack ok (best-effort).
+	} catch (err) {
+		// Best-effort TO THE CLIENT (still acks ok) — but never silent: the failure is logged and a
+		// dead token (invalid_auth / token_revoked / invalid_grant) flips the connection to `error`
+		// exactly like the read/send paths, so a broken read-sync (e.g. slack_error:missing_scope on
+		// a pre-write-scope token) surfaces in logs + the reconnect UI instead of vanishing.
+		const providerErr = await providerErrorMarkingAuthDeath(loaded.doc, err, 'mark_read_failed');
+		SystemLogger.warn({
+			msg: 'markRead failed (best-effort — acked ok to client)',
+			connectionId: loaded.doc._id,
+			provider: loaded.doc.provider,
+			externalId: opts.externalId,
+			error: providerErr.error,
+			detail: providerErr.message,
+		});
 	}
 	return { ok: true };
 }

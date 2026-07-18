@@ -5,8 +5,9 @@
  * providers/teams/messageMapping.ts.
  *
  * SCOPE (mirrors the Teams inbound bridge + SlackProvider.syncMessages):
- *  - `message` events in channels (`channel_type: 'channel'`) and private channels (`'group'`) —
- *    DMs (`im`/`mpim`) stay poll/backfill-only for now;
+ *  - `message` events in channels (`channel_type: 'channel'`), private channels (`'group'`), 1:1
+ *    DMs (`'im'`) and group DMs (`'mpim'`) — a Slack conversation id IS the channel id, so a
+ *    bridged DM routes through the exact same (team, channel) fan-out as a bridged channel;
  *  - NEW user messages (no subtype) → ingest; thread replies carry `thread_ts` → mapped to the
  *    bridge's threadExternalId (same as Teams `replyToId`);
  *  - `message_changed` → an EDIT of the nested `message` (`message.ts` addresses the original);
@@ -76,8 +77,7 @@ export type SlackMessageAction =
 			ts: string;
 	  };
 
-const asBoundedString = (v: unknown): string | undefined =>
-	typeof v === 'string' && v && v.length <= MAX_FIELD_LENGTH ? v : undefined;
+const asBoundedString = (v: unknown): string | undefined => (typeof v === 'string' && v && v.length <= MAX_FIELD_LENGTH ? v : undefined);
 
 /** Extract link-out stubs for the files carried on a message payload (best-effort, never throws). */
 function extractFiles(files: unknown): SlackFileStub[] | undefined {
@@ -106,17 +106,21 @@ function extractFiles(files: unknown): SlackFileStub[] | undefined {
 }
 
 /**
- * The bridged rooms are Slack CHANNELS (public `channel` / private `group`) — DM events are
- * skipped. A missing channel_type is tolerated (some delivery shapes omit it): routing requires an
- * existing bridged-channel mapping anyway, so an unbridged conversation matches nothing.
+ * The bridged rooms are Slack CONVERSATIONS: public channels (`channel`), private channels
+ * (`group`), 1:1 DMs (`im`) and group DMs (`mpim`) — same vocabulary as syncMessages, which reads
+ * all four through conversations.history. A missing channel_type is tolerated (some delivery
+ * shapes omit it): routing requires an existing bridged-channel mapping anyway, so an unbridged
+ * conversation matches nothing.
  */
 function isBridgeableChannelType(channelType: unknown): boolean {
-	return channelType === undefined || channelType === 'channel' || channelType === 'group';
+	return (
+		channelType === undefined || channelType === 'channel' || channelType === 'group' || channelType === 'im' || channelType === 'mpim'
+	);
 }
 
 /**
  * Normalize ONE `message` event into the action the bridge processes, or null when it should not
- * surface (bot/system/echo/DM/malformed — fail-closed, mirroring syncMessages' skip rules).
+ * surface (bot/system/echo/malformed — fail-closed, mirroring syncMessages' skip rules).
  */
 export function extractMessageEvent(event: Record<string, unknown>): SlackMessageAction | null {
 	const msg = event as SlackEventMessage;
@@ -212,7 +216,10 @@ export function fileStubLines(files: SlackFileStub[] | undefined): string {
  * `externalId`/`ts` are the raw Slack `ts`, thread root rides as `threadExternalId`. File-only
  * messages get their stub lines as the text so they still surface (ingest drops empty text).
  */
-export function toProviderMessage(action: Extract<SlackMessageAction, { kind: 'new' | 'edit' }>, authorDisplayName?: string): IProviderMessage {
+export function toProviderMessage(
+	action: Extract<SlackMessageAction, { kind: 'new' | 'edit' }>,
+	authorDisplayName?: string,
+): IProviderMessage {
 	const stubs = fileStubLines(action.files);
 	const text = [action.text?.trim(), stubs].filter(Boolean).join('\n');
 	return {

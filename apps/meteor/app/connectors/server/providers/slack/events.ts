@@ -28,7 +28,7 @@
  *
  * SLACK APP CONFIG this endpoint expects (see MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §2.1a):
  *   Event Subscriptions → Request URL: https://<site>/_slack/events
- *   Subscribe to bot events: message.channels, message.groups
+ *   Subscribe to USER events: message.channels, message.groups, message.im, message.mpim
  *   Basic Information → Signing Secret → paste into Admin → Slack → Signing Secret
  *
  * Clean-room: written from the Slack Events API / request-verification docs; nothing under
@@ -130,7 +130,7 @@ async function handleEventPost(req: any, res: any): Promise<void> {
 	ok(res);
 
 	if (!action) {
-		return; // Not a bridgeable message event (bot/system/DM/other event type) — acked + dropped.
+		return; // Not a bridgeable message event (bot/system/other event type) — acked + dropped.
 	}
 
 	setImmediate(() => {

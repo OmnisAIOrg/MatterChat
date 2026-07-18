@@ -56,7 +56,14 @@ import type {
 	IProviderUser,
 	IVerifiedConnection,
 } from '../ChatProvider';
-import { getSlackConfig, isSlackConfigured, isSlackEventsConfigured, SLACK_TOKEN_ENDPOINT, redirectUri, SLACK_USER_SCOPES } from './slack/config';
+import {
+	getSlackConfig,
+	isSlackConfigured,
+	isSlackEventsConfigured,
+	SLACK_TOKEN_ENDPOINT,
+	redirectUri,
+	SLACK_USER_SCOPES,
+} from './slack/config';
 import type { SlackTokens } from './slack/slackApi';
 import { slackFetch, slackGetAll } from './slack/slackApi';
 
@@ -313,7 +320,11 @@ export class SlackProvider implements IChatProvider {
 			profileLookups++;
 			try {
 				const info = await slackFetch<{
-					user?: { real_name?: string; profile?: { display_name?: string; real_name?: string; image_72?: string; image_48?: string }; name?: string };
+					user?: {
+						real_name?: string;
+						profile?: { display_name?: string; real_name?: string; image_72?: string; image_48?: string };
+						name?: string;
+					};
 				}>('users.info', tokens, { method: 'GET', params: { user: userId } });
 				const u = info.user || {};
 				const name = u.profile?.display_name || u.real_name || u.profile?.real_name || u.name || userId;
@@ -674,8 +685,9 @@ export class SlackProvider implements IChatProvider {
 	/**
 	 * Begin receiving realtime updates for a channel — REAL via the Slack Events API. Unlike Teams
 	 * (one Graph subscription per channel), Slack event subscriptions are APP-LEVEL: the app's
-	 * Event Subscriptions config (Request URL `/_slack/events`, bot events `message.channels` +
-	 * `message.groups`) delivers every visible channel's messages in one stream, verified per
+	 * Event Subscriptions config (Request URL `/_slack/events`, USER events `message.channels` +
+	 * `message.groups` + `message.im` + `message.mpim`) delivers every visible conversation's
+	 * messages — channels AND direct chats — in one stream, verified per
 	 * request by the signing secret. So there is nothing per-channel to create here — the bridge's
 	 * channel mapping (the bridgedChannels record the bridgeService keeps) IS the subscription, and
 	 * the events endpoint fans each delivery out to every connection bridging that (team, channel).
@@ -791,36 +803,36 @@ export class SlackProvider implements IChatProvider {
 	 * `ts=` the conversation's latest message ts. `externalId` is the conversation id from listChannels
 	 * OR listDirectChats — Slack marks both the same way (a conversation id IS the channel id).
 	 *
-	 * Best-effort: we first read the conversation's most-recent message ts (conversations.history
-	 * limit=1), then mark up to it. Any failure (missing scope, no messages, channel_not_found) is
-	 * SWALLOWED and resolves void — the service swallows throws anyway and still acks ok:true, so a
-	 * failed mark must never surface as a hard error to the client.
+	 * We first read the conversation's most-recent message ts (conversations.history limit=1), then
+	 * mark up to it. conversations.mark needs the per-type WRITE scope (channels:write /
+	 * groups:write / im:write / mpim:write — requested since the read-sync scope set landed; tokens
+	 * granted BEFORE that lack them and fail with `slack_error:missing_scope` until the user
+	 * reconnects). Failures are THROWN, not swallowed (same posture as TeamsProvider.markRead): the
+	 * service layer (markMyRead) still acks ok:true to the client, but logs the failure and stamps
+	 * auth-death (invalid_auth/token_revoked → connection status `error`) so a silently-broken
+	 * read-sync is visible instead of vanishing.
 	 */
 	async markRead(connection: IProviderConnection, externalId: string): Promise<void> {
 		if (!isSlackConfigured() || !externalId) {
 			return;
 		}
 		const tokens = tokensFromCredentials(connection.credentials);
-		try {
-			// People-directory DM target: a user id must be resolved to its im conversation id first.
-			const conversationId = await this.resolveConversationId(connection, externalId, tokens);
-			// Newest message ts to mark up to. limit=1 keeps this cheap.
-			const page = await slackFetch<{ messages?: Array<{ ts?: string }> }>('conversations.history', tokens, {
-				method: 'GET',
-				params: { channel: conversationId, limit: 1 },
-			});
-			const latestTs = page.messages?.[0]?.ts;
-			if (!latestTs) {
-				// Nothing to mark (empty conversation or no read access) — best-effort, just return.
-				return;
-			}
-			await slackFetch('conversations.mark', tokens, {
-				method: 'POST',
-				params: { channel: conversationId, ts: latestTs },
-			});
-		} catch (err) {
-			// Best-effort: swallow (missing scope, channel_not_found, etc.) and resolve void.
+		// People-directory DM target: a user id must be resolved to its im conversation id first.
+		const conversationId = await this.resolveConversationId(connection, externalId, tokens);
+		// Newest message ts to mark up to. limit=1 keeps this cheap.
+		const page = await slackFetch<{ messages?: Array<{ ts?: string }> }>('conversations.history', tokens, {
+			method: 'GET',
+			params: { channel: conversationId, limit: 1 },
+		});
+		const latestTs = page.messages?.[0]?.ts;
+		if (!latestTs) {
+			// Nothing to mark (empty conversation) — genuinely nothing to do.
+			return;
 		}
+		await slackFetch('conversations.mark', tokens, {
+			method: 'POST',
+			params: { channel: conversationId, ts: latestTs },
+		});
 	}
 
 	/**
