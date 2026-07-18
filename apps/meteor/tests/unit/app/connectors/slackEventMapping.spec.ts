@@ -19,7 +19,14 @@ describe('Slack event message mapping', () => {
 		});
 
 		it('extracts a private-channel (group) message', () => {
-			const action = extractMessageEvent({ type: 'message', channel: 'G999', channel_type: 'group', user: 'U1', text: 'psst', ts: '2.0002' });
+			const action = extractMessageEvent({
+				type: 'message',
+				channel: 'G999',
+				channel_type: 'group',
+				user: 'U1',
+				text: 'psst',
+				ts: '2.0002',
+			});
 			expect(action).to.include({ kind: 'new', channel: 'G999' });
 		});
 
@@ -75,16 +82,23 @@ describe('Slack event message mapping', () => {
 	describe('extractMessageEvent — echo prevention + skip rules', () => {
 		it('skips bot-authored events (bot_id — including the connector app bot itself)', () => {
 			expect(
-				extractMessageEvent({ type: 'message', channel: CHANNEL, channel_type: 'channel', bot_id: 'B1', text: 'beep', ts: '1.1', user: 'U1' }),
+				extractMessageEvent({
+					type: 'message',
+					channel: CHANNEL,
+					channel_type: 'channel',
+					bot_id: 'B1',
+					text: 'beep',
+					ts: '1.1',
+					user: 'U1',
+				}),
 			).to.equal(null);
 		});
 
 		it('skips subtype/system messages (bot_message, channel_join, thread_broadcast)', () => {
 			for (const subtype of ['bot_message', 'channel_join', 'thread_broadcast', 'channel_topic']) {
-				expect(extractMessageEvent({ type: 'message', subtype, channel: CHANNEL, channel_type: 'channel', user: 'U1', ts: '1.1' })).to.equal(
-					null,
-					subtype,
-				);
+				expect(
+					extractMessageEvent({ type: 'message', subtype, channel: CHANNEL, channel_type: 'channel', user: 'U1', ts: '1.1' }),
+				).to.equal(null, subtype);
 			}
 		});
 
@@ -94,9 +108,85 @@ describe('Slack event message mapping', () => {
 			expect(extractMessageEvent({ type: 'message', channel_type: 'channel', user: 'U1', ts: '1.1' })).to.equal(null); // no channel
 		});
 
-		it('skips DM channel types (im/mpim stay poll-only)', () => {
-			expect(extractMessageEvent({ type: 'message', channel: 'D1', channel_type: 'im', user: 'U1', text: 'x', ts: '1.1' })).to.equal(null);
-			expect(extractMessageEvent({ type: 'message', channel: 'G1', channel_type: 'mpim', user: 'U1', text: 'x', ts: '1.1' })).to.equal(null);
+		it('skips unknown channel types (fail-closed)', () => {
+			expect(extractMessageEvent({ type: 'message', channel: 'C1', channel_type: 'shared', user: 'U1', text: 'x', ts: '1.1' })).to.equal(
+				null,
+			);
+			expect(extractMessageEvent({ type: 'message', channel: 'C1', channel_type: 42, user: 'U1', text: 'x', ts: '1.1' })).to.equal(null);
+		});
+	});
+
+	describe('extractMessageEvent — DMs (im/mpim realtime)', () => {
+		it('extracts a 1:1 DM (im) message', () => {
+			expect(
+				extractMessageEvent({ type: 'message', channel: 'D0AAAAAAAA1', channel_type: 'im', user: 'U1', text: 'dm hello', ts: '10.000001' }),
+			).to.deep.equal({ kind: 'new', channel: 'D0AAAAAAAA1', ts: '10.000001', user: 'U1', text: 'dm hello' });
+		});
+
+		it('extracts a group DM (mpim) message', () => {
+			expect(
+				extractMessageEvent({ type: 'message', channel: 'G0BBBBBBBB2', channel_type: 'mpim', user: 'U2', text: 'group dm', ts: '11.5' }),
+			).to.deep.equal({ kind: 'new', channel: 'G0BBBBBBBB2', ts: '11.5', user: 'U2', text: 'group dm' });
+		});
+
+		it('carries thread replies in DMs like channels', () => {
+			const reply = extractMessageEvent({
+				type: 'message',
+				channel: 'D1',
+				channel_type: 'im',
+				user: 'U1',
+				text: 're',
+				ts: '12.000002',
+				thread_ts: '12.000001',
+			});
+			expect(reply).to.deep.include({ kind: 'new', channel: 'D1', threadTs: '12.000001' });
+		});
+
+		it('applies the same bot/subtype skip rules inside DMs', () => {
+			expect(
+				extractMessageEvent({ type: 'message', channel: 'D1', channel_type: 'im', bot_id: 'B1', user: 'U1', text: 'beep', ts: '1.1' }),
+			).to.equal(null);
+			expect(
+				extractMessageEvent({ type: 'message', subtype: 'channel_join', channel: 'G1', channel_type: 'mpim', user: 'U1', ts: '1.1' }),
+			).to.equal(null);
+		});
+
+		it('maps DM edits (message_changed) to the ORIGINAL ts', () => {
+			expect(
+				extractMessageEvent({
+					type: 'message',
+					subtype: 'message_changed',
+					channel: 'D1',
+					channel_type: 'im',
+					ts: '20.9',
+					message: { type: 'message', user: 'U1', text: 'fixed', ts: '20.000001', edited: { user: 'U1', ts: '20.9' } },
+				}),
+			).to.deep.equal({ kind: 'edit', channel: 'D1', ts: '20.000001', user: 'U1', text: 'fixed', editedTs: '20.9' });
+		});
+
+		it('maps DM deletes (message_deleted) to the deleted ts', () => {
+			expect(
+				extractMessageEvent({
+					type: 'message',
+					subtype: 'message_deleted',
+					channel: 'G1',
+					channel_type: 'mpim',
+					ts: '21.9',
+					deleted_ts: '21.000001',
+				}),
+			).to.deep.equal({ kind: 'delete', channel: 'G1', ts: '21.000001' });
+		});
+
+		it('maps a DM action to the same IProviderMessage vocabulary as syncMessages', () => {
+			const mapped = toProviderMessage({ kind: 'new', channel: 'D1', ts: '30.000001', user: 'U1', text: 'dm' }, 'Bob Builder');
+			expect(mapped).to.deep.equal({
+				externalId: '30.000001',
+				channelExternalId: 'D1',
+				authorExternalId: 'U1',
+				authorDisplayName: 'Bob Builder',
+				text: 'dm',
+				ts: '30.000001',
+			});
 		});
 	});
 
@@ -138,7 +228,14 @@ describe('Slack event message mapping', () => {
 	describe('extractMessageEvent — deletes', () => {
 		it('extracts message_deleted with the deleted ts', () => {
 			expect(
-				extractMessageEvent({ type: 'message', subtype: 'message_deleted', channel: CHANNEL, channel_type: 'channel', ts: '9.9', deleted_ts: '7.000001' }),
+				extractMessageEvent({
+					type: 'message',
+					subtype: 'message_deleted',
+					channel: CHANNEL,
+					channel_type: 'channel',
+					ts: '9.9',
+					deleted_ts: '7.000001',
+				}),
 			).to.deep.equal({ kind: 'delete', channel: CHANNEL, ts: '7.000001' });
 		});
 
@@ -189,9 +286,12 @@ describe('Slack event message mapping', () => {
 		it('fileStubLines renders name+permalink, tolerating missing fields', () => {
 			expect(fileStubLines(undefined)).to.equal('');
 			expect(fileStubLines([{ externalId: 'F1' }])).to.equal('[shared file: F1]');
-			expect(fileStubLines([{ externalId: 'F1', name: 'a.png', url: 'https://x/1' }, { externalId: 'F2', name: 'b.png' }])).to.equal(
-				'[shared file: a.png](https://x/1)\n[shared file: b.png]',
-			);
+			expect(
+				fileStubLines([
+					{ externalId: 'F1', name: 'a.png', url: 'https://x/1' },
+					{ externalId: 'F2', name: 'b.png' },
+				]),
+			).to.equal('[shared file: a.png](https://x/1)\n[shared file: b.png]');
 		});
 
 		it('slackTsToEpochMs converts seconds.micros and rejects junk', () => {

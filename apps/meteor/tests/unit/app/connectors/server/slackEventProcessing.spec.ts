@@ -4,7 +4,6 @@ import proxyquire from 'proxyquire';
 import sinon from 'sinon';
 
 import { extMessageId } from '../../../../../app/connectors/server/bridge/bridgeIds';
-// eslint-disable-next-line import/no-namespace
 import * as echoSuppressionModule from '../../../../../app/connectors/server/bridge/echoSuppression';
 
 const { echoSuppression } = echoSuppressionModule;
@@ -128,13 +127,34 @@ describe('Slack event processing', () => {
 			expect(ingestExternalMessage.secondCall.args[3]).to.equal('U-owner-connB');
 		});
 
+		it('routes a bridged DM (im/mpim conversation id) through the SAME ingest path as channels', async () => {
+			// A bridged DM is just a bridgedChannels entry whose channelExternalId is the D…/G… id —
+			// the fan-out, echo guards and deterministic ids are conversation-id keyed, so a
+			// message.im/message.mpim event needs no parallel path.
+			const DM = 'D0DMDMDMDM1';
+			const doc = {
+				...makeDoc('connDM'),
+				bridgedChannels: [{ channelExternalId: DM, name: 'alice (DM)', rid: 'rid-connDM', createdAt: new Date() }],
+			};
+			findByBridgedChannel.returns(cursorOf([doc]));
+
+			await processSlackMessageEvent(TEAM, { kind: 'new', channel: DM, ts: '1700000001.000100', user: 'U1', text: 'dm hello' });
+
+			expect(findByBridgedChannel.calledOnceWith('slack', TEAM, DM)).to.equal(true);
+			expect(ingestExternalMessage.calledOnce).to.equal(true);
+			const [ingestDoc, ingestBridge, ingestMessage] = ingestExternalMessage.firstCall.args;
+			expect(ingestDoc._id).to.equal('connDM');
+			expect(ingestBridge.channelExternalId).to.equal(DM);
+			expect(ingestMessage).to.deep.include({ externalId: '1700000001.000100', channelExternalId: DM, text: 'dm hello' });
+		});
+
 		it('does nothing for a channel no connection bridges', async () => {
 			findByBridgedChannel.returns(cursorOf([]));
 			await processSlackMessageEvent(TEAM, { kind: 'new', channel: 'C-unlinked', ts: '1.1', user: 'U1', text: 'x' });
 			expect(ingestExternalMessage.callCount).to.equal(0);
 		});
 
-		it('ECHO PREVENTION: drops the webhook echo of this connection\'s own outbound post', async () => {
+		it("ECHO PREVENTION: drops the webhook echo of this connection's own outbound post", async () => {
 			const docA = makeDoc('connA-echo');
 			const docB = makeDoc('connB-echo');
 			findByBridgedChannel.returns(cursorOf([docA, docB]));
@@ -143,7 +163,13 @@ describe('Slack event processing', () => {
 			const echoedTs = '1700000000.000200';
 			echoSuppression.add('connA-echo', echoedTs);
 
-			await processSlackMessageEvent(TEAM, { kind: 'new', channel: CHANNEL, ts: echoedTs, user: 'U-owner-connA-echo', text: 'mirrored out' });
+			await processSlackMessageEvent(TEAM, {
+				kind: 'new',
+				channel: CHANNEL,
+				ts: echoedTs,
+				user: 'U-owner-connA-echo',
+				text: 'mirrored out',
+			});
 
 			// connA (the author's own connection) suppressed; connB (another user bridging the same
 			// channel) still receives it — same fan-out semantics as the Teams webhook.
@@ -191,7 +217,7 @@ describe('Slack event processing', () => {
 			expect(ingestExternalMessage.firstCall.args[3]).to.equal(undefined);
 		});
 
-		it('one connection\'s ingest failure does not stop the fan-out to the others', async () => {
+		it("one connection's ingest failure does not stop the fan-out to the others", async () => {
 			findByBridgedChannel.returns(cursorOf([makeDoc('connF1'), makeDoc('connF2')]));
 			ingestExternalMessage.onFirstCall().rejects(new Error('boom'));
 			ingestExternalMessage.onSecondCall().resolves(true);
@@ -210,7 +236,14 @@ describe('Slack event processing', () => {
 			messagesFindOneById.callsFake(async (id: string) => (id === rcId ? existing : null));
 			usersFindOneById.resolves({ _id: 'user-connG', username: 'owner' });
 
-			await processSlackMessageEvent(TEAM, { kind: 'edit', channel: CHANNEL, ts: '7.000001', user: 'U1', text: 'new text', editedTs: '9.9' });
+			await processSlackMessageEvent(TEAM, {
+				kind: 'edit',
+				channel: CHANNEL,
+				ts: '7.000001',
+				user: 'U1',
+				text: 'new text',
+				editedTs: '9.9',
+			});
 
 			expect(updateMessage.calledOnce).to.equal(true);
 			const [payload, owner, original] = updateMessage.firstCall.args;

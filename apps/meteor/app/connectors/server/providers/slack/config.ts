@@ -37,6 +37,15 @@ export const SLACK_TOKEN_ENDPOINT = 'https://slack.com/api/oauth.v2.access';
  *  - team:read                      → resolve the workspace (team) id + name (team.info).
  *  - im:read / im:history           → list + read 1:1 DMs.
  *  - mpim:read / mpim:history       → list + read group DMs (multi-person IMs).
+ *  - channels:write / groups:write / im:write / mpim:write
+ *                                   → mark conversations read AS the user (conversations.mark —
+ *                                     the read-sync path, SlackProvider.markRead). Slack gates
+ *                                     conversations.mark per conversation TYPE, so all four are
+ *                                     needed for read-sync to cover channels + DMs.
+ *
+ * NOTE: users who connected BEFORE a scope was added hold a token WITHOUT it — Slack user tokens
+ * only carry the scopes granted at authorize time. Calls needing a missing scope fail with
+ * `slack_error:missing_scope` until the user reconnects the workspace.
  */
 export const SLACK_USER_SCOPES = [
 	'channels:read',
@@ -50,6 +59,10 @@ export const SLACK_USER_SCOPES = [
 	'im:history',
 	'mpim:read',
 	'mpim:history',
+	'channels:write',
+	'groups:write',
+	'im:write',
+	'mpim:write',
 ];
 
 export type SlackConfig = {
@@ -117,8 +130,9 @@ export function slackSigningSecret(): string {
  * secret is set. Without it, NO event payload is processed — bridges still work outbound (and the
  * reconcile poll still backfills); inbound realtime simply stays off until the admin provides the
  * signing secret. Unlike Teams/Graph there is NO per-channel subscription to create: the app-level
- * event subscription (message.channels + message.groups) covers every channel the connected user
- * (or the app's bot) can see, so "subscribing" a bridge is just recording the channel mapping.
+ * USER event subscription (message.channels + message.groups + message.im + message.mpim) covers
+ * every conversation — channels AND direct chats — the connected user can see, so "subscribing" a
+ * bridge is just recording the channel mapping.
  */
 export function isSlackEventsConfigured(): boolean {
 	return isSlackConfigured() && Boolean(slackSigningSecret());
