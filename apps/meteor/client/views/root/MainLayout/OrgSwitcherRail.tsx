@@ -166,7 +166,7 @@ const ExternalTile = ({
 	isSelected: boolean;
 	unread: ExternalUnreadCounts;
 	onClick: () => void;
-	getAuthorizeUrl: (provider: string, desktop: boolean) => Promise<string>;
+	getAuthorizeUrl: (provider: string, desktop: boolean) => Promise<unknown>;
 }): ReactElement => {
 	const { t } = useTranslation();
 	const branding = externalProviderBranding(connection.provider);
@@ -212,7 +212,7 @@ const ExternalTile = ({
 
 	const handleReconnect = useCallback(async () => {
 		try {
-			const url = await getAuthorizeUrl(connection.provider, isDesktopApp());
+			const url = String(await getAuthorizeUrl(connection.provider, isDesktopApp()));
 			window.location.href = url;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -255,6 +255,7 @@ const ExternalTile = ({
 	return (
 		<>
 			<GenericMenu
+				title={t('Workspace_options', { defaultValue: 'Workspace options' })}
 				items={menuItems}
 				placement='right-start'
 				button={
@@ -599,7 +600,7 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 						isSelected={selectedExternalId === connection._id}
 						unread={getCountsForConnection(connection._id)}
 						onClick={(): void => selectExternal(connection._id)}
-						getAuthorizeUrl={getAuthorizeUrl}
+						getAuthorizeUrl={(provider, desktop): Promise<unknown> => getAuthorizeUrl(provider as ExternalProvider, desktop)}
 					/>
 				))}
 				<Box className={dividerClass} />
