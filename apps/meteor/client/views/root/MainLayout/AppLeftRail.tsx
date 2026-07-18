@@ -129,7 +129,7 @@ const AppLeftRail = () => {
 	const { t } = useTranslation();
 	const router = useRouter();
 	const user = useUser();
-	const { sidebar, navbar } = useLayout();
+	const { sidebar, navbar, isMobile } = useLayout();
 	const currentRoute = useCurrentRoutePath();
 
 	const canViewBoards = usePermission('boards-view');
@@ -186,6 +186,12 @@ const AppLeftRail = () => {
 			sidebar.expand?.();
 		}
 	});
+
+	// MATTERCHAT: on phones the MobileTabBar carries the primary nav; this 88px column would eat a
+	// quarter of the viewport. Early-return AFTER all hooks (rules of hooks).
+	if (isMobile) {
+		return null;
+	}
 
 	const renderItem = (icon: ComponentProps<typeof Icon>['name'], label: string, onClick: () => void, active: boolean): ReactElement => (
 		<Box

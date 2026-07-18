@@ -2,9 +2,10 @@ import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCorners, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import type { IBoard, IBoardCard, IBoardList, Serialized } from '@rocket.chat/core-typings';
+import { css } from '@rocket.chat/css-in-js';
 import { Box, Throbber } from '@rocket.chat/fuselage';
 import { PageScrollableContent } from '@rocket.chat/ui-client';
-import { useEndpoint, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
+import { useEndpoint, useLayout, useMethod, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { MouseEvent } from 'react';
@@ -34,10 +35,29 @@ type MoveContext = { previous: CardsCache | undefined };
 // (API_Upper_Count_Limit, default 100) so every page request is honored in full.
 const CARDS_PAGE_SIZE = 100;
 
+// MATTERCHAT: mobile board = a Trello-style COLUMN PAGER. Desktop keeps free horizontal
+// scrolling of 280px columns; on phones each column becomes a near-full-width page the
+// user swipes between, with an edge peek of the next column, snap-locked per column.
+// The width override needs !important because Fuselage's minWidth/maxWidth Box props win
+// otherwise; `& > *` only ever matches the Column boxes (SortableContext renders no DOM).
+const mobileColumnPagerClass = css`
+	scroll-snap-type: x mandatory;
+	-webkit-overflow-scrolling: touch;
+	padding-inline: 8px;
+	scroll-padding-inline: 8px;
+
+	& > * {
+		min-width: calc(100vw - 56px) !important;
+		max-width: calc(100vw - 56px) !important;
+		scroll-snap-align: start;
+	}
+`;
+
 const BoardView = ({ board, lists }: BoardViewProps) => {
 	const router = useRouter();
 	const dispatchToastMessage = useToastMessageDispatch();
 	const queryClient = useQueryClient();
+	const { isMobile } = useLayout();
 
 	const getCards = useEndpoint('GET', '/v1/boards.cards');
 	const cardMove = useMethod('boards.cardMove');
@@ -336,8 +356,15 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 				<BulkActionBar boardId={board._id} selectedIds={selectedIdsList} lists={lists} onClearSelection={clearSelection} />
 			)}
 			<DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-				{/* Ledger paper ground behind the columns (calm dense dark surface in dark theme). */}
-				<Box display='flex' alignItems='flex-start' height='100%' style={{ overflowX: 'auto', backgroundColor: LEDGER_PAPER }}>
+				{/* Ledger paper ground behind the columns (calm dense dark surface in dark theme).
+				    On phones the same container becomes the snap-scrolling column pager. */}
+				<Box
+					display='flex'
+					alignItems='flex-start'
+					height='100%'
+					className={isMobile ? mobileColumnPagerClass : undefined}
+					style={{ overflowX: 'auto', backgroundColor: LEDGER_PAPER }}
+				>
 					<SortableContext items={sortableListIds} strategy={horizontalListSortingStrategy}>
 						{sortedLists.map((list) => (
 							<Column

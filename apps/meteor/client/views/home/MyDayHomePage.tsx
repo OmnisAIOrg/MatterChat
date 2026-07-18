@@ -157,6 +157,7 @@ const SectionCard = ({
 const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red' }[] }) => (
 	<Box
 		display='flex'
+		flexWrap='wrap'
 		mbe={12}
 		borderWidth='default'
 		borderRadius='x8'
@@ -175,7 +176,9 @@ const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red
 					style={{
 						borderInlineStart: index > 0 ? `1px solid ${LEDGER_RULE}` : undefined,
 						boxShadow: accent ? `inset 3px 0 0 0 ${accent}` : undefined,
-						minWidth: 0,
+						// MATTERCHAT: phones — the 4-across strip truncated its labels ("ACTIV…");
+						// a 140px floor wraps it into a clean 2×2 grid at ≤ ~600px widths.
+						minWidth: 'min(140px, 100%)',
 					}}
 				>
 					<Box
