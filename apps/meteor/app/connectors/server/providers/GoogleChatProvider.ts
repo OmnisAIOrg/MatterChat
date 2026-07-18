@@ -481,14 +481,15 @@ export class GoogleChatProvider implements IChatProvider {
 	// ─── sync (read) — REAL ──────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Read a space's messages: GET /v1/{space}/messages?pageSize=50, paged via nextPageToken up to
-	 * MAX_MESSAGE_PAGES. Each Google message is mapped to IProviderMessage — author from
+	 * Read a space's messages: GET /v1/{space}/messages?pageSize=50&orderBy=createTime%20desc, paged via nextPageToken up to
+	 * MAX_MESSAGE_PAGES. Fetches NEWEST messages first (descending order), then reverses to maintain the
+	 * ascending order contract documented below. Each Google message is mapped to IProviderMessage — author from
 	 * `sender.displayName` (falls back to the sender resource name), text from `text`, `ts` from
 	 * `createTime`. Messages without text (pure attachments/cards) still flow through with empty text.
 	 *
 	 * `channelExternalId` is the `spaces/{id}` resource name listChannels emitted. `since` is an
-	 * optional ISO timestamp; messages at/older than it are skipped client-side (Google's list order
-	 * is ascending by create time, so we filter rather than stop early).
+	 * optional ISO timestamp; messages at/older than it are skipped client-side. Returns messages in
+	 * ASCENDING create time order (oldest first).
 	 */
 	async *syncMessages(connection: IProviderConnection, channelExternalId: string, since?: string): AsyncIterable<IProviderMessage> {
 		if (!isGoogleConfigured()) {
@@ -511,10 +512,13 @@ export class GoogleChatProvider implements IChatProvider {
 
 		let pageToken: string | undefined;
 		let pages = 0;
+		const collectedMessages: IProviderMessage[] = [];
 
 		while (pages < MAX_MESSAGE_PAGES) {
 			const url = new URL(`${CHAT_BASE}/${space}/messages`);
 			url.searchParams.set('pageSize', String(MESSAGE_PAGE_SIZE));
+			// Fetch newest messages first (descending order) so we get the latest messages in big spaces.
+			url.searchParams.set('orderBy', 'createTime desc');
 			if (pageToken) {
 				url.searchParams.set('pageToken', pageToken);
 			}
@@ -537,7 +541,7 @@ export class GoogleChatProvider implements IChatProvider {
 				const authorId = msg.sender?.name || '';
 				const authorName = msg.sender?.displayName;
 
-				yield {
+				collectedMessages.push({
 					externalId: msg.name,
 					channelExternalId,
 					authorExternalId: authorId,
@@ -547,13 +551,19 @@ export class GoogleChatProvider implements IChatProvider {
 					text: msg.text || '',
 					ts,
 					...(msg.lastUpdateTime && msg.lastUpdateTime !== msg.createTime ? { editedTs: msg.lastUpdateTime } : {}),
-				};
+				});
 			}
 
 			pageToken = page.nextPageToken;
 			if (!pageToken) {
 				break;
 			}
+		}
+
+		// Reverse collected messages to restore ascending order (oldest first) before yielding.
+		collectedMessages.reverse();
+		for (const msg of collectedMessages) {
+			yield msg;
 		}
 	}
 

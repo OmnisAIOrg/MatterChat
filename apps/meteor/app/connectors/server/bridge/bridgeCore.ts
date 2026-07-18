@@ -34,13 +34,34 @@ import { callbacks } from '../../../../server/lib/callbacks';
 import { SystemLogger } from '../../../../server/lib/logger/system';
 import { createRoom } from '../../../lib/server/functions/createRoom';
 import { sendMessage } from '../../../lib/server/functions/sendMessage';
-import type { IProviderMessage } from '../ChatProvider';
+import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
 import { toProviderConnection } from '../runtimeConnection';
 import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } from './bridgeIds';
 import { echoSuppression } from './echoSuppression';
 
 const CALLBACK_ID = 'ConnectorBridge_Out';
+
+/**
+ * Parse a timestamp from an external message. Handles multiple formats:
+ *  - Slack: 'seconds.micros' (e.g., '1752796800.123456') → unix seconds
+ *  - Teams/Google: ISO-8601 strings → Date.parse
+ *  - Fallback: current time if parsing fails
+ */
+function parseExternalTs(ts: string): Date {
+	// Slack format: 'seconds.micros' (e.g., '1752796800.123456')
+	if (/^\d+\.\d+$/.test(ts)) {
+		const unix = Math.round(parseFloat(ts) * 1000);
+		return new Date(unix);
+	}
+	// Try ISO/standard format (Teams, Google, etc.)
+	const parsed = Date.parse(ts);
+	if (!Number.isNaN(parsed)) {
+		return new Date(parsed);
+	}
+	// Fallback: current time if all parsing fails
+	return new Date();
+}
 
 /** Slug a channel label into a valid RC room name (default validation is `[0-9a-zA-Z-_.]+`). */
 function roomNameFor(label: string): string {
@@ -136,7 +157,6 @@ export async function ingestExternalMessage(
 		return false;
 	}
 
-	const tsMs = Date.parse(message.ts);
 	const senderIsOwner = Boolean(ownerExternalId) && message.authorExternalId === ownerExternalId;
 
 	// Threading: link a reply to its already-ingested thread root (same deterministic id scheme).
@@ -152,7 +172,7 @@ export async function ingestExternalMessage(
 		_id: rcMessageId,
 		rid: bridge.rid,
 		msg: message.text,
-		ts: Number.isNaN(tsMs) ? new Date() : new Date(tsMs),
+		ts: parseExternalTs(message.ts),
 		u: { _id: owner._id, username: owner.username },
 		// External senders render via the ALIAS mechanism — never ghost RC accounts (spec §4.3).
 		...(senderIsOwner ? {} : { alias: message.authorDisplayName || message.authorExternalId }),
@@ -221,7 +241,22 @@ async function onMessageSaved(message: IMessage, room: IRoom | undefined): Promi
 		}
 
 		const provider = providerRegistry.get(doc.provider);
-		const { externalId } = await provider.postMessage(connection, bridge.channelExternalId, { text: message.msg });
+
+		// Build outbound message with optional thread reply: if this RC message replies to another,
+		// look up the parent's external id and pass it as threadExternalId. Providers support
+		// threading (e.g. Slack `thread_ts`, Teams `replyToId`); if parent has no external id,
+		// post top-level as today.
+		const outboundPayload: IOutboundMessage = { text: message.msg };
+		if (message.tmid) {
+			const parentMsg = await Messages.findOneById(message.tmid, {
+				projection: { 'customFields.connectorBridge.externalId': 1 },
+			});
+			if (parentMsg?.customFields?.connectorBridge?.externalId) {
+				outboundPayload.threadExternalId = parentMsg.customFields.connectorBridge.externalId;
+			}
+		}
+
+		const { externalId } = await provider.postMessage(connection, bridge.channelExternalId, outboundPayload);
 
 		// LOOP PREVENTION for the coming webhook echo of this very post:
 		// leg 1 — remember the external id in-memory (fast path)…
