@@ -136,8 +136,25 @@ const formatEnvelopeError = (e: { message: string; status?: number }): string =>
 
 const ExternalChannelView = (): ReactElement => {
 	const { t } = useTranslation();
-	const formatTime = useFormatTime();
-	const formatDateAndTime = useFormatDateAndTime();
+	const rawFormatTime = useFormatTime();
+	const rawFormatDateAndTime = useFormatDateAndTime();
+	// Crash-safe formatters: date-fns THROWS on an invalid date, and one malformed provider
+	// timestamp must degrade to blank text — never crash the whole workspace view (that is
+	// exactly what happened when Slack's seconds.micros ts reached the formatter).
+	const formatTime = (value: unknown): string => {
+		try {
+			return rawFormatTime(value as never);
+		} catch {
+			return '';
+		}
+	};
+	const formatDateAndTime = (value: unknown): string => {
+		try {
+			return rawFormatDateAndTime(value as never);
+		} catch {
+			return '';
+		}
+	};
 	const { selectedOrgId, selectedExternalChannel } = useOrgSwitcherSelection();
 	const { getConnectionById } = useExternalWorkspaces();
 
