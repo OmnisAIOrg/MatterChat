@@ -1,13 +1,15 @@
 import { css } from '@rocket.chat/css-in-js';
 import { Box, Icon } from '@rocket.chat/fuselage';
 import { useStableCallback } from '@rocket.chat/fuselage-hooks';
-import { useRouter, useLayout, usePermission, useCurrentRoutePath, useUser } from '@rocket.chat/ui-contexts';
+import { useRouter, useLayout, usePermission, useCurrentRoutePath, useUser, useEndpoint } from '@rocket.chat/ui-contexts';
+import { useQuery } from '@tanstack/react-query';
 import type { ComponentProps, ReactElement } from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
+import { NOTIFICATIONS_UNREAD_KEY } from '../../boards/notifications/NotificationsInbox';
 
 /**
  * AppLeftRail — the GREEN "Variant B" primary NAVIGATION rail (was the single Slack-style rail).
@@ -125,6 +127,35 @@ const itemClass = css`
 	}
 `;
 
+/**
+ * The Activity unread badge — a dense count chip overlaid on the bell icon's top-right corner.
+ * Absolutely positioned (zero layout shift), pointer-events off so clicks fall through to the
+ * rail button. Bright brand green with a thin rail-colored ring so it reads on both the resting
+ * dark rail and the active green pill.
+ */
+const activityBadgeClass = css`
+	position: absolute;
+	top: -4px;
+	inset-inline-end: -8px;
+	min-width: 15px;
+	height: 15px;
+	padding-inline: 3px;
+	border-radius: 8px;
+	background-color: ${BRAND_GREEN_BRIGHT};
+	color: #ffffff;
+	font-size: 9px;
+	font-weight: 800;
+	line-height: 15px;
+	text-align: center;
+	letter-spacing: 0;
+	pointer-events: none;
+	box-shadow: 0 0 0 1.5px ${NAV_RAIL_BG};
+`;
+
+// Same cheap-badge cadence the removed NavBar bell used (PR #53 dedup): poll the
+// unreadCount endpoint every 60s + on window focus.
+const UNREAD_POLL_MS = 60 * 1000;
+
 const AppLeftRail = () => {
 	const { t } = useTranslation();
 	const router = useRouter();
@@ -144,6 +175,20 @@ const AppLeftRail = () => {
 	// context returns 'current', so this is false in standalone/native mode.
 	const { selectedOrgId } = useOrgSwitcherSelection();
 	const inExternalMode = isExternalSelection(selectedOrgId);
+
+	// Activity unread badge. This is the SAME source the removed NavBar bell polled
+	// (GET /v1/boards.notifications.unreadCount under NOTIFICATIONS_UNREAD_KEY), so the
+	// inbox's mark-read invalidations keep this badge in sync. Gated on permission +
+	// native mode so hidden rail items never poll. Degrades to 0 on any error.
+	const getUnreadCount = useEndpoint('GET', '/v1/boards.notifications.unreadCount');
+	const { data: unreadData } = useQuery({
+		queryKey: NOTIFICATIONS_UNREAD_KEY,
+		queryFn: () => getUnreadCount({}),
+		enabled: canViewBoards && !inExternalMode,
+		refetchInterval: UNREAD_POLL_MS,
+		refetchOnWindowFocus: true,
+	});
+	const activityUnread = unreadData?.unread ?? 0;
 
 	// Active-section detection. `/boards/inbox` must win for Activity, so Boards
 	// excludes the inbox sub-route to avoid both lighting up at once.
@@ -193,17 +238,32 @@ const AppLeftRail = () => {
 		return null;
 	}
 
-	const renderItem = (icon: ComponentProps<typeof Icon>['name'], label: string, onClick: () => void, active: boolean): ReactElement => (
+	const renderItem = (
+		icon: ComponentProps<typeof Icon>['name'],
+		label: string,
+		onClick: () => void,
+		active: boolean,
+		badgeCount = 0,
+	): ReactElement => (
 		<Box
 			is='button'
 			type='button'
 			className={itemClass}
 			onClick={onClick}
 			title={label}
-			aria-label={label}
+			aria-label={badgeCount > 0 ? `${label} (${badgeCount > 99 ? '99+' : badgeCount})` : label}
 			aria-current={active ? 'page' : undefined}
 		>
-			<Icon name={icon} size='x24' />
+			{/* Relatively-positioned wrapper so the unread badge overlays the icon's top-right
+			    corner without shifting the icon/label layout. */}
+			<Box is='span' position='relative' display='inline-flex'>
+				<Icon name={icon} size='x24' />
+				{badgeCount > 0 && (
+					<Box is='span' className={activityBadgeClass} aria-hidden>
+						{badgeCount > 99 ? '99+' : badgeCount}
+					</Box>
+				)}
+			</Box>
 			<Box is='span' className='rail-label'>
 				{label}
 			</Box>
@@ -271,7 +331,7 @@ const AppLeftRail = () => {
 					</Box>
 				</Box>
 				{/* Activity / Search / Admin are MatterChat-native — hidden in external-workspace mode. */}
-				{!inExternalMode && canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive))}
+				{!inExternalMode && canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive), activityUnread)}
 				{!inExternalMode && renderItem('magnifier', t('Search'), handleSearch, false)}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
