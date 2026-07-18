@@ -23,6 +23,8 @@ export type GraphChatMessage = {
 	from?: { user?: { id?: string; displayName?: string } } | null;
 	/** Set on a threaded reply: the id of the thread's root message. */
 	replyToId?: string | null;
+	/** Attachments/files carried by the message (e.g., files, links). */
+	attachments?: Array<{ name?: string; contentUrl?: string }>;
 };
 
 /**
@@ -68,7 +70,30 @@ export function mapGraphMessage(msg: GraphChatMessage | null | undefined, channe
 
 	const rawBody = msg.body?.content || '';
 	const isHtml = msg.body?.contentType === 'html';
-	const text = isHtml ? htmlToText(rawBody) : rawBody.trim();
+	let text = isHtml ? htmlToText(rawBody) : rawBody.trim();
+
+	// Append attachments as plain-text lines when present (e.g., file-only messages with no body text).
+	// Format: "Attachment: <name> — <URL>" or "<name>" if URL is missing, or "<URL>" if name is missing.
+	if (msg.attachments?.length) {
+		const attachmentLines = msg.attachments
+			.map((att) => {
+				if (att.name && att.contentUrl) {
+					return `Attachment: ${att.name} — ${att.contentUrl}`;
+				}
+				if (att.name) {
+					return `Attachment: ${att.name}`;
+				}
+				if (att.contentUrl) {
+					return `Attachment: ${att.contentUrl}`;
+				}
+				return null;
+			})
+			.filter((line) => line !== null) as string[];
+
+		if (attachmentLines.length) {
+			text = text ? `${text}\n${attachmentLines.join('\n')}` : attachmentLines.join('\n');
+		}
+	}
 
 	return {
 		externalId: msg.id,
