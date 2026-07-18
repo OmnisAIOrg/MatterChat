@@ -40,11 +40,16 @@ Meteor.startup(() => {
 	// MobileTabBar/NavBar), the manifest link, the iOS standalone-mode metas, and the touch icon.
 	injectIntoHead(
 		'matterchat-mobile-pwa',
-		`<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		// maximum-scale=1 + user-scalable=no is the app-grade zoom lockdown (what Slack/Discord
+		// mobile web ship): it kills iOS's focus-an-input auto-zoom and double-tap/pinch zoom that
+		// leave the app frame panned and "unlocked". This is an installed app surface, not a
+		// document — zooming the chrome is never intended.
+		`<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 		<link rel="manifest" href="${getURL('images/manifest.json')}" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="theme-color" content="#1A212C" />
 		<link rel="apple-touch-icon" sizes="180x180" href="${getURL('images/pwa/apple-touch-icon.png')}" />`,
 	);
 

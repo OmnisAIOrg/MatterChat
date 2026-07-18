@@ -3,7 +3,7 @@ import { Box, Icon } from '@rocket.chat/fuselage';
 import { useStableCallback } from '@rocket.chat/fuselage-hooks';
 import { useRouter, useLayout, usePermission, useCurrentRoutePath } from '@rocket.chat/ui-contexts';
 import type { ComponentProps, ReactElement } from 'react';
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
@@ -101,10 +101,43 @@ const tabClass = css`
 `;
 
 /**
- * Mobile-only global patches, active only while this bar is mounted. `env()` resolves to 0 in
- * regular browser tabs, so the safe-area terms are no-ops outside the installed PWA.
+ * Mobile-only global HARDENING, active only while this bar is mounted (i.e. phones, logged-in).
+ * This is the app-grade lockdown that makes the PWA feel native instead of "a website":
+ *
+ *  1. FRAME LOCK — `body` pinned position:fixed with `overscroll-behavior: none`: no rubber-band,
+ *     no pull-to-refresh, no document panning. The document NEVER scrolls; only internal
+ *     scrollers (room list, message list, boards pager) do.
+ *  2. ZOOM KILL — every form control ≥16px (iOS auto-zooms focus on anything smaller — the
+ *     founder-reported "tap the message box and it zooms in"), `touch-action: manipulation`
+ *     everywhere (kills double-tap zoom + the 300ms tap delay; panning/scrolling unaffected;
+ *     dnd-kit's inline `touch-action:none` drag handles still win).
+ *  3. KEYBOARD — `--mc-vvh` tracks visualViewport.height (set by the effect below): when the
+ *     iOS keyboard opens, the whole app shrinks to the VISIBLE viewport so the composer rides
+ *     above the keyboard; the tab bar hides (`.mc-keyboard-open`) exactly like Slack's.
+ *  4. FEEL — no tap-highlight flash, no long-press callout on chrome, no font inflation.
+ *
+ * `env()` resolves to 0 in regular browser tabs, so safe-area terms are no-ops outside the
+ * installed PWA. The sheet mounts AFTER MainLayoutStyleTags in the DOM, so its !importants win.
  */
 const MOBILE_GLOBAL_STYLE = `
+	html, body {
+		overscroll-behavior: none !important;
+		-webkit-text-size-adjust: 100%;
+	}
+	body {
+		position: fixed !important;
+		inset: 0 !important;
+		height: var(--mc-vvh, 100dvh) !important;
+	}
+	body * {
+		-webkit-tap-highlight-color: transparent;
+	}
+	button, a, [role='button'], input, textarea, select, label {
+		touch-action: manipulation;
+	}
+	input, textarea, select, [contenteditable='true'] {
+		font-size: 16px !important;
+	}
 	#rocket-chat {
 		padding-block-end: calc(${MOBILE_TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom, 0px));
 		--sidebar-width: min(85vw, 320px);
@@ -112,11 +145,15 @@ const MOBILE_GLOBAL_STYLE = `
 	.rcx-navbar {
 		padding-block-start: env(safe-area-inset-top, 0px);
 	}
-	.rc-message-box textarea,
-	.rc-message-box [contenteditable='true'],
-	.rcx-message-box textarea,
-	.rcx-message-box [contenteditable='true'] {
-		font-size: 16px;
+	.mc-mobile-tab-bar {
+		-webkit-touch-callout: none;
+		user-select: none;
+	}
+	.mc-keyboard-open .mc-mobile-tab-bar {
+		display: none;
+	}
+	.mc-keyboard-open #rocket-chat {
+		padding-block-end: 0;
 	}
 `;
 
@@ -129,6 +166,36 @@ const MobileTabBar = (): ReactElement | null => {
 
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
 	const inExternalMode = isExternalSelection(selectedOrgId);
+
+	// FRAME/KEYBOARD LOCK (see MOBILE_GLOBAL_STYLE): track the VISUAL viewport. iOS does not
+	// resize the layout viewport for the keyboard — it PANS the document instead, which is what
+	// made the frame feel "unlocked". Syncing --mc-vvh shrinks the app to the visible height
+	// (composer rides above the keyboard), snapping scroll to 0 undoes any iOS pan, and the
+	// keyboard-open class hides the tab bar exactly like a native messenger.
+	useEffect(() => {
+		if (!isMobile || isEmbedded) {
+			return;
+		}
+		const vv = window.visualViewport;
+		if (!vv) {
+			return;
+		}
+		const root = document.documentElement;
+		const sync = (): void => {
+			root.style.setProperty('--mc-vvh', `${Math.round(vv.height)}px`);
+			root.classList.toggle('mc-keyboard-open', window.innerHeight - vv.height > 150);
+			window.scrollTo(0, 0);
+		};
+		sync();
+		vv.addEventListener('resize', sync);
+		vv.addEventListener('scroll', sync);
+		return () => {
+			vv.removeEventListener('resize', sync);
+			vv.removeEventListener('scroll', sync);
+			root.style.removeProperty('--mc-vvh');
+			root.classList.remove('mc-keyboard-open');
+		};
+	}, [isMobile, isEmbedded]);
 
 	// Active-section detection mirrors AppLeftRail: /boards/inbox wins for Activity so both
 	// never light at once; My Day is only active on /home with the drawer closed.
@@ -194,7 +261,7 @@ const MobileTabBar = (): ReactElement | null => {
 	return (
 		<>
 			<style>{MOBILE_GLOBAL_STYLE}</style>
-			<Box is='nav' aria-label={t('Navigation')} className={barClass}>
+			<Box is='nav' aria-label={t('Navigation')} className={['mc-mobile-tab-bar', barClass]}>
 				{renderTab('dashboard', t('My_Day', { defaultValue: 'My Day' }), handleMyDay, myDayActive)}
 				{renderTab('balloons', t('Chats'), handleChats, chatsActive)}
 				{canViewBoards && renderTab('squares', t('Boards'), handleBoards, boardsActive)}
