@@ -541,14 +541,30 @@ export async function listMyMessages(
 	}
 }
 
+/**
+ * Normalize a provider timestamp to ISO-8601 for the client. Teams already sends ISO; Slack sends
+ * its native `seconds.micros` epoch string ("1752796800.123456"), which the client date formatters
+ * reject as an Invalid Date — date-fns THROWS on it, which crashed the whole external view the
+ * moment a Slack conversation actually loaded messages. Unparseable input falls through unchanged.
+ */
+function toIsoTimestamp(ts: string): string {
+	if (/^\d+(\.\d+)?$/.test(ts)) {
+		const ms = Math.round(parseFloat(ts) * 1000);
+		if (Number.isFinite(ms)) {
+			return new Date(ms).toISOString();
+		}
+	}
+	return ts;
+}
+
 /** Project a provider message to the client shape; prefer the carried display name, fall back to the author id. */
 function toClientMessage(msg: IProviderMessage): ClientMessage {
 	return {
 		externalId: msg.externalId,
 		author: msg.authorDisplayName || msg.authorExternalId,
 		text: msg.text,
-		createdAt: msg.ts,
-		...(msg.editedTs ? { editedAt: msg.editedTs } : {}),
+		createdAt: toIsoTimestamp(msg.ts),
+		...(msg.editedTs ? { editedAt: toIsoTimestamp(msg.editedTs) } : {}),
 	};
 }
 
