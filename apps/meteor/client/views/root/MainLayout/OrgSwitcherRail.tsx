@@ -297,9 +297,15 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 	);
 };
 
-const OrgSwitcherRail = (): ReactElement | null => {
+/**
+ * `inDrawer` — MATTERCHAT mobile: the rail is desktop chrome (hidden under md), but on phones it
+ * re-mounts INSIDE the room-list drawer (Discord-style: workspace column beside the channel list —
+ * see SidebarRegion). In that mode selecting any workspace also collapses the drawer so the
+ * newly-selected workspace's content is immediately visible.
+ */
+const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactElement | null => {
 	const { t } = useTranslation();
-	const { isMobile } = useLayout();
+	const { isMobile, sidebar } = useLayout();
 	const { orgs, switchOrg, connectSlack, connectTeams, connectGoogle, teamsEnabled, googleEnabled } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
 	const router = useRouter();
@@ -324,6 +330,9 @@ const OrgSwitcherRail = (): ReactElement | null => {
 			currentRoutePath?.startsWith('/boards') || currentRoutePath?.startsWith('/litbox') || currentRoutePath?.startsWith('/admin');
 		if (onNativeContentRoute) {
 			router.navigate('/home');
+		}
+		if (inDrawer) {
+			sidebar.collapse();
 		}
 	};
 
@@ -369,8 +378,9 @@ const OrgSwitcherRail = (): ReactElement | null => {
 	}
 
 	// MATTERCHAT: on phones the MobileTabBar is the primary nav and every horizontal pixel counts —
-	// the workspace-switcher column is desktop chrome.
-	if (isMobile) {
+	// the standalone workspace-switcher column is desktop chrome. Inside the room-list drawer
+	// (`inDrawer`) it DOES render on mobile — that's where phone users switch Slack/Teams/GChat.
+	if (isMobile && !inDrawer) {
 		return null;
 	}
 
@@ -379,6 +389,9 @@ const OrgSwitcherRail = (): ReactElement | null => {
 	const handleSelect = (org: SwitchableOrg): void => {
 		if (org.type === 'slack' || org.id === 'current') {
 			setSelectedOrgId(org.id);
+			if (inDrawer) {
+				sidebar.collapse();
+			}
 			return;
 		}
 		switchOrg(org);
