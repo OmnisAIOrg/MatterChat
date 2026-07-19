@@ -37,6 +37,30 @@ export class ExternalSentMessagesRaw extends BaseRaw<IExternalSentMessage> imple
 		);
 	}
 
+	async recordSeenBatch(msgs: Omit<IExternalSentMessage, '_id' | '_updatedAt'>[]): Promise<void> {
+		if (!msgs.length) {
+			return;
+		}
+		// One round-trip for a whole history page. $setOnInsert (NOT $set) so re-reading history
+		// never overwrites a record we already hold — in particular a 'sent' record, which carries
+		// attribution the provider's history read may lack.
+		await this.col.bulkWrite(
+			msgs.map((msg) => ({
+				updateOne: {
+					filter: {
+						userId: msg.userId,
+						connectionId: msg.connectionId,
+						channelExternalId: msg.channelExternalId,
+						externalId: msg.externalId,
+					},
+					update: { $setOnInsert: msg },
+					upsert: true,
+				},
+			})),
+			{ ordered: false },
+		);
+	}
+
 	async findForChannel(
 		userId: string,
 		connectionId: string,

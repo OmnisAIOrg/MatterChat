@@ -27,4 +27,13 @@ export interface IExternalSentMessage extends IRocketChatRecord {
 	authorAvatarUrl?: string;
 	/** Provider-native creation time (from the send echo). */
 	createdAt: Date;
+	/**
+	 * How MatterChat learned about this message. OPTIONAL for backward compatibility — documents
+	 * written before this field existed are all `'sent'` by construction.
+	 *  - `sent`    — we posted it out through the connector.
+	 *  - `inbound` — pushed to us live by the provider's events API.
+	 *  - `history` — read from the provider's history API and persisted so it stays native to
+	 *                MatterChat (survives the provider's rate limits and retention gaps).
+	 */
+	source?: 'sent' | 'inbound' | 'history';
 }

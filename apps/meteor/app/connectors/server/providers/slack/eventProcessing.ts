@@ -27,7 +27,7 @@
  * the raw id) and rides the ALIAS mechanism exactly like Teams inbound (no ghost accounts).
  */
 import type { IBridgedChannel, IExternalWorkspaceConnection, IUser } from '@rocket.chat/core-typings';
-import { ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
+import { ExternalSentMessages, ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
 
 import type { SlackMessageAction, SlackReactionAction } from './eventMessageMapping';
 import { slackTsToEpochMs, toProviderMessage } from './eventMessageMapping';
@@ -141,20 +141,71 @@ async function ownerUserOf(doc: IExternalWorkspaceConnection): Promise<IUser | n
 
 // ── the three actions ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Persist one inbound message into MatterChat's durable external-message store, for every
+ * connection on the workspace. This is what makes the browse view live AND permanent: the message
+ * is ours from the moment Slack pushes it, independent of `conversations.history` (which is rate-
+ * limited to ~1 req/min for non-Marketplace apps and omits our own sent messages entirely).
+ *
+ * Idempotent: recordSeenBatch upserts on (userId, connectionId, channel, externalId) with
+ * $setOnInsert, so a redelivered event — or our own outbound echo already stored as 'sent' — is a
+ * no-op rather than a duplicate or an overwrite. Never throws: the bridge path must still run.
+ */
+async function recordInboundForBrowse(
+	docs: IExternalWorkspaceConnection[],
+	channelExternalId: string,
+	mapped: { externalId: string; text: string; authorDisplayName?: string; authorAvatarUrl?: string },
+	tsMs: number | undefined,
+): Promise<void> {
+	if (!docs.length || !mapped.externalId) {
+		return;
+	}
+	const createdAt = tsMs !== undefined ? new Date(tsMs) : new Date();
+	try {
+		await ExternalSentMessages.recordSeenBatch(
+			docs.map((doc) => ({
+				userId: doc.userId,
+				connectionId: doc._id,
+				provider: doc.provider,
+				channelExternalId,
+				externalId: mapped.externalId,
+				text: mapped.text,
+				...(mapped.authorDisplayName ? { author: mapped.authorDisplayName } : {}),
+				...(mapped.authorAvatarUrl ? { authorAvatarUrl: mapped.authorAvatarUrl } : {}),
+				createdAt,
+				source: 'inbound' as const,
+			})),
+		);
+	} catch (err) {
+		SystemLogger.warn({ msg: 'Slack events: browse-store write failed (bridge unaffected)', err: String(err) });
+	}
+}
+
 async function processNewMessage(teamId: string, action: Extract<SlackMessageAction, { kind: 'new' }>): Promise<void> {
+	// EVERY connection on this workspace — NOT just bridging ones. The browse view must receive
+	// inbound messages for channels that have no bridged room (a Slack DM opened from the rail);
+	// the old bridge-only early-return is exactly why those never went live until a manual refetch.
+	const allConnections = await ExternalWorkspaceConnections.findByProviderAndOrg('slack', teamId).toArray();
 	const targets = await bridgingConnections(teamId, action.channel);
-	if (!targets.length) {
+	if (!targets.length && !allConnections.length) {
 		return;
 	}
 
-	// Resolve the author's display name ONCE per event, on the first readable connection's token.
-	const lookup = targets.find((t) => t.connection?.credentials.accessToken);
-	const authorName = lookup?.connection
-		? await resolveAuthorName({ accessToken: String(lookup.connection.credentials.accessToken) }, teamId, action.user)
+	// Resolve the author's display name ONCE per event, on the first readable token (a bridging
+	// connection if there is one, otherwise any connection on the workspace).
+	const lookupConnection =
+		targets.find((t) => t.connection?.credentials.accessToken)?.connection ??
+		allConnections.map((doc: IExternalWorkspaceConnection) => toProviderConnection(doc)).find((c) => Boolean(c?.credentials.accessToken));
+	const authorName = lookupConnection
+		? await resolveAuthorName({ accessToken: String(lookupConnection.credentials.accessToken) }, teamId, action.user)
 		: undefined;
 
 	const mapped = toProviderMessage(action, authorName);
 	const tsMs = slackTsToEpochMs(action.ts);
+
+	// BROWSE LANE: persist for every connection on this workspace so the message becomes native to
+	// MatterChat and an already-open channel picks it up on its next poll — no history re-read.
+	await recordInboundForBrowse(allConnections, action.channel, mapped, tsMs);
 
 	for (const { doc, bridge, connection } of targets) {
 		// Fast-path echo drop: the ts chat.postMessage returned for THIS connection's own outbound
