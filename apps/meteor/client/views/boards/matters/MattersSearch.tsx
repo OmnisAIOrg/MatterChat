@@ -44,7 +44,8 @@ const searchResultItemClass = css`
 	}
 `;
 
-const MattersSearch = ({ boardId }: MattersSearchProps) => {
+// boardId is accepted for future board-scoped search; the endpoint is global today.
+const MattersSearch = (_props: MattersSearchProps) => {
 	const { t } = useTranslation();
 	const router = useRouter();
 	const searchCardsEndpoint = useEndpoint('GET', '/v1/boards.cards.search');
@@ -176,10 +177,10 @@ const MattersSearch = ({ boardId }: MattersSearchProps) => {
 								{card.assignees && card.assignees.length > 0 && (
 									<Box display='flex' alignItems='center' gap={4}>
 										{card.assignees.slice(0, 2).map((assignee: any) => (
-											<Avatar key={assignee._id} size={16} title={assignee.name} />
+											<Avatar key={assignee._id} size='x16' title={assignee.name} />
 										))}
 										{card.assignees.length > 2 && (
-											<Box fontScale='p3' color='hint'>
+											<Box fontScale='c1' color='hint'>
 												+{card.assignees.length - 2}
 											</Box>
 										)}

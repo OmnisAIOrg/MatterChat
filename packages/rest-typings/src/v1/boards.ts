@@ -634,6 +634,11 @@ export type BoardsEndpoints = {
 	'/v1/boards.cards': {
 		GET: (params: BoardsCardsProps) => PaginatedResult<{ cards: IBoardCard[] }>;
 	};
+	// Global cross-board card search (title + description). Without offset/count the
+	// historical 50-hit cap applies; `total` is the full match count either way.
+	'/v1/boards.cards.search': {
+		GET: (params: { text: string; offset?: number; count?: number }) => { cards: IBoardCard[]; count: number; offset: number; total: number };
+	};
 	// iCal (.ics) feed of the current user's due cards. Returns a raw RFC-5545
 	// `text/calendar` document (a string), NOT the usual JSON envelope.
 	'/v1/boards.cards.ical': {
