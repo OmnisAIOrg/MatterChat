@@ -74,6 +74,13 @@ function notConfigured(): never {
 	throw new Error('google_not_configured');
 }
 
+/**
+ * Cache user → DM space resolution per connection to avoid repeated lookups.
+ * Keyed by connection id, maps user resource names to space resource names.
+ * Entries are garbage-collected when the connection is discarded (unbridged/disconnected).
+ */
+const userToDmSpaceCache = new Map<string, Map<string, string>>();
+
 /** How many message pages (×pageSize) to read in one syncMessages call — a reasonable backfill cap. */
 const MAX_MESSAGE_PAGES = 5;
 const MESSAGE_PAGE_SIZE = 50;
@@ -287,8 +294,68 @@ export class GoogleChatProvider implements IChatProvider {
 	 * the next milestone), so this is a no-op today — disconnect at the record level is handled by
 	 * connectionService.
 	 */
-	async disconnect(_connection: IProviderConnection): Promise<void> {
-		// No live Google subscriptions to delete until the realtime milestone; nothing to release.
+	async disconnect(connection: IProviderConnection): Promise<void> {
+		// Clean up the cached user→DM space mapping when the connection is torn down.
+		userToDmSpaceCache.delete(connection.connectionId);
+	}
+
+	/**
+	 * Canonicalize a channel/space id before persisting in a bridge record. When the People
+	 * directory is used to bridge a person, it passes the user resource name (`users/{id}`),
+	 * but Google Chat's message endpoints (syncMessages/postMessage) require the space resource
+	 * name (`spaces/{id}`). This resolves user ids to their corresponding DM space via
+	 * `spaces.findDirectMessage` (creates the DM if it doesn't exist yet) and caches the result
+	 * to avoid repeated lookups.
+	 */
+	async resolveBridgeChannelId(connection: IProviderConnection, channelExternalId: string): Promise<string> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		// If it's already a space id, return it unchanged.
+		if (channelExternalId.startsWith('spaces/')) {
+			return channelExternalId;
+		}
+		// If it's not a user id, return unchanged (best-effort: let the caller's logic handle it).
+		if (!channelExternalId.startsWith('users/')) {
+			return channelExternalId;
+		}
+
+		// Check cache for this connection's user→space mapping.
+		let connectionCache = userToDmSpaceCache.get(connection.connectionId);
+		if (connectionCache?.has(channelExternalId)) {
+			return connectionCache.get(channelExternalId) || channelExternalId;
+		}
+
+		// Miss: look up the DM space via spaces.findDirectMessage.
+		const { tokens, onRefreshed } = tokensAndHook(connection);
+		try {
+			const response = await googleFetch<{ space?: string }>(
+				`${CHAT_BASE}/spaces:findDirectMessage?displayName=${encodeURIComponent(channelExternalId)}`,
+				tokens,
+				{},
+				onRefreshed,
+			);
+			const spaceId = response.space;
+			if (spaceId) {
+				// Cache the mapping for this connection.
+				if (!connectionCache) {
+					connectionCache = new Map();
+					userToDmSpaceCache.set(connection.connectionId, connectionCache);
+				}
+				connectionCache.set(channelExternalId, spaceId);
+				return spaceId;
+			}
+		} catch (err) {
+			SystemLogger.debug({
+				msg: 'Google Chat DM space resolution failed (using raw user id)',
+				connectionId: connection.connectionId,
+				userId: channelExternalId,
+				err: String(err),
+			});
+		}
+
+		// Fallback: return the raw user id (will likely fail downstream with a clear error).
+		return channelExternalId;
 	}
 
 	// ─── discovery ─────────────────────────────────────────────────────────────────────────────
