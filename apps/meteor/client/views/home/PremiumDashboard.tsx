@@ -129,7 +129,7 @@ const CardSection = ({ icon, title, count, action, children }: { icon: ReactNode
 			overflow: 'hidden',
 		}}
 	>
-		<Box display='flex' alignItems='center' gap={10} p={12} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 20px' }}>
+		<Box display='flex' alignItems='center' style={{ padding: '14px 20px', gap: '10px' }}>
 			{icon}
 			<Box style={{ fontSize: '14px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>
 				{title}
@@ -141,8 +141,8 @@ const CardSection = ({ icon, title, count, action, children }: { icon: ReactNode
 						height: '19px',
 						padding: '0 6px',
 						borderRadius: '999px',
-						background: 'var(--premium-dashboard-red-soft, rgba(207, 68, 56, 0.12))',
-						border: '1px solid var(--premium-dashboard-red-line, rgba(207, 68, 56, 0.3))',
+						background: 'var(--premium-dashboard-red-soft)',
+						border: '1px solid var(--premium-dashboard-red-line)',
 						color: 'var(--premium-dashboard-red)',
 						fontSize: '11px',
 						fontWeight: 600,
@@ -156,7 +156,7 @@ const CardSection = ({ icon, title, count, action, children }: { icon: ReactNode
 			)}
 			{action && <Box style={{ marginLeft: 'auto' }}>{action}</Box>}
 		</Box>
-		<Box>{children}</Box>
+		<Box style={{ display: 'flex', flexDirection: 'column' }}>{children}</Box>
 	</Box>
 );
 
@@ -316,12 +316,12 @@ export const PremiumDashboard = () => {
 	], []);
 
 	const matters = useMemo(() => [
-		{ name: 'Chauncey Frank', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: '#116240', stageBorder: '#CBE5D6' },
-		{ name: 'Candace Ann Moore', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Initial Review', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-amber-soft, rgba(169, 122, 24, 0.12))', stageColor: '#A97A18', stageBorder: '#EBD9B4' },
-		{ name: 'Knowledge Mims', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: '#116240', stageBorder: '#CBE5D6' },
-		{ name: 'Mark Embrey', type: 'Motor Vehicle Accident', date: '06/18/2026', stage: 'Pre-Litigation', sol: 'SOL 23 MO', stageBg: 'var(--premium-dashboard-blue-soft, rgba(60, 110, 180, 0.12))', stageColor: '#3C6EB4', stageBorder: '#CDDDF0' },
+		{ name: 'Chauncey Frank', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: 'var(--premium-dashboard-ink)', stageBorder: 'var(--premium-dashboard-border)' },
+		{ name: 'Candace Ann Moore', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Initial Review', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-amber-soft)', stageColor: 'var(--premium-dashboard-amber)', stageBorder: 'var(--premium-dashboard-border)' },
+		{ name: 'Knowledge Mims', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: 'var(--premium-dashboard-ink)', stageBorder: 'var(--premium-dashboard-border)' },
+		{ name: 'Mark Embrey', type: 'Motor Vehicle Accident', date: '06/18/2026', stage: 'Pre-Litigation', sol: 'SOL 23 MO', stageBg: 'var(--premium-dashboard-blue-soft)', stageColor: 'var(--premium-dashboard-blue)', stageBorder: 'var(--premium-dashboard-border)' },
 		{ name: 'Kailyn Moron', type: 'Motor Vehicle Accident', date: '02/20/2026', stage: 'Pre-Lit Settled', sol: 'SOL 19 MO', stageBg: 'var(--premium-dashboard-border)', stageColor: 'var(--premium-dashboard-ink2)', stageBorder: 'var(--premium-dashboard-border)' },
-		{ name: 'Mycal Mims', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: '#116240', stageBorder: '#CBE5D6' },
+		{ name: 'Mycal Mims', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: 'var(--premium-dashboard-ink)', stageBorder: 'var(--premium-dashboard-border)' },
 	], []);
 
 	return (
