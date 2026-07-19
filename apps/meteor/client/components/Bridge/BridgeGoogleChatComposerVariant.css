@@ -1,0 +1,139 @@
+/* Bridge Google Chat Composer Variant Styling */
+/* Design: docs/design/premium-refresh/Bridge Google Chat.dc.html */
+
+:root {
+	--greenSoft: #E8F3ED;
+	--greenLine: #CBE5D6;
+	--greenInk: #116240;
+	--green: #17804D;
+	--surface: #FFFFFF;
+	--border2: #DBDAD3;
+	--shadow1: 0 1px 2px rgba(23, 29, 25, 0.05), 0 1px 3px rgba(23, 29, 25, 0.04);
+	--ink3: #8E968F;
+}
+
+[data-theme='dark'] {
+	--greenSoft: #152A1E;
+	--greenLine: #265C3F;
+	--greenInk: #6FD6A3;
+	--green: #3FBC7C;
+	--surface: #151C17;
+	--border2: #2D372F;
+	--shadow1: 0 1px 2px rgba(0, 0, 0, 0.35);
+	--ink3: #707B74;
+}
+
+.bridge-gchat-composer {
+	flex: none;
+	padding: 14px 26px 18px;
+	font-family: 'Geist', system-ui, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+.bridge-gchat-composer-inner {
+	max-width: 860px;
+	margin: 0 auto;
+}
+
+.bridge-gchat-composer-input-group {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	background: var(--surface);
+	border: 1px solid var(--border2);
+	border-radius: 13px;
+	box-shadow: var(--shadow1);
+	padding: 11px 14px;
+	transition: all 0.15s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.bridge-gchat-composer-input-group:hover {
+	border-color: var(--ink3);
+}
+
+.bridge-gchat-composer-input-group:focus-within {
+	border-color: var(--green);
+	box-shadow: 0 0 0 3px rgba(23, 128, 77, 0.22);
+}
+
+[data-theme='dark'] .bridge-gchat-composer-input-group:focus-within {
+	box-shadow: 0 0 0 3px rgba(63, 188, 124, 0.28);
+}
+
+.bridge-gchat-composer-placeholder {
+	flex: 1;
+	font-size: 13.5px;
+	color: var(--ink3);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.bridge-gchat-composer-badge {
+	font-family: 'Geist Mono', 'Monaco', monospace;
+	font-size: 9px;
+	letter-spacing: 0.08em;
+	padding: 3px 8px;
+	border-radius: 6px;
+	background: var(--greenSoft);
+	border: 1px solid var(--greenLine);
+	color: var(--greenInk);
+	white-space: nowrap;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.bridge-gchat-composer-send {
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	border: 0;
+	background: var(--green);
+	color: #fff;
+	display: grid;
+	place-items: center;
+	cursor: pointer;
+	transition: all 0.15s cubic-bezier(0.2, 0.8, 0.3, 1);
+	flex: none;
+}
+
+.bridge-gchat-composer-send:hover {
+	background: #0f6a3d;
+	transform: translateY(-1px);
+	box-shadow: 0 1px 2px rgba(23, 29, 25, 0.05), 0 8px 24px -8px rgba(23, 29, 25, 0.14);
+}
+
+[data-theme='dark'] .bridge-gchat-composer-send:hover {
+	background: #57cd90;
+}
+
+.bridge-gchat-composer-send:active {
+	transform: translateY(0);
+}
+
+.bridge-gchat-composer-send svg {
+	stroke-width: 1.9;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+	.bridge-gchat-composer {
+		padding: 12px 20px 16px;
+	}
+
+	.bridge-gchat-composer-input-group {
+		padding: 9px 12px;
+		gap: 8px;
+	}
+
+	.bridge-gchat-composer-placeholder {
+		font-size: 13px;
+	}
+
+	.bridge-gchat-composer-send {
+		width: 30px;
+		height: 30px;
+	}
+}
