@@ -326,12 +326,543 @@ const buildLedgerCss = (t: LedgerTokens): string => `
 }
 `;
 
+/**
+ * PREMIUM REFRESH — wave3 chat surface styling (Chat.dc.html design)
+ *
+ * New high-fidelity token set for the premium-refresh design:
+ * - Geist typography (already wired)
+ * - Precise color palette with light/dark variants
+ * - Refined spacing, shadows, and radius values
+ * - Message list with day dividers and hover actions
+ * - Frosted-glass headers and refined composer
+ */
+
+type PremiumRefreshTokens = {
+	// Neutrals
+	bg: string;
+	surface: string;
+	surface2: string;
+	border: string;
+	border2: string;
+	ink: string;
+	ink2: string;
+	ink3: string;
+	// Primary green
+	green: string;
+	green2: string;
+	greenSoft: string;
+	greenLine: string;
+	greenInk: string;
+	onGreen: string;
+	// Status colors
+	red: string;
+	redSoft: string;
+	redLine: string;
+	amber: string;
+	amberSoft: string;
+	amberLine: string;
+	blue: string;
+	blueSoft: string;
+	blueLine: string;
+	// Rail (dark sidebar) colors
+	railBg: string;
+	railBg2: string;
+	railInk: string;
+	railInk2: string;
+	railLine: string;
+	railHover: string;
+	// Effects
+	shadow1: string;
+	shadow2: string;
+	shadow3: string;
+	bgGlass: string;
+};
+
+const LIGHT_PREMIUM: PremiumRefreshTokens = {
+	bg: '#F6F6F3',
+	surface: '#FFFFFF',
+	surface2: '#FAFAF7',
+	border: '#E7E6E0',
+	border2: '#DBDAD3',
+	ink: '#171D19',
+	ink2: '#57615B',
+	ink3: '#8E968F',
+	green: '#17804D',
+	green2: '#0F6A3D',
+	greenSoft: '#E8F3ED',
+	greenLine: '#CBE5D6',
+	greenInk: '#116240',
+	onGreen: '#FFFFFF',
+	red: '#CF4438',
+	redSoft: '#FBECEA',
+	redLine: '#F2CFCB',
+	amber: '#A97A18',
+	amberSoft: '#F8F0DF',
+	amberLine: '#EBD9B4',
+	blue: '#3C6EB4',
+	blueSoft: '#EAF1F9',
+	blueLine: '#CDDDF0',
+	railBg: '#0D1310',
+	railBg2: '#111814',
+	railInk: '#AEB8B1',
+	railInk2: '#6E7A73',
+	railLine: '#1F2823',
+	railHover: '#1A231E',
+	shadow1: '0 1px 2px rgba(23,29,25,.05),0 1px 3px rgba(23,29,25,.04)',
+	shadow2: '0 1px 2px rgba(23,29,25,.05),0 8px 24px -8px rgba(23,29,25,.14)',
+	shadow3: '0 2px 6px rgba(23,29,25,.06),0 24px 60px -12px rgba(23,29,25,.25)',
+	bgGlass: 'rgba(246,246,243,.82)',
+};
+
+const DARK_PREMIUM: PremiumRefreshTokens = {
+	bg: '#0F1512',
+	surface: '#151C17',
+	surface2: '#19211C',
+	border: '#242D27',
+	border2: '#2D372F',
+	ink: '#E9EDEA',
+	ink2: '#A2ACA5',
+	ink3: '#707B74',
+	green: '#3FBC7C',
+	green2: '#57CD90',
+	greenSoft: '#152A1E',
+	greenLine: '#265C3F',
+	greenInk: '#6FD6A3',
+	onGreen: '#08130D',
+	red: '#E0685D',
+	redSoft: '#32201D',
+	redLine: '#5C332D',
+	amber: '#D3A24A',
+	amberSoft: '#2E2717',
+	amberLine: '#5A4A24',
+	blue: '#7AA3D8',
+	blueSoft: '#1B2532',
+	blueLine: '#324B69',
+	railBg: '#0B100D',
+	railBg2: '#0F1511',
+	railInk: '#AEB8B1',
+	railInk2: '#69746D',
+	railLine: '#1D2620',
+	railHover: '#18201B',
+	shadow1: '0 1px 2px rgba(0,0,0,.35)',
+	shadow2: '0 1px 2px rgba(0,0,0,.4),0 10px 28px -8px rgba(0,0,0,.5)',
+	shadow3: '0 2px 6px rgba(0,0,0,.4),0 24px 60px -12px rgba(0,0,0,.6)',
+	bgGlass: 'rgba(15,21,18,.78)',
+};
+
+const buildPremiumRefreshPalette = (t: PremiumRefreshTokens): string => `.rcx-content--main {
+	--mc-premium-bg: ${t.bg};
+	--mc-premium-surface: ${t.surface};
+	--mc-premium-surface2: ${t.surface2};
+	--mc-premium-border: ${t.border};
+	--mc-premium-border2: ${t.border2};
+	--mc-premium-ink: ${t.ink};
+	--mc-premium-ink2: ${t.ink2};
+	--mc-premium-ink3: ${t.ink3};
+	--mc-premium-green: ${t.green};
+	--mc-premium-green2: ${t.green2};
+	--mc-premium-greenSoft: ${t.greenSoft};
+	--mc-premium-greenLine: ${t.greenLine};
+	--mc-premium-greenInk: ${t.greenInk};
+	--mc-premium-onGreen: ${t.onGreen};
+	--mc-premium-red: ${t.red};
+	--mc-premium-redSoft: ${t.redSoft};
+	--mc-premium-redLine: ${t.redLine};
+	--mc-premium-amber: ${t.amber};
+	--mc-premium-amberSoft: ${t.amberSoft};
+	--mc-premium-amberLine: ${t.amberLine};
+	--mc-premium-blue: ${t.blue};
+	--mc-premium-blueSoft: ${t.blueSoft};
+	--mc-premium-blueLine: ${t.blueLine};
+	--mc-premium-railBg: ${t.railBg};
+	--mc-premium-railBg2: ${t.railBg2};
+	--mc-premium-railInk: ${t.railInk};
+	--mc-premium-railInk2: ${t.railInk2};
+	--mc-premium-railLine: ${t.railLine};
+	--mc-premium-railHover: ${t.railHover};
+	--mc-premium-shadow1: ${t.shadow1};
+	--mc-premium-shadow2: ${t.shadow2};
+	--mc-premium-shadow3: ${t.shadow3};
+	--mc-premium-bgGlass: ${t.bgGlass};
+}`;
+
+const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
+/* MATTERCHAT PREMIUM REFRESH — Chat surface styling for the wave3 design */
+
+/* Main content area background */
+.rcx-content--main {
+	background-color: var(--mc-premium-bg);
+	color: var(--mc-premium-ink);
+	font-family: 'Geist', system-ui, -apple-system, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* Room header — frosted glass effect */
+.rcx-content--main .rcx-room-header {
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	background-color: ${t.bgGlass};
+	border-bottom-color: var(--mc-premium-border);
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	padding: 12px 22px;
+}
+
+.rcx-content--main .rcx-room-header h1 {
+	font-size: 14.5px;
+	font-weight: 650;
+	color: var(--mc-premium-ink);
+}
+
+/* Messages container and list background */
+.rcx-content--main .messages-container-main,
+.rcx-content--main .messages-box {
+	background-color: var(--mc-premium-bg);
+}
+
+.rcx-content--main .messages-list {
+	background-color: var(--mc-premium-bg);
+	padding: 18px 26px 8px;
+	max-width: 860px;
+	margin: 0 auto;
+}
+
+/* MessageDivider (day separator) styling */
+.rcx-content--main .rcx-message-divider {
+	margin: 14px 0 10px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.rcx-content--main .rcx-message-divider::before,
+.rcx-content--main .rcx-message-divider::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background-color: var(--mc-premium-border);
+}
+
+.rcx-content--main .rcx-message-divider .rcx-bubble {
+	flex: 0;
+	font-family: 'Geist Mono', ui-monospace, monospace;
+	font-size: 10px;
+	letter-spacing: 0.1em;
+	color: var(--mc-premium-ink3);
+	padding: 3px 11px;
+	border-radius: 99px;
+	border: 1px solid var(--mc-premium-border);
+	background-color: var(--mc-premium-surface);
+	white-space: nowrap;
+	text-transform: uppercase;
+}
+
+/* Message row styling */
+.rcx-content--main .rcx-message {
+	padding: 9px 12px;
+	border-radius: 11px;
+	background-color: transparent;
+	transition: background-color 120ms;
+	margin: 0;
+}
+
+.rcx-content--main .rcx-message:hover {
+	background-color: var(--mc-premium-surface);
+}
+
+/* Message header (username, time, badges) */
+.rcx-content--main .rcx-message-header {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 2px 0;
+}
+
+.rcx-content--main .rcx-message-header__username {
+	font-size: 13px;
+	font-weight: 650;
+	color: var(--mc-premium-ink);
+}
+
+.rcx-content--main .rcx-message-header__time {
+	font-size: 11px;
+	color: var(--mc-premium-ink3);
+}
+
+/* Message body text */
+.rcx-content--main .rcx-message-body {
+	margin-top: 2px;
+	font-size: 13.5px;
+	color: var(--mc-premium-ink);
+	line-height: 1.5;
+}
+
+/* Message left container (avatar) */
+.rcx-content--main .rcx-message-left-container {
+	margin-right: 11px;
+}
+
+.rcx-content--main .rcx-message__avatar {
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+}
+
+/* Read receipt check marks */
+.rcx-content--main .rcx-message-read-status {
+	color: var(--mc-premium-green);
+}
+
+/* Message actions toolbar */
+.rcx-content--main .rcx-message-actions {
+	opacity: 0;
+	transition: opacity 150ms;
+	display: flex;
+	gap: 2px;
+}
+
+.rcx-content--main .rcx-message:hover .rcx-message-actions {
+	opacity: 1;
+}
+
+.rcx-content--main .rcx-message-actions button {
+	width: 24px;
+	height: 24px;
+	border-radius: 7px;
+	color: var(--mc-premium-ink3);
+	background-color: transparent;
+	border: none;
+	cursor: pointer;
+	display: grid;
+	place-items: center;
+	transition: all 120ms;
+}
+
+.rcx-content--main .rcx-message-actions button:hover {
+	color: var(--mc-premium-ink);
+}
+
+/* Composer section styling (rc-message-box is the footer wrapper) */
+.rcx-content--main .rc-message-box {
+	padding: 14px 26px 18px;
+	background-color: var(--mc-premium-bg);
+}
+
+.rcx-content--main .rc-message-box > div {
+	max-width: 860px;
+	margin: 0 auto;
+}
+
+/* Message composer (ui-composer MessageComposer component) */
+.rcx-content--main .rcx-message-composer {
+	background-color: var(--mc-premium-surface);
+	border: 1px solid var(--mc-premium-border2);
+	border-radius: 13px;
+	box-shadow: var(--mc-premium-shadow1);
+	transition: all 150ms;
+}
+
+.rcx-content--main .rcx-message-composer:hover {
+	border-color: var(--mc-premium-ink3);
+}
+
+.rcx-content--main .rcx-message-composer:focus-within {
+	border-color: var(--mc-premium-ink3);
+}
+
+/* Message composer input area */
+.rcx-content--main .rcx-message-composer__input {
+	color: var(--mc-premium-ink);
+	padding: 11px 14px;
+	border: none;
+}
+
+.rcx-content--main .rcx-message-composer__input::placeholder {
+	color: var(--mc-premium-ink3);
+}
+
+/* Send button (primary action in composer) */
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button--primary {
+	background-color: var(--mc-premium-green);
+	color: var(--mc-premium-onGreen);
+	border-radius: 9px;
+	border: none;
+	cursor: pointer;
+	transition: all 150ms;
+}
+
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button--primary:hover {
+	background-color: var(--mc-premium-green2);
+}
+
+/* Message composer toolbar section */
+.rcx-content--main .rcx-message-composer__toolbar {
+	border-top-color: var(--mc-premium-border);
+	border-top-width: 1px;
+	border-top-style: solid;
+	padding: 5px 9px;
+	display: flex;
+	gap: 1px;
+}
+
+/* Toolbar buttons and formatting options */
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button,
+.rcx-content--main .rcx-message-composer__toolbar .rcx-icon-button {
+	color: var(--mc-premium-ink3);
+	border-radius: 8px;
+	cursor: pointer;
+	background-color: transparent;
+	border: none;
+	transition: all 120ms;
+}
+
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button:hover,
+.rcx-content--main .rcx-message-composer__toolbar .rcx-icon-button:hover {
+	background-color: var(--mc-premium-surface2);
+	color: var(--mc-premium-ink);
+}
+
+/* Legacy class support for backward compatibility */
+.rcx-content--main .rcx-message-box {
+	background-color: var(--mc-premium-surface);
+	border: 1px solid var(--mc-premium-border2);
+	border-radius: 13px;
+	box-shadow: var(--mc-premium-shadow1);
+	transition: all 150ms;
+}
+
+.rcx-content--main .rcx-message-box:hover,
+.rcx-content--main .rcx-message-box:focus-within {
+	border-color: var(--mc-premium-ink3);
+}
+
+/* Avatar styling — ensure proper radius */
+.rcx-content--main .rcx-avatar {
+	border-radius: 9px;
+}
+
+/* Typography helpers */
+.rcx-content--main .rcx-badge {
+	font-family: 'Geist Mono', ui-monospace, monospace;
+	font-size: 8.5px;
+	letter-spacing: 0.08em;
+	font-weight: 600;
+	padding: 2px 6px;
+	border-radius: 5px;
+}
+
+.rcx-content--main .rcx-badge--success {
+	background-color: var(--mc-premium-greenSoft);
+	border: 1px solid var(--mc-premium-greenLine);
+	color: var(--mc-premium-greenInk);
+}
+
+/* Status indicators */
+.rcx-content--main .status-online {
+	background-color: var(--mc-premium-green);
+	width: 8px;
+	height: 8px;
+	border-radius: 99px;
+	border: 2px solid var(--mc-premium-bg);
+	animation: mcPulse 2.6s ease-out infinite;
+}
+
+@keyframes mcPulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(63, 188, 124, 0.55);
+	}
+	70% {
+		box-shadow: 0 0 0 5px rgba(63, 188, 124, 0);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(63, 188, 124, 0);
+	}
+}
+`;
+
+/**
+ * PREMIUM DASHBOARD — Wave 3 refresh design tokens
+ * ============================================================================
+ *
+ * Modern card-based design with Geist typography and contemporary shadows.
+ * Used by the new PremiumDashboard component (wave3/s-dashboard feature).
+ */
+
+type DashboardTokens = {
+	bg: string;
+	surface: string;
+	border: string;
+	ink: string;
+	ink2: string;
+	ink3: string;
+	green: string;
+	greenLight: string;
+	greenSoft: string;
+	red: string;
+	amber: string;
+	blue: string;
+};
+
+const PREMIUM_LIGHT: DashboardTokens = {
+	bg: '#F6F6F3',
+	surface: '#FFFFFF',
+	border: '#E7E6E0',
+	ink: '#171D19',
+	ink2: '#57615B',
+	ink3: '#8E968F',
+	green: '#17804D',
+	greenLight: '#0F6A3D',
+	greenSoft: '#E8F3ED',
+	red: '#CF4438',
+	amber: '#A97A18',
+	blue: '#3C6EB4',
+};
+
+const PREMIUM_DARK: DashboardTokens = {
+	bg: '#0F1512',
+	surface: '#151C17',
+	border: '#242D27',
+	ink: '#E9EDEA',
+	ink2: '#A2ACA5',
+	ink3: '#707B74',
+	green: '#3FBC7C',
+	greenLight: '#57CD90',
+	greenSoft: '#152A1E',
+	red: '#E0685D',
+	amber: '#D3A24A',
+	blue: '#7AA3D8',
+};
+
+const buildPremiumDashboardCss = (theme: string): string => {
+	const t = theme === 'dark' ? PREMIUM_DARK : PREMIUM_LIGHT;
+
+	return `:root[data-theme="${theme}"] {
+		--premium-dashboard-bg: ${t.bg};
+		--premium-dashboard-surface: ${t.surface};
+		--premium-dashboard-border: ${t.border};
+		--premium-dashboard-ink: ${t.ink};
+		--premium-dashboard-ink2: ${t.ink2};
+		--premium-dashboard-ink3: ${t.ink3};
+		--premium-dashboard-green: ${t.green};
+		--premium-dashboard-green-light: ${t.greenLight};
+		--premium-dashboard-green-soft: ${t.greenSoft};
+		--premium-dashboard-red: ${t.red};
+		--premium-dashboard-red-soft: ${theme === 'dark' ? 'rgba(224, 104, 93, 0.12)' : 'rgba(207, 68, 56, 0.12)'};
+		--premium-dashboard-red-line: ${theme === 'dark' ? 'rgba(224, 104, 93, 0.3)' : 'rgba(207, 68, 56, 0.3)'};
+		--premium-dashboard-amber: ${t.amber};
+		--premium-dashboard-amber-soft: ${theme === 'dark' ? 'rgba(211, 162, 74, 0.12)' : 'rgba(169, 122, 24, 0.12)'};
+		--premium-dashboard-blue: ${t.blue};
+		--premium-dashboard-blue-soft: ${theme === 'dark' ? 'rgba(122, 163, 216, 0.12)' : 'rgba(60, 110, 180, 0.12)'};
+	}`;
+};
+
 export const MainLayoutStyleTags = () => {
 	const [, , theme] = useThemeMode();
 
 	// Brand the light and dark themes; leave high-contrast (a11y) entirely stock.
 	const branded = theme === 'light' || theme === 'dark';
 	const ledger = theme === 'dark' ? DARK_LEDGER : LIGHT_LEDGER;
+	const premium = theme === 'dark' ? DARK_PREMIUM : LIGHT_PREMIUM;
 
 	return (
 		<>
@@ -340,12 +871,18 @@ export const MainLayoutStyleTags = () => {
 			{theme === 'dark' && <PaletteStyleTag selector='.rcx-content--main' palette={codeBlock} tagId='codeBlock-palette' />}
 			{/* Ledger-dense brand accents on the chat surface — custom-palette precedent = codeBlock above. */}
 			{branded && <PaletteStyleTag selector='.rcx-content--main' palette={buildLedgerPalette(ledger)} tagId={`ledger-palette-${theme}`} />}
+			{/* Premium refresh tokens — wave3 chat design tokens. */}
+			{branded && <PaletteStyleTag selector='.rcx-content--main' palette={buildPremiumRefreshPalette(premium)} tagId={`premium-refresh-palette-${theme}`} />}
 			{/* Static, no user input — the drag-region rule is a constant string (mirrors RawText's pattern). */}
 			<style dangerouslySetInnerHTML={{ __html: NAVBAR_DRAG_REGION_CSS }} />
 			{/* Static, no user input — the frame rule is a constant string. */}
 			<style dangerouslySetInnerHTML={{ __html: MATTERCHAT_FRAME_CSS }} />
 			{/* Static, theme-derived constant string — ledger accents Fuselage tokens don't cover. */}
 			{branded && <style dangerouslySetInnerHTML={{ __html: buildLedgerCss(ledger) }} />}
+			{/* Static, theme-derived constant string — premium refresh chat styling. */}
+			{branded && <style dangerouslySetInnerHTML={{ __html: buildPremiumRefreshCss(premium) }} />}
+			{/* Premium dashboard tokens — Wave 3 refresh design. */}
+			{branded && <style dangerouslySetInnerHTML={{ __html: buildPremiumDashboardCss(theme) }} />}
 		</>
 	);
 };
