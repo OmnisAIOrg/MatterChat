@@ -2,7 +2,7 @@ import type { IBoard, ISavedView, SavedViewType, Serialized } from '@rocket.chat
 import { Box, ButtonGroup, Icon } from '@rocket.chat/fuselage';
 import { PageHeader } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -40,6 +40,17 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 	// seedFromCasePro wiring (same endpoint, toast and cards invalidation);
 	// leads boards get the chip only, exactly like LeadsBoardRoute.
 	const [lastSyncAt, setLastSyncAt] = useState<Date | undefined>();
+
+	// The board's lists, for ExportImportMenu → ExportModal (it renders a per-list export picker).
+	// This was previously passed as a bare `lists` identifier that was never defined in this scope,
+	// so rendering this header threw `ReferenceError: lists is not defined` and crashed the board.
+	const getLists = useEndpoint('GET', '/v1/boards.lists');
+	const { data: listsData } = useQuery({
+		queryKey: ['boards', 'lists', board._id],
+		queryFn: () => getLists({ boardId: board._id }),
+	});
+	const lists = listsData?.lists ?? [];
+
 	const seedFromCasePro = useEndpoint('POST', '/v1/boards.matters.seedFromCasePro');
 	const seedMutation = useMutation({
 		mutationFn: () => seedFromCasePro({ boardId: board._id }),
