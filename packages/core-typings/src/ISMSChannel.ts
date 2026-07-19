@@ -47,7 +47,7 @@ export interface ISMSMessage {
 	caseProMessageId: string;
 
 	/** Sender as tracked by CasePro (phone number, party ID, or "system"). */
-	casePro Sender?: string;
+	caseProSender?: string;
 
 	/** External SMS provider's message ID (Twilio, Bandwidth, etc.). */
 	externalMessageId?: string;
