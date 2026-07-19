@@ -104,3 +104,4 @@ export type * from './models/IBoardsSubscriptionsModel';
 export type * from './models/IBoardsNotificationsModel';
 export type * from './models/IBoardsSavedViewsModel';
 export type * from './models/IBoardsFormsModel';
+export type * from './models/IBoardUserNotificationPrefsModel';

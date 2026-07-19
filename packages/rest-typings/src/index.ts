@@ -14,6 +14,7 @@ import type { BoardsMattersEndpoints } from './v1/boards-matters';
 import type { BoardsReportsEndpoints } from './v1/boards-reports';
 import type { BoardsViewsEndpoints } from './v1/boards-views';
 import type { BoardsNotificationsEndpoints } from './v1/boards-notifications';
+import type { BoardsNotificationPreferencesEndpoints } from './v1/boards-notification-preferences';
 import type { BoardsAiEndpoints } from './v1/boards-ai';
 import type { BoardsFormsEndpoints } from './v1/boards-forms';
 import type { CalendarEndpoints } from './v1/calendar';
@@ -107,6 +108,7 @@ export interface Endpoints
 		BoardsReportsEndpoints,
 		BoardsViewsEndpoints,
 		BoardsNotificationsEndpoints,
+		BoardsNotificationPreferencesEndpoints,
 		BoardsAiEndpoints,
 		BoardsFormsEndpoints,
 		FirmFeedEndpoints, // MATTERCHAT: Firm Feed (My Day bulletin)

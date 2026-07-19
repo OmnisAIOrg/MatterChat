@@ -19,6 +19,7 @@ import {
 	BoardsLeadsRaw,
 	BoardsListsRaw,
 	BoardsNotificationsRaw,
+	BoardsUserNotificationPrefsRaw,
 	BoardsPlaybooksRaw,
 	BoardsReferralsOutRaw,
 	BoardsFormsRaw,
@@ -131,6 +132,7 @@ registerModel('IBoardsAutomationsModel', new BoardsAutomationsRaw(db, trashColle
 registerModel('IBoardsAutomationRunsModel', new BoardsAutomationRunsRaw(db));
 registerModel('IBoardsSubscriptionsModel', new BoardsSubscriptionsRaw(db, trashCollection));
 registerModel('IBoardsNotificationsModel', new BoardsNotificationsRaw(db, trashCollection));
+registerModel('IBoardUserNotificationPrefsModel', new BoardsUserNotificationPrefsRaw(db));
 registerModel('IBoardsSavedViewsModel', new BoardsSavedViewsRaw(db, trashCollection));
 registerModel('IBoardsFormsModel', new BoardsFormsRaw(db, trashCollection));
 registerModel('ICallHistoryModel', new CallHistoryRaw(db));

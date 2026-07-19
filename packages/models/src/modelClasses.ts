@@ -18,6 +18,7 @@ export * from './models/BoardsSubscriptions';
 export * from './models/BoardsNotifications';
 export * from './models/BoardsSavedViews';
 export * from './models/BoardsForms';
+export * from './models/BoardsUserNotificationPrefs';
 export * from './models/BoardsLeads';
 export * from './models/BoardsReferralSources';
 export * from './models/BoardsCommunications';
