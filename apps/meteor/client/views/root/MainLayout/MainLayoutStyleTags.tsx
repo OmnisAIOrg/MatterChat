@@ -488,23 +488,73 @@ const buildPremiumRefreshPalette = (t: PremiumRefreshTokens): string => `.rcx-co
 
 const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 /* MATTERCHAT PREMIUM REFRESH — Chat surface styling for the wave3 design */
+
+/* Main content area background */
 .rcx-content--main {
 	background-color: var(--mc-premium-bg);
 	color: var(--mc-premium-ink);
+	font-family: 'Geist', system-ui, -apple-system, sans-serif;
+	-webkit-font-smoothing: antialiased;
 }
 
-/* Header — frosted glass effect */
+/* Room header — frosted glass effect */
 .rcx-content--main .rcx-room-header {
 	backdrop-filter: blur(14px);
 	-webkit-backdrop-filter: blur(14px);
 	background-color: ${t.bgGlass};
 	border-bottom-color: var(--mc-premium-border);
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	padding: 12px 22px;
 }
 
-/* Message list background and spacing */
+.rcx-content--main .rcx-room-header h1 {
+	font-size: 14.5px;
+	font-weight: 650;
+	color: var(--mc-premium-ink);
+}
+
+/* Messages container and list background */
+.rcx-content--main .messages-container-main,
+.rcx-content--main .messages-box {
+	background-color: var(--mc-premium-bg);
+}
+
 .rcx-content--main .messages-list {
 	background-color: var(--mc-premium-bg);
 	padding: 18px 26px 8px;
+	max-width: 860px;
+	margin: 0 auto;
+}
+
+/* MessageDivider (day separator) styling */
+.rcx-content--main .rcx-message-divider {
+	margin: 14px 0 10px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.rcx-content--main .rcx-message-divider::before,
+.rcx-content--main .rcx-message-divider::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background-color: var(--mc-premium-border);
+}
+
+.rcx-content--main .rcx-message-divider .rcx-bubble {
+	flex: 0;
+	font-family: 'Geist Mono', ui-monospace, monospace;
+	font-size: 10px;
+	letter-spacing: 0.1em;
+	color: var(--mc-premium-ink3);
+	padding: 3px 11px;
+	border-radius: 99px;
+	border: 1px solid var(--mc-premium-border);
+	background-color: var(--mc-premium-surface);
+	white-space: nowrap;
+	text-transform: uppercase;
 }
 
 /* Message row styling */
@@ -513,34 +563,10 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	border-radius: 11px;
 	background-color: transparent;
 	transition: background-color 120ms;
+	margin: 0;
 }
 
 .rcx-content--main .rcx-message:hover {
-	background-color: var(--mc-premium-surface);
-}
-
-/* Day divider styling */
-.rcx-content--main .messages-list-date {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 14px 0 10px;
-	font-family: 'Geist Mono', ui-monospace, monospace;
-	font-size: 10px;
-	letter-spacing: 0.1em;
-	color: var(--mc-premium-ink3);
-}
-
-.rcx-content--main .messages-list-date-line {
-	flex: 1;
-	height: 1px;
-	background-color: var(--mc-premium-border);
-}
-
-.rcx-content--main .messages-list-date-label {
-	padding: 3px 11px;
-	border-radius: 99px;
-	border: 1px solid var(--mc-premium-border);
 	background-color: var(--mc-premium-surface);
 }
 
@@ -549,7 +575,7 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	display: flex;
 	align-items: baseline;
 	gap: 8px;
-	margin: 0;
+	margin: 0 0 2px 0;
 }
 
 .rcx-content--main .rcx-message-header__username {
@@ -563,19 +589,6 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	color: var(--mc-premium-ink3);
 }
 
-/* Admin badge styling */
-.rcx-content--main .message-admin-badge {
-	font-family: 'Geist Mono', ui-monospace, monospace;
-	font-size: 8.5px;
-	letter-spacing: 0.08em;
-	font-weight: 600;
-	padding: 2px 6px;
-	border-radius: 5px;
-	background-color: var(--mc-premium-greenSoft);
-	border: 1px solid var(--mc-premium-greenLine);
-	color: var(--mc-premium-greenInk);
-}
-
 /* Message body text */
 .rcx-content--main .rcx-message-body {
 	margin-top: 2px;
@@ -584,59 +597,182 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	line-height: 1.5;
 }
 
-/* Composer/message box styling */
-.rcx-content--main .message-box {
-	padding: 14px 26px 18px;
+/* Message left container (avatar) */
+.rcx-content--main .rcx-message-left-container {
+	margin-right: 11px;
 }
 
-.rcx-content--main .rcx-box--full.rcx-message-box {
+.rcx-content--main .rcx-message__avatar {
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+}
+
+/* Read receipt check marks */
+.rcx-content--main .rcx-message-read-status {
+	color: var(--mc-premium-green);
+}
+
+/* Message actions toolbar */
+.rcx-content--main .rcx-message-actions {
+	opacity: 0;
+	transition: opacity 150ms;
+	display: flex;
+	gap: 2px;
+}
+
+.rcx-content--main .rcx-message:hover .rcx-message-actions {
+	opacity: 1;
+}
+
+.rcx-content--main .rcx-message-actions button {
+	width: 24px;
+	height: 24px;
+	border-radius: 7px;
+	color: var(--mc-premium-ink3);
+	background-color: transparent;
+	border: none;
+	cursor: pointer;
+	display: grid;
+	place-items: center;
+	transition: all 120ms;
+}
+
+.rcx-content--main .rcx-message-actions button:hover {
+	color: var(--mc-premium-ink);
+}
+
+/* Composer section styling */
+.rcx-content--main .message-box {
+	padding: 14px 26px 18px;
+	background-color: var(--mc-premium-bg);
+}
+
+.rcx-content--main .message-box-wrapper {
+	max-width: 860px;
+	margin: 0 auto;
+}
+
+/* Message input box */
+.rcx-content--main .rcx-message-box {
 	background-color: var(--mc-premium-surface);
 	border: 1px solid var(--mc-premium-border2);
 	border-radius: 13px;
 	box-shadow: var(--mc-premium-shadow1);
 	transition: all 150ms;
+	padding: 0;
 }
 
-.rcx-content--main .rcx-box--full.rcx-message-box:hover {
+.rcx-content--main .rcx-message-box:hover {
 	border-color: var(--mc-premium-ink3);
 }
 
-.rcx-content--main .rcx-box--full.rcx-message-box:focus-within {
+.rcx-content--main .rcx-message-box:focus-within {
 	border-color: var(--mc-premium-ink3);
 }
 
-/* Composer textarea placeholder */
+/* Composer input area */
+.rcx-content--main .rcx-input-box__input {
+	color: var(--mc-premium-ink);
+	border: none;
+	padding: 11px 14px;
+}
+
 .rcx-content--main .rcx-input-box__input::placeholder {
 	color: var(--mc-premium-ink3);
 }
 
 /* Send button (primary action) */
-.rcx-content--main .rcx-message-box__send {
+.rcx-content--main .rcx-message-box .rcx-button--primary {
 	background-color: var(--mc-premium-green);
 	color: var(--mc-premium-onGreen);
 	border-radius: 9px;
+	border: none;
+	width: 32px;
+	height: 32px;
+	display: grid;
+	place-items: center;
+	cursor: pointer;
 	transition: all 150ms;
+	margin: 11px 14px;
 }
 
-.rcx-content--main .rcx-message-box__send:hover {
+.rcx-content--main .rcx-message-box .rcx-button--primary:hover {
 	background-color: var(--mc-premium-green2);
 }
 
-/* Composer toolbar icons */
-.rcx-content--main .rcx-message-box__actions button {
+/* Composer toolbar section */
+.rcx-content--main .rcx-message-box .rcx-box {
+	border-top-color: var(--mc-premium-border);
+	border-top-width: 1px;
+	border-top-style: solid;
+	padding: 5px 9px;
+	display: flex;
+	gap: 1px;
+}
+
+/* Toolbar buttons and formatting options */
+.rcx-content--main .rcx-message-box .rcx-button--ghost,
+.rcx-content--main .rcx-message-box .rcx-icon-button {
 	color: var(--mc-premium-ink3);
 	border-radius: 8px;
+	width: 30px;
+	height: 30px;
+	display: grid;
+	place-items: center;
+	cursor: pointer;
+	background-color: transparent;
+	border: none;
 	transition: all 120ms;
 }
 
-.rcx-content--main .rcx-message-box__actions button:hover {
+.rcx-content--main .rcx-message-box .rcx-button--ghost:hover,
+.rcx-content--main .rcx-message-box .rcx-icon-button:hover {
 	background-color: var(--mc-premium-surface2);
 	color: var(--mc-premium-ink);
 }
 
-/* Avatar styling */
+/* Avatar styling — ensure proper radius */
 .rcx-content--main .rcx-avatar {
 	border-radius: 9px;
+}
+
+/* Typography helpers */
+.rcx-content--main .rcx-badge {
+	font-family: 'Geist Mono', ui-monospace, monospace;
+	font-size: 8.5px;
+	letter-spacing: 0.08em;
+	font-weight: 600;
+	padding: 2px 6px;
+	border-radius: 5px;
+}
+
+.rcx-content--main .rcx-badge--success {
+	background-color: var(--mc-premium-greenSoft);
+	border: 1px solid var(--mc-premium-greenLine);
+	color: var(--mc-premium-greenInk);
+}
+
+/* Status indicators */
+.rcx-content--main .status-online {
+	background-color: var(--mc-premium-green);
+	width: 8px;
+	height: 8px;
+	border-radius: 99px;
+	border: 2px solid var(--mc-premium-bg);
+	animation: mcPulse 2.6s ease-out infinite;
+}
+
+@keyframes mcPulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(63, 188, 124, 0.55);
+	}
+	70% {
+		box-shadow: 0 0 0 5px rgba(63, 188, 124, 0);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(63, 188, 124, 0);
+	}
 }
 `;
 
