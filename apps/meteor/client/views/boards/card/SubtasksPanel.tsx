@@ -70,8 +70,40 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 	};
 	const onError = (error: unknown): void => dispatchToastMessage({ type: 'error', message: error });
 
+	// Check nesting depth: count ancestors to enforce max 3-level nesting (wave3 Subtasks v2 limit)
+	const getNestingDepth = async (currentCardId: string): Promise<number> => {
+		let depth = 0;
+		let cursor = currentCardId;
+		const visited = new Set([currentCardId]); // Prevent infinite loops
+
+		while (true) {
+			const current = await getCard({ cardId: cursor });
+			if (!current?.card) break;
+
+			const parent = current.card.relations?.find((r) => r.type === 'parent');
+			if (!parent) break;
+
+			depth++;
+			cursor = parent.cardId;
+
+			// Safety: break if we've gone too deep or seen this card before
+			if (depth >= 3 || visited.has(cursor)) break;
+			visited.add(cursor);
+		}
+
+		return depth;
+	};
+
 	const addMutation = useMutation({
 		mutationFn: async (title: string) => {
+			// Validate we're not exceeding 3-level nesting
+			const depth = await getNestingDepth(cardId);
+			if (depth >= 2) {
+				// depth 0 = root, depth 1 = immediate child, depth 2 = grandchild
+				// So if depth >= 2, we're already at grandchild level and can't add more
+				throw new Error(t('Boards_Subtask_Nesting_Level_3', { defaultValue: 'Maximum nesting level (3) reached' }));
+			}
+
 			const created = await cardCreate({ boardId: card.boardId, listId: card.listId, title });
 			try {
 				await relationsAdd({ cardId, type: 'child', targetCardId: created._id });
