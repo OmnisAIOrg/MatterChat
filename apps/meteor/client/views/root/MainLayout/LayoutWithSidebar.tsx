@@ -11,6 +11,7 @@ import AppLeftRail from './AppLeftRail';
 import ExternalErrorBoundary from './ExternalErrorBoundary';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
+import { PremiumThemeStyleTags } from './PremiumThemeStyleTags';
 import MobileTabBar from './MobileTabBar';
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
@@ -238,6 +239,7 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 				id='rocket-chat'
 				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav'].filter(Boolean).join(' ')}
 			>
+				<PremiumThemeStyleTags />
 				<MainLayoutStyleTags />
 				<OrgSwitcherProvider>
 					<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
