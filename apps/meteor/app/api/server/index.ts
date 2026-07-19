@@ -19,6 +19,7 @@ import './v1/boards-ai';
 import './v1/boards-forms';
 import './v1/boards-calendar-sync';
 import './v1/boards-export-import';
+import './v1/boards-subtasks';
 import './v1/firm-feed'; // MATTERCHAT: Firm Feed (My Day bulletin)
 import './v1/call-history';
 import './v1/cross-firm';
