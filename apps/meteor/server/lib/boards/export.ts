@@ -1,4 +1,4 @@
-import type { IBoardCard, IBoard, IBoardList, IBoardComment, Serialized } from '@rocket.chat/core-typings';
+import type { IBoardCard, IBoard, IBoardList, IBoardComment, Serialized, IUser } from '@rocket.chat/core-typings';
 import { Rooms, Users } from '../../../app/models/server';
 import { getCardsForBoard, getListsForBoard, getBoardInfo } from './index';
 import { db } from '../../../server/database/client';
@@ -9,6 +9,15 @@ interface ExportOptions {
   boardId: string;
   format: ExportFormat;
   listIds?: string[];
+}
+
+/**
+ * Check if a user has guest role and should have watermarked exports.
+ * MATTERCHAT: Guests can only access invited boards/channels and exports are watermarked.
+ */
+async function shouldWatermarkExport(userId: string): Promise<boolean> {
+  const user = await Users.findOneById(userId);
+  return user?.roles?.includes('guest') ?? false;
 }
 
 /**
@@ -28,6 +37,7 @@ export async function generateBoardExportCSV(
 
   const filteredLists = listIds ? lists.filter((l) => listIds.includes(l._id)) : lists;
   const result: Record<string, string> = {};
+  const isGuest = await shouldWatermarkExport(userId);
 
   // CSV header
   const header = [
@@ -50,7 +60,14 @@ export async function generateBoardExportCSV(
     const cards = await getCardsForBoard(userId, boardId, { offset: 0, count: 10000 });
     const listCards = cards.cards.filter((c) => c.listId === list._id);
 
-    const csvRows = [header];
+    // MATTERCHAT: Add watermark for guest users
+    const csvRows: string[] = [];
+    if (isGuest) {
+      csvRows.push(`# GUEST USER EXPORT - ${new Date().toISOString()}`);
+      csvRows.push(`# This export is confidential and for authorized recipients only.`);
+      csvRows.push('');
+    }
+    csvRows.push(header);
 
     for (const card of listCards) {
       const assigneeNames = card.assignees?.length
@@ -109,6 +126,7 @@ export async function generateBoardExportJSON(
   cards: Serialized<IBoardCard>[];
   comments: any[];
   activities: any[];
+  watermark?: { isGuest: boolean; exportedAt: string };
 }> {
   const { board, lists } = await getBoardInfo(userId, boardId);
 
@@ -118,6 +136,7 @@ export async function generateBoardExportJSON(
 
   const cardsResult = await getCardsForBoard(userId, boardId, { offset: 0, count: 10000 });
   const cards = cardsResult.cards;
+  const isGuest = await shouldWatermarkExport(userId);
 
   // Fetch comments for all cards
   const Rooms_collection = db.getCollection('rocketchat_subscription');
@@ -144,6 +163,13 @@ export async function generateBoardExportJSON(
     cards: cards as Serialized<IBoardCard>[],
     comments,
     activities,
+    // MATTERCHAT: Add watermark for guest users
+    ...(isGuest && {
+      watermark: {
+        isGuest: true,
+        exportedAt: new Date().toISOString(),
+      },
+    }),
   };
 }
 
