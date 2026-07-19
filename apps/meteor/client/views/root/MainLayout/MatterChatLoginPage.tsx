@@ -79,13 +79,9 @@ const injectStyles = (): void => {
    Make the left brand chamber + a top strip draggable; keep every interactive control no-drag.
    In a normal browser -webkit-app-region is a harmless no-op. */
 .mclg-dragbar { position: absolute; top: 0; left: 0; right: 0; height: 46px; -webkit-app-region: drag; z-index: 55; }
-/* Desktop app (frameless window): drop the decorative green outer frame + rounded shell so the
-   page is full-bleed and the native window chrome is the ONLY frame — otherwise the macOS traffic
-   lights float on the green border and look broken. Nudge the brand chamber's top padding down so
-   the lockup clears the inset traffic lights. */
-.mclg-desktop .mclg-frame { padding: 0 !important; background: #041109 !important; }
-.mclg-desktop .mclg-shell { border-radius: 0 !important; box-shadow: none !important; }
-.mclg-desktop .mclg-left { padding-top: 52px !important; }
+/* Desktop app: KEEP the green frame (founder wants it to match web). The macOS traffic lights are
+   repositioned by the wrapper (v0.1.4) to sit inside the frame on the dark brand chamber, so no
+   full-bleed override is needed here. */
 .mclg-left { -webkit-app-region: drag; }
 .mclg-card, .mclg-card *, .mclg-field, .mclg-primary, .mclg-omnis, .mclg-eye, .mclg-root a, .mclg-root button, .mclg-root input { -webkit-app-region: no-drag; }
 

@@ -91,27 +91,13 @@ body {
 		box-shadow: none !important;
 	}
 }
-/* DESKTOP APP (Electron): the floating green card is a web/PWA nicety that CLASHES with the native
-   window chrome — it insets the app ~22px so the macOS traffic lights (fixed at 16,16 by the wrapper)
-   land in the green border instead of on the NavBar. Go full-bleed so the OS window is the only frame
-   and the NavBar reaches the top-left. body.mc-desktop-app is toggled from JS (matterchatDesktop). */
-body.mc-desktop-app {
-	margin: 0 !important;
-	width: 100vw !important;
-	height: 100vh !important;
-	border-radius: 0 !important;
-	box-shadow: none !important;
-	background: #1A212C !important;
-}
-body.mc-desktop-app #react-root {
-	inset: 0 !important;
-	border-radius: 0 !important;
-	box-shadow: none !important;
-}
-/* macOS only (hidden-inset traffic lights sit top-LEFT): reserve room so the NavBar's leftmost
-   controls don't sit under the lights. Win/Linux use a right-side titleBarOverlay → no left pad. */
+/* DESKTOP APP (Electron): KEEP the floating green frame (founder wants it to match web). The macOS
+   traffic lights are repositioned by the wrapper (v0.1.4, trafficLightPosition) to sit INSIDE the
+   frame on the NavBar rather than floating on the green border. Here we only reserve NavBar left-room
+   on macOS so the lights don't sit under its controls (hidden-inset lights are top-LEFT; Win/Linux use
+   a right-side titleBarOverlay so no left pad). body.mc-desktop-mac is toggled from JS. */
 body.mc-desktop-mac .rcx-navbar {
-	padding-left: 82px !important;
+	padding-left: 78px !important;
 }
 `;
 
