@@ -43,6 +43,44 @@ deferred work so nothing is lost. Fix carefully — several of these are archite
 
 ---
 
+## 🔵 CasePro → MatterChat webhook: NEVER SHIPPED (not a config fix)
+
+_Investigated 2026-07-19. Recorded because it looks wired but isn't, and was twice
+mis-diagnosed as "the domain move orphaned the webhook URL"._
+
+**Both halves of this integration are inert. There is no URL to repoint.**
+
+- **CasePro's sender was never deployed.** Neither `origin/staging-backend` (what runs) nor
+  `origin/main` contains a single `matterchat` reference in `src`. The sender — a
+  `webhook-subscriptions` module with a per-subscription `target_url` DB column — exists only
+  on **local, unpushed branches** (`feature/matterchat-webhook-action` + siblings). Nothing has
+  ever POSTed to MatterChat from CasePro in any deployed environment.
+- **MatterChat's receiver is fail-closed and unarmed.** `CASEPRO_WEBHOOK_SECRET` is NOT set in
+  the production manifest. By design that means every delivery is answered 202 with zero
+  processing — so even a correct sender would be silently dropped.
+- **It was built staging-only.** The ingress exists solely as
+  `kubernetes/staging/casepro-webhooks-public-ingress-staging.yaml` (`webhooks-crm.stg-omnisai.io`)
+  with **no production counterpart**, and neither `.env.production` nor `.env.staging` carries any
+  webhook/MatterChat config. Tests hardcode `matterchat.stg-omnisai.io` — a host from two domains ago.
+
+**To actually ship it** (a build, not a config tweak):
+1. Push + merge the `webhook-subscriptions` module to `staging-backend`; deploy.
+2. Build the production side: prod ingress (if CasePro needs to receive), prod env/secret.
+3. Set `CASEPRO_WEBHOOK_SECRET` in MatterChat's prod manifest (requires a promote) and the same
+   shared secret on the CasePro side.
+4. Create a subscription row with `target_url = https://app.matterchat.com/_casepro/webhook`
+   (runtime DB value — changeable later without a redeploy).
+
+**Priority: LOW.** This is real-time case-update notifications posting into matter channels — a
+nice-to-have layered on the matters/leads sync, which works via **outbound pull** and is entirely
+independent of this (and of MatterChat's domain).
+
+⚠️ **Do NOT diagnose CasePro sync problems as "the webhook broke."** The outbound pull sync uses a
+static API key against CasePro's own base URL and is domain-independent. The CasePro board failures
+of 2026-07-19 were a **frontend crash on legacy card shapes** (see migration v339), not transport.
+
+---
+
 ## 🟡 Founder-side config (unblocks features already built)
 - **Teams:** paste Client ID + Client Secret (Azure app reg → Certificates & secrets) in Admin → Teams.
 - **Google Chat:** paste OAuth Client ID + Secret (Google Cloud Console) in Admin → GoogleChat.
