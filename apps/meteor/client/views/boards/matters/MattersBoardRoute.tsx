@@ -9,6 +9,7 @@ import { BoardAutomationsButton } from '../automation';
 import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
 import { CaseProConnectionControls, CaseProStubBanner } from '../casepro';
+import MattersSearch from './MattersSearch';
 
 /**
  * MattersBoardRoute — the `/boards/matters` landing screen (M3a client).
@@ -135,6 +136,7 @@ const MattersBoardRoute = () => {
 						</Box>
 					}
 				>
+					<MattersSearch boardId={board._id} />
 					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={4} />
 					<ButtonGroup>
 						<BoardAutomationsButton boardId={board._id} small={false} />
