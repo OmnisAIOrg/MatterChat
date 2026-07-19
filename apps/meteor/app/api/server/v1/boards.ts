@@ -79,6 +79,9 @@ import {
 	buildICalForUser,
 	getOrCreateIcalToken,
 	resolveUserIdByIcalToken,
+	saveBoardAsTemplate,
+	createBoardFromTemplate,
+	listBoardTemplates,
 } from '../../../../server/lib/boards';
 import { settings } from '../../../settings/server';
 import { API } from '../api';
@@ -1079,5 +1082,110 @@ API.v1.get(
 		const { activities, total } = await getActivities(userId, { boardId, cardId }, { offset, count });
 
 		return API.v1.success({ activities, count: activities.length, offset, total });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// Board Templates
+// ---------------------------------------------------------------------------
+
+API.v1.post(
+	'boards.templates.save',
+	{
+		authRequired: true,
+		body: {
+			type: 'object',
+			properties: {
+				boardId: { type: 'string' },
+				name: { type: 'string' },
+				description: { type: 'string' },
+				visibility: { enum: ['private', 'team', 'firm'] },
+				teamId: { type: 'string' },
+			},
+			required: ['boardId', 'name', 'visibility'],
+			additionalProperties: false,
+		},
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { boardId, name, description, visibility, teamId } = this.bodyParams;
+
+		const result = await saveBoardAsTemplate(userId, {
+			boardId,
+			name,
+			description,
+			visibility,
+			teamId,
+		});
+
+		return API.v1.success(result);
+	},
+);
+
+API.v1.get(
+	'boards.templates.list',
+	{
+		authRequired: true,
+		query: {
+			type: 'object',
+			properties: {
+				pipelineType: { type: 'string' },
+				visibility: { type: 'string' },
+			},
+			additionalProperties: false,
+		},
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { pipelineType, visibility } = this.queryParams;
+		const templates = listBoardTemplates(
+			visibility as 'private' | 'team' | 'firm' | undefined,
+			pipelineType,
+		);
+
+		return API.v1.success({ templates, count: templates.length });
+	},
+);
+
+API.v1.post(
+	'boards.create.from-template',
+	{
+		authRequired: true,
+		body: {
+			type: 'object',
+			properties: {
+				templateId: { type: 'string' },
+				name: { type: 'string' },
+				teamId: { type: 'string' },
+			},
+			required: ['templateId', 'name'],
+			additionalProperties: false,
+		},
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const { userId } = this;
+		const { templateId, name, teamId } = this.bodyParams;
+
+		const board = await createBoardFromTemplate(userId, {
+			templateId,
+			name,
+			teamId,
+		});
+
+		return API.v1.success({ board });
 	},
 );
