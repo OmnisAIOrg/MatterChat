@@ -18,8 +18,10 @@ export interface IBoardUserNotificationPrefsModel extends IBaseModel<IBoardUserN
 	/**
 	 * Update user's notification preferences (partial update).
 	 */
-	updatePrefs(userId: IUser['_id'], updates: Partial<Omit<IBoardUserNotificationPrefs, '_id' | 'userId'>)
-	: Promise<IBoardUserNotificationPrefs | null>;
+	updatePrefs(
+		userId: IUser['_id'],
+		updates: Partial<Omit<IBoardUserNotificationPrefs, '_id' | 'userId' | 'createdAt' | '_updatedAt'>>,
+	): Promise<IBoardUserNotificationPrefs | null>;
 
 	/**
 	 * Set the notification preset for a user (e.g., 'all', 'urgent_only', 'silent').
