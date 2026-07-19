@@ -107,12 +107,15 @@ export async function syncSMSRoomMessages(roomId: string): Promise<number | unde
 		}
 
 		// Update the room's sync cursor so the next pull skips already-synced messages.
+		// Use dotted paths so we patch only these fields — replacing the whole `sms`
+		// sub-document here would wipe enabled/caseProThreadId/caseProMatterId and break
+		// every subsequent sync (the room would no longer read as an SMS channel).
 		if (pullResult.nextCursor) {
-			const syncUpdate: Partial<ISMSChannel> = { syncCursor: pullResult.nextCursor };
+			const syncUpdate: Record<string, unknown> = { 'sms.syncCursor': pullResult.nextCursor };
 			if (pullResult.events.length > 0) {
-				syncUpdate.lastSyncAt = new Date().toISOString();
+				syncUpdate['sms.lastSyncAt'] = new Date().toISOString();
 			}
-			await Rooms.updateOne({ _id: roomId }, { $set: { sms: syncUpdate } });
+			await Rooms.updateOne({ _id: roomId }, { $set: syncUpdate });
 		}
 
 		return messagesAdded;

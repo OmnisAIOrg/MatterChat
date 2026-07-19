@@ -150,6 +150,21 @@ export const getAgentRoute = {
 				});
 			}
 
+			// Authorization: enforce agent visibility (firm/team/private). Without this,
+			// any authenticated user could read another user's private agent (incl. its
+			// knowledge-source config) by id or slug. Creator/admin always allowed;
+			// otherwise defer to canUseAgent (firm + allowedRoles / team / private rules).
+			const isAdmin = await hasPermissionAsync(user._id, 'admin');
+			const allowed =
+				agent.createdBy === user._id || isAdmin || (await agentService.canUseAgent(user._id, agent, user.roles || []));
+			if (!allowed) {
+				// 404 (not 403) so a private agent's existence isn't disclosed to non-viewers.
+				return res.status(404).json({
+					success: false,
+					error: 'Agent not found',
+				});
+			}
+
 			res.json({
 				success: true,
 				agent,

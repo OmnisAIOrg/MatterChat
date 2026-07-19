@@ -15,6 +15,46 @@ import type { ISMSChannel } from '@rocket.chat/core-typings';
  */
 
 /**
+ * Authorization guard for SMS reads. SMS threads carry privileged client communications,
+ * so an authenticated user must be a member of the MatterChat room bound to the matter /
+ * thread before any thread data is returned. Without this, any logged-in user could read
+ * another firm's SMS threads by guessing a matterId/threadId (IDOR). Admins bypass.
+ * Returns true when access is allowed.
+ */
+async function userCanAccessSMSMatter(userId: string, isAdmin: boolean, matterId: string): Promise<boolean> {
+	if (isAdmin) {
+		return true;
+	}
+	// Find SMS-enabled rooms bound to this matter that the user is subscribed to.
+	const rooms = await Rooms.find(
+		{ 'sms.enabled': true, 'sms.caseProMatterId': matterId },
+		{ projection: { _id: 1 } },
+	).toArray();
+	for (const room of rooms) {
+		if (await Subscriptions.findOneByRoomIdAndUserId(room._id, userId, { projection: { _id: 1 } })) {
+			return true;
+		}
+	}
+	return false;
+}
+
+async function userCanAccessSMSThread(userId: string, isAdmin: boolean, threadId: string): Promise<boolean> {
+	if (isAdmin) {
+		return true;
+	}
+	const rooms = await Rooms.find(
+		{ 'sms.enabled': true, 'sms.caseProThreadId': threadId },
+		{ projection: { _id: 1 } },
+	).toArray();
+	for (const room of rooms) {
+		if (await Subscriptions.findOneByRoomIdAndUserId(room._id, userId, { projection: { _id: 1 } })) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * GET /api/v1/sms/threads?matterId=...
  *
  * List SMS threads for a matter. Returns the raw CasePro thread rows.
@@ -29,9 +69,13 @@ API.v1.addRoute(
 				const { matterId } = this.queryParams;
 				check(matterId, String);
 
+				// Authorization: caller must be a member of an SMS room bound to this matter.
+				const isAdmin = !!this.user?.roles?.includes('admin');
+				if (!(await userCanAccessSMSMatter(this.userId, isAdmin, matterId))) {
+					return API.v1.unauthorized();
+				}
+
 				const bridge = getSMSBridge();
-				// No direct permission check here; the caller should validate matter access
-				// via room membership. Returns empty if the bridge is in stub mode.
 				const threads = await bridge.listThreadsForMatter(matterId, 50, 0);
 				return API.v1.success({ threads });
 			} catch (err) {
@@ -54,6 +98,12 @@ API.v1.addRoute(
 			try {
 				const { threadId } = this.urlParams;
 				check(threadId, String);
+
+				// Authorization: caller must be a member of the room bound to this thread.
+				const isAdmin = !!this.user?.roles?.includes('admin');
+				if (!(await userCanAccessSMSThread(this.userId, isAdmin, threadId))) {
+					return API.v1.unauthorized();
+				}
 
 				const bridge = getSMSBridge();
 				const thread = await bridge.getThread(threadId);
@@ -84,6 +134,12 @@ API.v1.addRoute(
 				const offset = parseInt(this.queryParams.offset || '0', 10);
 
 				check(threadId, String);
+
+				// Authorization: caller must be a member of the room bound to this thread.
+				const isAdmin = !!this.user?.roles?.includes('admin');
+				if (!(await userCanAccessSMSThread(this.userId, isAdmin, threadId))) {
+					return API.v1.unauthorized();
+				}
 
 				const bridge = getSMSBridge();
 				const messages = await bridge.getThreadMessages(threadId, limit, offset);
