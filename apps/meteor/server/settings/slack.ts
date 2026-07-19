@@ -31,6 +31,15 @@ import { settingsRegistry } from '../../app/settings/server';
  */
 export const createSlackSettings = () =>
 	settingsRegistry.addGroup('Slack', async function () {
+		// Setup guide — read-only informational setting with step-by-step instructions.
+		await this.add('Slack_Setup_Guide', '', {
+			type: 'string',
+			readonly: true,
+			public: false,
+			i18nLabel: 'Slack_Setup_Guide',
+			i18nDescription: 'Slack_Setup_Guide_Description',
+		});
+
 		// Master switch. Gates the authorize route + provider. Off by default (standalone principle).
 		await this.add('Slack_Enabled', false, {
 			type: 'boolean',
