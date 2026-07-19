@@ -196,3 +196,32 @@
 **Chose:** switched every remaining boards REST handler off `requireUid()` (which calls `Meteor.userId()` — it THROWS "Meteor.userId can only be invoked in method calls or publications" in the typed REST router) to `const uid = this.userId` (safe: all routes are `authRequired: true`): `boards-reports.ts` (2 sites), `boards-matters.ts` (12 — 3 effect-only calls simply deleted, `authRequired` already covers them), and `boards-views.ts` (5 — NOT in the pass-3 notes; caught at runtime when the harness saved-views family failed 10 cases). `requireUid` remains valid in Meteor methods/server lib.
 **Why the harness matters:** the tsc pass is blind to this bug (the code typechecks fine); only the runtime harness catches it. Added 4 uid-fix smoke cases (reports.overview/sourceToSettlement, matters.playbooks.list/deadlines.list) so the regression class stays covered.
 **Also fixed (type-level only, teams bridge was never typechecked):** `bridgeCore.ts` `message.editedAt` → `isEditedMessage(message)` guard; `TeamsProvider.syncMessages` TS7022 — the explicit generic on `graphFetch<...>` does NOT break the `page`→`next`→`page` control-flow cycle, an explicit annotation on the `page` variable does. And `@rocket.chat/ui-contexts` needs a dist rebuild alongside core/rest/model-typings + models when `SubscriptionWithRoom`-picked fields change.
+
+## 2026-07-19 — Ensō unread beacon + red pulsing unread badges (feat/enso-branding)
+- The rail's bottom ambient ensō doubles as the unread beacon: red badge + white total
+  (wired to the SAME `useSession('unread')` the favicon/title use — can never disagree),
+  click → most recent unread room via useGoToRoom, else /home.
+- Room-list unread badges (all DMs/channels) restyled to the brand-red pulsing dot —
+  ADDITIVELY: `client/components/unreadPulseBadge.ts` injects one global stylesheet
+  targeting `.rcx-sidebar-v2-item__badge`; NO RC core file edited (two in-place
+  UnreadBadge edits were made then REVERTED in favor of the selector approach).
+- Gotchas burned: (1) css() classes are objects — `.join(' ')` produces garbage, use the
+  array form on Box; (2) Fuselage SidebarV2ItemBadge STRINGIFIES className ("()=>e") —
+  css-in-js can't style it, only real string classes/global CSS; (3) the prod build's
+  "error TS" gate MISSED an undefined identifier (shipped a crashing bundle) — browser
+  verification is the only real gate; (4) `UID` is a readonly zsh builtin — never use it
+  as a shell var name in API scripts.
+
+## 2026-07-19 — Redesigned sign-in (Login.dc.html port) (feat/enso-branding)
+- New client/views/root/MainLayout/MatterChatLoginPage.tsx (additive) renders the founder's
+  design: brand chamber (aurora, breathing ensō + rings + reflection, trust bar) + cream card.
+  One marked swap in LoginPage.tsx; every non-login flow (reset/register/secret) falls back to
+  the stock RegistrationRoute. Real auth: useLoginWithPassword + inline error mapping;
+  Omnis ID via Meteor.loginWithOmnisai (gated on OmnisAI_OIDC_Enabled); success bridges via
+  the green EnsoLoader. Verified live: bad creds → inline error; real creds → workspace.
+- Fonts SELF-HOSTED at public/fonts/brand (10 latin woff2: Space Grotesk/Newsreader/
+  JetBrains Mono/Inter Tight) — app CSP blocks Google Fonts.
+- GOTCHA (cost a debugging session): RC paints imgs at transform:scale(2.5) via an ADOPTED
+  stylesheet — invisible in document.styleSheets, no animation, layout box stays correct,
+  only paint scales. Counter with `transform: none !important` on any custom-page img (and
+  re-assert intentional transforms like the ensō reflection's scaleY(-1) with !important).

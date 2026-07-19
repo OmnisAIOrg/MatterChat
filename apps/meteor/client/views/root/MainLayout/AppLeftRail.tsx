@@ -1,14 +1,25 @@
 import { css } from '@rocket.chat/css-in-js';
 import { Box, Icon } from '@rocket.chat/fuselage';
 import { useStableCallback } from '@rocket.chat/fuselage-hooks';
-import { useRouter, useLayout, usePermission, useCurrentRoutePath, useUser, useEndpoint } from '@rocket.chat/ui-contexts';
+import {
+	useRouter,
+	useLayout,
+	usePermission,
+	useCurrentRoutePath,
+	useUser,
+	useEndpoint,
+	useSession,
+	useUserSubscriptions,
+} from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 import type { ComponentProps, ReactElement } from 'react';
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
-import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
+import EnsoMark from '../../../components/EnsoMark';
+import { UNREAD_PULSE_BADGE_CLASS } from '../../../components/unreadPulseBadge';
+import { useGoToRoom } from '../../room/hooks/useGoToRoom';
 import { NOTIFICATIONS_UNREAD_KEY } from '../../boards/notifications/NotificationsInbox';
 import { getUnseenUpdates } from '../../../updates/updatesFeed';
 
@@ -29,7 +40,7 @@ import { getUnseenUpdates } from '../../../updates/updatesFeed';
  *  • Search   → focuses the existing NavBar search combobox (icon 'magnifier')
  *  • Admin    → /admin         (icon 'cog' — admins only)
  *
- * Bottom reuses the existing `UserMenu` (avatar + account menu) from the NavBar — kept here (not in the
+ * Bottom anchors the ambient ensō brand mark (the account menu lives in the NavBar avatar) — (not in the
  * workspace rail) so the account-menu mount that already works is preserved.
  *
  * The rail is intentionally always-dark (independent of the light/dark theme) — the signature
@@ -45,6 +56,23 @@ const ACCENT_RING = 'rgba(27,122,46,0.5)';
 // (pill, rails, accents) but the brand name itself stays red. LitBox keeps its own original blue.
 const MATTERCHAT_RED = '#e1140a';
 
+// Positioning shell for the ensō's unread badge — the red + white + pulse treatment itself
+// comes from the SHARED UNREAD_PULSE_BADGE_CLASS (one definition with the room-list badges).
+const ensoUnreadBadgeClass = css`
+	position: absolute;
+	top: 2px;
+	right: 16px;
+	z-index: 2;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: 9px;
+	font-size: 10.5px;
+	line-height: 18px;
+	text-align: center;
+	pointer-events: none;
+`;
+
 const RAIL_WIDTH = 88;
 const NAV_RAIL_BG = '#1A212C';
 const NAV_RAIL_BORDER = '#2C3644';
@@ -59,6 +87,9 @@ const railClass = css`
 	border-right: 1px solid ${NAV_RAIL_BORDER};
 	box-shadow: inset -1px 0 0 ${WS_RAIL_BG};
 	overflow-y: auto;
+	/* NEVER scrolls sideways — the rail is a fixed column. (The ensō mount's glow can paint wider
+	   than its box; without this the rail becomes horizontally draggable.) */
+	overflow-x: hidden;
 
 	@media print {
 		display: none;
@@ -181,6 +212,27 @@ const AppLeftRail = () => {
 	const { sidebar, navbar, isMobile } = useLayout();
 	const currentRoute = useCurrentRoutePath();
 	const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
+
+	// Total-unread state for the ensō badge — the SAME session key the favicon/title badge uses
+	// (kept by useUnread: a number, '999+', '•' = alert-only, or '' = none).
+	const unreadSession = useSession('unread') as string | number | null | undefined;
+	const unreadLabel = typeof unreadSession === 'number' ? String(unreadSession) : unreadSession && unreadSession !== '•' ? unreadSession : '';
+	const hasUnread = Boolean(unreadLabel) || unreadSession === '•';
+	// The unread rooms themselves (same filter as useUnread) — clicking the ensō jumps to the
+	// most recent one.
+	const unreadSubs = useUserSubscriptions(
+		useMemo(() => ({ 'open': { $ne: false }, 'hideUnreadStatus': { $ne: true }, 'archived': { $ne: true }, '$or': [{ alert: true }, { unread: { $gt: 0 } }] }), []),
+		useMemo(() => ({ fields: { rid: 1, t: 1, unread: 1, alert: 1, lm: 1 } }), []),
+	);
+	const goToRoom = useGoToRoom();
+	const handleEnsoClick = useStableCallback(() => {
+		const next = [...(unreadSubs ?? [])].sort((a, b) => new Date(b.lm ?? 0).getTime() - new Date(a.lm ?? 0).getTime())[0];
+		if (next) {
+			void goToRoom(next.rid);
+			return;
+		}
+		router.navigate('/home');
+	});
 
 	const canViewBoards = usePermission('boards-view');
 	// Admins get a direct rail entry to /admin. This custom rail replaced the stock sidebar's
@@ -383,11 +435,42 @@ const AppLeftRail = () => {
 				{!inExternalMode && renderItem('megaphone', t('Updates'), handleUpdates, updatesActive, 0, hasUnseenUpdates)}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
-			{user && (
-				<Box display='flex' flexDirection='column' alignItems='center' mbs={8}>
-					<UserMenu user={user} />
+			{/* Ambient ensō loop anchors the rail bottom — the living brand mark, replacing the avatar
+			    (the user menu lives in the NavBar's top-right avatar). Doubles as the unread beacon:
+			    a flashing red badge with the total unread count; clicking jumps to the most recent
+			    unread room (or /home when caught up). Inner box clips the brush glow so it can never
+			    widen the rail; the badge sits on the button OUTSIDE the clip. */}
+			<Box
+				is='button'
+				type='button'
+				onClick={handleEnsoClick}
+				title={hasUnread ? t('Unread_Messages', { defaultValue: 'Unread messages' }) : t('Chats')}
+				aria-label={hasUnread ? t('Unread_Messages', { defaultValue: 'Unread messages' }) : t('Chats')}
+				mbs={8}
+				style={{
+					position: 'relative',
+					width: '100%',
+					height: '56px',
+					flexShrink: 0,
+					background: 'none',
+					border: 0,
+					padding: 0,
+					cursor: 'pointer',
+				}}
+			>
+				<Box
+					display='flex'
+					flexDirection='column'
+					alignItems='center'
+					justifyContent='center'
+					style={{ width: '100%', height: '100%', overflow: 'hidden' }}
+				>
+					<EnsoMark size={44} />
 				</Box>
-			)}
+				{/* className must be the ARRAY form — css() classes are css-in-js objects, not strings;
+				    .join(' ') stringifies them into garbage and NO styles apply. */}
+				{hasUnread && <Box is='span' className={[ensoUnreadBadgeClass, UNREAD_PULSE_BADGE_CLASS]}>{unreadLabel || '•'}</Box>}
+			</Box>
 		</Box>
 	);
 };
