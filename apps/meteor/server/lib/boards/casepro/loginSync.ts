@@ -1,4 +1,4 @@
-import { callbacks } from '../../../callbacks';
+import { callbacks } from '../../callbacks';
 import { pullFromCasePro as pullLeadsFromCasePro } from '../leads';
 import { pullFromCasePro as pullMattersFromCasePro } from '../matters';
 import { SystemLogger } from '../../logger/system';
