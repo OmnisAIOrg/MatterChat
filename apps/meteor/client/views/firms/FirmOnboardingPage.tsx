@@ -107,7 +107,7 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 										<TextInput
 											id={nameFieldId}
 											value={firmName}
-											onChange={(e) => setFirmName(e.currentTarget.value)}
+											onChange={(e) => setFirmName((e.target as HTMLInputElement).value)}
 											placeholder={t('Firm_name_placeholder')}
 											disabled={busy}
 										/>
@@ -150,7 +150,7 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 											id={emailsFieldId}
 											rows={4}
 											value={emailsRaw}
-											onChange={(e) => setEmailsRaw(e.currentTarget.value)}
+											onChange={(e) => setEmailsRaw((e.target as HTMLTextAreaElement).value)}
 											placeholder={t('Firm_invite_emails_placeholder')}
 											disabled={busy}
 										/>

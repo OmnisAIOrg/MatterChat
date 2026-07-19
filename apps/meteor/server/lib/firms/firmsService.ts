@@ -1,6 +1,6 @@
 import { Team } from '@rocket.chat/core-services';
 import type { IUser, ITeam } from '@rocket.chat/core-typings';
-import { TEAM_TYPE } from '@rocket.chat/core-typings';
+import { TeamType } from '@rocket.chat/core-typings';
 import { Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
@@ -85,8 +85,8 @@ export const createFirm = async (userId: string, rawName: unknown): Promise<Firm
 		const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
 		try {
 			team = await Team.create(userId, {
-				team: { name: candidate, type: TEAM_TYPE.PRIVATE },
-				room: { readOnly: false, extraData: {} },
+				team: { name: candidate, type: TeamType.PRIVATE },
+				room: { name: candidate, readOnly: false, extraData: {} },
 			});
 		} catch (e: unknown) {
 			lastError = e;
@@ -155,6 +155,9 @@ export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ s
 	// Redeeming it registers the account, joins the team room, and (because the
 	// room is customFields.firmTeam) adopts the user into the firm.
 	const invite = await findOrCreateInvite(userId, { rid: firm.roomId, days: 15, maxUses: 0 });
+	if (!invite) {
+		throw new Meteor.Error('error-invite-failed', 'Could not create the firm invite link', { method: 'firms.invite' });
+	}
 	const siteUrl = settings.get<string>('Site_Url')?.replace(/\/+$/, '') ?? '';
 	const inviteUrl = `${siteUrl}/invite/${invite._id}`;
 
