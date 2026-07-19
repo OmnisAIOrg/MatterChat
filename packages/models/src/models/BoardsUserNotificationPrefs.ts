@@ -30,8 +30,9 @@ export class BoardsUserNotificationPrefsRaw extends BaseRaw<IBoardUserNotificati
 			updatedAt: new Date(),
 		};
 
-		const result = await this.insertOne(defaultPrefs as any);
-		return result.ops[0] || (await this.findByUserId(userId))!;
+		// The modern mongo driver's InsertOneResult has no `.ops`; read the inserted doc back.
+		await this.insertOne(defaultPrefs as any);
+		return (await this.findByUserId(userId))!;
 	}
 
 	async updatePrefs(
@@ -104,7 +105,12 @@ export class BoardsUserNotificationPrefsRaw extends BaseRaw<IBoardUserNotificati
 				}, {} as any);
 
 			default:
-				return {};
+				// Standard defaults for every action (in-app on, email/push off) — must cover
+				// all BoardNotificationAction keys, not an empty object.
+				return actions.reduce((acc, action) => {
+					acc[action] = { inApp: true, email: false, push: false };
+					return acc;
+				}, {} as any);
 		}
 	}
 
