@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 
+// MATTERCHAT: Bridge components
+import { BridgeTeamsBadge } from '../Bridge';
 import FederatedRoomOriginServer from './FederatedRoomOriginServer';
 import ParentRoom from './ParentRoom';
 import RoomTitle from './RoomTitle';
@@ -44,6 +46,8 @@ const RoomHeader = ({ room, slots = {} }: RoomHeaderProps) => {
 					<RoomTitle room={room} />
 					<Favorite room={room} />
 					{isRoomFederated(room) && <FederatedRoomOriginServer room={room} />}
+					{/* MATTERCHAT: Teams bridge badge */}
+					<BridgeTeamsBadge room={room} />
 					<Encrypted room={room} />
 					<Translate room={room} />
 					<RoomTopic room={room} />
