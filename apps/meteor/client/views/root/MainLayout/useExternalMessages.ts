@@ -1,7 +1,7 @@
 import type { ExternalWorkspaceMessage } from '@rocket.chat/rest-typings';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 /**
  * useExternalMessages — REAL read + post for one channel/space of the caller's OWN external connection.
@@ -66,17 +66,47 @@ export const useExternalMessages = (
 	const enabled = Boolean(connectionId && channelExternalId);
 	const queryKey = ['external-workspaces.messages', connectionId ?? '', channelExternalId ?? ''];
 
-	// Recently-sent echoes, kept OUTSIDE the react-query cache and merged into the output below.
-	// The cache-prepend alone is not enough: the reconciling refetch REPLACES the cached list, and
-	// Slack's conversations.history often omits a just-posted message for a few seconds — which made
-	// a sent DM appear and then VANISH until some later refetch. An echo survives here until the
-	// server list actually contains it (by id, or same text within 2 min for local-fallback ids),
-	// with a retention ceiling as the safety valve. Keyed per channel so echoes never leak across.
-	const recentEchoesRef = useRef<Map<string, { msg: EnrichedExternalMessage; at: number }[]>>(new Map());
+	// Sent-message echoes, kept OUTSIDE the react-query cache and merged into the output below.
+	// WHY DURABLE (localStorage, not just memory): Slack's conversations.history API — which this
+	// browse view re-reads on every load — does NOT return a custom (non-Marketplace) app's OWN
+	// sent messages, verified end-to-end: chat.postMessage returns a real ts, yet a same-channel
+	// history read seconds AND days later never contains it. So a message sent from MatterChat would
+	// be invisible here forever even though it reached Slack. We therefore PERSIST every sent message
+	// per (connection, channel) in localStorage and always merge it in — so the user's own messages
+	// survive reloads and days, independent of what Slack's read returns. An echo is dropped only if
+	// the server list genuinely carries it (dedup), with a 30-day retention ceiling.
 	const echoKey = `${connectionId ?? ''}:${channelExternalId ?? ''}`;
-	// A re-render nudge for when an echo is added/dropped. Echoes live in a ref (mutated during the
-	// merge below, which must not trigger a render), so adding one needs an explicit render bump —
-	// WITHOUT touching the react-query cache (see the send() note on why cache-prepend was the bug).
+	const echoStoreKey = `mc-ext-sent:${echoKey}`;
+	const ECHO_RETENTION_MS = 30 * 24 * 60 * 60_000; // 30 days
+	const ECHO_MAX_PER_CHANNEL = 500;
+
+	const loadEchoes = useCallback((): { msg: EnrichedExternalMessage; at: number }[] => {
+		try {
+			const raw = window.localStorage.getItem(echoStoreKey);
+			const arr = raw ? (JSON.parse(raw) as { msg: EnrichedExternalMessage; at: number }[]) : [];
+			return Array.isArray(arr) ? arr.filter((e) => Date.now() - e.at < ECHO_RETENTION_MS) : [];
+		} catch {
+			return [];
+		}
+	}, [echoStoreKey, ECHO_RETENTION_MS]);
+
+	const saveEchoes = useCallback(
+		(arr: { msg: EnrichedExternalMessage; at: number }[]): void => {
+			try {
+				const capped = arr.slice(-ECHO_MAX_PER_CHANNEL);
+				if (capped.length === 0) {
+					window.localStorage.removeItem(echoStoreKey);
+				} else {
+					window.localStorage.setItem(echoStoreKey, JSON.stringify(capped));
+				}
+			} catch {
+				// localStorage full/unavailable — degrade silently (echo just won't persist this session).
+			}
+		},
+		[echoStoreKey, ECHO_MAX_PER_CHANNEL],
+	);
+
+	// A re-render nudge for when an echo is added/dropped (localStorage writes don't trigger a render).
 	const [, bumpEchoRender] = useState(0);
 
 	const query = useQuery({
@@ -114,14 +144,11 @@ export const useExternalMessages = (
 				err.providerError = result.error;
 				throw err;
 			}
-			// INSTANT SEND — echo held in the ref ONLY, never prepended to the react-query cache.
-			// WHY NOT the cache: the merge below confirms/drops an echo once `serverMessages` (which
-			// reads straight from the cache) contains it. Prepending the echo to that same cache made
-			// it look server-confirmed the instant it was sent → it was dropped from the ref → then the
-			// reconciling refetch replaced the cache (Slack's history omits a just-posted message for a
-			// few seconds) → the message appeared for ~1s and then VANISHED for good. Holding the echo
-			// only in the ref keeps `serverMessages` pure, so an echo is dropped ONLY when REAL provider
-			// history carries it. Prefer the server's echoed message; local fallback otherwise.
+			// INSTANT + DURABLE SEND — echo persisted to localStorage, never to the react-query cache.
+			// (Cache-prepend was the OLD bug: it made the echo look server-confirmed instantly, so it got
+			// dropped, then the refetch wiped it — appeared ~1s then vanished. Keeping serverMessages pure
+			// means an echo is dropped ONLY when REAL provider history carries it.) Prefer the server's
+			// echoed message; local fallback otherwise.
 			const serverEcho = (result as { message?: Partial<EnrichedExternalMessage> })?.message;
 			const echo: EnrichedExternalMessage = {
 				externalId: (result as { externalId?: string })?.externalId ?? `local-echo-${Date.now()}`,
@@ -130,17 +157,16 @@ export const useExternalMessages = (
 				createdAt: new Date().toISOString(),
 				...(serverEcho && typeof serverEcho === 'object' ? serverEcho : {}),
 			};
-			const held = recentEchoesRef.current.get(echoKey) ?? [];
-			recentEchoesRef.current.set(echoKey, [...held, { msg: echo, at: Date.now() }]);
-			// Force a render so the merge picks up the new echo immediately (ref mutation alone won't).
+			saveEchoes([...loadEchoes(), { msg: echo, at: Date.now() }]);
+			// Force a render so the merge picks up the new echo immediately.
 			bumpEchoRender((n) => n + 1);
 			// Reconciliation: refetch in the background WITHOUT awaiting — the echo stays visible (via the
-			// ref merge) until the fresh provider list genuinely contains it.
+			// localStorage merge) until the fresh provider list genuinely contains it.
 			void queryClient.invalidateQueries({ queryKey });
 		},
 		// queryKey is derived from the same deps; spreading it would add an unstable array identity.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[enabled, sendMutation, queryClient, connectionId, channelExternalId],
+		[enabled, sendMutation, queryClient, connectionId, channelExternalId, loadEchoes, saveEchoes],
 	);
 
 	const sendError: ExternalEnvelopeError | undefined = sendMutation.isError
@@ -153,11 +179,10 @@ export const useExternalMessages = (
 
 	// Merge surviving echoes into the output. An echo is confirmed (and dropped) once the server
 	// list carries its externalId — or, for local-fallback ids, a message with the same text within
-	// 2 minutes. Unconfirmed echoes stay visible up to the retention ceiling.
-	const ECHO_RETENTION_MS = 10 * 60_000;
+	// 2 minutes. Unconfirmed echoes stay visible up to the 30-day retention ceiling.
 	const serverMessages = data?.ok === true ? data.messages : undefined;
 	let mergedMessages = serverMessages;
-	const held = recentEchoesRef.current.get(echoKey) ?? [];
+	const held = loadEchoes();
 	if (held.length > 0) {
 		const now = Date.now();
 		// Confirmation requires a valid server list: only mark echoes as confirmed if we have
@@ -176,7 +201,7 @@ export const useExternalMessages = (
 		};
 		const surviving = held.filter((e) => now - e.at < ECHO_RETENTION_MS && !confirmed(e.msg));
 		if (surviving.length !== held.length) {
-			recentEchoesRef.current.set(echoKey, surviving);
+			saveEchoes(surviving);
 		}
 		if (surviving.length > 0) {
 			// Newest-first list: echoes are the newest — most recent echo first, then the server list.
