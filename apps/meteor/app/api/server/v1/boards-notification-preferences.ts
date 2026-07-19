@@ -1,153 +1,117 @@
-import type { IUser } from '@rocket.chat/core-typings';
-import { Router } from '@rocket.chat/core-services';
-import { BoardsUserNotificationPrefs } from '@rocket.chat/models';
 import {
 	isBoardsUserNotificationPrefsGetProps,
 	isBoardsUserNotificationPrefsUpdateProps,
 	isBoardsUserNotificationPrefsBoardMuteProps,
 	isBoardsUserNotificationPrefsTestProps,
 } from '@rocket.chat/rest-typings';
+
 import { boardNotificationPrefsService } from '../../../../server/lib/boards/notifications/preferences.service';
+import { API } from '../api';
 
 /**
- * GET /api/v1/boards.user.notification-preferences
- * Fetch the authenticated user's notification preferences.
+ * The authenticated user's Boards notification preferences.
+ * Uses the standard RC API.v1.addRoute pattern (NOT the microservice Router) — every
+ * handler reads this.userId / this.bodyParams and returns API.v1.success/failure. All
+ * routes are self-scoped to the caller (no cross-user access).
+ *
+ *   GET boards.user.notification-preferences        — read my prefs
+ *   PUT boards.user.notification-preferences        — set a preset OR partial-update the matrix
  */
-Router.get('/api/v1/boards.user.notification-preferences', {
-	authRequired: true,
-	validateParams: isBoardsUserNotificationPrefsGetProps,
-	action: async (req, res) => {
-		try {
-			const userId = (req.user as IUser)._id;
+API.v1.addRoute(
+	'boards.user.notification-preferences',
+	{ authRequired: true },
+	{
+		async get() {
+			// GET carries no meaningful params; validate defensively for the contract.
+			if (this.queryParams && !isBoardsUserNotificationPrefsGetProps(this.queryParams)) {
+				return API.v1.failure('invalid-params');
+			}
+			const preferences = await boardNotificationPrefsService.getPreferences(this.userId);
+			return API.v1.success({ preferences });
+		},
+		async put() {
+			if (!isBoardsUserNotificationPrefsUpdateProps(this.bodyParams)) {
+				return API.v1.failure('invalid-params');
+			}
+			const { preset, preferences, mutedBoards, digestFrequency, digestTime } = this.bodyParams as {
+				preset?: 'all' | 'urgent_only' | 'digest_only' | 'silent' | 'default';
+				preferences?: any;
+				mutedBoards?: string[];
+				digestFrequency?: string;
+				digestTime?: string;
+			};
 
-			const preferences = await boardNotificationPrefsService.getPreferences(userId);
-
-			return res.success({ preferences });
-		} catch (error: any) {
-			return res.fail({ error: error.message });
-		}
-	},
-});
-
-/**
- * PUT /api/v1/boards.user.notification-preferences
- * Update the authenticated user's notification preferences.
- * Can update preset, preferences matrix, muted boards, or digest settings.
- */
-Router.put('/api/v1/boards.user.notification-preferences', {
-	authRequired: true,
-	validateParams: isBoardsUserNotificationPrefsUpdateProps,
-	action: async (req, res) => {
-		try {
-			const userId = (req.user as IUser)._id;
-			const { preset, preferences, mutedBoards, digestFrequency, digestTime } = req.body;
-
-			// If preset is provided, set it and ignore preferences
+			// A preset takes precedence and replaces the whole matrix.
 			if (preset) {
-				const updated = await boardNotificationPrefsService.setPreset(userId, preset);
+				const updated = await boardNotificationPrefsService.setPreset(this.userId, preset);
 				if (!updated) {
-					return res.fail({ error: 'Failed to update preferences' });
+					return API.v1.failure('Failed to update preferences');
 				}
-				return res.success({ success: true, updated });
+				return API.v1.success({ success: true, updated });
 			}
 
-			// Otherwise, do a partial update
-			const updates: any = {};
-
+			const updates: Record<string, unknown> = {};
 			if (preferences) {
 				if (!boardNotificationPrefsService.validatePreferences(preferences)) {
-					return res.fail({ error: 'Invalid preferences structure' });
+					return API.v1.failure('Invalid preferences structure');
 				}
 				updates.preferences = preferences;
 			}
-
 			if (mutedBoards !== undefined) {
 				updates.mutedBoards = mutedBoards;
 			}
-
 			if (digestFrequency) {
 				updates.digestFrequency = digestFrequency;
 			}
-
 			if (digestTime) {
 				updates.digestTime = digestTime;
 			}
 
-			const updated = await boardNotificationPrefsService.updatePreferences(userId, updates);
-
+			const updated = await boardNotificationPrefsService.updatePreferences(this.userId, updates);
 			if (!updated) {
-				return res.fail({ error: 'Failed to update preferences' });
+				return API.v1.failure('Failed to update preferences');
 			}
-
-			return res.success({ success: true, updated });
-		} catch (error: any) {
-			return res.fail({ error: error.message });
-		}
+			return API.v1.success({ success: true, updated });
+		},
 	},
-});
+);
 
 /**
- * PUT /api/v1/boards.user.notification-preferences.board-mute
- * Mute or unmute notifications for a specific board.
+ * PUT boards.user.notification-preferences.board-mute — mute/unmute one board for me.
  */
-Router.put('/api/v1/boards.user.notification-preferences.board-mute', {
-	authRequired: true,
-	validateParams: isBoardsUserNotificationPrefsBoardMuteProps,
-	action: async (req, res) => {
-		try {
-			const userId = (req.user as IUser)._id;
-			const { boardId, mute } = req.body;
-
-			let updated;
-			if (mute) {
-				updated = await boardNotificationPrefsService.muteBoard(userId, boardId);
-			} else {
-				updated = await boardNotificationPrefsService.unmuteBoard(userId, boardId);
-			}
-
+API.v1.addRoute(
+	'boards.user.notification-preferences.board-mute',
+	{ authRequired: true, validateParams: isBoardsUserNotificationPrefsBoardMuteProps },
+	{
+		async put() {
+			const { boardId, mute } = this.bodyParams;
+			const updated = mute
+				? await boardNotificationPrefsService.muteBoard(this.userId, boardId)
+				: await boardNotificationPrefsService.unmuteBoard(this.userId, boardId);
 			if (!updated) {
-				return res.fail({ error: 'Failed to update board mute status' });
+				return API.v1.failure('Failed to update board mute status');
 			}
-
-			return res.success({ success: true, mutedBoards: updated.mutedBoards });
-		} catch (error: any) {
-			return res.fail({ error: error.message });
-		}
+			return API.v1.success({ success: true, mutedBoards: updated.mutedBoards });
+		},
 	},
-});
+);
 
 /**
- * POST /api/v1/boards.user.notification-preferences.test
- * Send a test notification to verify user preferences are working.
- * Returns which channels would be used for the given event type.
+ * POST boards.user.notification-preferences.test — report which channels WOULD fire for an
+ * event type under my current prefs (a dry-run; sends nothing).
  */
-Router.post('/api/v1/boards.user.notification-preferences.test', {
-	authRequired: true,
-	validateParams: isBoardsUserNotificationPrefsTestProps,
-	action: async (req, res) => {
-		try {
-			const userId = (req.user as IUser)._id;
-			const { eventType, boardId } = req.body;
-
-			// If no boardId provided, use a dummy board ID to check preferences
+API.v1.addRoute(
+	'boards.user.notification-preferences.test',
+	{ authRequired: true, validateParams: isBoardsUserNotificationPrefsTestProps },
+	{
+		async post() {
+			const { eventType, boardId } = this.bodyParams;
 			const testBoardId = boardId || 'test-board-id';
-
-			// Check what channels would notify for this event type
-			const sent = await boardNotificationPrefsService.shouldNotify(userId, eventType, testBoardId);
-
-			// TODO: In a real implementation, actually send test notifications here
-			// For now, just return what would be sent
-
-			return res.success({
+			const sent = await boardNotificationPrefsService.shouldNotify(this.userId, eventType, testBoardId);
+			return API.v1.success({
 				success: true,
-				sent: {
-					inApp: sent.inApp,
-					email: sent.email,
-					push: sent.push,
-				},
+				sent: { inApp: sent.inApp, email: sent.email, push: sent.push },
 			});
-		} catch (error: any) {
-			return res.fail({ error: error.message });
-		}
+		},
 	},
-});
+);
