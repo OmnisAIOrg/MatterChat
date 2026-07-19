@@ -28,6 +28,15 @@ import { settingsRegistry } from '../../app/settings/server';
  */
 export const createTeamsSettings = () =>
 	settingsRegistry.addGroup('Teams', async function () {
+		// Setup guide — read-only informational setting with step-by-step instructions.
+		await this.add('Teams_Setup_Guide', '', {
+			type: 'string',
+			readonly: true,
+			public: false,
+			i18nLabel: 'Teams_Setup_Guide',
+			i18nDescription: 'Teams_Setup_Guide_Description',
+		});
+
 		// Master switch. Gates the authorize route + provider. Off by default (standalone principle).
 		await this.add('Teams_Enabled', false, {
 			type: 'boolean',

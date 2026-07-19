@@ -27,6 +27,15 @@ import { settingsRegistry } from '../../app/settings/server';
  */
 export const createGoogleSettings = () =>
 	settingsRegistry.addGroup('GoogleChat', async function () {
+		// Setup guide — read-only informational setting with step-by-step instructions.
+		await this.add('GoogleChat_Setup_Guide', '', {
+			type: 'string',
+			readonly: true,
+			public: false,
+			i18nLabel: 'GoogleChat_Setup_Guide',
+			i18nDescription: 'GoogleChat_Setup_Guide_Description',
+		});
+
 		// Master switch. Gates the authorize route + provider. Off by default (standalone principle).
 		await this.add('GoogleChat_Enabled', false, {
 			type: 'boolean',
