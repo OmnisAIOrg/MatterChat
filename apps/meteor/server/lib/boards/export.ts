@@ -1,7 +1,6 @@
 import type { IBoardCard, IBoard, IBoardList, IBoardComment, Serialized, IUser } from '@rocket.chat/core-typings';
-import { Rooms, Users } from '../../../app/models/server';
+import { Users } from '@rocket.chat/models';
 import { getCardsForBoard, getListsForBoard, getBoardInfo } from './index';
-import { db } from '../../../server/database/client';
 
 export type ExportFormat = 'csv' | 'json';
 
@@ -137,10 +136,6 @@ export async function generateBoardExportJSON(
   const cardsResult = await getCardsForBoard(userId, boardId, { offset: 0, count: 10000 });
   const cards = cardsResult.cards;
   const isGuest = await shouldWatermarkExport(userId);
-
-  // Fetch comments for all cards
-  const Rooms_collection = db.getCollection('rocketchat_subscription');
-  const commentsCollection = db.getCollection('rocketchat_room');
 
   const comments: any[] = [];
   const activities: any[] = [];

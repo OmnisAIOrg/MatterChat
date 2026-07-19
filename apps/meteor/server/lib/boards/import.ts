@@ -1,5 +1,5 @@
 import type { IBoard, IBoardCard, IBoardList, IBoardCardAssignee } from '@rocket.chat/core-typings';
-import { Users } from '../../../app/models/server';
+import { Users } from '@rocket.chat/models';
 import { createBoard, createList, createCard } from './index';
 
 export interface TrelloJSON {
