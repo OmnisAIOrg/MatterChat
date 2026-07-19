@@ -7,6 +7,7 @@ export type * from './models/IBaseUploadsModel';
 export type * from './models/ICannedResponseModel';
 export type * from './models/ICredentialTokensModel';
 export type * from './models/IExternalWorkspaceConnectionsModel';
+export type * from './models/IExternalSentMessagesModel';
 export type * from './models/IBoardCalendarConnectionsModel';
 export type * from './models/ICustomSoundsModel';
 export type * from './models/ICustomUserStatusModel';
