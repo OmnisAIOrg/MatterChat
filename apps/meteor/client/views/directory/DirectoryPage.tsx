@@ -1,6 +1,6 @@
-import { Tabs } from '@rocket.chat/fuselage';
+import { Tabs, Box } from '@rocket.chat/fuselage';
 import { Page, PageHeader, PageContent } from '@rocket.chat/ui-client';
-import { useRouter, useRouteParameter, useSetting } from '@rocket.chat/ui-contexts';
+import { useRouter, useRouteParameter, useSetting, usePermission } from '@rocket.chat/ui-contexts';
 import { useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -17,6 +17,14 @@ const DirectoryPage = () => {
 	const federationEnabled = false; // TODO old federation removed
 	const tab = useRouteParameter('tab') as TabName | undefined;
 	const router = useRouter();
+	const canViewDirectory = usePermission('view-directory');
+
+	// MATTERCHAT: Redirect guests (who lack view-directory permission) to home
+	useEffect(() => {
+		if (!canViewDirectory) {
+			router.navigate('/', { replace: true });
+		}
+	}, [canViewDirectory, router]);
 
 	useEffect(
 		() =>

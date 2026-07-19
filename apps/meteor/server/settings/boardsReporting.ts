@@ -9,7 +9,8 @@ import { settingsRegistry } from '../../app/settings/server';
  * API key → ai.generate writes a "not configured" note instead of failing a run.
  *
  * Notifications:
- * - Boards_Notifications_InApp_Enabled : master toggle for the in-app inbox/bell delivery.
+ * - Boards_Notifications_InApp_Enabled  : master toggle for the in-app inbox/bell delivery.
+ * - Boards_Notifications_WebPush_Enabled : master toggle for browser/PWA push (VAPID).
  * - Boards_Email_Digest_Enabled        : whether the periodic email digest of unread items is sent.
  * - Boards_Email_Digest_Schedule       : cron/time the digest cron fires (firm-local; see automation tz).
  *
@@ -31,6 +32,13 @@ export const createBoardsReportingSettings = () =>
 				public: true,
 				i18nLabel: 'Boards_Notifications_InApp_Enabled',
 				i18nDescription: 'Boards_Notifications_InApp_Enabled_Description',
+			});
+
+			await this.add('Boards_Notifications_WebPush_Enabled', true, {
+				type: 'boolean',
+				public: true,
+				i18nLabel: 'Boards_Notifications_WebPush_Enabled',
+				i18nDescription: 'Boards_Notifications_WebPush_Enabled_Description',
 			});
 
 			await this.add('Boards_Email_Digest_Enabled', false, {
