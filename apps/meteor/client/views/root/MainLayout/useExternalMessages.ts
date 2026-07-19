@@ -1,7 +1,7 @@
 import type { ExternalWorkspaceMessage } from '@rocket.chat/rest-typings';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 /**
  * useExternalMessages — REAL read + post for one channel/space of the caller's OWN external connection.
@@ -74,6 +74,10 @@ export const useExternalMessages = (
 	// with a retention ceiling as the safety valve. Keyed per channel so echoes never leak across.
 	const recentEchoesRef = useRef<Map<string, { msg: EnrichedExternalMessage; at: number }[]>>(new Map());
 	const echoKey = `${connectionId ?? ''}:${channelExternalId ?? ''}`;
+	// A re-render nudge for when an echo is added/dropped. Echoes live in a ref (mutated during the
+	// merge below, which must not trigger a render), so adding one needs an explicit render bump —
+	// WITHOUT touching the react-query cache (see the send() note on why cache-prepend was the bug).
+	const [, bumpEchoRender] = useState(0);
 
 	const query = useQuery({
 		queryKey,
@@ -110,9 +114,14 @@ export const useExternalMessages = (
 				err.providerError = result.error;
 				throw err;
 			}
-			// INSTANT SEND: append the sent message to the cached list right away. Prefer the server's
-			// echoed message (the server lane is adding it to the payload); construct a local echo
-			// otherwise. Defaults-first spread so a PARTIAL echo still renders something sensible.
+			// INSTANT SEND — echo held in the ref ONLY, never prepended to the react-query cache.
+			// WHY NOT the cache: the merge below confirms/drops an echo once `serverMessages` (which
+			// reads straight from the cache) contains it. Prepending the echo to that same cache made
+			// it look server-confirmed the instant it was sent → it was dropped from the ref → then the
+			// reconciling refetch replaced the cache (Slack's history omits a just-posted message for a
+			// few seconds) → the message appeared for ~1s and then VANISHED for good. Holding the echo
+			// only in the ref keeps `serverMessages` pure, so an echo is dropped ONLY when REAL provider
+			// history carries it. Prefer the server's echoed message; local fallback otherwise.
 			const serverEcho = (result as { message?: Partial<EnrichedExternalMessage> })?.message;
 			const echo: EnrichedExternalMessage = {
 				externalId: (result as { externalId?: string })?.externalId ?? `local-echo-${Date.now()}`,
@@ -121,23 +130,12 @@ export const useExternalMessages = (
 				createdAt: new Date().toISOString(),
 				...(serverEcho && typeof serverEcho === 'object' ? serverEcho : {}),
 			};
-			queryClient.setQueryData<{ ok: boolean; messages?: EnrichedExternalMessage[] } | undefined>(queryKey, (current) => {
-				if (current?.ok !== true || !Array.isArray(current.messages)) {
-					return current;
-				}
-				// Guard the (unlikely) case a background refetch already delivered the real message.
-				if (current.messages.some((m) => m.externalId === echo.externalId)) {
-					return current;
-				}
-				// The list is stored newest-FIRST (the view reverses for display), so prepend.
-				return { ...current, messages: [echo, ...current.messages] };
-			});
-			// Remember the echo OUTSIDE the cache too — the reconciling refetch replaces the cached
-			// list, and provider history may not include the just-posted message yet (see merge below).
 			const held = recentEchoesRef.current.get(echoKey) ?? [];
 			recentEchoesRef.current.set(echoKey, [...held, { msg: echo, at: Date.now() }]);
-			// Reconciliation: refetch in the background WITHOUT awaiting — the optimistic echo is already
-			// on screen, and react-query keeps showing the cached data until the fresh list lands.
+			// Force a render so the merge picks up the new echo immediately (ref mutation alone won't).
+			bumpEchoRender((n) => n + 1);
+			// Reconciliation: refetch in the background WITHOUT awaiting — the echo stays visible (via the
+			// ref merge) until the fresh provider list genuinely contains it.
 			void queryClient.invalidateQueries({ queryKey });
 		},
 		// queryKey is derived from the same deps; spreading it would add an unstable array identity.
