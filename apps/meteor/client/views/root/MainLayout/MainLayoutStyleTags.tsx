@@ -394,8 +394,12 @@ const buildPremiumDashboardCss = (theme: string): string => {
 		--premium-dashboard-green-light: ${t.greenLight};
 		--premium-dashboard-green-soft: ${t.greenSoft};
 		--premium-dashboard-red: ${t.red};
+		--premium-dashboard-red-soft: ${theme === 'dark' ? 'rgba(224, 104, 93, 0.12)' : 'rgba(207, 68, 56, 0.12)'};
+		--premium-dashboard-red-line: ${theme === 'dark' ? 'rgba(224, 104, 93, 0.3)' : 'rgba(207, 68, 56, 0.3)'};
 		--premium-dashboard-amber: ${t.amber};
+		--premium-dashboard-amber-soft: ${theme === 'dark' ? 'rgba(211, 162, 74, 0.12)' : 'rgba(169, 122, 24, 0.12)'};
 		--premium-dashboard-blue: ${t.blue};
+		--premium-dashboard-blue-soft: ${theme === 'dark' ? 'rgba(122, 163, 216, 0.12)' : 'rgba(60, 110, 180, 0.12)'};
 	}`;
 };
 

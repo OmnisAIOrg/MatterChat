@@ -76,12 +76,12 @@ const StatTile = ({ label, value, accent }: { label: string; value: number; acce
 const ActionCard = ({ icon, title, subtitle, action, link }: { icon: ReactNode; title: string; subtitle: ReactNode; action?: ReactNode; link?: boolean }) => (
 	<Box
 		p={12}
+		display='flex'
+		alignItems='center'
 		style={{
 			background: 'var(--premium-dashboard-surface)',
 			border: '1px solid var(--premium-dashboard-border)',
 			borderRadius: '14px',
-			display: 'flex',
-			alignItems: 'center',
 			gap: '14px',
 			cursor: 'pointer',
 			transition: 'all 150ms',
