@@ -10,6 +10,13 @@ import { getDefaultSubscriptionPref } from '../../../utils/lib/getDefaultSubscri
 import { notifyOnSubscriptionChangedById } from '../lib/notifyListener';
 
 export const addUserToDefaultChannels = async function (user: IUser, silenced?: boolean): Promise<void> {
+	// MATTERCHAT: with self-serve firms on, new accounts land in their own firm
+	// team (created or joined via invite) instead of the shared default channels
+	// — auto-joining every registrant into GENERAL would leak users across firms.
+	if (settings.get('Firms_SelfServe_Enabled') === true) {
+		return;
+	}
+
 	await callbacks.run('beforeJoinDefaultChannels', user);
 	const defaultRooms = await getDefaultChannels();
 

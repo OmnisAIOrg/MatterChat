@@ -7,6 +7,7 @@ import { hasPermissionAsync, hasAllPermissionAsync } from '../../app/authorizati
 import { settings } from '../../app/settings/server';
 import { trim } from '../../lib/utils/stringUtils';
 import { readSecondaryPreferred } from '../database/readSecondaryPreferred';
+import { getFirmScopeExtraQuery, userMatchesFirmScope } from './firms/firmsService';
 import { roomCoordinator } from './rooms/roomCoordinator';
 
 export class Spotlight {
@@ -120,12 +121,24 @@ export class Spotlight {
 		}
 	}
 
-	async _searchOutsiderUsers({ text, usernames, options, users, canListOutsiders, match = { startsWith: false, endsWith: false } }) {
+	async _searchOutsiderUsers({
+		text,
+		usernames,
+		options,
+		users,
+		canListOutsiders,
+		firmScope,
+		match = { startsWith: false, endsWith: false },
+	}) {
 		// Then get the outsiders if allowed
 		if (canListOutsiders) {
 			const searchFields = settings.get('Accounts_SearchFields').trim().split(',');
+			// MATTERCHAT: self-serve firms — outsider search stays inside the caller's firm cohort
+			const extraQuery = firmScope ? [firmScope] : undefined;
 			users.push(
-				...(await Users.findByActiveUsersExcept(text, usernames, options, searchFields, undefined, match).toArray()).map(this.mapOutsiders),
+				...(await Users.findByActiveUsersExcept(text, usernames, options, searchFields, extraQuery, match).toArray()).map(
+					this.mapOutsiders,
+				),
 			);
 
 			// If the limit was reached, return
@@ -190,6 +203,9 @@ export class Spotlight {
 		const canListOutsiders = await hasAllPermissionAsync(userId, ['view-outside-room', 'view-d-room']);
 		const canListInsiders = canListOutsiders || (rid && (await canAccessRoomAsync(room, { _id: userId })));
 
+		// MATTERCHAT: self-serve firms — non-admin searches are scoped to the caller's firm cohort
+		const firmScope = await getFirmScopeExtraQuery(userId);
+
 		const insiderExtraQuery = [];
 
 		if (rid) {
@@ -221,6 +237,7 @@ export class Spotlight {
 			options,
 			users,
 			canListOutsiders,
+			firmScope,
 			insiderExtraQuery,
 			mentions,
 		};
@@ -243,10 +260,12 @@ export class Spotlight {
 
 		if (users.length === 0 && canListOutsiders && text) {
 			const exactMatch = await Users.findOneByUsernameIgnoringCase(text, {
-				projection: options.projection,
+				projection: { ...options.projection, ...(firmScope && { customFields: 1 }) },
 				readPreference: options.readPreference,
 			});
-			if (exactMatch) {
+			// MATTERCHAT: exact-username lookups must not leak users outside the firm cohort
+			if (exactMatch && userMatchesFirmScope(exactMatch, firmScope)) {
+				delete exactMatch.customFields;
 				users.push(this.mapOutsiders(exactMatch));
 				this.processLimitAndUsernames(options, usernames, users);
 			}

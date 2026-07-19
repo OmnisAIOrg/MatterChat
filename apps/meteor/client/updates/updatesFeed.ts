@@ -15,18 +15,31 @@ export interface UpdateEntry {
 }
 
 export const updatesFeed: UpdateEntry[] = [
+	// Wave 4
+	{
+		id: 'w4-self-serve-firms',
+		title: 'Self-serve Signup, Firms & Invites',
+		date: '2026-07-19',
+		tag: 'Wave 4',
+		description:
+			'Create an account on app.matterchat.com, set up your firm in one step, and invite teammates by email. Each firm gets its own private team, and user search/directory stays scoped to your firm.',
+		features: [
+			'Public account registration with email verification',
+			'One-step firm creation during onboarding',
+			'Email invitations that land teammates directly in your firm',
+			'Firm-scoped user directory and search',
+		],
+	},
+
 	// Wave 3 Features (In Progress)
 	{
 		id: 'w3-updates-tab',
 		title: 'Updates Tab',
 		date: '2026-07-18',
 		tag: 'Wave 3',
-		description: 'Desktop-app-style changelog view listing all shipped updates and features with dates and descriptions. NEW badge on nav entry for unseen updates.',
-		features: [
-			'Updates feed with versioned entries',
-			'Unseen update badge on nav',
-			'localStorage tracking for last-seen',
-		],
+		description:
+			'Desktop-app-style changelog view listing all shipped updates and features with dates and descriptions. NEW badge on nav entry for unseen updates.',
+		features: ['Updates feed with versioned entries', 'Unseen update badge on nav', 'localStorage tracking for last-seen'],
 	},
 	{
 		id: 'w3-foundation',
@@ -43,11 +56,7 @@ export const updatesFeed: UpdateEntry[] = [
 		date: '2026-07-17',
 		tag: 'Wave 2',
 		description: 'Fixed boards pagination and improved kanban UI for better task management.',
-		features: [
-			'Resolved pagination bugs in board views',
-			'Enhanced kanban card drag-and-drop',
-			'Improved board loading performance',
-		],
+		features: ['Resolved pagination bugs in board views', 'Enhanced kanban card drag-and-drop', 'Improved board loading performance'],
 	},
 	{
 		id: 'w2-bridge-reactions',
@@ -68,12 +77,7 @@ export const updatesFeed: UpdateEntry[] = [
 		date: '2026-07-17',
 		tag: 'Wave 2',
 		description: 'Improved connector setup experience with guided workflows and clear configuration steps.',
-		features: [
-			'Step-by-step setup wizards',
-			'Clear error messaging',
-			'Integration status indicators',
-			'Quick-start documentation',
-		],
+		features: ['Step-by-step setup wizards', 'Clear error messaging', 'Integration status indicators', 'Quick-start documentation'],
 	},
 	{
 		id: 'w2-auto-sync',
@@ -81,12 +85,7 @@ export const updatesFeed: UpdateEntry[] = [
 		date: '2026-07-16',
 		tag: 'Wave 2',
 		description: 'Automatic synchronization of bridged workspace data with real-time status indicators.',
-		features: [
-			'Real-time sync status',
-			'Auto-retry failed syncs',
-			'Sync history log',
-			'Connection health indicators',
-		],
+		features: ['Real-time sync status', 'Auto-retry failed syncs', 'Sync history log', 'Connection health indicators'],
 	},
 	{
 		id: 'w2-matters-search',
@@ -94,12 +93,7 @@ export const updatesFeed: UpdateEntry[] = [
 		date: '2026-07-16',
 		tag: 'Wave 2',
 		description: 'Full-text search capabilities for matters, including name, ID, and case metadata.',
-		features: [
-			'Case-insensitive search',
-			'Filter by matter type',
-			'Filter by stage',
-			'Recent searches saved',
-		],
+		features: ['Case-insensitive search', 'Filter by matter type', 'Filter by stage', 'Recent searches saved'],
 	},
 	{
 		id: 'w2-full-names',
@@ -107,12 +101,7 @@ export const updatesFeed: UpdateEntry[] = [
 		date: '2026-07-15',
 		tag: 'Wave 2',
 		description: 'Support for full names and customizable display preferences across the platform.',
-		features: [
-			'Display name customization',
-			'Full name profile fields',
-			'Consistent name display',
-			'Name formatting options',
-		],
+		features: ['Display name customization', 'Full name profile fields', 'Consistent name display', 'Name formatting options'],
 	},
 
 	// Future Wave 3 Items (Planned)

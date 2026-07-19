@@ -39,6 +39,7 @@ import { generatePersonalAccessTokenOfUser } from '../../../../imports/personal-
 import { regeneratePersonalAccessTokenOfUser } from '../../../../imports/personal-access-tokens/server/api/methods/regenerateToken';
 import { removePersonalAccessTokenOfUser } from '../../../../imports/personal-access-tokens/server/api/methods/removeToken';
 import { UserChangedAuditStore } from '../../../../server/lib/auditServerEvents/userChanged';
+import { getFirmScopeExtraQuery } from '../../../../server/lib/firms/firmsService';
 import { i18n } from '../../../../server/lib/i18n';
 import { SystemLogger } from '../../../../server/lib/logger/system';
 import { resetUserE2EEncriptionKey } from '../../../../server/lib/resetUserE2EKey';
@@ -698,6 +699,11 @@ API.v1.addRoute(
 				throw new Meteor.Error('error-invalid-query', isValidQuery.errors.join('\n'));
 			}
 
+			// MATTERCHAT: self-serve firms — scope the listing to the caller's firm
+			// cohort (view-d-room is a default permission, so without this the
+			// endpoint would leak the full cross-firm directory). Admins exempt.
+			const firmScope = await getFirmScopeExtraQuery(this.userId);
+
 			const actualSort = sort || { username: 1 };
 
 			if (sort?.status) {
@@ -720,7 +726,7 @@ API.v1.addRoute(
 			const result = await Users.col
 				.aggregate<{ sortedResults: IUser[]; totalCount: { total: number }[] }>([
 					{
-						$match: nonEmptyQuery,
+						$match: firmScope ? { $and: [nonEmptyQuery, firmScope] } : nonEmptyQuery,
 					},
 					{
 						$project: inclusiveFields,

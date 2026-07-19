@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 
 import { validateInviteToken } from './validateInviteToken';
 import { RoomMemberActions } from '../../../../definition/IRoomTypeConfig';
+import { adoptUserIntoFirm, isSelfServeFirmsEnabled } from '../../../../server/lib/firms/firmsService';
 import { roomCoordinator } from '../../../../server/lib/rooms/roomCoordinator';
 import { addUserToRoom } from '../../../lib/server/functions/addUserToRoom';
 
@@ -55,6 +56,19 @@ export const useInviteToken = async (userId: string, token: string) => {
 	// If no username is set yet, then the the join will happen on the setUsername method
 	if (user.username) {
 		await addUserToRoom(room._id, user);
+	}
+
+	// MATTERCHAT: joining a firm team's main channel via invite adopts the user
+	// into that firm (self-serve firms). Best-effort; never blocks the join.
+	if (
+		isSelfServeFirmsEnabled() &&
+		room.teamMain &&
+		room.teamId &&
+		(room.customFields as Record<string, unknown> | undefined)?.firmTeam === true &&
+		!(user.customFields as Record<string, unknown> | undefined)?.firmId
+	) {
+		const firmName = (room.customFields as Record<string, unknown> | undefined)?.firmName;
+		await adoptUserIntoFirm(user._id, room.teamId, typeof firmName === 'string' ? firmName : undefined);
 	}
 
 	return {

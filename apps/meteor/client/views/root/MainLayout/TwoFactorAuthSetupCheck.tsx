@@ -3,7 +3,7 @@ import { useLayout } from '@rocket.chat/ui-contexts';
 import type { ReactNode } from 'react';
 import { lazy } from 'react';
 
-import LayoutWithSidebar from './LayoutWithSidebar';
+import FirmSetupCheck from './FirmSetupCheck';
 import MainContent from './MainContent';
 import { useRequire2faSetup } from '../../hooks/useRequire2faSetup';
 
@@ -23,7 +23,8 @@ const TwoFactorAuthSetupCheck = ({ children }: { children: ReactNode }) => {
 		);
 	}
 
-	return <LayoutWithSidebar>{children}</LayoutWithSidebar>;
+	// MATTERCHAT: firm onboarding gate wraps the normal layout (self-serve firms)
+	return <FirmSetupCheck>{children}</FirmSetupCheck>;
 };
 
 export default TwoFactorAuthSetupCheck;
