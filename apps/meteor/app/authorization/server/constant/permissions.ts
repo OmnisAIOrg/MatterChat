@@ -243,8 +243,13 @@ export const permissions = [
 	{ _id: 'bypass-time-limit-edit-and-delete', roles: ['bot', 'app'] },
 	{ _id: 'export-messages-as-pdf', roles: ['admin', 'user'] },
 
+	// MATTERCHAT: Guest tier access to directory (invited boards/channels only).
+	// Guests cannot browse the directory to discover new channels or users.
+	{ _id: 'view-directory', roles: ['admin', 'user', 'federated-external', 'partner', 'attorney', 'paralegal', 'case-manager', 'intake-specialist', 'intake-manager', 'marketing'] },
+
 	// Boards (kanban / matters / leads) — see omnis-boards-build MASTER-PLAN §A.4
-	{ _id: 'boards-view', roles: ['admin', 'user', 'partner'] },
+	// Guests can view only invited boards (board member acl enforced server-side).
+	{ _id: 'boards-view', roles: ['admin', 'user', 'partner', 'guest'] },
 	{ _id: 'boards-create', roles: ['admin', 'user', 'attorney', 'case-manager', 'partner'] },
 	{ _id: 'boards-admin', roles: ['admin', 'partner'] },
 	{ _id: 'boards-matters-view', roles: ['admin', 'attorney', 'case-manager', 'paralegal'] },
