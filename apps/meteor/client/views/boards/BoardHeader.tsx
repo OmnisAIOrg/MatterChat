@@ -10,6 +10,7 @@ import BoardStatusControl from './BoardStatusControl';
 import { BoardAutomationsButton, BoardButtonsMenu } from './automation';
 import { CaseProConnectionControls, CaseProStatusChip } from './casepro';
 import BoardFormsButton from './forms/BoardFormsButton';
+import ExportImportMenu from './ExportImportMenu';
 import { getPipelineTypeIcon } from './lib/icons';
 import ViewSwitcher from './views/ViewSwitcher';
 
@@ -108,6 +109,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 				<ButtonGroup>
 					<BoardStatusControl board={board} />
 					<BoardFormsButton boardId={board._id} />
+					<ExportImportMenu boardId={board._id} boardTitle={board.title} lists={lists} />
 					<BoardButtonsMenu boardId={board._id} />
 					<BoardAutomationsButton boardId={board._id} />
 				</ButtonGroup>

@@ -32,6 +32,7 @@ Updated 2026-07-01 · branch `staging`. (Resume workflow: `CLAUDE.md`; live hand
 | Parity | Milestones | server | harness |
 | Parity | Approvals (request → approved/changes/rejected) | server | harness |
 | Parity | Global cross‑board search | server | harness |
+| Notifications | Board push notifications (VAPID web-push + in-app bell) | `app/web-push`, `boards/notifications` | code + parsecheck |
 | AI | CHI tool server — 23 MCP tools | `~/matterchat-mcp-v2` | smoke + live |
 | Cross‑firm | CFCS trust core (channel‑hosted, CasePro‑free) | `~/omnis-counsel` + client panel | browser + tests |
 | Tooling | Velocity harness (dev server + API test suite) | — | proven |
