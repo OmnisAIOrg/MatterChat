@@ -1396,6 +1396,8 @@
   "Boards_Matters_Stuck_Over_Days": "> {{days}}d in stage",
   "Boards_Matters_Sync_From_CasePro": "Sync from CasePro",
   "Boards_Matters_Sync_Result": "Synced {{bound}} of {{total}} matters ({{skipped}} skipped)",
+  "No_Matters_Found": "No matters found",
+  "Search_Matters": "Search matters",
   "Boards_Matters_Team": "Team",
   "Boards_Matters_Top_Offer": "Top offer",
   "Boards_Matters_Total_Balance": "Total balance",

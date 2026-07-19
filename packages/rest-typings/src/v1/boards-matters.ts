@@ -454,6 +454,10 @@ export type BoardsMattersEndpoints = {
 	'/v1/boards.matters.ensureBoard': {
 		POST: (params: BoardsMattersEnsureBoardProps) => { board: IBoard; lists: IBoardList[] };
 	};
+	// Auto-sync status poll for the matters header pill (login-hook + cron syncs).
+	'/v1/boards.casepro.syncStatus': {
+		GET: () => { syncing: boolean; lastSyncFinishedAt?: string; lastSyncError?: string };
+	};
 	'/v1/boards.matters.bind': {
 		POST: (params: BoardsMattersBindProps) => { card: IBoardCard };
 	};
