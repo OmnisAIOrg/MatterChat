@@ -1,12 +1,16 @@
-import type { IBoardTemplate, IBoard, IBoardList } from '@rocket.chat/core-typings';
-import { Boards, BoardsLists } from '@rocket.chat/models';
+import type { IBoardTemplate, IBoard } from '@rocket.chat/core-typings';
+import { Boards, BoardsLists, BoardsCards } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
+import { ObjectId } from 'mongodb';
 
-// Placeholder for BoardTemplates collection — will be added to @rocket.chat/models
-// For now, using a simple in-memory store for seeding
+import { assertBoardRole } from './permissions';
+import { createBoard } from './service';
+
+// Board Templates - seed templates for common workflows
 const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 	{
+		_id: new ObjectId(),
 		name: 'PI Intake Checklist',
 		description: 'Standard personal injury intake workflow with discovery checklists',
 		pipelineType: 'matters',
@@ -17,20 +21,8 @@ const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 			{ id: 'settlement', name: 'Settlement', order: 3072 },
 		],
 		fieldDefs: [
-			{
-				id: Random.id(),
-				name: 'Statute of Limitations',
-				type: 'date',
-				showOnFront: true,
-				position: 0,
-			},
-			{
-				id: Random.id(),
-				name: 'Case Value',
-				type: 'currency',
-				showOnFront: true,
-				position: 1,
-			},
+			{ id: Random.id(), name: 'Statute of Limitations', type: 'date', showOnFront: true, position: 0 },
+			{ id: Random.id(), name: 'Case Value', type: 'currency', showOnFront: true, position: 1 },
 		],
 		labelDefs: [
 			{ id: Random.id(), name: 'Urgent', color: '#cf4438' },
@@ -41,8 +33,12 @@ const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 		deprecated: false,
 		usageCount: 0,
 		schemaVersion: 1,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+		createdBy: 'system',
 	},
 	{
+		_id: new ObjectId(),
 		name: 'Discovery Phase Tasks',
 		description: 'Organized discovery document review and production tracking',
 		pipelineType: 'matters',
@@ -53,20 +49,8 @@ const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 			{ id: 'privileged', name: 'Privileged/Redacted', order: 3072 },
 		],
 		fieldDefs: [
-			{
-				id: Random.id(),
-				name: 'Document Count',
-				type: 'number',
-				showOnFront: true,
-				position: 0,
-			},
-			{
-				id: Random.id(),
-				name: 'Review Deadline',
-				type: 'date',
-				showOnFront: true,
-				position: 1,
-			},
+			{ id: Random.id(), name: 'Document Count', type: 'number', showOnFront: true, position: 0 },
+			{ id: Random.id(), name: 'Review Deadline', type: 'date', showOnFront: true, position: 1 },
 		],
 		labelDefs: [
 			{ id: Random.id(), name: 'Confidential', color: '#ea4435' },
@@ -77,8 +61,12 @@ const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 		deprecated: false,
 		usageCount: 0,
 		schemaVersion: 1,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+		createdBy: 'system',
 	},
 	{
+		_id: new ObjectId(),
 		name: 'Settlement Negotiations',
 		description: 'Track settlement offers, counteroffers, and resolution status',
 		pipelineType: 'matters',
@@ -89,20 +77,8 @@ const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 			{ id: 'resolved', name: 'Resolved', order: 3072 },
 		],
 		fieldDefs: [
-			{
-				id: Random.id(),
-				name: 'Offer Amount',
-				type: 'currency',
-				showOnFront: true,
-				position: 0,
-			},
-			{
-				id: Random.id(),
-				name: 'Settlement Deadline',
-				type: 'date',
-				showOnFront: true,
-				position: 1,
-			},
+			{ id: Random.id(), name: 'Offer Amount', type: 'currency', showOnFront: true, position: 0 },
+			{ id: Random.id(), name: 'Settlement Deadline', type: 'date', showOnFront: true, position: 1 },
 			{
 				id: Random.id(),
 				name: 'Status',
@@ -124,13 +100,14 @@ const SEED_TEMPLATES: Partial<IBoardTemplate>[] = [
 		deprecated: false,
 		usageCount: 0,
 		schemaVersion: 1,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+		createdBy: 'system',
 	},
 ];
 
 export async function seedBoardTemplates(): Promise<void> {
-	// NOTE: This is a placeholder. In production, BoardTemplates collection
-	// would be added to @rocket.chat/models and used here to seed templates.
-	// For now, this documents the seeding logic that will run on workspace init.
+	// Placeholder: In production, this would seed templates to BoardTemplates collection
 }
 
 export type SaveBoardAsTemplateParams = {
@@ -145,20 +122,19 @@ export async function saveBoardAsTemplate(
 	uid: string,
 	params: SaveBoardAsTemplateParams,
 ): Promise<{ templateId: string; uri: string }> {
-	// Load board & lists for snapshot
+	await assertBoardRole(params.boardId, uid, 'admin', 'boards.templates.save');
+
 	const board = await Boards.findOneById(params.boardId);
 	if (!board) {
 		throw new Meteor.Error('error-board-not-found', 'Board not found');
 	}
 
 	const lists = await BoardsLists.findByBoard(params.boardId).toArray();
-
-	// TODO: Create BoardTemplate document in collection
-	// For now, return placeholder
 	const templateId = Random.id();
-	const uri = `board-template-${templateId}`;
 
-	return { templateId, uri };
+	// In production: create BoardTemplate document in collection
+	// For now, return template info for frontend confirmation
+	return { templateId, uri: `board-template-${templateId}` };
 }
 
 export type CreateBoardFromTemplateParams = {
@@ -171,19 +147,54 @@ export async function createBoardFromTemplate(
 	uid: string,
 	params: CreateBoardFromTemplateParams,
 ): Promise<IBoard> {
-	// TODO: Load template, clone structure into new board
-	// For now, throw placeholder
-	throw new Meteor.Error('error-not-implemented', 'Template creation coming soon');
+	const template = SEED_TEMPLATES.find((t) => t._id?.toString() === params.templateId);
+	if (!template) {
+		throw new Meteor.Error('error-template-not-found', 'Template not found');
+	}
+
+	const board = await createBoard(uid, {
+		title: params.name,
+		pipelineType: template.pipelineType,
+		teamId: params.teamId,
+	});
+
+	if (template.lists) {
+		for (const templateList of template.lists) {
+			await BoardsLists.insertOne({
+				_id: new ObjectId(),
+				boardId: board._id,
+				title: templateList.name,
+				position: templateList.order,
+				caseproStageId: (templateList as any).defaultStageId,
+				archived: false,
+				createdAt: new Date(),
+			} as any);
+		}
+	}
+
+	if (template.fieldDefs || template.labelDefs) {
+		await Boards.updateOne(
+			{ _id: board._id },
+			{
+				$set: {
+					fieldDefs: template.fieldDefs || [],
+					labelDefs: template.labelDefs || [],
+				},
+			},
+		);
+	}
+
+	return board;
 }
 
 export function listBoardTemplates(
 	visibility?: 'private' | 'team' | 'firm',
 	pipelineType?: string,
 ): Partial<IBoardTemplate>[] {
-	// TODO: Query BoardTemplates collection with filters
-	// For now, return seed templates
 	return SEED_TEMPLATES.filter((t) => {
 		if (pipelineType && t.pipelineType !== pipelineType) return false;
+		if (visibility && t.visibility !== visibility) return false;
+		if (t.deprecated) return false;
 		return true;
 	});
 }
