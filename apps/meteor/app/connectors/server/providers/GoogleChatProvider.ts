@@ -74,6 +74,13 @@ function notConfigured(): never {
 	throw new Error('google_not_configured');
 }
 
+/**
+ * Cache user → DM space resolution per connection to avoid repeated lookups.
+ * Keyed by connection id, maps user resource names to space resource names.
+ * Entries are garbage-collected when the connection is discarded (unbridged/disconnected).
+ */
+const userToDmSpaceCache = new Map<string, Map<string, string>>();
+
 /** How many message pages (×pageSize) to read in one syncMessages call — a reasonable backfill cap. */
 const MAX_MESSAGE_PAGES = 5;
 const MESSAGE_PAGE_SIZE = 50;
@@ -179,11 +186,58 @@ type GoogleMembership = { name?: string; member?: GoogleChatUser; groupMember?: 
 /** Page size for spaces.members.list — members per space are few, one page usually suffices. */
 const MEMBER_PAGE_SIZE = 100;
 
+// ── user display-name cache (aggregate from space memberships; 6h TTL) ───────────────────────────
+
+const DISPLAY_NAME_TTL_MS = 6 * 60 * 60 * 1000; // display names move slowly; 6h keeps lookups rare.
+const DISPLAY_NAME_CACHE_MAX = 2000;
+
+const displayNameCache = new Map<string, { name: string | undefined; expiresAt: number }>();
+
+/** Test hook: empty the display-name cache. */
+export function clearDisplayNameCache(): void {
+	displayNameCache.clear();
+}
+
+/**
+ * Resolve a Google Chat user id (e.g., `users/{id}`) to a display name using the cache,
+ * populated from member lookups. TTL-cached per user, capped, best-effort (any failure caches
+ * undefined so one broken lookup doesn't retry per message; falls back to the raw id).
+ */
+function resolveUserDisplayName(userId: string | undefined): string | undefined {
+	if (!userId) {
+		return undefined;
+	}
+	const cached = displayNameCache.get(userId);
+	if (cached && cached.expiresAt > Date.now()) {
+		return cached.name;
+	}
+	// Not cached or expired — return undefined to signal caller should use fallback
+	return undefined;
+}
+
+/**
+ * Cache a user's display name, internal use by member-fetching functions.
+ * Oldest-first eviction when cache is full (Map preserves insertion order).
+ */
+function cacheUserDisplayName(userId: string, displayName: string | undefined): void {
+	if (!userId) {
+		return;
+	}
+	if (displayNameCache.size >= DISPLAY_NAME_CACHE_MAX) {
+		const oldest = displayNameCache.keys().next().value;
+		if (oldest !== undefined) {
+			displayNameCache.delete(oldest);
+		}
+	}
+	displayNameCache.set(userId, { name: displayName, expiresAt: Date.now() + DISPLAY_NAME_TTL_MS });
+}
+
 /**
  * List a space's HUMAN members via spaces.members.list: GET /v1/{space}/members?pageSize=100 (paged via
  * nextPageToken, field `memberships`). Returns the `member` User of each membership (group memberships,
  * which have no per-person id, are dropped). Requires the delegated `chat.memberships.readonly` scope —
  * a missing-scope/permission failure rides back UNSWALLOWED via googleGetAll (`google_error:...`).
+ * As a side effect, populates the display-name cache for later resolution.
  */
 async function fetchSpaceMembers(space: string, tokens: GoogleTokens, onRefreshed?: OnRefreshed): Promise<GoogleChatUser[]> {
 	const memberships = await googleGetAll<GoogleMembership>(
@@ -196,6 +250,8 @@ async function fetchSpaceMembers(space: string, tokens: GoogleTokens, onRefreshe
 	for (const m of memberships) {
 		// Only person ("member") memberships carry a user id; skip Google-group ("groupMember") rows.
 		if (m?.member?.name) {
+			// Cache the display name for later resolution
+			cacheUserDisplayName(m.member.name, m.member.displayName);
 			users.push(m.member);
 		}
 	}
@@ -287,8 +343,68 @@ export class GoogleChatProvider implements IChatProvider {
 	 * the next milestone), so this is a no-op today — disconnect at the record level is handled by
 	 * connectionService.
 	 */
-	async disconnect(_connection: IProviderConnection): Promise<void> {
-		// No live Google subscriptions to delete until the realtime milestone; nothing to release.
+	async disconnect(connection: IProviderConnection): Promise<void> {
+		// Clean up the cached user→DM space mapping when the connection is torn down.
+		userToDmSpaceCache.delete(connection.connectionId);
+	}
+
+	/**
+	 * Canonicalize a channel/space id before persisting in a bridge record. When the People
+	 * directory is used to bridge a person, it passes the user resource name (`users/{id}`),
+	 * but Google Chat's message endpoints (syncMessages/postMessage) require the space resource
+	 * name (`spaces/{id}`). This resolves user ids to their corresponding DM space via
+	 * `spaces.findDirectMessage` (creates the DM if it doesn't exist yet) and caches the result
+	 * to avoid repeated lookups.
+	 */
+	async resolveBridgeChannelId(connection: IProviderConnection, channelExternalId: string): Promise<string> {
+		if (!isGoogleConfigured()) {
+			return notConfigured();
+		}
+		// If it's already a space id, return it unchanged.
+		if (channelExternalId.startsWith('spaces/')) {
+			return channelExternalId;
+		}
+		// If it's not a user id, return unchanged (best-effort: let the caller's logic handle it).
+		if (!channelExternalId.startsWith('users/')) {
+			return channelExternalId;
+		}
+
+		// Check cache for this connection's user→space mapping.
+		let connectionCache = userToDmSpaceCache.get(connection.connectionId);
+		if (connectionCache?.has(channelExternalId)) {
+			return connectionCache.get(channelExternalId) || channelExternalId;
+		}
+
+		// Miss: look up the DM space via spaces.findDirectMessage.
+		const { tokens, onRefreshed } = tokensAndHook(connection);
+		try {
+			const response = await googleFetch<{ space?: string }>(
+				`${CHAT_BASE}/spaces:findDirectMessage?displayName=${encodeURIComponent(channelExternalId)}`,
+				tokens,
+				{},
+				onRefreshed,
+			);
+			const spaceId = response.space;
+			if (spaceId) {
+				// Cache the mapping for this connection.
+				if (!connectionCache) {
+					connectionCache = new Map();
+					userToDmSpaceCache.set(connection.connectionId, connectionCache);
+				}
+				connectionCache.set(channelExternalId, spaceId);
+				return spaceId;
+			}
+		} catch (err) {
+			SystemLogger.debug({
+				msg: 'Google Chat DM space resolution failed (using raw user id)',
+				connectionId: connection.connectionId,
+				userId: channelExternalId,
+				err: String(err),
+			});
+		}
+
+		// Fallback: return the raw user id (will likely fail downstream with a clear error).
+		return channelExternalId;
 	}
 
 	// ─── discovery ─────────────────────────────────────────────────────────────────────────────
@@ -386,7 +502,20 @@ export class GoogleChatProvider implements IChatProvider {
 				SystemLogger.debug({ msg: 'Google Chat listDirectChats member lookup failed for a space', space: space.name, err: String(err) });
 			}
 
-			const memberNames = members.map((m) => m.displayName).filter((n): n is string => Boolean(n));
+			// Resolve display names for all members, using cached values when available.
+			const memberNames = members
+				.map((m) => {
+					// Prefer the member's displayName; fall back to cached name or raw id.
+					if (m.displayName) {
+						return m.displayName;
+					}
+					if (m.name) {
+						const cached = resolveUserDisplayName(m.name);
+						return cached || m.name;
+					}
+					return undefined;
+				})
+				.filter((n): n is string => Boolean(n));
 			const memberExternalIds = members.map((m) => m.name).filter((id): id is string => Boolean(id));
 
 			// Prefer the joined member display names (the other people in the DM). Group DMs may also carry a
@@ -465,9 +594,11 @@ export class GoogleChatProvider implements IChatProvider {
 				if (m.type && m.type !== 'HUMAN') {
 					continue;
 				}
+				// Resolve display name: prefer the member's displayName, fall back to cache, then raw id.
+				const displayName = m.displayName || resolveUserDisplayName(externalId) || externalId;
 				byUserId.set(externalId, {
 					externalId,
-					displayName: m.displayName || externalId,
+					displayName,
 					// avatarUrl rides through ONLY if the membership User carries one — the Chat API does not
 					// populate a photo on this block today, so in practice this stays undefined (see caveats).
 					...(m.avatarUrl ? { avatarUrl: m.avatarUrl } : {}),
@@ -484,8 +615,9 @@ export class GoogleChatProvider implements IChatProvider {
 	 * Read a space's messages: GET /v1/{space}/messages?pageSize=50&orderBy=createTime%20desc, paged via nextPageToken up to
 	 * MAX_MESSAGE_PAGES. Fetches NEWEST messages first (descending order), then reverses to maintain the
 	 * ascending order contract documented below. Each Google message is mapped to IProviderMessage — author from
-	 * `sender.displayName` (falls back to the sender resource name), text from `text`, `ts` from
-	 * `createTime`. Messages without text (pure attachments/cards) still flow through with empty text.
+	 * `sender.displayName`, with TTL-cached fallback to resolved display names (populated by member lookups).
+	 * Text from `text`, `ts` from `createTime`. Messages without text (pure attachments/cards) still flow through
+	 * with empty text.
 	 *
 	 * `channelExternalId` is the `spaces/{id}` resource name listChannels emitted. `since` is an
 	 * optional ISO timestamp; messages at/older than it are skipped client-side. Returns messages in
@@ -539,7 +671,8 @@ export class GoogleChatProvider implements IChatProvider {
 				}
 
 				const authorId = msg.sender?.name || '';
-				const authorName = msg.sender?.displayName;
+				// Resolve author display name: prefer sender.displayName, then cached, then raw id.
+				const authorName = msg.sender?.displayName || resolveUserDisplayName(authorId);
 
 				collectedMessages.push({
 					externalId: msg.name,
