@@ -22,8 +22,14 @@ const OmnisAILoginRoute = () => {
 				return;
 			}
 
-			// Success: navigate to home
-			router.navigate({ pathname: '/home' }, { replace: true });
+			// Success: HARD-reload into the app rather than an SPA navigate. In the desktop
+			// webview (and on any slow reconnect) the resume token persists but the LIVE session
+			// hasn't activated the instant this callback fires, so an SPA navigate to /home gets
+			// bounced back to /login by the auth guard — you land on the login screen even though
+			// you're "logged in" (a restart then boots you straight in). A full reload boots fresh,
+			// reads the now-persisted resume token, and lands in the authenticated workspace —
+			// automatically doing what the manual restart did. `router` no longer needed on success.
+			window.location.replace('/home');
 		});
 	}, [router]);
 
