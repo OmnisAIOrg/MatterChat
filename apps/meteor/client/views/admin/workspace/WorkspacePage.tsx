@@ -1,15 +1,14 @@
 import type { IWorkspaceInfo, IStats } from '@rocket.chat/core-typings';
-import { Box, Button, ButtonGroup, Callout, CardGrid } from '@rocket.chat/fuselage';
+import { Box, Button, ButtonGroup } from '@rocket.chat/fuselage';
 import type { IInstance } from '@rocket.chat/rest-typings';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import DeploymentCard from './DeploymentCard/DeploymentCard';
-import MessagesRoomsCard from './MessagesRoomsCard/MessagesRoomsCard';
-import UsersUploadsCard from './UsersUploadsCard/UsersUploadsCard';
-import VersionCard from './VersionCard/VersionCard';
-import { useIsEnterprise } from '../../../hooks/useIsEnterprise';
+import PremiumDeploymentCard from './DeploymentCard/PremiumDeploymentCard';
+import PremiumRoomsCard from './MessagesRoomsCard/PremiumRoomsCard';
+import PremiumUsersCard from './UsersUploadsCard/PremiumUsersCard';
+import PremiumVersionCard from './PremiumVersionCard/PremiumVersionCard';
 
 type WorkspaceStatusPageProps = {
 	canViewStatistics: boolean;
@@ -32,10 +31,6 @@ const WorkspacePage = ({
 }: WorkspaceStatusPageProps) => {
 	const { t } = useTranslation();
 
-	const { data } = useIsEnterprise();
-
-	const warningMultipleInstances = !data?.isEnterprise && !statistics?.msEnabled && statistics?.instanceCount > 1;
-
 	return (
 		<Page bg='tint'>
 			<PageHeader title={t('Workspace')}>
@@ -50,18 +45,20 @@ const WorkspacePage = ({
 			</PageHeader>
 
 			<PageScrollableContentWithShadow p={16}>
-				<Box marginBlock='none' marginInline='auto' width='full' color='default'>
-					{warningMultipleInstances && (
-						<Callout type='warning' title={t('Multiple_monolith_instances_alert')} marginBlockEnd={16}></Callout>
-					)}
-					<Box mbe={16}>
-						<VersionCard serverInfo={serverInfo} />
+				<Box marginBlock='none' marginInline='auto' width='full' maxWidth='1000px' color='default'>
+					{/* Premium Version Card - Hero */}
+					<PremiumVersionCard serverInfo={serverInfo} />
+
+					{/* Three-card grid */}
+					<Box
+						display='grid'
+						gridTemplateColumns='1.2fr 1fr 1fr'
+						gap='16px'
+					>
+						<PremiumDeploymentCard serverInfo={serverInfo} statistics={statistics} instances={instances} />
+						<PremiumUsersCard statistics={statistics} />
+						<PremiumRoomsCard statistics={statistics} />
 					</Box>
-					<CardGrid breakpoints={{ lg: 4, xs: 4, p: 8 }}>
-						<DeploymentCard serverInfo={serverInfo} statistics={statistics} instances={instances} />
-						<UsersUploadsCard statistics={statistics} />
-						<MessagesRoomsCard statistics={statistics} />
-					</CardGrid>
 				</Box>
 			</PageScrollableContentWithShadow>
 		</Page>
