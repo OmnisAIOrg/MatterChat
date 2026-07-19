@@ -10,6 +10,8 @@ import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
 import { CaseProConnectionControls, CaseProStubBanner } from '../casepro';
 import MattersSearch from './MattersSearch';
+import MattersPremiumRefreshStyles from './MattersPremiumRefreshStyles';
+import MattersBoardView from './MattersBoardView';
 
 /**
  * MattersBoardRoute — the `/boards/matters` landing screen (M3a client).
@@ -127,41 +129,41 @@ const MattersBoardRoute = () => {
 
 	const { lists } = data;
 
-	// LEDGER CHROME (style only): background='room' puts the page shell on the
-	// ledger paper surface (the chat-restyle palette re-points
-	// --rcx-color-surface-room to paper light / calm dark), and the
-	// 'mc-board-header' class pulls the serif case-caption + single dense
-	// strip CSS from BoardsChromeStyleTags. Wiring is untouched.
+	// MATTERCHAT: Premium-refresh Matters board with MattersBoardView
+	// (see MattersPremiumRefreshStyles for design tokens).
 	return (
 		<Page flexDirection='row' background='room'>
-			<Page background='room'>
-				<PageHeader
-					className='mc-board-header'
-					title={
-						<Box display='flex' alignItems='center'>
-							<Icon name='bag' size='x24' mie={8} color='hint' />
-							<Box withTruncatedText>{board.title || t('Boards_Matters')}</Box>
-						</Box>
-					}
-				>
-					<MattersSearch boardId={board._id} />
-					<CaseProConnectionControls
-						onSync={handleSync}
-						isSyncing={seedMutation.isPending || Boolean(syncStatus?.syncing)}
-						lastSyncAt={syncStatus?.lastSyncFinishedAt ? new Date(syncStatus.lastSyncFinishedAt) : lastSyncAt}
-						mie={4}
-					/>
-					<ButtonGroup>
-						<BoardAutomationsButton boardId={board._id} small={false} />
-					</ButtonGroup>
-				</PageHeader>
+			<div className='mc-matters-board'>
+				<MattersPremiumRefreshStyles />
+				<Page background='room'>
+					<PageHeader
+						className='mc-board-header'
+						title={
+							<Box display='flex' alignItems='center'>
+								<Icon name='bag' size='x24' mie={8} color='hint' />
+								<Box withTruncatedText>{board.title || t('Boards_Matters')}</Box>
+							</Box>
+						}
+					>
+						<MattersSearch boardId={board._id} />
+						<CaseProConnectionControls
+							onSync={handleSync}
+							isSyncing={seedMutation.isPending || Boolean(syncStatus?.syncing)}
+							lastSyncAt={syncStatus?.lastSyncFinishedAt ? new Date(syncStatus.lastSyncFinishedAt) : lastSyncAt}
+							mie={4}
+						/>
+						<ButtonGroup>
+							<BoardAutomationsButton boardId={board._id} small={false} />
+						</ButtonGroup>
+					</PageHeader>
 
-				<CaseProStubBanner pi={24} pbs={12} />
+					<CaseProStubBanner pi={24} pbs={12} />
 
-				<BoardView board={board} lists={lists} />
-			</Page>
+					<MattersBoardView board={board} lists={lists} />
+				</Page>
 
-			{cardId && <CardDetail boardId={board._id} cardId={cardId} onClose={handleCloseCard} />}
+				{cardId && <CardDetail boardId={board._id} cardId={cardId} onClose={handleCloseCard} />}
+			</div>
 		</Page>
 	);
 };
