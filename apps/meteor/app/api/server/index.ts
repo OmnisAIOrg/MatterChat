@@ -13,6 +13,7 @@ import './v1/boards-automations';
 import './v1/boards-leads';
 import './v1/boards-matters';
 import './v1/boards-notifications';
+import './v1/boards-notification-preferences';
 import './v1/boards-reports';
 import './v1/boards-views';
 import './v1/boards-ai';
