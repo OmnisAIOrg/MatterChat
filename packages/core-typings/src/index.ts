@@ -79,6 +79,7 @@ export type * from './ICustomEmojiDescriptor';
 export type * from './IAnalytics';
 export type * from './ICredentialToken';
 export type * from './IExternalWorkspaceConnection';
+export type * from './IExternalSentMessage';
 export type * from './IBoardCalendarConnection';
 export type * from './IAvatar';
 export type * from './ICustomUserStatus';

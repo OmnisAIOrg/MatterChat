@@ -86,6 +86,7 @@ export * from './models/VideoConference';
 export * from './models/WebdavAccounts';
 export * from './models/CredentialTokens';
 export * from './models/ExternalWorkspaceConnections';
+export * from './models/ExternalSentMessages';
 export * from './models/BoardCalendarConnections';
 export * from './models/MessageReads';
 export * from './models/ReadReceipts';

@@ -12,7 +12,7 @@
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §4.
  */
 import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.chat/core-typings';
-import { ExternalWorkspaceConnections } from '@rocket.chat/models';
+import { ExternalWorkspaceConnections, ExternalSentMessages } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import type { IProviderChannel, IProviderConnection, IProviderDirectChat, IProviderMember, IProviderMessage } from './ChatProvider';
@@ -541,6 +541,29 @@ export async function listMyMessages(
 		for await (const msg of provider.syncMessages(loaded.connection, opts.channelExternalId, opts.since)) {
 			messages.push(toClientMessage(msg));
 		}
+
+		// Merge in MatterChat's OWN durable record of messages this user sent to this channel, so
+		// they stay visible even when the provider's history read omits them (Slack does — verified).
+		// De-dupe by externalId (drop a stored one the provider ALSO returned). Stored + provider are
+		// both newest-first; interleave by createdAt so ordering stays correct.
+		const sent = await ExternalSentMessages.findForChannel(userId, loaded.doc._id, opts.channelExternalId);
+		if (sent.length > 0) {
+			const seen = new Set(messages.map((m) => m.externalId).filter(Boolean));
+			const extras: ClientMessage[] = sent
+				.filter((s) => !seen.has(s.externalId))
+				.map((s) => ({
+					externalId: s.externalId,
+					author: s.author ?? 'You',
+					...(s.authorAvatarUrl ? { authorAvatarUrl: s.authorAvatarUrl } : {}),
+					text: s.text,
+					createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : String(s.createdAt),
+				}));
+			if (extras.length > 0) {
+				const merged = [...messages, ...extras].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+				return { messages: merged, connection: toClientConnection(loaded.doc) };
+			}
+		}
+
 		return { messages, connection: toClientConnection(loaded.doc) };
 	} catch (err) {
 		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
@@ -659,13 +682,33 @@ export async function sendMyMessage(
 		const created = await provider.postMessage(loaded.connection, opts.channelExternalId, { text: opts.text });
 		// Instant-echo message: the caller's own attribution + the provider-echoed creation ts.
 		const self = await resolveSelfProfile(loaded.doc, loaded.connection);
+		const createdAt = created.ts ? toIsoTimestamp(created.ts) : new Date().toISOString();
 		const message: ClientMessage = {
 			externalId: created.externalId,
 			author: self.author,
 			...(self.authorAvatarUrl ? { authorAvatarUrl: self.authorAvatarUrl } : {}),
 			text: opts.text,
-			createdAt: created.ts ? toIsoTimestamp(created.ts) : new Date().toISOString(),
+			createdAt,
 		};
+		// DURABLE RECORD: provider history APIs (Slack conversations.history) don't reliably return
+		// the app's OWN sent messages, so persist what we sent — listMyMessages merges these back so
+		// the user's sent messages stay visible forever, on every device. Best-effort: a store failure
+		// never fails the send (the message already reached the provider).
+		try {
+			await ExternalSentMessages.recordSent({
+				userId,
+				connectionId: loaded.doc._id,
+				provider: loaded.doc.provider,
+				channelExternalId: opts.channelExternalId,
+				externalId: created.externalId,
+				text: opts.text,
+				...(self.author ? { author: self.author } : {}),
+				...(self.authorAvatarUrl ? { authorAvatarUrl: self.authorAvatarUrl } : {}),
+				createdAt: created.ts ? new Date(createdAt) : new Date(),
+			});
+		} catch {
+			// swallow — durable record is a best-effort enhancement, not part of the send contract.
+		}
 		return { externalId: created.externalId, message, connection: toClientConnection(loaded.doc) };
 	} catch (err) {
 		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
