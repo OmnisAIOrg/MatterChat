@@ -164,6 +164,14 @@ export interface IBoardCard extends IRocketChatRecord {
 	relations?: { type: 'relates' | 'blocks' | 'blocked-by' | 'duplicate' | 'parent' | 'child'; cardId: string }[];
 	mirrorOf?: string; // source card _id if this is a mirror
 
+	// Subtask hierarchy support (wave3 Subtasks v2). When a card is created as a subtask of another,
+	// parentCardId points to its parent. A card can have multiple children (via relations child[]), but only
+	// one parent. Supports 3-level nesting: root → subtask → sub-subtask. A subtask has its own assignee,
+	// dueDate, description, comments, attachments, and completion state — it is a first-class card, not a
+	// checklist item. Sub-subtasks are queries against relations; no separate collection.
+	// When a parent is completed, all active subtasks cascade (optional auto-complete per automation settings).
+	parentCardId?: string; // parent card _id (omitted for root cards)
+
 	// Recurring "routine" tasks. When a card carrying a recurrence rule is completed (dueComplete
 	// flips true), the service materializes the next occurrence — a clone with the due date advanced
 	// and checklists reset — and moves the rule onto that new card. The completed card becomes a plain

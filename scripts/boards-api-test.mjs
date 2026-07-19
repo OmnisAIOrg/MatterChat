@@ -677,3 +677,41 @@ async function main() {
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
+
+  // --- notification preferences (wave3, spec #4) ---
+  // GET user's default preferences
+  const prefGet = await api('GET', '/boards.user.notification-preferences');
+  ok(prefGet.status === 200 && prefGet.json?.preferences?.preferences, 'notification-preferences GET returns matrix', `preset=${prefGet.json?.preferences?.preset}`);
+
+  const defaultPrefs = prefGet.json?.preferences;
+  ok(defaultPrefs?.preset === 'all', 'default preset is "all"', defaultPrefs?.preset);
+  ok(typeof defaultPrefs?.preferences?.assigned?.inApp === 'boolean', 'assigned pref has inApp channel', defaultPrefs?.preferences?.assigned?.inApp);
+
+  // PUT: set a preset
+  const prefPreset = await api('PUT', '/boards.user.notification-preferences', { preset: 'urgent_only' });
+  ok(prefPreset.json?.success === true && prefPreset.json?.updated?.preset === 'urgent_only', 'set preset=urgent_only', prefPreset.json?.updated?.preset);
+
+  // PUT: toggle a single event/channel
+  const prefToggle = await api('PUT', '/boards.user.notification-preferences', {
+    preferences: {
+      assigned: { inApp: false, email: true, push: false },
+      mentioned: { inApp: true, email: true, push: false },
+      due_soon: { inApp: true, email: false, push: false },
+      approval_requested: { inApp: true, email: true, push: false },
+      stage_changed: { inApp: true, email: false, push: false },
+    },
+  });
+  ok(prefToggle.json?.success === true && prefToggle.json?.updated?.preferences?.assigned?.inApp === false, 'toggle assigned.inApp', `inApp=${prefToggle.json?.updated?.preferences?.assigned?.inApp}`);
+
+  // PUT: board mute
+  const prefMute = await api('PUT', '/boards.user.notification-preferences.board-mute', { boardId, mute: true });
+  ok(prefMute.json?.success === true && prefMute.json?.mutedBoards?.includes(boardId), 'mute board', `muted=${prefMute.json?.mutedBoards?.length}`);
+
+  // PUT: board unmute
+  const prefUnmute = await api('PUT', '/boards.user.notification-preferences.board-mute', { boardId, mute: false });
+  ok(prefUnmute.json?.success === true && !prefUnmute.json?.mutedBoards?.includes(boardId), 'unmute board', `muted=${prefUnmute.json?.mutedBoards?.length}`);
+
+  // POST: test notification
+  const prefTest = await api('POST', '/boards.user.notification-preferences.test', { eventType: 'assigned', boardId });
+  ok(prefTest.json?.success === true && typeof prefTest.json?.sent?.inApp === 'boolean', 'test notification routed', `sent=${JSON.stringify(prefTest.json?.sent)}`);
+
