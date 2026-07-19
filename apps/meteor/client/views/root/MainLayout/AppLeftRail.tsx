@@ -194,6 +194,7 @@ const AppLeftRail = () => {
 	// excludes the inbox sub-route to avoid both lighting up at once.
 	const inboxActive = currentRoute?.includes('/boards/inbox');
 	const boardsActive = currentRoute?.includes('/boards') && !inboxActive;
+	const docsActive = Boolean(currentRoute?.includes('/docs'));
 	const filesActive = Boolean(currentRoute?.includes('/litbox'));
 	const chatActive = !currentRoute?.includes('/boards') && Boolean(currentRoute?.includes('/home') || currentRoute?.includes('/channel'));
 	const adminActive = Boolean(currentRoute?.includes('/admin'));
@@ -216,6 +217,10 @@ const AppLeftRail = () => {
 
 	const handleAdmin = useStableCallback(() => {
 		router.navigate('/admin');
+	});
+
+	const handleDocs = useStableCallback(() => {
+		router.navigate('/docs');
 	});
 
 	// Search has no global "open" action; the NavBar search is a focus-driven
@@ -297,6 +302,7 @@ const AppLeftRail = () => {
 				    is the way back to MatterChat). Boards + LitBox stay (they remain meaningful inside it). */}
 				{!inExternalMode && renderItem('balloons', t('Chats'), handleChat, chatActive)}
 				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, Boolean(boardsActive))}
+				{!inExternalMode && renderItem('book', t('Docs'), handleDocs, docsActive)}
 				<Box
 					is='button'
 					type='button'
