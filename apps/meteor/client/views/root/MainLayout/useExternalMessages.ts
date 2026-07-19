@@ -159,24 +159,31 @@ export const useExternalMessages = (
 	const ECHO_RETENTION_MS = 10 * 60_000;
 	const serverMessages = data?.ok === true ? data.messages : undefined;
 	let mergedMessages = serverMessages;
-	if (Array.isArray(serverMessages)) {
-		const held = recentEchoesRef.current.get(echoKey) ?? [];
-		if (held.length > 0) {
-			const now = Date.now();
-			const confirmed = (echo: EnrichedExternalMessage): boolean =>
-				serverMessages.some(
-					(m) =>
-						m.externalId === echo.externalId ||
-						(m.text === echo.text && Math.abs(Date.parse(m.createdAt) - Date.parse(echo.createdAt)) < 120_000),
-				);
-			const surviving = held.filter((e) => now - e.at < ECHO_RETENTION_MS && !confirmed(e.msg));
-			if (surviving.length !== held.length) {
-				recentEchoesRef.current.set(echoKey, surviving);
+	const held = recentEchoesRef.current.get(echoKey) ?? [];
+	if (held.length > 0) {
+		const now = Date.now();
+		// Confirmation requires a valid server list: only mark echoes as confirmed if we have
+		// server data to check against. If the server fetch failed or returned error, we show
+		// ALL unconfirmed echoes to persist them through the error window.
+		const confirmed = (echo: EnrichedExternalMessage): boolean => {
+			if (!Array.isArray(serverMessages)) {
+				// No server data yet (error/loading) — don't confirm; show the echo.
+				return false;
 			}
-			if (surviving.length > 0) {
-				// Newest-first list: echoes are the newest — most recent echo first, then the server list.
-				mergedMessages = [...surviving.map((e) => e.msg).reverse(), ...serverMessages];
-			}
+			return serverMessages.some(
+				(m) =>
+					m.externalId === echo.externalId ||
+					(m.text === echo.text && Math.abs(Date.parse(m.createdAt) - Date.parse(echo.createdAt)) < 120_000),
+			);
+		};
+		const surviving = held.filter((e) => now - e.at < ECHO_RETENTION_MS && !confirmed(e.msg));
+		if (surviving.length !== held.length) {
+			recentEchoesRef.current.set(echoKey, surviving);
+		}
+		if (surviving.length > 0) {
+			// Newest-first list: echoes are the newest — most recent echo first, then the server list.
+			const echoMessages = surviving.map((e) => e.msg).reverse();
+			mergedMessages = Array.isArray(serverMessages) ? [...echoMessages, ...serverMessages] : echoMessages;
 		}
 	}
 
