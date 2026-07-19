@@ -11,7 +11,7 @@
  *
  * See MATTERCHAT-EXTERNAL-WORKSPACE-CONNECTORS.md §4.
  */
-import type { ExternalProvider, IExternalWorkspaceConnection } from '@rocket.chat/core-typings';
+import type { ExternalProvider, IExternalSentMessage, IExternalWorkspaceConnection } from '@rocket.chat/core-typings';
 import { ExternalWorkspaceConnections, ExternalSentMessages } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
@@ -526,6 +526,34 @@ async function loadOwnedConnection(
  * newest-first. On any Graph/auth/config error it returns a structured ProviderError (NOT swallowed)
  * so the panel can render it plainly — including admin-consent / permission failures.
  */
+/**
+ * Provider history reads are heavily rate-limited — Slack throttles `conversations.history` to
+ * roughly ONE request per minute for non-Marketplace apps like ours. The browse view now polls so
+ * an open channel stays live, so polls are served from the durable store and the provider is only
+ * topped up once per window per channel. Process-local by design: the throttle is a courtesy to the
+ * provider, and a second pod simply gets its own window.
+ */
+const PROVIDER_HISTORY_THROTTLE_MS = 60_000;
+const lastProviderHit = new Map<string, number>();
+
+function shouldHitProvider(channelKey: string): boolean {
+	const last = lastProviderHit.get(channelKey);
+	return last === undefined || Date.now() - last >= PROVIDER_HISTORY_THROTTLE_MS;
+}
+
+function markProviderHit(channelKey: string): void {
+	lastProviderHit.set(channelKey, Date.now());
+	// Bound the map so a long-lived process across many channels can't grow it without limit.
+	if (lastProviderHit.size > 5000) {
+		const cutoff = Date.now() - PROVIDER_HISTORY_THROTTLE_MS;
+		for (const [key, at] of lastProviderHit) {
+			if (at < cutoff) {
+				lastProviderHit.delete(key);
+			}
+		}
+	}
+}
+
 export async function listMyMessages(
 	userId: string,
 	opts: { connectionId: string; channelExternalId: string; since?: string },
@@ -535,37 +563,89 @@ export async function listMyMessages(
 		return loaded;
 	}
 
-	try {
-		const provider = providerRegistry.get(loaded.doc.provider);
-		const messages: ClientMessage[] = [];
-		for await (const msg of provider.syncMessages(loaded.connection, opts.channelExternalId, opts.since)) {
-			messages.push(toClientMessage(msg));
-		}
+	const channelKey = `${loaded.doc._id}:${opts.channelExternalId}`;
 
-		// Merge in MatterChat's OWN durable record of messages this user sent to this channel, so
-		// they stay visible even when the provider's history read omits them (Slack does — verified).
-		// De-dupe by externalId (drop a stored one the provider ALSO returned). Stored + provider are
-		// both newest-first; interleave by createdAt so ordering stays correct.
-		const sent = await ExternalSentMessages.findForChannel(userId, loaded.doc._id, opts.channelExternalId);
-		if (sent.length > 0) {
-			const seen = new Set(messages.map((m) => m.externalId).filter(Boolean));
-			const extras: ClientMessage[] = sent
-				.filter((s) => !seen.has(s.externalId))
-				.map((s) => ({
-					externalId: s.externalId,
-					author: s.author ?? 'You',
-					...(s.authorAvatarUrl ? { authorAvatarUrl: s.authorAvatarUrl } : {}),
-					text: s.text,
-					createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : String(s.createdAt),
-				}));
-			if (extras.length > 0) {
-				const merged = [...messages, ...extras].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-				return { messages: merged, connection: toClientConnection(loaded.doc) };
+	try {
+		// The store is the SOURCE OF TRUTH for the browse view: once MatterChat has seen a message
+		// it stays native here, so revisiting a channel never depends on the provider returning it
+		// again. The provider read only tops the store up.
+		const fetchedFresh = shouldHitProvider(channelKey);
+		const messages: ClientMessage[] = [];
+
+		if (fetchedFresh) {
+			// Mark BEFORE the read: a failure (rate limit, outage) must also consume the window,
+			// otherwise every poll would retry immediately and make throttling worse.
+			markProviderHit(channelKey);
+			const provider = providerRegistry.get(loaded.doc.provider);
+			for await (const msg of provider.syncMessages(loaded.connection, opts.channelExternalId, opts.since)) {
+				messages.push(toClientMessage(msg));
+			}
+
+			// Persist what we just read so it survives the provider's retention/rate limits. Best
+			// effort — a store failure must never break the read.
+			try {
+				await ExternalSentMessages.recordSeenBatch(
+					messages
+						.filter((m) => m.externalId)
+						.map((m) => ({
+							userId,
+							connectionId: loaded.doc._id,
+							provider: loaded.doc.provider,
+							channelExternalId: opts.channelExternalId,
+							externalId: m.externalId as string,
+							text: m.text,
+							...(m.author ? { author: m.author } : {}),
+							...(m.authorAvatarUrl ? { authorAvatarUrl: m.authorAvatarUrl } : {}),
+							createdAt: new Date(m.createdAt),
+							source: 'history' as const,
+						})),
+				);
+			} catch (storeErr) {
+				SystemLogger.warn({ msg: 'Connector browse: persisting history failed (read still served)', err: String(storeErr) });
 			}
 		}
 
-		return { messages, connection: toClientConnection(loaded.doc) };
+		// Merge EVERYTHING MatterChat knows for this channel (our own sent messages, live inbound
+		// events, and previously-persisted history) with whatever the provider just returned.
+		// De-dupe by externalId, newest-first.
+		const stored = await ExternalSentMessages.findForChannel(userId, loaded.doc._id, opts.channelExternalId);
+		const seen = new Set(messages.map((m) => m.externalId).filter(Boolean));
+		const extras: ClientMessage[] = stored
+			.filter((s: IExternalSentMessage) => !seen.has(s.externalId))
+			.map((s: IExternalSentMessage) => ({
+				externalId: s.externalId,
+				author: s.author ?? (s.source === 'sent' || !s.source ? 'You' : ''),
+				...(s.authorAvatarUrl ? { authorAvatarUrl: s.authorAvatarUrl } : {}),
+				text: s.text,
+				createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : String(s.createdAt),
+			}));
+
+		const merged =
+			extras.length > 0 ? [...messages, ...extras].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)) : messages;
+
+		return { messages: merged, connection: toClientConnection(loaded.doc) };
 	} catch (err) {
+		// The provider read failed (rate limit, dead token, outage). If MatterChat already holds
+		// messages for this channel, serve them rather than showing the user an empty/error panel —
+		// that is the whole point of the durable store.
+		try {
+			const stored = await ExternalSentMessages.findForChannel(userId, loaded.doc._id, opts.channelExternalId);
+			if (stored.length > 0) {
+				SystemLogger.warn({ msg: 'Connector browse: provider read failed — serving stored messages', err: String(err) });
+				return {
+					messages: stored.map((s: IExternalSentMessage) => ({
+						externalId: s.externalId,
+						author: s.author ?? (s.source === 'sent' || !s.source ? 'You' : ''),
+						...(s.authorAvatarUrl ? { authorAvatarUrl: s.authorAvatarUrl } : {}),
+						text: s.text,
+						createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : String(s.createdAt),
+					})),
+					connection: toClientConnection(loaded.doc),
+				};
+			}
+		} catch {
+			// fall through to the structured provider error
+		}
 		// A dead refresh token (invalid_grant) also flips the connection to `error` → reconnect.
 		return providerErrorMarkingAuthDeath(loaded.doc, err, 'list_messages_failed');
 	}

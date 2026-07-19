@@ -59,6 +59,15 @@ export class ExternalWorkspaceConnectionsRaw extends BaseRaw<IExternalWorkspaceC
 	}
 
 	/**
+	 * EVERY connection on one external workspace, bridged or not. Inbound provider events must
+	 * reach the browse view even when a channel has no bridged room, so this deliberately does
+	 * NOT filter on `bridgedChannels`.
+	 */
+	findByProviderAndOrg(provider: ExternalProvider, externalOrgId: string): FindCursor<IExternalWorkspaceConnection> {
+		return this.find({ provider, externalOrgId });
+	}
+
+	/**
 	 * Create-or-update the single connection for a (user, provider, external org) triple. The OAuth
 	 * callback calls this after a successful token exchange so re-connecting the same Teams tenant
 	 * refreshes the stored credentials/status in place instead of piling up duplicate documents.

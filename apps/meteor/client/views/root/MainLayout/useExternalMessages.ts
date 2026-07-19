@@ -1,6 +1,6 @@
 import type { ExternalWorkspaceMessage } from '@rocket.chat/rest-typings';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 /**
@@ -116,6 +116,19 @@ export const useExternalMessages = (
 		// Live provider data; a short stale time keeps it fresh on channel switch without hammering.
 		staleTime: 10_000,
 		retry: false,
+		// POLL so an OPEN channel goes live. This is cheap: the server serves from MatterChat's
+		// durable message store and only tops up from the provider once per minute per channel
+		// (Slack throttles conversations.history to ~1 req/min for non-Marketplace apps), so the
+		// poll costs a local read, not a provider call. Without this, new inbound messages only
+		// appeared after navigating away and back (remount → refetch).
+		refetchInterval: 10_000,
+		// Don't poll a hidden tab — no value, and it burns the provider window on wake.
+		refetchIntervalInBackground: false,
+		// Keep the previous channel's rendered messages until the new ones land, and keep cached
+		// messages far longer than the default, so revisiting a channel shows content instantly
+		// instead of visibly reloading from scratch every time.
+		placeholderData: keepPreviousData,
+		gcTime: 60 * 60_000,
 	});
 
 	const { data } = query;
