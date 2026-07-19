@@ -10,15 +10,16 @@ import {
 	StatesSubtitle,
 	Throbber,
 } from '@rocket.chat/fuselage';
-import { Page, PageHeader } from '@rocket.chat/ui-client';
+import { Page, PageHeader, useThemeMode } from '@rocket.chat/ui-client';
 import { useEndpoint, useRouteParameter, useRouter, useSetModal, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import LeadCaptureModal from './LeadCaptureModal';
+import LeadsBoardView from './LeadsBoardView';
+import { getLeadsTokens, LEADS_PAGE_TITLE_STYLE, LEADS_RADIUS } from './leadsDesignTokens';
 import { BoardAutomationsButton } from '../automation';
-import BoardView from '../board/BoardView';
 import CardDetail from '../card/CardDetail';
 import { CaseProStatusChip, CaseProStubBanner, useCaseProStubMode } from '../casepro';
 import { getPipelineTypeIcon } from '../lib/icons';
@@ -40,6 +41,9 @@ const LeadsBoardRoute = () => {
 	const setModal = useSetModal();
 	const queryClient = useQueryClient();
 	const dispatchToastMessage = useToastMessageDispatch();
+	const [, , themeMode] = useThemeMode();
+	const isDark = themeMode === 'dark';
+	const tokens = getLeadsTokens(isDark);
 
 	// Stub mode (per `boards.casepro.status`, falling back to the public
 	// settings): the intake board runs local-only (no read-through pull /
@@ -138,23 +142,50 @@ const LeadsBoardRoute = () => {
 
 	const { lists } = data;
 
-	// LEDGER CHROME (style only): paper page shell (background='room' — the
-	// chat-restyle palette re-points --rcx-color-surface-room to paper light /
-	// calm dark) + the 'mc-board-header' dense-strip CSS. The CasePro sync
-	// action collapses to a compact icon button (tooltip + aria-label); New
-	// Lead keeps its label as the page's primary action. Wiring is untouched.
+	// Leads Board Premium Refresh — uses new LeadsBoardView with design-token styled
+	// kanban columns, cards, and header. Header wraps with backdrop-blur glass effect.
 	return (
-		<Page flexDirection='row' background='room'>
-			<Page background='room'>
-				<PageHeader
-					className='mc-board-header'
-					title={
-						<Box display='flex' alignItems='center'>
-							<Icon name={getPipelineTypeIcon('leads')} size='x24' mie={8} color='hint' />
-							<Box withTruncatedText>{board.title}</Box>
-						</Box>
-					}
+		<Page flexDirection='row' background='room' style={{ backgroundColor: tokens.bg }}>
+			<Page background='room' style={{ backgroundColor: tokens.bg }}>
+				<Box
+					style={{
+						backdropFilter: 'blur(14px)',
+						WebkitBackdropFilter: 'blur(14px)',
+						backgroundColor: tokens.bgGlass,
+						borderBottom: `1px solid ${tokens.border}`,
+						padding: '14px 24px',
+						display: 'flex',
+						alignItems: 'center',
+						gap: '12px',
+						flexShrink: 0,
+					}}
 				>
+					<Box
+						display='flex'
+						justifyContent='center'
+						alignItems='center'
+						style={{
+							width: '30px',
+							height: '30px',
+							borderRadius: LEADS_RADIUS.button,
+							backgroundColor: tokens.greenSoft,
+							border: `1px solid ${tokens.greenLine}`,
+							color: tokens.greenInk,
+							flexShrink: 0,
+						}}
+					>
+						<Icon name={getPipelineTypeIcon('leads')} size='x16' />
+					</Box>
+					<h1
+						style={{
+							...LEADS_PAGE_TITLE_STYLE,
+							color: tokens.ink,
+							margin: 0,
+						}}
+					>
+						{board.title}
+					</h1>
+					<Box style={{ flex: 1 }} />
 					<CaseProStatusChip mie={4} />
 					<ButtonGroup>
 						{!caseProStub && (
@@ -168,14 +199,24 @@ const LeadsBoardRoute = () => {
 							/>
 						)}
 						<BoardAutomationsButton boardId={board._id} />
-						<Button primary small onClick={handleNewLead}>
+						<Button
+							primary
+							small
+							onClick={handleNewLead}
+							style={{
+								backgroundColor: tokens.green,
+								borderColor: tokens.green,
+								color: tokens.onGreen,
+								borderRadius: LEADS_RADIUS.button,
+							}}
+						>
 							<Icon name='plus' size='x16' mie={4} />
 							{t('Boards_New_Lead', { defaultValue: 'New Lead' })}
 						</Button>
 					</ButtonGroup>
-				</PageHeader>
+				</Box>
 				<CaseProStubBanner variant='leads' pi={24} pbs={16} />
-				<BoardView board={board} lists={lists} />
+				<LeadsBoardView board={board} lists={lists} />
 			</Page>
 			{cardId && boardId && <CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />}
 		</Page>
