@@ -1,11 +1,11 @@
 import { useSession } from '@rocket.chat/ui-contexts';
 import type { LoginRoutes } from '@rocket.chat/web-ui-registration';
-import RegistrationRoute from '@rocket.chat/web-ui-registration';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import LoggedOutBanner from '../../../components/deviceManagement/LoggedOutBanner';
+import MatterChatLoginPage from './MatterChatLoginPage';
 import { useIframe } from '../hooks/useIframe';
 
 const LoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginRoutes; children?: ReactNode }) => {
@@ -28,7 +28,9 @@ const LoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginRoutes; chi
 	return (
 		<>
 			{showForcedLogoutBanner && <LoggedOutBanner />}
-			<RegistrationRoute defaultRoute={defaultRoute}>{children}</RegistrationRoute>
+			{/* MATTERCHAT: the redesigned sign-in (brand chamber + cream card). It renders the
+			    stock RegistrationRoute itself for every non-login flow (reset/register/secret). */}
+			<MatterChatLoginPage defaultRoute={defaultRoute}>{children}</MatterChatLoginPage>
 		</>
 	);
 };

@@ -211,3 +211,17 @@
   "error TS" gate MISSED an undefined identifier (shipped a crashing bundle) — browser
   verification is the only real gate; (4) `UID` is a readonly zsh builtin — never use it
   as a shell var name in API scripts.
+
+## 2026-07-19 — Redesigned sign-in (Login.dc.html port) (feat/enso-branding)
+- New client/views/root/MainLayout/MatterChatLoginPage.tsx (additive) renders the founder's
+  design: brand chamber (aurora, breathing ensō + rings + reflection, trust bar) + cream card.
+  One marked swap in LoginPage.tsx; every non-login flow (reset/register/secret) falls back to
+  the stock RegistrationRoute. Real auth: useLoginWithPassword + inline error mapping;
+  Omnis ID via Meteor.loginWithOmnisai (gated on OmnisAI_OIDC_Enabled); success bridges via
+  the green EnsoLoader. Verified live: bad creds → inline error; real creds → workspace.
+- Fonts SELF-HOSTED at public/fonts/brand (10 latin woff2: Space Grotesk/Newsreader/
+  JetBrains Mono/Inter Tight) — app CSP blocks Google Fonts.
+- GOTCHA (cost a debugging session): RC paints imgs at transform:scale(2.5) via an ADOPTED
+  stylesheet — invisible in document.styleSheets, no animation, layout box stays correct,
+  only paint scales. Counter with `transform: none !important` on any custom-page img (and
+  re-assert intentional transforms like the ensō reflection's scaleY(-1) with !important).
