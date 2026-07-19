@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import EnsoMark from '../../../components/EnsoMark';
-import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
 import { NOTIFICATIONS_UNREAD_KEY } from '../../boards/notifications/NotificationsInbox';
 import { getUnseenUpdates } from '../../../updates/updatesFeed';
 
@@ -30,7 +29,7 @@ import { getUnseenUpdates } from '../../../updates/updatesFeed';
  *  • Search   → focuses the existing NavBar search combobox (icon 'magnifier')
  *  • Admin    → /admin         (icon 'cog' — admins only)
  *
- * Bottom reuses the existing `UserMenu` (avatar + account menu) from the NavBar — kept here (not in the
+ * Bottom anchors the ambient ensō brand mark (the account menu lives in the NavBar avatar) — (not in the
  * workspace rail) so the account-menu mount that already works is preserved.
  *
  * The rail is intentionally always-dark (independent of the light/dark theme) — the signature
@@ -60,6 +59,9 @@ const railClass = css`
 	border-right: 1px solid ${NAV_RAIL_BORDER};
 	box-shadow: inset -1px 0 0 ${WS_RAIL_BG};
 	overflow-y: auto;
+	/* NEVER scrolls sideways — the rail is a fixed column. (The ensō mount's glow can paint wider
+	   than its box; without this the rail becomes horizontally draggable.) */
+	overflow-x: hidden;
 
 	@media print {
 		display: none;
@@ -337,8 +339,6 @@ const AppLeftRail = () => {
 					Chat
 				</Box>
 			</Box>
-			{/* Ambient ensō loop under the wordmark — same living brand mark as the Omnis CC rail. */}
-			<EnsoMark size={44} style={{ marginTop: 4, marginBottom: 2 }} />
 			<Box className={dividerClass} />
 			<Box className={sectionLabelClass}>MENU</Box>
 			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px', width: '100%' }}>
@@ -386,11 +386,19 @@ const AppLeftRail = () => {
 				{!inExternalMode && renderItem('megaphone', t('Updates'), handleUpdates, updatesActive, 0, hasUnseenUpdates)}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
-			{user && (
-				<Box display='flex' flexDirection='column' alignItems='center' mbs={8}>
-					<UserMenu user={user} />
-				</Box>
-			)}
+			{/* Ambient ensō loop anchors the rail bottom — the living brand mark, replacing the avatar
+			    (the user menu lives in the NavBar's top-right avatar). Fixed overflow-hidden box so the
+			    brush glow can never widen the rail. */}
+			<Box
+				display='flex'
+				flexDirection='column'
+				alignItems='center'
+				justifyContent='center'
+				mbs={8}
+				style={{ width: '100%', height: '56px', overflow: 'hidden', flexShrink: 0 }}
+			>
+				<EnsoMark size={44} />
+			</Box>
 		</Box>
 	);
 };
