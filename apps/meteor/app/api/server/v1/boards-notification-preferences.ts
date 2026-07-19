@@ -7,7 +7,7 @@ import {
 	isBoardsUserNotificationPrefsBoardMuteProps,
 	isBoardsUserNotificationPrefsTestProps,
 } from '@rocket.chat/rest-typings';
-import { boardNotificationPrefsService } from '../../../server/lib/boards/notifications/preferences.service';
+import { boardNotificationPrefsService } from '../../../../server/lib/boards/notifications/preferences.service';
 
 /**
  * GET /api/v1/boards.user.notification-preferences
