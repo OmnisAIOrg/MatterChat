@@ -74,10 +74,13 @@ const MattersCardTile = ({
 	// Determine if SOL is low risk (red fill)
 	const isLowSol = solPercentage < 35;
 
-	// Resolve label ids -> defs
+	// Resolve label ids -> defs. `card.labels` is OPTIONAL on IBoardCard and is undefined on
+	// CasePro-synced matter cards (they carry no labels array) — guard it, or the whole matters
+	// board crashes with "Cannot read properties of undefined (reading 'map')" the moment a real
+	// matter renders (P0 regression, wave 3).
 	const labelMap = useMemo(() => new Map((labelDefs ?? []).map((l) => [l.id, l] as const)), [labelDefs]);
 	const cardLabels = useMemo(
-		() => card.labels.map((id) => labelMap.get(id)).filter((l): l is IBoardLabelDef => Boolean(l)),
+		() => (card.labels ?? []).map((id) => labelMap.get(id)).filter((l): l is IBoardLabelDef => Boolean(l)),
 		[card.labels, labelMap],
 	);
 
