@@ -134,8 +134,8 @@ const DARK: PremiumTokens = {
 };
 
 const buildMattersBoardCss = (t: PremiumTokens): string => `
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
-
+/* Geist is vendored locally (public/fonts + the foundation @font-face). No CDN @import:
+   it is CSP-blocked on prod and was masking that the local woff2 files were corrupt HTML. */
 .mc-matters-board {
 	--mc-premium-bg: ${t.bg};
 	--mc-premium-surface: ${t.surface};
