@@ -111,8 +111,6 @@ export type BoardsUserNotificationPrefsDTO = IBoardUserNotificationPrefs;
 export type BoardsNotificationPreferencesEndpoints = {
 	'/v1/boards.user.notification-preferences': {
 		GET: (params: BoardsUserNotificationPrefsGetProps) => { preferences: BoardsUserNotificationPrefsDTO };
-	};
-	'/v1/boards.user.notification-preferences': {
 		PUT: (params: BoardsUserNotificationPrefsUpdateProps) => { success: boolean; updated: BoardsUserNotificationPrefsDTO };
 	};
 	'/v1/boards.user.notification-preferences.board-mute': {
