@@ -177,7 +177,7 @@ const MattersSearch = (_props: MattersSearchProps) => {
 								{card.assignees && card.assignees.length > 0 && (
 									<Box display='flex' alignItems='center' gap={4}>
 										{card.assignees.slice(0, 2).map((assignee: any) => (
-											<Avatar key={assignee._id} size='x16' title={assignee.name} />
+											<Avatar key={assignee._id} size='x16' title={assignee.name} url={`/avatar/${assignee.username ?? assignee._id}`} />
 										))}
 										{card.assignees.length > 2 && (
 											<Box fontScale='c1' color='hint'>
