@@ -23,6 +23,7 @@ export const useConnectorAvailability = (): { availability: ExternalWorkspaceAva
 		queryKey: ['external-workspaces', 'availability'],
 		queryFn: () => getAvailability(),
 		staleTime: 60_000,
+		refetchOnMount: 'always',
 	});
 	return { availability: data?.availability ?? FALLBACK, isLoading };
 };
