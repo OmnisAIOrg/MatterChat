@@ -5,6 +5,7 @@ import { createLead } from '../../../server/lib/boards/leads/service';
 import { ensureMattersBoard, bindMatterCard } from '../../../server/lib/boards/matters/service';
 import { createCard } from '../../../server/lib/boards/service';
 import { handleChiQuestion } from '../../../server/lib/chi/service';
+import { handleAskQuestion } from '../../../server/lib/agents/ask-handler';
 import { setRoomFolderMethod } from '../../../server/methods/setRoomFolder';
 import { slashCommands } from '../../utils/server/slashCommand';
 
@@ -123,5 +124,20 @@ slashCommands.add({
 	options: {
 		description: 'File this channel under a sidebar folder (no name removes it)',
 		params: 'folder name',
+	},
+});
+
+slashCommands.add({
+	command: 'ask',
+	callback: async ({ params, message, userId }: SlashCommandCallbackParams<'ask'>): Promise<void> => {
+		// Fire-and-return: agent round-trip can take many seconds; handler posts a
+		// "Asking…" placeholder and edits it with the answer.
+		void handleAskQuestion(userId, message.rid, params, message.workspace?.toString() || 'default').catch(
+			() => undefined,
+		);
+	},
+	options: {
+		description: 'Ask an AI knowledge agent a question',
+		params: '<agent-name> <question>',
 	},
 });
