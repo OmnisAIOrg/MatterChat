@@ -66,7 +66,11 @@ export interface IExternalWorkspaceConnectionsModel extends IBaseModel<IExternal
 	 * Every connection (any user) bridging the SAME external channel of the SAME external org —
 	 * inbound fan-out: one Graph subscription per app+channel is shared across all bridging users.
 	 */
-	findByBridgedChannel(provider: ExternalProvider, externalOrgId: string, channelExternalId: string): FindCursor<IExternalWorkspaceConnection>;
+	findByBridgedChannel(
+		provider: ExternalProvider,
+		externalOrgId: string,
+		channelExternalId: string,
+	): FindCursor<IExternalWorkspaceConnection>;
 	/** EVERY connection on one external workspace, bridged or not (inbound events → browse view). */
 	findByProviderAndOrg(provider: ExternalProvider, externalOrgId: string): FindCursor<IExternalWorkspaceConnection>;
 	/** Every connection with at least one bridged channel (renewal timer / boot reconcile scan). */

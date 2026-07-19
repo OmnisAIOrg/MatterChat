@@ -621,9 +621,7 @@ export async function listMyMessages(
 			}));
 
 		const merged =
-			extras.length > 0
-				? [...messages, ...extras].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-				: messages;
+			extras.length > 0 ? [...messages, ...extras].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)) : messages;
 
 		return { messages: merged, connection: toClientConnection(loaded.doc) };
 	} catch (err) {

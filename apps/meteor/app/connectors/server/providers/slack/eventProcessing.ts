@@ -255,7 +255,11 @@ async function processEditedMessage(teamId: string, action: Extract<SlackMessage
 			if (!owner) {
 				continue;
 			}
-			await updateMessage({ _id: existing._id, rid: existing.rid, msg: mapped.text, customFields: existing.customFields ?? {} }, owner, existing);
+			await updateMessage(
+				{ _id: existing._id, rid: existing.rid, msg: mapped.text, customFields: existing.customFields ?? {} },
+				owner,
+				existing,
+			);
 		} catch (err) {
 			SystemLogger.warn({ msg: 'Slack events: edit apply failed', connectionId: doc._id, err: String(err) });
 		}

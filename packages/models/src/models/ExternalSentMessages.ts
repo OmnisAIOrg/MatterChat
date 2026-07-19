@@ -61,15 +61,7 @@ export class ExternalSentMessagesRaw extends BaseRaw<IExternalSentMessage> imple
 		);
 	}
 
-	async findForChannel(
-		userId: string,
-		connectionId: string,
-		channelExternalId: string,
-		limit = 500,
-	): Promise<IExternalSentMessage[]> {
-		return this.find(
-			{ userId, connectionId, channelExternalId },
-			{ sort: { createdAt: -1 }, limit },
-		).toArray();
+	async findForChannel(userId: string, connectionId: string, channelExternalId: string, limit = 500): Promise<IExternalSentMessage[]> {
+		return this.find({ userId, connectionId, channelExternalId }, { sort: { createdAt: -1 }, limit }).toArray();
 	}
 }

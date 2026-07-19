@@ -14,10 +14,5 @@ export interface IExternalSentMessagesModel extends IBaseModel<IExternalSentMess
 	recordSeenBatch(msgs: Omit<IExternalSentMessage, '_id' | '_updatedAt'>[]): Promise<void>;
 
 	/** Every message MatterChat knows about for one channel, newest-first, capped. */
-	findForChannel(
-		userId: string,
-		connectionId: string,
-		channelExternalId: string,
-		limit?: number,
-	): Promise<IExternalSentMessage[]>;
+	findForChannel(userId: string, connectionId: string, channelExternalId: string, limit?: number): Promise<IExternalSentMessage[]>;
 }
