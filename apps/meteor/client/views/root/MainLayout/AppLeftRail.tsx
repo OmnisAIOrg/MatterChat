@@ -4,12 +4,13 @@ import { useStableCallback } from '@rocket.chat/fuselage-hooks';
 import { useRouter, useLayout, usePermission, useCurrentRoutePath, useUser, useEndpoint } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 import type { ComponentProps, ReactElement } from 'react';
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
 import { NOTIFICATIONS_UNREAD_KEY } from '../../boards/notifications/NotificationsInbox';
+import { getUnseenUpdates } from '../../../updates/updatesFeed';
 
 /**
  * AppLeftRail — the GREEN "Variant B" primary NAVIGATION rail (was the single Slack-style rail).
@@ -152,9 +153,26 @@ const activityBadgeClass = css`
 	box-shadow: 0 0 0 1.5px ${NAV_RAIL_BG};
 `;
 
+/**
+ * The Updates "NEW" badge — a small indicator for unseen updates.
+ * Positioned on the icon, similar to activity badge but simpler (no count).
+ */
+const updatesBadgeClass = css`
+	position: absolute;
+	top: -2px;
+	inset-inline-end: -2px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background-color: ${BRAND_GREEN_BRIGHT};
+	pointer-events: none;
+	box-shadow: 0 0 0 1.5px ${NAV_RAIL_BG};
+`;
+
 // Same cheap-badge cadence the removed NavBar bell used (PR #53 dedup): poll the
 // unreadCount endpoint every 60s + on window focus.
 const UNREAD_POLL_MS = 60 * 1000;
+const UPDATES_LAST_SEEN_KEY = 'matterchat:updates:lastSeen';
 
 const AppLeftRail = () => {
 	const { t } = useTranslation();
@@ -162,6 +180,7 @@ const AppLeftRail = () => {
 	const user = useUser();
 	const { sidebar, navbar, isMobile } = useLayout();
 	const currentRoute = useCurrentRoutePath();
+	const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
 
 	const canViewBoards = usePermission('boards-view');
 	// Admins get a direct rail entry to /admin. This custom rail replaced the stock sidebar's
@@ -190,13 +209,22 @@ const AppLeftRail = () => {
 	});
 	const activityUnread = unreadData?.unread ?? 0;
 
+	// Check for unseen updates badge
+	useEffect(() => {
+		const lastSeen = localStorage.getItem(UPDATES_LAST_SEEN_KEY);
+		const unseen = getUnseenUpdates(lastSeen);
+		setHasUnseenUpdates(unseen.length > 0);
+	}, []);
+
 	// Active-section detection. `/boards/inbox` must win for Activity, so Boards
 	// excludes the inbox sub-route to avoid both lighting up at once.
 	const inboxActive = currentRoute?.includes('/boards/inbox');
 	const boardsActive = currentRoute?.includes('/boards') && !inboxActive;
+	const docsActive = Boolean(currentRoute?.includes('/docs'));
 	const filesActive = Boolean(currentRoute?.includes('/litbox'));
 	const chatActive = !currentRoute?.includes('/boards') && Boolean(currentRoute?.includes('/home') || currentRoute?.includes('/channel'));
 	const adminActive = Boolean(currentRoute?.includes('/admin'));
+	const updatesActive = Boolean(currentRoute?.includes('/updates'));
 
 	const handleChat = useStableCallback(() => {
 		router.navigate('/home');
@@ -216,6 +244,16 @@ const AppLeftRail = () => {
 
 	const handleAdmin = useStableCallback(() => {
 		router.navigate('/admin');
+	});
+
+	const handleDocs = useStableCallback(() => {
+		router.navigate('/docs');
+	});
+
+	const handleUpdates = useStableCallback(() => {
+		router.navigate('/updates');
+		// Clear the unseen badge when navigating to updates
+		setHasUnseenUpdates(false);
 	});
 
 	// Search has no global "open" action; the NavBar search is a focus-driven
@@ -244,6 +282,7 @@ const AppLeftRail = () => {
 		onClick: () => void,
 		active: boolean,
 		badgeCount = 0,
+		hasNewBadge = false,
 	): ReactElement => (
 		<Box
 			is='button'
@@ -251,7 +290,13 @@ const AppLeftRail = () => {
 			className={itemClass}
 			onClick={onClick}
 			title={label}
-			aria-label={badgeCount > 0 ? `${label} (${badgeCount > 99 ? '99+' : badgeCount})` : label}
+			aria-label={
+				badgeCount > 0
+					? `${label} (${badgeCount > 99 ? '99+' : badgeCount})`
+					: hasNewBadge
+						? `${label} (new)`
+						: label
+			}
 			aria-current={active ? 'page' : undefined}
 		>
 			{/* Relatively-positioned wrapper so the unread badge overlays the icon's top-right
@@ -263,6 +308,7 @@ const AppLeftRail = () => {
 						{badgeCount > 99 ? '99+' : badgeCount}
 					</Box>
 				)}
+				{hasNewBadge && <Box is='span' className={updatesBadgeClass} aria-hidden />}
 			</Box>
 			<Box is='span' className='rail-label'>
 				{label}
@@ -297,6 +343,7 @@ const AppLeftRail = () => {
 				    is the way back to MatterChat). Boards + LitBox stay (they remain meaningful inside it). */}
 				{!inExternalMode && renderItem('balloons', t('Chats'), handleChat, chatActive)}
 				{canViewBoards && renderItem('squares', t('Boards'), handleBoards, Boolean(boardsActive))}
+				{!inExternalMode && renderItem('book', t('Docs'), handleDocs, docsActive)}
 				<Box
 					is='button'
 					type='button'
@@ -330,9 +377,10 @@ const AppLeftRail = () => {
 						{t('Files', { defaultValue: 'Files' })}
 					</Box>
 				</Box>
-				{/* Activity / Search / Admin are MatterChat-native — hidden in external-workspace mode. */}
+				{/* Activity / Search / Updates / Admin are MatterChat-native — hidden in external-workspace mode. */}
 				{!inExternalMode && canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive), activityUnread)}
 				{!inExternalMode && renderItem('magnifier', t('Search'), handleSearch, false)}
+				{!inExternalMode && renderItem('megaphone', t('Updates'), handleUpdates, updatesActive, 0, hasUnseenUpdates)}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
 			{user && (

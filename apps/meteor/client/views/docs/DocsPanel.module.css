@@ -1,0 +1,73 @@
+.docsPanel {
+  padding: 24px;
+  max-height: 100vh;
+  overflow: auto;
+  font-family: Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.panelTitle {
+  font-size: 19px;
+  font-weight: 650;
+  margin: 0;
+  font-family: Geist;
+}
+
+.docsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docItem {
+  padding: 12px;
+  border-radius: 9px;
+  border: 1px solid var(--rcx-color-border);
+  background: var(--rcx-color-surface-2);
+  cursor: pointer;
+  transition: all 150ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.docItem:hover {
+  background: var(--rcx-color-surface);
+  box-shadow: 0 1px 2px rgba(23, 29, 25, 0.05), 0 8px 24px -8px rgba(23, 29, 25, 0.14);
+}
+
+.docItem.selected {
+  background: var(--rcx-color-surface-tint);
+  border-color: var(--rcx-color-status-tint-border);
+}
+
+.docTitle {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  font-family: Geist;
+}
+
+.docDescription {
+  font-size: 12.5px;
+  color: var(--rcx-color-text-secondary);
+  margin: 4px 0;
+}
+
+.editorModal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--rcx-color-surface);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 2px 6px rgba(23, 29, 25, 0.06), 0 24px 60px -12px rgba(23, 29, 25, 0.25);
+  z-index: 1000;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .editorModal {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2), 0 24px 60px -12px rgba(0, 0, 0, 0.4);
+  }
+}

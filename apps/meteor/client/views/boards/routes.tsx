@@ -91,9 +91,11 @@ registerBoardsRoute('/board/:id/:view?/:cardId?', {
 // Matters depth (M5): board-wide deadline/SOL agenda, caseload by assignee, and reports.
 // These literal sub-paths MUST be registered BEFORE the '/matters/:cardId?' catch-all below,
 // otherwise 'calendar'/'caseload'/'reports' would be matched as a :cardId.
+// MATTERCHAT: Replaced with premium-refresh DeadlinesView (wave3 screen refresh).
+// Design: docs/design/premium-refresh/Deadlines.dc.html
 registerBoardsRoute('/matters/calendar', {
 	name: 'boards-matters-calendar',
-	component: lazy(() => import('./matters/calendar/MattersCalendar')),
+	component: lazy(() => import('./views/DeadlinesView')),
 });
 
 registerBoardsRoute('/matters/caseload', {

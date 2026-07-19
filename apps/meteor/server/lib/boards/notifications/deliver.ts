@@ -1,10 +1,57 @@
-import type { IBoardCard, IBoardNotification } from '@rocket.chat/core-typings';
+import type { BoardNotificationAction, IBoardCard, IBoardNotification } from '@rocket.chat/core-typings';
 import { BoardsNotifications } from '@rocket.chat/models';
 
 import { settings } from '../../../../app/settings/server';
 import { SystemLogger } from '../../logger/system';
 import type { BoardEventName } from '../events';
+import { boardNotificationPrefsService } from './preferences.service';
 import { resolveCardRecipients, resolveBoardRecipients } from './subscriptions';
+import { sendWebPushToUser, isWebPushConfigured } from '../../../../app/web-push/server/send';
+
+/**
+ * Map a delivery `kind` (BoardEventName or synthesized reason) to the per-user preference
+ * action a recipient can toggle/mute. Anything unmapped falls through to `null` = "not a
+ * user-configurable event", which is always delivered in-app (system/digest notices the
+ * matrix doesn't cover) but never forced as push.
+ */
+function kindToAction(kind: string): BoardNotificationAction | null {
+	if (kind === 'mention' || kind.includes('mention')) {
+		return 'mentioned';
+	}
+	if (kind.includes('assign') || kind === 'member.added') {
+		return 'assigned';
+	}
+	if (kind === 'sla_breach' || kind === 'sol_warning' || kind.includes('due')) {
+		return 'due_soon';
+	}
+	if (kind.includes('approval')) {
+		return 'approval_requested';
+	}
+	if (kind === 'card.moved' || kind === 'list.moved' || kind.includes('stage')) {
+		return 'stage_changed';
+	}
+	return null;
+}
+
+/**
+ * Resolve, per recipient, which channels this notification is allowed on — honoring the
+ * user's mute + per-event-type × channel matrix. When the event maps to no configurable
+ * action (system/digest), it delivers in-app (matrix doesn't govern it) and never pushes.
+ * Fail-open on a prefs read error so a lookup glitch never silences a real notification.
+ */
+async function channelsFor(userId: string, kind: string, boardId?: string): Promise<{ inApp: boolean; push: boolean }> {
+	const action = kindToAction(kind);
+	if (!action || !boardId) {
+		return { inApp: true, push: false };
+	}
+	try {
+		const prefs = await boardNotificationPrefsService.shouldNotify(userId, action, boardId);
+		return { inApp: prefs.inApp, push: prefs.push };
+	} catch (err) {
+		SystemLogger.debug({ msg: 'boards.notifications.prefs.readFailed', userId, kind, err });
+		return { inApp: true, push: false };
+	}
+}
 
 /**
  * Boards notification DELIVERY (M8 — closes the M7 NOTIFY-action gap + is the fan-out
@@ -36,6 +83,15 @@ import { resolveCardRecipients, resolveBoardRecipients } from './subscriptions';
 function inAppEnabled(): boolean {
 	try {
 		return settings.get('Boards_Notifications_InApp_Enabled') !== false;
+	} catch {
+		return true;
+	}
+}
+
+/** Web push delivery master toggle (degrades to enabled-by-default if the setting read fails). */
+function webPushEnabled(): boolean {
+	try {
+		return settings.get('Boards_Notifications_WebPush_Enabled') !== false;
 	} catch {
 		return true;
 	}
@@ -80,12 +136,62 @@ export function boardLink(boardId: string): string {
 }
 
 /**
+ * Send web push notifications to recipients (browser push via VAPID). Fire-and-forget with
+ * graceful degradation: failures are logged at debug and do not affect in-app delivery.
+ * Only attempts sends if web-push is configured and the setting is enabled.
+ */
+async function sendWebPushNotifications(recipients: string[], spec: NotificationSpec): Promise<void> {
+	if (!webPushEnabled() || !isWebPushConfigured()) {
+		return;
+	}
+
+	const payload = {
+		title: spec.title,
+		...(spec.body ? { body: spec.body } : {}),
+		...(spec.link ? { url: spec.link } : {}),
+		// Use a consistent tag per card to coalesce multiple notifications
+		...(spec.cardId ? { tag: `boards-card-${spec.cardId}` } : spec.boardId ? { tag: `boards-board-${spec.boardId}` } : {}),
+	};
+
+	const unique = [...new Set(recipients.filter(Boolean))];
+	await Promise.all(
+		unique.map(async (userId) => {
+			try {
+				await sendWebPushToUser(userId, payload);
+			} catch (err) {
+				SystemLogger.debug({ msg: 'boards.notifications.webpush.sendFailed', userId, kind: spec.kind, err });
+			}
+		}),
+	);
+}
+
+/**
  * Write a `boards_notifications` row for each recipient. The low-level primitive every
  * other helper here funnels through. De-dupes the recipient list, honors the in-app
  * toggle, and never throws (per-row failures are swallowed + logged at debug).
+ * Also dispatches web push notifications in parallel (fire-and-forget).
  */
 export async function deliverToRecipients(recipients: string[], spec: NotificationSpec): Promise<DeliveryResult> {
 	const unique = [...new Set(recipients.filter(Boolean))];
+
+	// Resolve each recipient's allowed channels ONCE (mute + per-event-type × channel matrix),
+	// then honor it for BOTH web push and the in-app row. A muted board or a push-disabled event
+	// no longer leaks through the dispatcher (the prefs feature is now enforced at delivery time,
+	// not just stored). Fail-open per user so a prefs glitch never silences a real notification.
+	const channels = new Map<string, { inApp: boolean; push: boolean }>();
+	await Promise.all(
+		unique.map(async (userId) => {
+			channels.set(userId, await channelsFor(userId, spec.kind, spec.boardId));
+		}),
+	);
+
+	// Fire web push only to recipients who allow push for this event (non-blocking).
+	const pushRecipients = unique.filter((userId) => channels.get(userId)?.push);
+	if (pushRecipients.length) {
+		void sendWebPushNotifications(pushRecipients, spec).catch((err) => {
+			SystemLogger.debug({ msg: 'boards.notifications.webpush.fanoutFailed', kind: spec.kind, err });
+		});
+	}
 
 	if (!inAppEnabled()) {
 		return { delivered: 0, recipients: unique, suppressed: true };
@@ -94,6 +200,10 @@ export async function deliverToRecipients(recipients: string[], spec: Notificati
 	let delivered = 0;
 	const now = new Date();
 	for (const userId of unique) {
+		// Skip the durable in-app row for anyone who muted the board or turned in-app off for this event.
+		if (!channels.get(userId)?.inApp) {
+			continue;
+		}
 		const row: Omit<IBoardNotification, '_id' | '_updatedAt'> = {
 			userId,
 			kind: spec.kind,
