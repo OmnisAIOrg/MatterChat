@@ -326,6 +326,79 @@ const buildLedgerCss = (t: LedgerTokens): string => `
 }
 `;
 
+/**
+ * ============================================================================
+ * PREMIUM DASHBOARD — Wave 3 refresh design tokens
+ * ============================================================================
+ *
+ * Modern card-based design with Geist typography and contemporary shadows.
+ * Used by the new PremiumDashboard component (wave3/s-dashboard feature).
+ */
+
+type DashboardTokens = {
+	bg: string;
+	surface: string;
+	border: string;
+	ink: string;
+	ink2: string;
+	ink3: string;
+	green: string;
+	greenLight: string;
+	greenSoft: string;
+	red: string;
+	amber: string;
+	blue: string;
+};
+
+const PREMIUM_LIGHT: DashboardTokens = {
+	bg: '#F6F6F3',
+	surface: '#FFFFFF',
+	border: '#E7E6E0',
+	ink: '#171D19',
+	ink2: '#57615B',
+	ink3: '#8E968F',
+	green: '#17804D',
+	greenLight: '#0F6A3D',
+	greenSoft: '#E8F3ED',
+	red: '#CF4438',
+	amber: '#A97A18',
+	blue: '#3C6EB4',
+};
+
+const PREMIUM_DARK: DashboardTokens = {
+	bg: '#0F1512',
+	surface: '#151C17',
+	border: '#242D27',
+	ink: '#E9EDEA',
+	ink2: '#A2ACA5',
+	ink3: '#707B74',
+	green: '#3FBC7C',
+	greenLight: '#57CD90',
+	greenSoft: '#152A1E',
+	red: '#E0685D',
+	amber: '#D3A24A',
+	blue: '#7AA3D8',
+};
+
+const buildPremiumDashboardCss = (theme: string): string => {
+	const t = theme === 'dark' ? PREMIUM_DARK : PREMIUM_LIGHT;
+
+	return `:root[data-theme="${theme}"] {
+		--premium-dashboard-bg: ${t.bg};
+		--premium-dashboard-surface: ${t.surface};
+		--premium-dashboard-border: ${t.border};
+		--premium-dashboard-ink: ${t.ink};
+		--premium-dashboard-ink2: ${t.ink2};
+		--premium-dashboard-ink3: ${t.ink3};
+		--premium-dashboard-green: ${t.green};
+		--premium-dashboard-green-light: ${t.greenLight};
+		--premium-dashboard-green-soft: ${t.greenSoft};
+		--premium-dashboard-red: ${t.red};
+		--premium-dashboard-amber: ${t.amber};
+		--premium-dashboard-blue: ${t.blue};
+	}`;
+};
+
 export const MainLayoutStyleTags = () => {
 	const [, , theme] = useThemeMode();
 
@@ -346,6 +419,8 @@ export const MainLayoutStyleTags = () => {
 			<style dangerouslySetInnerHTML={{ __html: MATTERCHAT_FRAME_CSS }} />
 			{/* Static, theme-derived constant string — ledger accents Fuselage tokens don't cover. */}
 			{branded && <style dangerouslySetInnerHTML={{ __html: buildLedgerCss(ledger) }} />}
+			{/* Premium dashboard tokens — Wave 3 refresh design. */}
+			{branded && <style dangerouslySetInnerHTML={{ __html: buildPremiumDashboardCss(theme) }} />}
 		</>
 	);
 };
