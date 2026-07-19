@@ -31,6 +31,7 @@ import type { EmojiCustomEndpoints } from './v1/emojiCustom';
 import type { ExternalWorkspacesEndpoints } from './v1/external-workspaces';
 import type { FederationEndpoints } from './v1/federation';
 import type { FirmFeedEndpoints } from './v1/firm-feed'; // MATTERCHAT: Firm Feed (My Day bulletin)
+import type { FirmsEndpoints } from './v1/firms'; // MATTERCHAT: Self-serve firms
 import type { GroupsEndpoints } from './v1/groups';
 import type { ImportEndpoints } from './v1/import';
 import type { InstancesEndpoints } from './v1/instances';
@@ -112,6 +113,7 @@ export interface Endpoints
 		BoardsAiEndpoints,
 		BoardsFormsEndpoints,
 		FirmFeedEndpoints, // MATTERCHAT: Firm Feed (My Day bulletin)
+		FirmsEndpoints, // MATTERCHAT: Self-serve firms
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
@@ -294,6 +296,7 @@ export * from './v1/boards-forms';
 export type * from './v1/external-workspaces';
 export * from './v1/federation';
 export * from './v1/firm-feed'; // MATTERCHAT: Firm Feed (My Day bulletin)
+export type * from './v1/firms'; // MATTERCHAT: Self-serve firms
 export * from './v1/rooms';
 export * from './v1/rooms-legal-hold';
 export * from './v1/groups';

@@ -7,12 +7,13 @@ import { isTruthy } from '@rocket.chat/tools';
 import mem from 'mem';
 import { DDPRateLimiter } from 'meteor/ddp-rate-limiter';
 import { Meteor } from 'meteor/meteor';
-import type { FindOptions, SortDirection } from 'mongodb';
+import type { Filter, FindOptions, SortDirection } from 'mongodb';
 
 import { hasPermissionAsync } from '../../app/authorization/server/functions/hasPermission';
 import { methodDeprecationLogger } from '../../app/lib/server/lib/deprecationWarningLogger';
 import { settings } from '../../app/settings/server';
 import { trim } from '../../lib/utils/stringUtils';
+import { getFirmScopeExtraQuery } from '../lib/firms/firmsService';
 
 const sortChannels = (field: string, direction: 'asc' | 'desc'): Record<string, 1 | -1> => {
 	switch (field) {
@@ -180,6 +181,7 @@ const findUsers = async ({
 	pagination,
 	workspace,
 	viewFullOtherUserInfo,
+	firmScope,
 }: {
 	text: string;
 	sort: Record<string, SortDirection>;
@@ -189,6 +191,7 @@ const findUsers = async ({
 	};
 	workspace: string;
 	viewFullOtherUserInfo: boolean;
+	firmScope?: Filter<IUser> | null;
 }) => {
 	const searchFields =
 		workspace === 'all' ? ['username', 'name', 'emails.address'] : settings.get<string>('Accounts_SearchFields').trim().split(',');
@@ -222,7 +225,13 @@ const findUsers = async ({
 		  };
 
 	if (workspace === 'all') {
-		const { cursor, totalCount } = Users.findPaginatedByActiveUsersExcept<FederatedUser>(text, [], options, searchFields);
+		const { cursor, totalCount } = Users.findPaginatedByActiveUsersExcept<FederatedUser>(
+			text,
+			[],
+			options,
+			searchFields,
+			firmScope ? [firmScope] : [],
+		);
 		const [results, total] = await Promise.all([cursor.toArray(), totalCount]);
 		return {
 			total,
@@ -232,6 +241,21 @@ const findUsers = async ({
 
 	if (workspace === 'external') {
 		const { cursor, totalCount } = Users.findPaginatedByActiveExternalUsersExcept<FederatedUser>(text, [], options, searchFields);
+		const [results, total] = await Promise.all([cursor.toArray(), totalCount]);
+		return {
+			total,
+			results,
+		};
+	}
+
+	// MATTERCHAT: with a firm scope, replicate the "local users" filter and add
+	// the firm restriction (findPaginatedByActiveLocalUsersExcept has no
+	// extraQuery parameter and packages/models stays untouched).
+	if (firmScope) {
+		const { cursor, totalCount } = Users.findPaginatedByActiveUsersExcept<FederatedUser>(text, [], options, searchFields, [
+			{ federation: { $exists: false } } as Filter<IUser>,
+			firmScope,
+		]);
 		const [results, total] = await Promise.all([cursor.toArray(), totalCount]);
 		return {
 			total,
@@ -263,7 +287,10 @@ const getUsers = async (
 
 	const viewFullOtherUserInfo = await hasPermissionAsync(user._id, 'view-full-other-user-info');
 
-	const { total, results } = await findUsers({ text, sort, pagination, workspace, viewFullOtherUserInfo });
+	// MATTERCHAT: self-serve firms — scope the directory to the caller's firm.
+	const firmScope = await getFirmScopeExtraQuery(user._id);
+
+	const { total, results } = await findUsers({ text, sort, pagination, workspace, viewFullOtherUserInfo, firmScope });
 
 	return {
 		total,

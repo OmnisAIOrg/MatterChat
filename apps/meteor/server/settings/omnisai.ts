@@ -82,4 +82,22 @@ export const createOmnisAIOAuthSettings = () =>
 			i18nLabel: 'CrossFirm_Firm_Name',
 			i18nDescription: 'CrossFirm_Firm_Name_Description',
 		});
+
+		// Self-serve firms (public signup → create firm → invite teammates).
+		// Off by default; enabled per-deployment via OVERWRITE_SETTING_*.
+		await this.add('Firms_SelfServe_Enabled', false, {
+			type: 'boolean',
+			public: true,
+			i18nLabel: 'Firms_SelfServe_Enabled',
+			i18nDescription: 'Firms_SelfServe_Enabled_Description',
+		});
+
+		// When self-serve is on, scope the user directory / search surfaces so
+		// members of one firm cannot enumerate members of another.
+		await this.add('Firms_Scoped_Directory', true, {
+			type: 'boolean',
+			public: false,
+			i18nLabel: 'Firms_Scoped_Directory',
+			i18nDescription: 'Firms_Scoped_Directory_Description',
+		});
 	});
