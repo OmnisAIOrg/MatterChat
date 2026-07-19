@@ -8,6 +8,7 @@ import { memo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
+import EnsoMark from '../../../components/EnsoMark';
 import { UserMenu } from '../../../navbar/NavBarSettingsToolbar';
 import { NOTIFICATIONS_UNREAD_KEY } from '../../boards/notifications/NotificationsInbox';
 import { getUnseenUpdates } from '../../../updates/updatesFeed';
@@ -336,6 +337,8 @@ const AppLeftRail = () => {
 					Chat
 				</Box>
 			</Box>
+			{/* Ambient ensō loop under the wordmark — same living brand mark as the Omnis CC rail. */}
+			<EnsoMark size={44} style={{ marginTop: 4, marginBottom: 2 }} />
 			<Box className={dividerClass} />
 			<Box className={sectionLabelClass}>MENU</Box>
 			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px', width: '100%' }}>

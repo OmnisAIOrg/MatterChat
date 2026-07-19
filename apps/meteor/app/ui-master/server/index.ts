@@ -5,7 +5,7 @@ import { Meteor } from 'meteor/meteor';
 import { Inject } from 'meteor/meteorhacks:inject-initial';
 import { Tracker } from 'meteor/tracker';
 
-import { applyHeadInjections, headInjections, injectIntoBody, injectIntoHead } from './inject';
+import { addScript, applyHeadInjections, headInjections, injectIntoBody, injectIntoHead } from './inject';
 import { getMessageMaxParseLength } from '../../../lib/getMessageMaxParseLength';
 import { withDebouncing } from '../../../lib/utils/highOrderFunctions';
 import { settings } from '../../settings/server';
@@ -69,6 +69,72 @@ Meteor.startup(() => {
 			)
 			.join('\n\t\t')}`,
 	);
+
+	// MATTERCHAT: Ensō boot splash — the same brand loading animation as the Omnis Command Center
+	// desktop app (ported pattern: hold-mode charge + "Initializing" caption + 3.5s minimum, then
+	// ignite + reveal once the app has painted). Loader + assets ship in public/enso/. Skipped for
+	// embedded layouts and under DISABLE_ANIMATION (E2E). NOTE: must go through addScript (served
+	// as a same-origin file) — a raw inline <script> is silently killed by the CSP.
+	if (!process.env.DISABLE_ANIMATION) {
+		addScript(
+			'ensosplash',
+			`(function () {
+				if (/layout=embedded/.test(location.search)) return;
+				var MIN = 3500;
+				var started = performance.now();
+				var revealed = false;
+				var label = null;
+				var labelAnim = null;
+				function dismissLabel() {
+					if (!label) return;
+					try { labelAnim && labelAnim.cancel(); } catch (e) {}
+					try { label.animate([{ opacity: 0.9 }, { opacity: 0 }], { duration: 400, easing: 'ease', fill: 'forwards' }); } catch (e) {}
+				}
+				function reveal() {
+					if (revealed) return;
+					revealed = true;
+					setTimeout(function () {
+						dismissLabel();
+						window.EnsoLoader && window.EnsoLoader.done();
+					}, Math.max(0, MIN - (performance.now() - started)));
+				}
+				function watchReady() {
+					var r = document.getElementById('react-root');
+					if (r && r.firstElementChild) { requestAnimationFrame(function () { requestAnimationFrame(reveal); }); return; }
+					var mo = new MutationObserver(function () {
+						var el = document.getElementById('react-root');
+						if (el && el.firstElementChild) {
+							mo.disconnect();
+							requestAnimationFrame(function () { requestAnimationFrame(reveal); });
+						}
+					});
+					mo.observe(document.documentElement, { childList: true, subtree: true });
+				}
+				function boot() {
+					if (!window.EnsoLoader) return;
+					window.EnsoLoader.play({ hold: true, scrim: true, size: 240 });
+					label = document.createElement('div');
+					label.textContent = 'Initializing';
+					label.style.cssText = 'position:fixed;left:0;right:0;top:calc(50% + 148px);z-index:100000;pointer-events:none;text-align:center;color:rgba(255,255,255,.82);font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;';
+					document.body.appendChild(label);
+					try { labelAnim = label.animate([{ opacity: 0.4 }, { opacity: 0.92 }, { opacity: 0.4 }], { duration: 2400, iterations: Infinity, easing: 'ease-in-out' }); } catch (e) {}
+					window.addEventListener('enso-loader-done', function () { label && label.remove(); label = null; }, { once: true });
+					watchReady();
+					setTimeout(reveal, MIN + 8000); // safety cap — never hang on the splash
+				}
+				function start() {
+					var s = document.createElement('script');
+					s.src = '/enso/enso-loader.js';
+					s.async = false;
+					s.setAttribute('data-enso', 'EnsoLoader');
+					s.onload = boot;
+					s.onerror = function () {};
+					document.head.appendChild(s);
+				}
+				if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+			})();`,
+		);
+	}
 
 	if (process.env.DISABLE_ANIMATION) {
 		injectIntoHead(

@@ -466,7 +466,18 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 				fontSize: org.initial.length > 1 ? '14px' : '16px',
 			}}
 		>
-			{isSlack ? <SlackMark size={20} /> : org.initial}
+			{isSlack ? (
+				<SlackMark size={20} />
+			) : org.id === 'current' ? (
+				/* This workspace = the MatterChat app itself → the ensō app icon, not a letter tile. */
+				<img
+					src='/images/pwa/icon-192.png'
+					alt={org.name}
+					style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover', borderRadius: 'inherit' }}
+				/>
+			) : (
+				org.initial
+			)}
 
 			{isSlack && (
 				<Box
