@@ -1,14 +1,16 @@
-import type { BoardsPipelineType } from '@rocket.chat/core-typings';
+import type { BoardsPipelineType, IBoardTemplate } from '@rocket.chat/core-typings';
 import type { SelectOption } from '@rocket.chat/fuselage';
-import { Field, FieldLabel, FieldRow, FieldError, Select, TextInput, Box } from '@rocket.chat/fuselage';
+import { Field, FieldLabel, FieldRow, FieldError, Select, TextInput, Box, Button } from '@rocket.chat/fuselage';
 import { GenericModal } from '@rocket.chat/ui-client';
-import { useId, useMemo } from 'react';
+import { useState, useId, useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import BoardTemplateGallery from './BoardTemplateGallery';
 
 export type NewBoardFormValues = {
 	title: string;
 	pipelineType: BoardsPipelineType;
+	templateId?: string;
 };
 
 type NewBoardModalProps = {
@@ -18,15 +20,21 @@ type NewBoardModalProps = {
 
 const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 	const { t } = useTranslation();
+	const [showTemplates, setShowTemplates] = useState(false);
+	const [selectedTemplate, setSelectedTemplate] = useState<Partial<IBoardTemplate> | null>(null);
 
 	const {
 		register,
 		control,
 		handleSubmit,
 		formState: { errors, isSubmitting },
+		watch,
+		setValue,
 	} = useForm<NewBoardFormValues>({
-		defaultValues: { title: '', pipelineType: 'general' },
+		defaultValues: { title: '', pipelineType: 'general', templateId: undefined },
 	});
+
+	const pipelineType = watch('pipelineType');
 
 	const titleId = useId();
 	const pipelineId = useId();
@@ -40,6 +48,31 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 		[t],
 	);
 
+	const handleSelectTemplate = (template: Partial<IBoardTemplate>) => {
+		setSelectedTemplate(template);
+		setValue('templateId', template._id);
+		setValue('pipelineType', template.pipelineType || 'general');
+		setShowTemplates(false);
+	};
+
+	if (showTemplates) {
+		return (
+			<GenericModal
+				title={t('Boards_Select_Template')}
+				confirmText={t('Cancel')}
+				onCancel={onClose}
+				onClose={onClose}
+				confirmDisabled={false}
+				onConfirm={() => setShowTemplates(false)}
+			>
+				<BoardTemplateGallery
+					pipelineType={pipelineType}
+					onSelectTemplate={handleSelectTemplate}
+				/>
+			</GenericModal>
+		);
+	}
+
 	return (
 		<GenericModal
 			wrapperFunction={(props) => <Box is='form' onSubmit={handleSubmit((values) => onConfirm(values))} {...props} />}
@@ -49,6 +82,25 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 			onClose={onClose}
 			confirmDisabled={isSubmitting}
 		>
+			{selectedTemplate && (
+				<Box mbe={16} p={12} bg='tint' borderRadius='x4'>
+					<Box fontScale='p2b' mbe={4}>
+						{t('Template_Selected')}: {selectedTemplate.name}
+					</Box>
+					<Button
+						small
+						secondary
+						onClick={() => {
+							setSelectedTemplate(null);
+							setValue('templateId', undefined);
+							setShowTemplates(false);
+						}}
+					>
+						{t('Change_Template')}
+					</Button>
+				</Box>
+			)}
+
 			<Field>
 				<FieldLabel htmlFor={titleId}>{t('Title')}</FieldLabel>
 				<FieldRow>
@@ -79,6 +131,12 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 					/>
 				</FieldRow>
 			</Field>
+
+			<Box mbs={12} display='flex' gap={8}>
+				<Button secondary onClick={() => setShowTemplates(true)}>
+					{t('Browse_Templates')}
+				</Button>
+			</Box>
 		</GenericModal>
 	);
 };

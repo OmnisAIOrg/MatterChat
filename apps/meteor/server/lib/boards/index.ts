@@ -4,3 +4,4 @@ export * from './service';
 export * from './reads';
 export * from './ical';
 export * from './ical-token';
+export * from './templates';
