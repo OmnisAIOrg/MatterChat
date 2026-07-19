@@ -33,6 +33,7 @@ export type BoardsActivityVerb =
 	| 'automation.ran'
 	| 'automation.notified'
 	| 'casepro.snapshot.refreshed'
+	| 'casepro.snapshot.failed'
 	| 'casepro.stage.pushed'
 	| 'casepro.task.pushed'
 	| 'form.intake.routed'
