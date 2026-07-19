@@ -2,7 +2,8 @@ import { cronJobs } from '@rocket.chat/cron';
 import { Boards } from '@rocket.chat/models';
 
 import { caseProTransportDiagnostics } from '../lib/boards/casepro';
-import { isCaseProEnabled, pullFromCasePro } from '../lib/boards/leads';
+import { isCaseProEnabled as isCaseProEnabledLeads, pullFromCasePro as pullLeadsFromCasePro } from '../lib/boards/leads';
+import { isCaseProEnabled as isCaseProEnabledMatters, pullFromCasePro as pullMattersFromCasePro } from '../lib/boards/matters';
 import { SystemLogger } from '../lib/logger/system';
 
 /**
@@ -26,7 +27,7 @@ import { SystemLogger } from '../lib/logger/system';
  */
 
 async function runCaseProLeadsPull(): Promise<void> {
-	if (!isCaseProEnabled()) {
+	if (!isCaseProEnabledLeads()) {
 		return;
 	}
 	const diag = caseProTransportDiagnostics();
@@ -43,10 +44,43 @@ async function runCaseProLeadsPull(): Promise<void> {
 	}
 
 	try {
-		const result = await pullFromCasePro(board.createdBy);
+		const result = await pullLeadsFromCasePro(board.createdBy);
 		SystemLogger.info({ msg: 'boards.casepro.cron.leadsPull', ...result });
 	} catch (err) {
 		SystemLogger.warn({ msg: 'boards.casepro.cron.leadsPull.failed', err });
+	}
+}
+
+/**
+ * CasePro matters-pull cron (mirrors runCaseProLeadsPull).
+ *
+ * Same gating: CasePro_Enabled is on, transport is LIVE, and a matters board exists.
+ * Actor: the existing board's `createdBy`.
+ */
+async function runCaseProMattersPull(): Promise<void> {
+	if (!isCaseProEnabledMatters()) {
+		return;
+	}
+	const diag = caseProTransportDiagnostics();
+	if (diag.effective === 'stub') {
+		SystemLogger.debug({ msg: 'boards.casepro.cron.mattersPull.skipped', reason: diag.reason ?? 'transport is stub' });
+		return;
+	}
+
+	const boards = await Boards.findByPipelineType('matters').toArray();
+	const board = boards.find((b) => !b.archived);
+	if (!board) {
+		// never create a board from the cron — nothing to sync into yet.
+		return;
+	}
+
+	try {
+		const result = await pullMattersFromCasePro(board.createdBy);
+		if (result) {
+			SystemLogger.info({ msg: 'boards.casepro.cron.mattersPull', ...result });
+		}
+	} catch (err) {
+		SystemLogger.warn({ msg: 'boards.casepro.cron.mattersPull.failed', err });
 	}
 }
 
@@ -71,7 +105,7 @@ export async function boardsCaseProSyncCron(): Promise<void> {
 		SystemLogger.info({ msg: 'CasePro live transport active', host: diag.host, orgConfigured: diag.orgConfigured });
 	}
 
-	// every 15 minutes — frequent enough for an intake pipeline, far below any
-	// rate ceiling given the pull is one listIntakes page-through per tick.
+	// every 15 minutes — frequent enough for both pipelines, far below any rate ceiling.
 	await cronJobs.add('BoardsCaseProLeadsPull', '*/15 * * * *', async () => runCaseProLeadsPull());
+	await cronJobs.add('BoardsCaseProMattersPull', '*/15 * * * *', async () => runCaseProMattersPull());
 }

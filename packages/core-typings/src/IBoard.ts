@@ -61,6 +61,15 @@ export interface IBoardCaseProSync {
 	 * CasePro emits no task events, so there is no pull direction.
 	 */
 	taskSyncEnabled?: boolean;
+
+	/**
+	 * Sync status tracking for auto-sync (login + interval). Omitted = never synced yet.
+	 */
+	syncStatus?: {
+		lastSyncStartedAt?: Date;
+		lastSyncFinishedAt?: Date;
+		lastSyncError?: string;
+	};
 }
 
 export interface IBoard extends IRocketChatRecord {
