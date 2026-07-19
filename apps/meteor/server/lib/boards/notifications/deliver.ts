@@ -5,6 +5,7 @@ import { settings } from '../../../../app/settings/server';
 import { SystemLogger } from '../../logger/system';
 import type { BoardEventName } from '../events';
 import { resolveCardRecipients, resolveBoardRecipients } from './subscriptions';
+import { sendWebPushToUser, isWebPushConfigured } from '../../../../app/web-push/server/send';
 
 /**
  * Boards notification DELIVERY (M8 — closes the M7 NOTIFY-action gap + is the fan-out
@@ -36,6 +37,15 @@ import { resolveCardRecipients, resolveBoardRecipients } from './subscriptions';
 function inAppEnabled(): boolean {
 	try {
 		return settings.get('Boards_Notifications_InApp_Enabled') !== false;
+	} catch {
+		return true;
+	}
+}
+
+/** Web push delivery master toggle (degrades to enabled-by-default if the setting read fails). */
+function webPushEnabled(): boolean {
+	try {
+		return settings.get('Boards_Notifications_WebPush_Enabled') !== false;
 	} catch {
 		return true;
 	}
@@ -80,12 +90,48 @@ export function boardLink(boardId: string): string {
 }
 
 /**
+ * Send web push notifications to recipients (browser push via VAPID). Fire-and-forget with
+ * graceful degradation: failures are logged at debug and do not affect in-app delivery.
+ * Only attempts sends if web-push is configured and the setting is enabled.
+ */
+async function sendWebPushNotifications(recipients: string[], spec: NotificationSpec): Promise<void> {
+	if (!webPushEnabled() || !isWebPushConfigured()) {
+		return;
+	}
+
+	const payload = {
+		title: spec.title,
+		...(spec.body ? { body: spec.body } : {}),
+		...(spec.link ? { url: spec.link } : {}),
+		// Use a consistent tag per card to coalesce multiple notifications
+		...(spec.cardId ? { tag: `boards-card-${spec.cardId}` } : spec.boardId ? { tag: `boards-board-${spec.boardId}` } : {}),
+	};
+
+	const unique = [...new Set(recipients.filter(Boolean))];
+	await Promise.all(
+		unique.map(async (userId) => {
+			try {
+				await sendWebPushToUser(userId, payload);
+			} catch (err) {
+				SystemLogger.debug({ msg: 'boards.notifications.webpush.sendFailed', userId, kind: spec.kind, err });
+			}
+		}),
+	);
+}
+
+/**
  * Write a `boards_notifications` row for each recipient. The low-level primitive every
  * other helper here funnels through. De-dupes the recipient list, honors the in-app
  * toggle, and never throws (per-row failures are swallowed + logged at debug).
+ * Also dispatches web push notifications in parallel (fire-and-forget).
  */
 export async function deliverToRecipients(recipients: string[], spec: NotificationSpec): Promise<DeliveryResult> {
 	const unique = [...new Set(recipients.filter(Boolean))];
+
+	// Fire web push in parallel (non-blocking, failures logged at debug).
+	void sendWebPushNotifications(unique, spec).catch((err) => {
+		SystemLogger.debug({ msg: 'boards.notifications.webpush.fanoutFailed', kind: spec.kind, err });
+	});
 
 	if (!inAppEnabled()) {
 		return { delivered: 0, recipients: unique, suppressed: true };

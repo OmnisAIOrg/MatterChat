@@ -7976,6 +7976,8 @@
   "Boards_Reporting": "Boards Reporting & AI",
   "Boards_Notifications_InApp_Enabled": "Enable in-app notifications",
   "Boards_Notifications_InApp_Enabled_Description": "Deliver board events (assignments, mentions, due/SOL warnings, automation NOTIFY actions) to the in-app Boards inbox and bell.",
+  "Boards_Notifications_WebPush_Enabled": "Enable browser push notifications",
+  "Boards_Notifications_WebPush_Enabled_Description": "Send browser/PWA push notifications for board events when users have subscribed. Requires WEB_PUSH_VAPID_* keys to be configured on the server.",
   "Boards_Email_Digest_Enabled": "Enable email digest",
   "Boards_Email_Digest_Enabled_Description": "Send each user a periodic email summarizing their unread board notifications. Requires SMTP to be configured; silently skipped otherwise.",
   "Boards_Email_Digest_Schedule": "Email digest schedule (cron)",
