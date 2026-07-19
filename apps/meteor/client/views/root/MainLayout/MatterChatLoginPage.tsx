@@ -14,8 +14,11 @@ import { useState } from 'react';
  *
  * REAL WIRING (this is not a mockup):
  *   • email/password → useLoginWithPassword (same hook the stock LoginForm uses)
- *   • "Sign in with Omnis ID" → Meteor.loginWithOmnisai() when present (desktop deep-link
- *     aware), else /_omnisai/authorize — gated on the OmnisAI_OIDC_Enabled setting
+ *   • "Sign in with Omnis ID" → plain in-window /_omnisai/authorize (302s to sso.omnisai.io);
+ *     stays IN the desktop app window (wrapper whitelists OmnisAI SSO hosts) — no browser bounce,
+ *     no matterchat:// deep-link. Gated on the OmnisAI_OIDC_Enabled setting.
+ *   • On the desktop app (window.matterchatDesktop) the page goes full-bleed so the native window
+ *     chrome is the only frame (the decorative green frame otherwise clashes with the traffic lights).
  *   • "Forgot password?" / "Create an account" → falls back to the STOCK RegistrationRoute
  *     at 'reset-password' / 'register' (full stock flows preserved)
  *   • success → the green Ensō Loader bridges into the workspace
@@ -76,6 +79,13 @@ const injectStyles = (): void => {
    Make the left brand chamber + a top strip draggable; keep every interactive control no-drag.
    In a normal browser -webkit-app-region is a harmless no-op. */
 .mclg-dragbar { position: absolute; top: 0; left: 0; right: 0; height: 46px; -webkit-app-region: drag; z-index: 55; }
+/* Desktop app (frameless window): drop the decorative green outer frame + rounded shell so the
+   page is full-bleed and the native window chrome is the ONLY frame — otherwise the macOS traffic
+   lights float on the green border and look broken. Nudge the brand chamber's top padding down so
+   the lockup clears the inset traffic lights. */
+.mclg-desktop .mclg-frame { padding: 0 !important; background: #041109 !important; }
+.mclg-desktop .mclg-shell { border-radius: 0 !important; box-shadow: none !important; }
+.mclg-desktop .mclg-left { padding-top: 52px !important; }
 .mclg-left { -webkit-app-region: drag; }
 .mclg-card, .mclg-card *, .mclg-field, .mclg-primary, .mclg-omnis, .mclg-eye, .mclg-root a, .mclg-root button, .mclg-root input { -webkit-app-region: no-drag; }
 
@@ -137,12 +147,13 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 		return <RegistrationRoute defaultRoute={stockRoute}>{children}</RegistrationRoute>;
 	}
 
+	// ALWAYS the plain in-window OAuth flow — navigate to /_omnisai/authorize, which 302s to
+	// sso.omnisai.io/auth/login. On web this is the normal flow; in the desktop app it now stays
+	// IN the app window (the wrapper whitelists OmnisAI's first-party SSO hosts) and completes on
+	// the same-origin /_omnisai/callback — no system-browser bounce, no matterchat:// deep-link
+	// (which needed a signed app). We deliberately do NOT call Meteor.loginWithOmnisai() here: that
+	// triggers the old ?client=desktop external-browser flow that never returned to an unsigned app.
 	const handleOmnisai = (): void => {
-		const fn = (window as unknown as { Meteor?: { loginWithOmnisai?: () => void } }).Meteor?.loginWithOmnisai;
-		if (typeof fn === 'function') {
-			fn();
-			return;
-		}
 		window.location.href = '_omnisai/authorize';
 	};
 
@@ -173,7 +184,10 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 	const emailValid = /\S+@\S+|\S{3,}/.test(email);
 
 	return (
-		<div className='mclg-root' style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'auto', background: '#041109' }}>
+		<div
+			className={`mclg-root${typeof window !== 'undefined' && (window as unknown as { matterchatDesktop?: unknown }).matterchatDesktop ? ' mclg-desktop' : ''}`}
+			style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'auto', background: '#041109' }}
+		>
 			<div
 				className='mclg-frame'
 				style={{
