@@ -127,7 +127,15 @@ const ConnectWorkspaceModal = ({ onClose, onConnect }: ConnectWorkspaceModalProp
 		// Enabled but missing credentials, or fully disabled: keep the card visible and explain.
 		if (isAdmin) {
 			return (
-				<Button small secondary onClick={(): void => router.navigate(`/admin/settings/${spec.settingsGroup}`)}>
+				<Button
+					small
+					secondary
+					onClick={(): void => {
+						// Close FIRST: navigating behind an open modal looks like a dead button.
+						onClose();
+						router.navigate(`/admin/settings/${spec.settingsGroup}`);
+					}}
+				>
 					<Icon name='cog' size='x16' mie={4} />
 					{state.enabled
 						? t('Connector_Finish_Setup', { defaultValue: 'Finish setup' })
