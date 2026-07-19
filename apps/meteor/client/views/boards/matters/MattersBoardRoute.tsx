@@ -44,6 +44,14 @@ const MattersBoardRoute = () => {
 	const [lastSyncAt, setLastSyncAt] = useState<Date | undefined>();
 
 	const ensureBoard = useEndpoint('POST', '/v1/boards.matters.ensureBoard');
+	// Auto-sync status (login-hook + 15-min cron): feeds the header pill so background
+	// syncs are visible, not just the manual button's own mutation state.
+	const getSyncStatus = useEndpoint('GET', '/v1/boards.casepro.syncStatus');
+	const { data: syncStatus } = useQuery({
+		queryKey: ['boards', 'casepro', 'syncStatus'],
+		queryFn: () => getSyncStatus(),
+		refetchInterval: 15_000,
+	});
 	const seedFromCasePro = useEndpoint('POST', '/v1/boards.matters.seedFromCasePro');
 
 	const { data, isLoading, isError, refetch } = useQuery({
@@ -137,7 +145,12 @@ const MattersBoardRoute = () => {
 					}
 				>
 					<MattersSearch boardId={board._id} />
-					<CaseProConnectionControls onSync={handleSync} isSyncing={seedMutation.isPending} lastSyncAt={lastSyncAt} mie={4} />
+					<CaseProConnectionControls
+						onSync={handleSync}
+						isSyncing={seedMutation.isPending || Boolean(syncStatus?.syncing)}
+						lastSyncAt={syncStatus?.lastSyncFinishedAt ? new Date(syncStatus.lastSyncFinishedAt) : lastSyncAt}
+						mie={4}
+					/>
 					<ButtonGroup>
 						<BoardAutomationsButton boardId={board._id} small={false} />
 					</ButtonGroup>
