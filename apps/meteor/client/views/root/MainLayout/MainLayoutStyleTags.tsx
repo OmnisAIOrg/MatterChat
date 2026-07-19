@@ -642,67 +642,61 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	color: var(--mc-premium-ink);
 }
 
-/* Composer section styling */
-.rcx-content--main .message-box {
+/* Composer section styling (rc-message-box is the footer wrapper) */
+.rcx-content--main .rc-message-box {
 	padding: 14px 26px 18px;
 	background-color: var(--mc-premium-bg);
 }
 
-.rcx-content--main .message-box-wrapper {
+.rcx-content--main .rc-message-box > div {
 	max-width: 860px;
 	margin: 0 auto;
 }
 
-/* Message input box */
-.rcx-content--main .rcx-message-box {
+/* Message composer (ui-composer MessageComposer component) */
+.rcx-content--main .rcx-message-composer {
 	background-color: var(--mc-premium-surface);
 	border: 1px solid var(--mc-premium-border2);
 	border-radius: 13px;
 	box-shadow: var(--mc-premium-shadow1);
 	transition: all 150ms;
-	padding: 0;
 }
 
-.rcx-content--main .rcx-message-box:hover {
+.rcx-content--main .rcx-message-composer:hover {
 	border-color: var(--mc-premium-ink3);
 }
 
-.rcx-content--main .rcx-message-box:focus-within {
+.rcx-content--main .rcx-message-composer:focus-within {
 	border-color: var(--mc-premium-ink3);
 }
 
-/* Composer input area */
-.rcx-content--main .rcx-input-box__input {
+/* Message composer input area */
+.rcx-content--main .rcx-message-composer__input {
 	color: var(--mc-premium-ink);
-	border: none;
 	padding: 11px 14px;
+	border: none;
 }
 
-.rcx-content--main .rcx-input-box__input::placeholder {
+.rcx-content--main .rcx-message-composer__input::placeholder {
 	color: var(--mc-premium-ink3);
 }
 
-/* Send button (primary action) */
-.rcx-content--main .rcx-message-box .rcx-button--primary {
+/* Send button (primary action in composer) */
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button--primary {
 	background-color: var(--mc-premium-green);
 	color: var(--mc-premium-onGreen);
 	border-radius: 9px;
 	border: none;
-	width: 32px;
-	height: 32px;
-	display: grid;
-	place-items: center;
 	cursor: pointer;
 	transition: all 150ms;
-	margin: 11px 14px;
 }
 
-.rcx-content--main .rcx-message-box .rcx-button--primary:hover {
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button--primary:hover {
 	background-color: var(--mc-premium-green2);
 }
 
-/* Composer toolbar section */
-.rcx-content--main .rcx-message-box .rcx-box {
+/* Message composer toolbar section */
+.rcx-content--main .rcx-message-composer__toolbar {
 	border-top-color: var(--mc-premium-border);
 	border-top-width: 1px;
 	border-top-style: solid;
@@ -712,24 +706,34 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 }
 
 /* Toolbar buttons and formatting options */
-.rcx-content--main .rcx-message-box .rcx-button--ghost,
-.rcx-content--main .rcx-message-box .rcx-icon-button {
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button,
+.rcx-content--main .rcx-message-composer__toolbar .rcx-icon-button {
 	color: var(--mc-premium-ink3);
 	border-radius: 8px;
-	width: 30px;
-	height: 30px;
-	display: grid;
-	place-items: center;
 	cursor: pointer;
 	background-color: transparent;
 	border: none;
 	transition: all 120ms;
 }
 
-.rcx-content--main .rcx-message-box .rcx-button--ghost:hover,
-.rcx-content--main .rcx-message-box .rcx-icon-button:hover {
+.rcx-content--main .rcx-message-composer__toolbar .rcx-button:hover,
+.rcx-content--main .rcx-message-composer__toolbar .rcx-icon-button:hover {
 	background-color: var(--mc-premium-surface2);
 	color: var(--mc-premium-ink);
+}
+
+/* Legacy class support for backward compatibility */
+.rcx-content--main .rcx-message-box {
+	background-color: var(--mc-premium-surface);
+	border: 1px solid var(--mc-premium-border2);
+	border-radius: 13px;
+	box-shadow: var(--mc-premium-shadow1);
+	transition: all 150ms;
+}
+
+.rcx-content--main .rcx-message-box:hover,
+.rcx-content--main .rcx-message-box:focus-within {
+	border-color: var(--mc-premium-ink3);
 }
 
 /* Avatar styling — ensure proper radius */
