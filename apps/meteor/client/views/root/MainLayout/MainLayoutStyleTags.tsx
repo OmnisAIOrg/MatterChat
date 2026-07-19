@@ -1,5 +1,6 @@
 import { PaletteStyleTag } from '@rocket.chat/fuselage';
 import { useThemeMode } from '@rocket.chat/ui-client';
+import { useEffect } from 'react';
 
 import { codeBlock } from '../lib/codeBlockStyles';
 
@@ -89,6 +90,28 @@ body {
 		border-radius: 0 !important;
 		box-shadow: none !important;
 	}
+}
+/* DESKTOP APP (Electron): the floating green card is a web/PWA nicety that CLASHES with the native
+   window chrome — it insets the app ~22px so the macOS traffic lights (fixed at 16,16 by the wrapper)
+   land in the green border instead of on the NavBar. Go full-bleed so the OS window is the only frame
+   and the NavBar reaches the top-left. body.mc-desktop-app is toggled from JS (matterchatDesktop). */
+body.mc-desktop-app {
+	margin: 0 !important;
+	width: 100vw !important;
+	height: 100vh !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	background: #1A212C !important;
+}
+body.mc-desktop-app #react-root {
+	inset: 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+}
+/* macOS only (hidden-inset traffic lights sit top-LEFT): reserve room so the NavBar's leftmost
+   controls don't sit under the lights. Win/Linux use a right-side titleBarOverlay → no left pad. */
+body.mc-desktop-mac .rcx-navbar {
+	padding-left: 82px !important;
 }
 `;
 
@@ -858,6 +881,17 @@ const buildPremiumDashboardCss = (theme: string): string => {
 
 export const MainLayoutStyleTags = () => {
 	const [, , theme] = useThemeMode();
+
+	// Desktop app (Electron): tag <body> so the full-bleed frame + macOS traffic-light padding above
+	// activate. Inert on web/PWA (matterchatDesktop is only injected by the desktop wrapper's preload).
+	useEffect(() => {
+		const w = window as unknown as { matterchatDesktop?: unknown };
+		if (!w.matterchatDesktop) return undefined;
+		document.body.classList.add('mc-desktop-app');
+		const isMac = /Mac/i.test(navigator.platform) || /Macintosh/i.test(navigator.userAgent);
+		if (isMac) document.body.classList.add('mc-desktop-mac');
+		return () => document.body.classList.remove('mc-desktop-app', 'mc-desktop-mac');
+	}, []);
 
 	// Brand the light and dark themes; leave high-contrast (a11y) entirely stock.
 	const branded = theme === 'light' || theme === 'dark';
