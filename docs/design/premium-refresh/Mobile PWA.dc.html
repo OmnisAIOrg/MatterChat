@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0F0C}
+.mc a{color:var(--green)}
+.mc a:hover{color:var(--green2)}
+.mc{
+--bg:#F6F6F3;--surface:#FFFFFF;--surface2:#FAFAF7;--border:#E7E6E0;--border2:#DBDAD3;
+--ink:#171D19;--ink2:#57615B;--ink3:#8E968F;
+--green:#17804D;--green2:#0F6A3D;--onGreen:#FFFFFF;--greenSoft:#E8F3ED;--greenLine:#CBE5D6;--greenInk:#116240;
+--red:#CF4438;--redSoft:#FBECEA;--redLine:#F2CFCB;
+--amber:#A97A18;--amberSoft:#F8F0DF;--amberLine:#EBD9B4;
+--blue:#3C6EB4;--blueSoft:#EAF1F9;--blueLine:#CDDDF0;
+--railBg:#0D1310;--railInk:#AEB8B1;--railInk2:#6E7A73;--railLine:#1F2823;--railHover:#1A231E;
+--shadow1:0 1px 2px rgba(23,29,25,.05),0 1px 3px rgba(23,29,25,.04);
+--shadow2:0 1px 2px rgba(23,29,25,.05),0 8px 24px -8px rgba(23,29,25,.14);
+}
+.mc[data-theme="dark"]{
+--bg:#0F1512;--surface:#151C17;--surface2:#19211C;--border:#242D27;--border2:#2D372F;
+--ink:#E9EDEA;--ink2:#A2ACA5;--ink3:#707B74;
+--green:#3FBC7C;--green2:#57CD90;--onGreen:#08130D;--greenSoft:#152A1E;--greenLine:#265C3F;--greenInk:#6FD6A3;
+--red:#E0685D;--redSoft:#32201D;--redLine:#5C332D;
+--amber:#D3A24A;--amberSoft:#2E2717;--amberLine:#5A4A24;
+--blue:#7AA3D8;--blueSoft:#1B2532;--blueLine:#324B69;
+--railBg:#0B100D;--railInk:#AEB8B1;--railInk2:#69746D;--railLine:#1D2620;--railHover:#18201B;
+--shadow1:0 1px 2px rgba(0,0,0,.35);
+--shadow2:0 1px 2px rgba(0,0,0,.4),0 10px 28px -8px rgba(0,0,0,.5);
+}
+@keyframes mcPulse{0%{box-shadow:0 0 0 0 rgba(63,188,124,.55)}70%{box-shadow:0 0 0 5px rgba(63,188,124,0)}100%{box-shadow:0 0 0 0 rgba(63,188,124,0)}}
+</style>
+</helmet>
+<div class="mc" data-theme="{{ theme }}" style="font-family:'Geist',system-ui,sans-serif;min-height:100vh;background:#0B0F0C;padding:48px;display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap;-webkit-font-smoothing:antialiased">
+
+  <!-- HOME -->
+  <div style="width:390px;flex:none">
+    <div style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;color:#6E7A73;padding:0 4px 12px">PWA · HOME</div>
+    <div style="height:800px;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);border:6px solid #1A231E;box-shadow:0 30px 70px -20px rgba(0,0,0,.6)">
+      <div style="flex:none;background:var(--railBg);padding:12px 16px 10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#22A957,#0F7A3C);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px">M</div>
+          <div style="flex:1;height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:9px;background:var(--railHover);border:1px solid var(--railLine);color:var(--railInk2)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+            <span style="font-size:12px">Search</span>
+          </div>
+          <div style="position:relative">
+            <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#2FA268,#186B44);display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:600">CN</div>
+            <span style="position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:99px;background:#3FBC7C;border:2px solid var(--railBg);animation:mcPulse 2.6s ease-out infinite"></span>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;overflow:auto;padding:18px 16px 20px">
+        <div style="font-size:19px;font-weight:650;letter-spacing:-.02em;color:var(--ink)">Good evening, Chi-Hung</div>
+        <div style="margin-top:3px;font-size:12px;color:var(--ink2)">Saturday, July 18 · <span style="color:var(--red);font-weight:500">2 matters</span> near deadline</div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:9px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:13px 14px">
+            <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:var(--ink3)">ACTIVE MATTERS</div>
+            <div style="margin-top:4px;font-size:22px;font-weight:650;color:var(--ink)">99</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:13px 14px;position:relative;overflow:hidden">
+            <span style="position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--red)"></span>
+            <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:var(--red)">SOL ≤ 30D</div>
+            <div style="margin-top:4px;font-size:22px;font-weight:650;color:var(--red)">2</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:13px 14px;display:flex;align-items:center;gap:11px">
+          <div style="width:32px;height:32px;border-radius:9px;background:var(--greenSoft);border:1px solid var(--greenLine);display:grid;place-items:center;color:var(--greenInk)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12.4 2.4 2.4 4.8-5.2"></path></svg></div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink)">Due today</div>
+            <div style="font-size:11.5px;color:var(--ink2)">Nothing due — you're clear.</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 14px">
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">Approaching deadlines</span>
+            <span style="min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--redSoft);border:1px solid var(--redLine);color:var(--red);font-size:10.5px;font-weight:600;display:grid;place-items:center">2</span>
+          </div>
+          <sc-for list="{{ deadlines }}" as="d" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;border-top:1px solid var(--border)">
+              <span style="width:6px;height:6px;border-radius:99px;background:var(--red);box-shadow:0 0 0 3px var(--redSoft);flex:none"></span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:600;color:var(--ink)">{{ d.title }}</div>
+                <div style="font-size:11px;color:var(--ink3)">{{ d.date }}</div>
+              </div>
+              <span style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;padding:2.5px 7px;border-radius:6px;background:var(--redSoft);border:1px solid var(--redLine);color:var(--red)">{{ d.badge }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 14px">
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">My matters</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">99</span>
+            <span style="flex:1"></span>
+            <a href="#" style="font-size:11.5px;font-weight:500;text-decoration:none">View all →</a>
+          </div>
+          <sc-for list="{{ matters }}" as="m" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--border)">
+              <span style="width:6px;height:6px;border-radius:99px;background:var(--green);flex:none"></span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:600;color:var(--ink)">{{ m.name }}</div>
+                <div style="font-size:11px;color:var(--ink3)">{{ m.type }}</div>
+              </div>
+              <span style="font-size:10px;font-weight:600;padding:2.5px 9px;border-radius:99px;background:{{ m.bg }};color:{{ m.fg }};border:1px solid {{ m.line }}">{{ m.stage }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:none;display:flex;background:var(--surface);border-top:1px solid var(--border);padding:8px 6px 18px">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--green)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20h-5.5v-5h-5v5H4z"></path></svg><span style="font-size:9.5px;font-weight:600">Home</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9.5L4 20.5z"></path></svg><span style="font-size:9.5px;font-weight:500">Chats</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="6.6" height="6.6" rx="1.8"></rect><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.8"></rect><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.8"></rect><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.8"></rect></svg><span style="font-size:9.5px;font-weight:500">Boards</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink3);position:relative"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.3 9.2a5.7 5.7 0 0 1 11.4 0c0 4.4 1.9 5.6 1.9 5.6H4.4s1.9-1.2 1.9-5.6M10 18.8a2.1 2.1 0 0 0 4 0"></path></svg><span style="font-size:9.5px;font-weight:500">Activity</span><span style="position:absolute;top:-3px;right:24%;min-width:15px;height:15px;border-radius:99px;background:#D5375B;color:#fff;font-size:9px;font-weight:600;display:grid;place-items:center;padding:0 4px">6</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8"></path></svg><span style="font-size:9.5px;font-weight:500">Admin</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOARD -->
+  <div style="width:390px;flex:none">
+    <div style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;color:#6E7A73;padding:0 4px 12px">PWA · MATTERS BOARD</div>
+    <div style="height:800px;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);border:6px solid #1A231E;box-shadow:0 30px 70px -20px rgba(0,0,0,.6)">
+      <div style="flex:none;background:var(--railBg);padding:14px 16px 12px;display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#AEB8B1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 9 12l5.5 6"></path></svg>
+        <span style="font-size:15px;font-weight:650;color:#F2F5F3">Matters</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#AEB8B1;padding:3px 8px;border-radius:99px;border:1px solid var(--railLine)"><span style="width:6px;height:6px;border-radius:99px;background:#3FBC7C"></span>CasePro</span>
+        <span style="flex:1"></span>
+        <button style="height:28px;padding:0 11px;border-radius:8px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer">+ New</button>
+      </div>
+      <div style="flex:none;display:flex;gap:7px;padding:10px 16px;background:var(--railBg);border-bottom:1px solid var(--railLine);overflow:auto">
+        <span style="flex:none;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;font-weight:600;padding:5px 12px;border-radius:99px;background:rgba(63,188,124,.16);color:#7CD8A8">INTAKE · 17</span>
+        <span style="flex:none;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;padding:5px 12px;border-radius:99px;border:1px solid var(--railLine);color:#AEB8B1">REVIEW · 2</span>
+        <span style="flex:none;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;padding:5px 12px;border-radius:99px;border:1px solid var(--railLine);color:#AEB8B1">INVESTIGATION · 45</span>
+      </div>
+      <div style="flex:1;overflow:auto;padding:14px 16px 20px;display:flex;flex-direction:column;gap:9px">
+        <sc-for list="{{ intake }}" as="c" hint-placeholder-count="6">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:12px 13px">
+            <div style="display:flex;align-items:flex-start;gap:9px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--ink)">{{ c.name }}</div>
+                <div style="margin-top:1px;font-size:11px;color:var(--ink3)">{{ c.type }}</div>
+              </div>
+              <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--ink3)">{{ c.id }}</span>
+            </div>
+            <div style="margin-top:9px;display:flex;align-items:center;gap:8px">
+              <div style="flex:1;height:4px;border-radius:99px;background:var(--surface2);border:1px solid var(--border);overflow:hidden"><div style="height:100%;background:var(--green);width:{{ c.solPct }}"></div></div>
+              <span style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--ink3)">{{ c.sol }}</span>
+              <span style="display:inline-flex;padding-left:5px">
+                <sc-for list="{{ c.team }}" as="t" hint-placeholder-count="2"><span style="width:18px;height:18px;border-radius:99px;background:linear-gradient(135deg,#2FA268,#186B44);border:2px solid var(--surface);display:inline-grid;place-items:center;color:#fff;font-size:7px;font-weight:600;margin-left:-5px">{{ t }}</span></sc-for>
+              </span>
+            </div>
+          </div>
+        </sc-for>
+        <button style="height:38px;border-radius:11px;border:1.5px dashed var(--border2);background:transparent;color:var(--ink3);font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">+ Add card</button>
+      </div>
+      <div style="flex:none;padding:0 16px 18px;background:var(--bg)">
+        <button style="width:100%;height:44px;border-radius:13px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow2)">+ New matter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div style="width:390px;flex:none">
+    <div style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;color:#6E7A73;padding:0 4px 12px">PWA · CHAT</div>
+    <div style="height:800px;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);border:6px solid #1A231E;box-shadow:0 30px 70px -20px rgba(0,0,0,.6)">
+      <div style="flex:none;background:var(--railBg);padding:14px 16px 12px;display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#AEB8B1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 9 12l5.5 6"></path></svg>
+        <div style="position:relative;flex:none">
+          <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#2FA268,#186B44);display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:600">CN</div>
+          <span style="position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:99px;background:#3FBC7C;border:2px solid var(--railBg);animation:mcPulse 2.6s ease-out infinite"></span>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:650;color:#F2F5F3">cnguyen</div>
+          <div style="font-size:10.5px;color:#6E7A73">Online · Admin</div>
+        </div>
+        <span style="flex:1"></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7A73" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7A73" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5.5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="18.5" r="1"></circle></svg>
+      </div>
+      <div style="flex:1;overflow:auto;padding:16px 14px 8px">
+        <sc-for list="{{ chatDays }}" as="d" hint-placeholder-count="3">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0 8px">
+              <span style="flex:1;height:1px;background:var(--border)"></span>
+              <span style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.1em;color:var(--ink3);padding:2.5px 9px;border-radius:99px;border:1px solid var(--border);background:var(--surface)">{{ d.day }}</span>
+              <span style="flex:1;height:1px;background:var(--border)"></span>
+            </div>
+            <sc-for list="{{ d.msgs }}" as="m" hint-placeholder-count="2">
+              <div style="display:flex;gap:9px;padding:7px 4px">
+                <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#2FA268,#186B44);display:grid;place-items:center;color:#fff;font-size:9.5px;font-weight:600;flex:none">CN</div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:baseline;gap:7px">
+                    <span style="font-size:12.5px;font-weight:650;color:var(--ink)">cnguyen</span>
+                    <span style="font-size:10px;color:var(--ink3)">{{ m.time }}</span>
+                  </div>
+                  <sc-for list="{{ m.lines }}" as="l" hint-placeholder-count="1"><div style="margin-top:1px;font-size:13px;color:var(--ink);line-height:1.45">{{ l }}</div></sc-for>
+                </div>
+                <svg style="flex:none;margin-top:3px" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 13 4 4 7.5-8.5M12.5 17 21 7.5"></path></svg>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+      <div style="flex:none;padding:10px 14px 18px">
+        <div style="display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--border2);border-radius:13px;box-shadow:var(--shadow1);padding:9px 12px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M9 10h.01M15 10h.01M8.5 14.2c.9 1.1 2.1 1.7 3.5 1.7s2.6-.6 3.5-1.7"></path></svg>
+          <span style="flex:1;font-size:13px;color:var(--ink3)">Message @cnguyen</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.7" stroke-linecap="round"><path d="M20 12.5 12.6 20a5 5 0 0 1-7-7l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.8 1.8 0 0 1-2.5-2.5l7.4-7.4"></path></svg>
+          <span style="width:30px;height:30px;border-radius:9px;background:var(--green);display:grid;place-items:center;color:var(--onGreen)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"></path></svg></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEADLINES -->
+  <div style="width:390px;flex:none">
+    <div style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;color:#6E7A73;padding:0 4px 12px">PWA · DEADLINES</div>
+    <div style="height:800px;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);border:6px solid #1A231E;box-shadow:0 30px 70px -20px rgba(0,0,0,.6)">
+      <div style="flex:none;background:var(--railBg);padding:14px 16px 12px;display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#AEB8B1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 9 12l5.5 6"></path></svg>
+        <span style="font-size:15px;font-weight:650;color:#F2F5F3">Deadlines</span>
+        <span style="flex:1"></span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:99px;background:rgba(224,104,93,.15);border:1px solid rgba(224,104,93,.35);color:#E0685D"><span style="width:6px;height:6px;border-radius:99px;background:#E0685D"></span>SOL at risk: 2</span>
+      </div>
+      <div style="flex:1;overflow:auto;padding:16px 16px 20px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13.5px;font-weight:650;color:var(--ink)">Overdue</span>
+          <span style="min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--redSoft);border:1px solid var(--redLine);color:var(--red);font-size:10.5px;font-weight:600;display:grid;place-items:center">2</span>
+        </div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ overdue }}" as="d" hint-placeholder-count="2">
+            <div style="position:relative;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:13px 14px 13px 18px">
+              <span style="position:absolute;left:0;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--red)"></span>
+              <div style="display:flex;gap:6px">
+                <span style="font-size:9.5px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--redSoft);border:1px solid var(--redLine);color:var(--red)">Statute of limitations</span>
+                <span style="font-size:9.5px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--surface2);border:1px solid var(--border2);color:var(--ink2)">High risk</span>
+              </div>
+              <div style="margin-top:7px;font-size:13px;font-weight:650;color:var(--ink)">Statute of limitations</div>
+              <div style="margin-top:3px;font-size:11.5px;color:var(--ink2)">Due: {{ d.date }} <span style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;color:var(--red)">{{ d.days }}</span></div>
+              <div style="margin-top:10px;display:flex;gap:7px">
+                <button style="flex:1;height:30px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--ink);font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer">Open</button>
+                <button style="flex:1;height:30px;border-radius:9px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer">Acknowledge</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:20px">
+          <span style="font-size:13.5px;font-weight:650;color:var(--ink)">Later</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">124</span>
+        </div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ later }}" as="d" hint-placeholder-count="3">
+            <div style="position:relative;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:13px 14px 13px 18px;display:flex;align-items:center;gap:10px">
+              <span style="position:absolute;left:0;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--greenLine)"></span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--ink)">Statute of limitations</div>
+                <div style="margin-top:2px;font-size:11.5px;color:var(--ink2)">Due: {{ d.date }}</div>
+              </div>
+              <span style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;padding:2.5px 7px;border-radius:6px;background:var(--greenSoft);border:1px solid var(--greenLine);color:var(--greenInk)">{{ d.days }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;\&quot;light\&quot;|\&quot;dark\&quot;&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? "light";
+    const tone = {
+      green: { bg: "var(--greenSoft)", fg: "var(--greenInk)", line: "var(--greenLine)" },
+      amber: { bg: "var(--amberSoft)", fg: "var(--amber)", line: "var(--amberLine)" },
+      blue: { bg: "var(--blueSoft)", fg: "var(--blue)", line: "var(--blueLine)" }
+    };
+    const matters = [
+      ["Chauncey Frank", "Investigation", "blue"], ["Candace Ann Moore", "Initial Review", "amber"], ["Knowledge Mims", "Investigation", "blue"], ["Mark Embrey", "Pre-Litigation", "blue"]
+    ].map(x => ({ name: x[0], stage: x[1], type: "Motor Vehicle Accident", ...tone[x[2]] }));
+    const deadlines = [
+      { title: "SOL — Test Test", date: "Due 02/03/2022", badge: "896D" },
+      { title: "SOL — Judit Ferrer", date: "Due 12/30/2024", badge: "535D" }
+    ];
+    const intake = [
+      ["Candace Ann Moore", "#2", "24 MO", "80%", ["KM", "ST"]],
+      ["Karina Martinez", "#16", "24 MO", "76%", ["ST"]],
+      ["Jordan Farrell", "#22", "22 MO", "70%", ["LR", "MS"]],
+      ["Test Test 3", "#26", "18 MO", "58%", ["YA"]],
+      ["Yaritza Test", "#27", "24 MO", "78%", ["KM", "PN"]],
+      ["English Test", "#55", "23 MO", "74%", ["EB"]]
+    ].map(x => ({ name: x[0], id: x[1], sol: x[2], solPct: x[3], team: x[4], type: "Motor Vehicle Accident" }));
+    const chatDays = [
+      { day: "JULY 16TH, 2026", msgs: [{ time: "12:16 PM", lines: ["Hi", "wyd"] }] },
+      { day: "JULY 17TH, 2026", msgs: [{ time: "8:08 PM", lines: ["Hey", "Hey"] }, { time: "9:01 PM", lines: ["Hey", "Wyd"] }] },
+      { day: "TODAY", msgs: [{ time: "8:03 PM", lines: ["hi"] }] }
+    ];
+    const overdue = [{ date: "2/3/2024", days: "896D PAST" }, { date: "1/29/2025", days: "535D PAST" }];
+    const later = [{ date: "10/29/2026", days: "103D LEFT" }, { date: "5/29/2027", days: "315D LEFT" }, { date: "7/1/2027", days: "348D LEFT" }];
+    return { theme, matters, deadlines, intake, chatDays, overdue, later };
+  }
+}
+</script>
+</body>
+</html>

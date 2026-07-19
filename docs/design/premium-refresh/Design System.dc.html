@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0F0C}
+.mc a{color:var(--green)}
+.mc a:hover{color:var(--green2)}
+.mc{
+--bg:#F6F6F3;--surface:#FFFFFF;--surface2:#FAFAF7;--border:#E7E6E0;--border2:#DBDAD3;
+--ink:#171D19;--ink2:#57615B;--ink3:#8E968F;
+--green:#17804D;--green2:#0F6A3D;--onGreen:#FFFFFF;--greenSoft:#E8F3ED;--greenLine:#CBE5D6;--greenInk:#116240;
+--red:#CF4438;--redSoft:#FBECEA;--redLine:#F2CFCB;
+--amber:#A97A18;--amberSoft:#F8F0DF;--amberLine:#EBD9B4;
+--blue:#3C6EB4;--blueSoft:#EAF1F9;--blueLine:#CDDDF0;
+--railBg:#0D1310;--railBg2:#111814;--railInk:#AEB8B1;--railInk2:#6E7A73;--railLine:#1F2823;--railHover:#1A231E;
+--shadow1:0 1px 2px rgba(23,29,25,.05),0 1px 3px rgba(23,29,25,.04);
+--shadow2:0 1px 2px rgba(23,29,25,.05),0 8px 24px -8px rgba(23,29,25,.14);
+--shadow3:0 2px 6px rgba(23,29,25,.06),0 24px 60px -12px rgba(23,29,25,.25);
+--focus:0 0 0 3px rgba(23,128,77,.22);
+}
+.mc[data-theme="dark"]{
+--bg:#0F1512;--surface:#151C17;--surface2:#19211C;--border:#242D27;--border2:#2D372F;
+--ink:#E9EDEA;--ink2:#A2ACA5;--ink3:#707B74;
+--green:#3FBC7C;--green2:#57CD90;--onGreen:#08130D;--greenSoft:#152A1E;--greenLine:#265C3F;--greenInk:#6FD6A3;
+--red:#E0685D;--redSoft:#32201D;--redLine:#5C332D;
+--amber:#D3A24A;--amberSoft:#2E2717;--amberLine:#5A4A24;
+--blue:#7AA3D8;--blueSoft:#1B2532;--blueLine:#324B69;
+--railBg:#0B100D;--railBg2:#0F1511;--railInk:#AEB8B1;--railInk2:#69746D;--railLine:#1D2620;--railHover:#18201B;
+--shadow1:0 1px 2px rgba(0,0,0,.35);
+--shadow2:0 1px 2px rgba(0,0,0,.4),0 10px 28px -8px rgba(0,0,0,.5);
+--shadow3:0 2px 6px rgba(0,0,0,.4),0 24px 60px -12px rgba(0,0,0,.6);
+--focus:0 0 0 3px rgba(63,188,124,.28);
+}
+@keyframes mcShimmer{0%{background-position:120% 0}100%{background-position:-20% 0}}
+@keyframes mcSpin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div class="mc" data-theme="{{ theme }}" style="font-family:'Geist',system-ui,sans-serif;min-height:100vh;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased">
+  <div style="border-bottom:1px solid var(--border);background:var(--surface)">
+    <div style="max-width:1120px;margin:0 auto;padding:36px 40px 30px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#22A957,#0F7A3C);display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px">M</div>
+        <div style="font-size:17px;font-weight:700;letter-spacing:-.01em"><span style="color:var(--ink)">Matter</span><span style="color:#E4484D">Chat</span></div>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;padding:4px 9px;border-radius:99px;background:var(--greenSoft);border:1px solid var(--greenLine);color:var(--greenInk)">DESIGN SYSTEM V1</span>
+      </div>
+      <h1 style="margin:18px 0 0;font-size:27px;font-weight:650;letter-spacing:-.02em">Foundations &amp; components</h1>
+      <p style="margin:8px 0 0;font-size:13.5px;color:var(--ink2);max-width:620px;line-height:1.55">One visual language for every surface: Geist for UI, Geist Mono for data labels, restrained brand green on warm neutrals, soft elevation, 9–14px radii. Toggle the theme tweak to preview dark mode.</p>
+    </div>
+  </div>
+  <div style="max-width:1120px;margin:0 auto;padding:14px 40px 90px">
+
+    <!-- COLOR -->
+    <div style="padding-top:42px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">01 · COLOR TOKENS</div>
+      <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="4">
+        <div style="margin-top:20px">
+          <div style="font-size:13px;font-weight:600;color:var(--ink)">{{ g.name }}</div>
+          <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+            <sc-for list="{{ g.swatches }}" as="s" hint-placeholder-count="6">
+              <div style="width:104px">
+                <div style="height:56px;border-radius:10px;border:1px solid var(--border);background:{{ s.hex }}"></div>
+                <div style="margin-top:6px;font-size:11.5px;font-weight:600;color:var(--ink)">{{ s.label }}</div>
+                <div style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">{{ s.hex }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- TYPOGRAPHY -->
+    <div style="padding-top:52px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">02 · TYPOGRAPHY</div>
+      <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);overflow:hidden">
+        <div style="display:flex;align-items:baseline;gap:20px;padding:16px 22px"><span style="width:150px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">DISPLAY · 25/650</span><span style="font-size:25px;font-weight:650;letter-spacing:-.02em">Good evening, Chi-Hung Nguyen</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;padding:16px 22px;border-top:1px solid var(--border)"><span style="width:150px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">TITLE · 18/650</span><span style="font-size:18px;font-weight:650;letter-spacing:-.015em">Approaching deadlines</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;padding:16px 22px;border-top:1px solid var(--border)"><span style="width:150px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">HEADING · 14/600</span><span style="font-size:14px;font-weight:600">My matters</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;padding:16px 22px;border-top:1px solid var(--border)"><span style="width:150px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">BODY · 13.5/400</span><span style="font-size:13.5px;color:var(--ink2)">Once you hit Save, Start Case from Intake takes you to a new case.</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;padding:16px 22px;border-top:1px solid var(--border)"><span style="width:150px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">SECONDARY · 12.5</span><span style="font-size:12.5px;color:var(--ink3)">Motor Vehicle Accident · 07/11/2026</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;padding:16px 22px;border-top:1px solid var(--border)"><span style="width:150px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">LABEL · MONO 10</span><span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--ink3)">ACTIVE MATTERS · SOL ≤ 30D</span></div>
+      </div>
+    </div>
+
+    <!-- SCALES -->
+    <div style="padding-top:52px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div>
+        <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">03 · RADIUS</div>
+        <div style="margin-top:16px;display:flex;gap:12px;align-items:flex-end">
+          <div style="text-align:center"><div style="width:52px;height:52px;border-radius:7px;background:var(--surface);border:1px solid var(--border2)"></div><div style="margin-top:6px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">7</div></div>
+          <div style="text-align:center"><div style="width:52px;height:52px;border-radius:9px;background:var(--surface);border:1px solid var(--border2)"></div><div style="margin-top:6px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">9</div></div>
+          <div style="text-align:center"><div style="width:52px;height:52px;border-radius:14px;background:var(--surface);border:1px solid var(--border2)"></div><div style="margin-top:6px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">14</div></div>
+          <div style="text-align:center"><div style="width:52px;height:52px;border-radius:99px;background:var(--surface);border:1px solid var(--border2)"></div><div style="margin-top:6px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">PILL</div></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">04 · ELEVATION</div>
+        <div style="margin-top:16px;display:flex;gap:14px">
+          <div style="width:88px;height:64px;border-radius:12px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow1);display:grid;place-items:center;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">RESTING</div>
+          <div style="width:88px;height:64px;border-radius:12px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow2);display:grid;place-items:center;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">HOVER</div>
+          <div style="width:88px;height:64px;border-radius:12px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow3);display:grid;place-items:center;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">OVERLAY</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">05 · SPACING &amp; MOTION</div>
+        <div style="margin-top:16px;display:flex;gap:8px;align-items:flex-end">
+          <div style="width:4px;height:4px;background:var(--green);border-radius:2px"></div>
+          <div style="width:8px;height:8px;background:var(--green);border-radius:2px"></div>
+          <div style="width:12px;height:12px;background:var(--green);border-radius:3px"></div>
+          <div style="width:16px;height:16px;background:var(--green);border-radius:4px"></div>
+          <div style="width:24px;height:24px;background:var(--green);border-radius:5px"></div>
+          <div style="width:32px;height:32px;background:var(--green);border-radius:6px"></div>
+        </div>
+        <div style="margin-top:12px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3);line-height:1.9">4 · 8 · 12 · 16 · 24 · 32<br>HOVER 120MS · PANEL 200MS · OVERLAY 250MS<br>EASE cubic-bezier(.2,.8,.3,1)</div>
+      </div>
+    </div>
+
+    <!-- BUTTONS -->
+    <div style="padding-top:52px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">06 · BUTTONS</div>
+      <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);padding:22px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <button style="height:34px;padding:0 15px;border-radius:9px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--shadow1);transition:all .15s" style-hover="background:var(--green2);transform:translateY(-1px)" style-active="transform:translateY(0)">Primary</button>
+        <button style="height:34px;padding:0 15px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--ink);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--shadow1);transition:all .15s" style-hover="border-color:var(--ink3)">Secondary</button>
+        <button style="height:34px;padding:0 13px;border-radius:9px;border:0;background:transparent;color:var(--ink2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s" style-hover="background:var(--surface2);color:var(--ink)">Ghost</button>
+        <button style="height:34px;padding:0 15px;border-radius:9px;border:1px solid var(--redLine);background:var(--redSoft);color:var(--red);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s" style-hover="background:var(--red);color:#fff;border-color:var(--red)">Danger</button>
+        <button title="Icon button" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--ink2);display:grid;place-items:center;cursor:pointer;transition:all .15s" style-hover="border-color:var(--ink3);color:var(--ink)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+        <span style="display:inline-flex">
+          <button style="height:34px;padding:0 14px;border-radius:9px 0 0 9px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer" style-hover="background:var(--green2)">New matter</button>
+          <button style="height:34px;width:30px;border-radius:0 9px 9px 0;border:0;border-left:1px solid rgba(255,255,255,.25);background:var(--green);color:var(--onGreen);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--green2)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"></path></svg></button>
+        </span>
+        <button style="height:34px;padding:0 15px;border-radius:9px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:13px;font-weight:600;cursor:progress;display:inline-flex;align-items:center;gap:8px;opacity:.85"><span style="width:13px;height:13px;border-radius:99px;border:2px solid rgba(255,255,255,.35);border-top-color:var(--onGreen);animation:mcSpin .7s linear infinite"></span>Saving…</button>
+        <button disabled style="height:34px;padding:0 15px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--ink3);font-family:inherit;font-size:13px;font-weight:600;cursor:not-allowed">Disabled</button>
+        <button style="height:34px;padding:0 15px;border-radius:9px;border:1px solid var(--greenLine);background:var(--surface);color:var(--ink);font-family:inherit;font-size:13px;font-weight:600;box-shadow:var(--focus)">Focused</button>
+      </div>
+    </div>
+
+    <!-- INPUTS -->
+    <div style="padding-top:52px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">07 · INPUTS &amp; CONTROLS</div>
+      <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);padding:22px;display:grid;grid-template-columns:repeat(3,1fr);gap:22px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Client name</label>
+          <input value="Chauncey Frank" style="width:100%;box-sizing:border-box;height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--ink);font-family:inherit;font-size:13px;outline:none;transition:all .15s" style-hover="border-color:var(--ink3)" style-focus="border-color:var(--green);box-shadow:var(--focus)">
+          <div style="margin-top:5px;font-size:11.5px;color:var(--ink3)">As it appears on the intake form.</div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Focused</label>
+          <input value="Motor Vehicle Accident" style="width:100%;box-sizing:border-box;height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--green);background:var(--surface);color:var(--ink);font-family:inherit;font-size:13px;outline:none;box-shadow:var(--focus)">
+          <div style="margin-top:5px;font-size:11.5px;color:var(--ink3)">Green ring, 3px, 22% alpha.</div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--red);margin-bottom:6px">Claim deadline</label>
+          <input value="13/45/2026" style="width:100%;box-sizing:border-box;height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--red);background:var(--surface);color:var(--ink);font-family:inherit;font-size:13px;outline:none;box-shadow:0 0 0 3px rgba(207,68,56,.15)">
+          <div style="margin-top:5px;font-size:11.5px;color:var(--red);display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8v4.5M12 15.8v.2"></path></svg>Enter a valid date.</div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Search</label>
+          <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);color:var(--ink3);cursor:text" style-hover="border-color:var(--ink3)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+            <span style="flex:1;font-size:13px">Search matters</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border2)">⌘K</span>
+          </div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Stage</label>
+          <div style="display:flex;align-items:center;justify-content:space-between;height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--ink);font-size:13px;cursor:pointer" style-hover="border-color:var(--ink3)">
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:99px;background:var(--green)"></span>Investigation</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"></path></svg>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:11px;justify-content:center">
+          <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer">
+            <span style="width:17px;height:17px;border-radius:5px;background:var(--green);display:grid;place-items:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--onGreen)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span>Checked
+          </label>
+          <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer">
+            <span style="width:17px;height:17px;border-radius:5px;border:1.5px solid var(--border2);background:var(--surface);box-sizing:border-box" style-hover="border-color:var(--green)"></span>Unchecked
+          </label>
+          <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer">
+            <span style="width:17px;height:17px;border-radius:99px;border:5px solid var(--green);background:var(--surface);box-sizing:border-box"></span>Radio selected
+          </label>
+          <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer">
+            <span style="width:32px;height:19px;border-radius:99px;background:var(--green);position:relative;transition:background .15s"><span style="position:absolute;top:2.5px;right:2.5px;width:14px;height:14px;border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)"></span></span>Toggle on
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- BADGES -->
+    <div style="padding-top:52px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">08 · BADGES, PILLS &amp; STATUS</div>
+      <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);padding:22px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <span style="width:106px;text-align:center;font-size:11px;font-weight:600;padding:3.5px 0;border-radius:99px;background:var(--greenSoft);color:var(--greenInk);border:1px solid var(--greenLine)">Investigation</span>
+        <span style="width:106px;text-align:center;font-size:11px;font-weight:600;padding:3.5px 0;border-radius:99px;background:var(--amberSoft);color:var(--amber);border:1px solid var(--amberLine)">Initial Review</span>
+        <span style="width:106px;text-align:center;font-size:11px;font-weight:600;padding:3.5px 0;border-radius:99px;background:var(--blueSoft);color:var(--blue);border:1px solid var(--blueLine)">Pre-Litigation</span>
+        <span style="width:106px;text-align:center;font-size:11px;font-weight:600;padding:3.5px 0;border-radius:99px;background:var(--surface2);color:var(--ink2);border:1px solid var(--border2)">Pre-Lit Settled</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink2);padding:3px 9px;border-radius:7px;border:1px solid var(--border);background:var(--surface2)">SOL 24 MO</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:7px;background:var(--redSoft);border:1px solid var(--redLine);color:var(--red)">896D OVERDUE</span>
+        <span style="min-width:19px;height:19px;padding:0 6px;border-radius:99px;background:var(--redSoft);border:1px solid var(--redLine);color:var(--red);font-size:11px;font-weight:600;display:inline-grid;place-items:center">2</span>
+        <span style="font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:2.5px 8px;border-radius:6px;background:var(--blueSoft);border:1px solid var(--blueLine);color:var(--blue)">BETA</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)"><span style="width:8px;height:8px;border-radius:99px;background:#3FBC7C"></span>Online</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)"><span style="width:8px;height:8px;border-radius:99px;background:var(--red)"></span>Busy</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)"><span style="width:8px;height:8px;border-radius:99px;background:var(--amber)"></span>Away</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)"><span style="width:8px;height:8px;border-radius:99px;border:1.5px solid var(--ink3);box-sizing:border-box"></span>Offline</span>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div style="padding-top:52px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">09 · TABS</div>
+        <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);padding:18px 22px">
+          <div style="display:flex;gap:22px;border-bottom:1px solid var(--border)">
+            <span style="padding:8px 2px 10px;font-size:13px;font-weight:600;color:var(--ink);border-bottom:2px solid var(--green);margin-bottom:-1px;cursor:pointer">Overview</span>
+            <span style="padding:8px 2px 10px;font-size:13px;font-weight:500;color:var(--ink3);cursor:pointer;transition:color .12s" style-hover="color:var(--ink)">Documents</span>
+            <span style="padding:8px 2px 10px;font-size:13px;font-weight:500;color:var(--ink3);cursor:pointer;transition:color .12s" style-hover="color:var(--ink)">Billing</span>
+            <span style="padding:8px 2px 10px;font-size:13px;font-weight:500;color:var(--ink3);cursor:pointer;transition:color .12s" style-hover="color:var(--ink)">Timeline</span>
+          </div>
+          <div style="margin-top:16px;display:inline-flex;padding:3px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);gap:2px">
+            <span style="padding:5px 13px;border-radius:8px;background:var(--surface);box-shadow:var(--shadow1);font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer">Board</span>
+            <span style="padding:5px 13px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--ink3);cursor:pointer" style-hover="color:var(--ink)">Table</span>
+            <span style="padding:5px 13px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--ink3);cursor:pointer" style-hover="color:var(--ink)">Calendar</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">10 · EMPTY STATE &amp; SKELETON</div>
+        <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);padding:18px 22px;display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div style="text-align:center;padding:10px 6px">
+            <div style="width:40px;height:40px;margin:0 auto;border-radius:12px;background:var(--greenSoft);border:1px solid var(--greenLine);display:grid;place-items:center;color:var(--greenInk)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="8" r="3.5"></circle><path d="M4 19.5c.6-3.2 3-4.8 6-4.8s5.4 1.6 6 4.8M18 6v5M15.5 8.5h5"></path></svg></div>
+            <div style="margin-top:10px;font-size:13px;font-weight:600;color:var(--ink)">No leads in this stage</div>
+            <div style="margin-top:3px;font-size:12px;color:var(--ink3);line-height:1.5">New leads land here when intake begins.</div>
+            <button style="margin-top:11px;height:29px;padding:0 12px;border-radius:8px;border:0;background:var(--green);color:var(--onGreen);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:var(--green2)">+ Add lead</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px;justify-content:center">
+            <span style="height:12px;width:85%;border-radius:6px;background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 45%,var(--surface2) 65%);background-size:300% 100%;animation:mcShimmer 1.4s linear infinite"></span>
+            <span style="height:12px;width:65%;border-radius:6px;background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 45%,var(--surface2) 65%);background-size:300% 100%;animation:mcShimmer 1.4s linear infinite"></span>
+            <span style="height:12px;width:75%;border-radius:6px;background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 45%,var(--surface2) 65%);background-size:300% 100%;animation:mcShimmer 1.4s linear infinite"></span>
+            <span style="height:12px;width:55%;border-radius:6px;background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 45%,var(--surface2) 65%);background-size:300% 100%;animation:mcShimmer 1.4s linear infinite"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div style="padding-top:52px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">11 · TABLE</div>
+      <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow1);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--ink3);flex:1;max-width:260px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+            <span style="font-size:12.5px">Filter matters…</span>
+          </div>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:99px;background:var(--greenSoft);border:1px solid var(--greenLine);color:var(--greenInk);cursor:pointer">Stage: Investigation <span style="opacity:.6">✕</span></span>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:5px 11px;border-radius:99px;border:1px dashed var(--border2);color:var(--ink3);cursor:pointer" style-hover="color:var(--ink);border-color:var(--ink3)">+ Filter</span>
+          <span style="flex:1"></span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink3)">99 ROWS</span>
+        </div>
+        <div style="display:grid;grid-template-columns:40px 1.6fr 1fr .8fr .9fr .7fr;padding:8px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <span><span style="width:15px;height:15px;border-radius:4.5px;border:1.5px solid var(--border2);background:var(--surface);display:inline-block;box-sizing:border-box"></span></span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3);display:flex;align-items:center;gap:4px;cursor:pointer" style-hover="color:var(--ink)">CLIENT <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"></path></svg></span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3)">TYPE</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3)">OPENED</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3)">STAGE</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3);text-align:right">SOL</span>
+        </div>
+        <sc-for list="{{ tableRows }}" as="r" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:40px 1.6fr 1fr .8fr .9fr .7fr;align-items:center;padding:9px 18px;border-bottom:1px solid var(--border);background:{{ r.rowBg }};cursor:pointer;transition:background .12s" style-hover="background:var(--surface2)">
+            <span>
+              <sc-if value="{{ r.checked }}" hint-placeholder-val="{{ false }}"><span style="width:15px;height:15px;border-radius:4.5px;background:var(--green);display:inline-grid;place-items:center"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--onGreen)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span></sc-if>
+              <sc-if value="{{ r.unchecked }}" hint-placeholder-val="{{ true }}"><span style="width:15px;height:15px;border-radius:4.5px;border:1.5px solid var(--border2);background:var(--surface);display:inline-block;box-sizing:border-box"></span></sc-if>
+            </span>
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">{{ r.name }}</span>
+            <span style="font-size:12.5px;color:var(--ink2)">{{ r.type }}</span>
+            <span style="font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums">{{ r.date }}</span>
+            <span><span style="display:inline-block;width:106px;text-align:center;font-size:11px;font-weight:600;padding:3.5px 0;border-radius:99px;background:{{ r.bg }};color:{{ r.fg }};border:1px solid {{ r.line }}">{{ r.stage }}</span></span>
+            <span style="text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink2);padding:3px 9px;border-radius:7px;border:1px solid var(--border);background:var(--surface2)">{{ r.sol }}</span></span>
+          </div>
+        </sc-for>
+        <div style="display:flex;justify-content:center;padding:12px">
+          <div style="display:inline-flex;align-items:center;gap:14px;padding:8px 16px;border-radius:12px;background:var(--railBg);color:#E9EDEA;box-shadow:var(--shadow3)">
+            <span style="font-size:12.5px;font-weight:600">2 selected</span>
+            <span style="width:1px;height:16px;background:var(--railLine)"></span>
+            <span style="font-size:12.5px;color:var(--railInk);cursor:pointer" style-hover="color:#fff">Assign</span>
+            <span style="font-size:12.5px;color:var(--railInk);cursor:pointer" style-hover="color:#fff">Change stage</span>
+            <span style="font-size:12.5px;color:#E0685D;cursor:pointer">Archive</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVERLAYS -->
+    <div style="padding-top:52px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--ink3)">12 · OVERLAYS</div>
+      <div style="margin-top:18px;display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:26px;display:grid;place-items:center">
+          <div style="width:min(440px,100%);border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow3);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--border)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+              <span style="flex:1;font-size:13.5px;color:var(--ink3)">Type a command or search…</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border2);color:var(--ink3)">ESC</span>
+            </div>
+            <div style="padding:7px">
+              <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:var(--ink3);padding:6px 9px 4px">QUICK ACTIONS</div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;background:var(--greenSoft);color:var(--ink);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--greenInk)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg><span style="flex:1;font-size:13px;font-weight:500">New matter</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">⌘N</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;color:var(--ink);cursor:pointer" style-hover="background:var(--surface2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="8" r="3.5"></circle><path d="M4 19.5c.6-3.2 3-4.8 6-4.8s5.4 1.6 6 4.8M18 6v5M15.5 8.5h5"></path></svg><span style="flex:1;font-size:13px;font-weight:500">New lead</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">⌘L</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;color:var(--ink);cursor:pointer" style-hover="background:var(--surface2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M8 3v4M16 3v4M4 10.5h16"></path></svg><span style="flex:1;font-size:13px;font-weight:500">Go to Deadlines</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">G D</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow3);padding:18px 20px">
+            <div style="font-size:14.5px;font-weight:650;color:var(--ink)">Archive this matter?</div>
+            <p style="margin:7px 0 0;font-size:12.5px;color:var(--ink2);line-height:1.55">Chauncey Frank — Motor Vehicle Accident will move to the archive. You can restore it any time.</p>
+            <div style="margin-top:15px;display:flex;justify-content:flex-end;gap:8px">
+              <button style="height:31px;padding:0 13px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--ink);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="border-color:var(--ink3)">Cancel</button>
+              <button style="height:31px;padding:0 13px;border-radius:8px;border:0;background:var(--red);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="opacity:.9">Archive</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="padding:6px 10px;border-radius:8px;background:var(--railBg);color:#E9EDEA;font-size:11.5px;box-shadow:var(--shadow2)">SOL expires in 19 months</span>
+            <span style="font-size:11.5px;color:var(--ink3)">← tooltip · dark surface, 8px radius</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;\&quot;light\&quot;|\&quot;dark\&quot;&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? "light";
+    const colorGroups = [
+      { name: "Brand", swatches: [
+        { hex: "#22A957", label: "Frame green" }, { hex: "#17804D", label: "Primary" }, { hex: "#0F6A3D", label: "Primary hover" }, { hex: "#E8F3ED", label: "Green tint" }, { hex: "#116240", label: "Green ink" }, { hex: "#E4484D", label: "Wordmark red" }
+      ]},
+      { name: "Neutrals — light", swatches: [
+        { hex: "#F6F6F3", label: "App bg" }, { hex: "#FFFFFF", label: "Surface" }, { hex: "#FAFAF7", label: "Surface 2" }, { hex: "#E7E6E0", label: "Border" }, { hex: "#8E968F", label: "Ink 3" }, { hex: "#57615B", label: "Ink 2" }, { hex: "#171D19", label: "Ink" }
+      ]},
+      { name: "Neutrals — dark & rails", swatches: [
+        { hex: "#0F1512", label: "App bg" }, { hex: "#151C17", label: "Surface" }, { hex: "#242D27", label: "Border" }, { hex: "#E9EDEA", label: "Ink" }, { hex: "#0D1310", label: "Rail bg" }, { hex: "#1F2823", label: "Rail line" }, { hex: "#AEB8B1", label: "Rail ink" }
+      ]},
+      { name: "Status", swatches: [
+        { hex: "#CF4438", label: "Danger" }, { hex: "#FBECEA", label: "Danger tint" }, { hex: "#A97A18", label: "Warning" }, { hex: "#F8F0DF", label: "Warning tint" }, { hex: "#3C6EB4", label: "Info" }, { hex: "#EAF1F9", label: "Info tint" }
+      ]}
+    ];
+    const tone = {
+      green: { bg: "var(--greenSoft)", fg: "var(--greenInk)", line: "var(--greenLine)" },
+      amber: { bg: "var(--amberSoft)", fg: "var(--amber)", line: "var(--amberLine)" },
+      blue: { bg: "var(--blueSoft)", fg: "var(--blue)", line: "var(--blueLine)" },
+      neutral: { bg: "var(--surface2)", fg: "var(--ink2)", line: "var(--border2)" }
+    };
+    const tableRows = [
+      { name: "Chauncey Frank", type: "Motor Vehicle Accident", date: "07/11/2026", stage: "Investigation", sol: "24 MO", t: "green", checked: true },
+      { name: "Candace Ann Moore", type: "Motor Vehicle Accident", date: "07/11/2026", stage: "Initial Review", sol: "24 MO", t: "amber", checked: true },
+      { name: "Mark Embrey", type: "Motor Vehicle Accident", date: "06/18/2026", stage: "Pre-Litigation", sol: "23 MO", t: "blue", checked: false },
+      { name: "Kailyn Moron", type: "Motor Vehicle Accident", date: "02/20/2026", stage: "Pre-Lit Settled", sol: "19 MO", t: "neutral", checked: false }
+    ].map(r => ({ ...r, ...tone[r.t], unchecked: !r.checked, rowBg: r.checked ? "var(--greenSoft)" : "transparent" }));
+    return { theme, colorGroups, tableRows };
+  }
+}
+</script>
+</body>
+</html>

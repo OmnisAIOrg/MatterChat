@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0F0C}
+.mc a{color:var(--green)}
+.mc a:hover{color:var(--green2)}
+.mc{
+--bg:#F6F6F3;--surface:#FFFFFF;--surface2:#FAFAF7;--border:#E7E6E0;--border2:#DBDAD3;
+--ink:#171D19;--ink2:#57615B;--ink3:#8E968F;
+--green:#17804D;--green2:#0F6A3D;--onGreen:#FFFFFF;--greenSoft:#E8F3ED;--greenLine:#CBE5D6;--greenInk:#116240;
+--red:#CF4438;--redSoft:#FBECEA;--redLine:#F2CFCB;
+--amber:#A97A18;--amberSoft:#F8F0DF;--amberLine:#EBD9B4;
+--blue:#3C6EB4;--blueSoft:#EAF1F9;--blueLine:#CDDDF0;
+--railBg:#0D1310;--railBg2:#111814;--railInk:#AEB8B1;--railInk2:#6E7A73;--railLine:#1F2823;--railHover:#1A231E;
+--shadow1:0 1px 2px rgba(23,29,25,.05),0 1px 3px rgba(23,29,25,.04);
+--shadow2:0 1px 2px rgba(23,29,25,.05),0 8px 24px -8px rgba(23,29,25,.14);
+--shadow3:0 2px 6px rgba(23,29,25,.06),0 24px 60px -12px rgba(23,29,25,.25);
+--bgGlass:rgba(246,246,243,.82);
+}
+.mc[data-theme="dark"]{
+--bg:#0F1512;--surface:#151C17;--surface2:#19211C;--border:#242D27;--border2:#2D372F;
+--ink:#E9EDEA;--ink2:#A2ACA5;--ink3:#707B74;
+--green:#3FBC7C;--green2:#57CD90;--onGreen:#08130D;--greenSoft:#152A1E;--greenLine:#265C3F;--greenInk:#6FD6A3;
+--red:#E0685D;--redSoft:#32201D;--redLine:#5C332D;
+--amber:#D3A24A;--amberSoft:#2E2717;--amberLine:#5A4A24;
+--blue:#7AA3D8;--blueSoft:#1B2532;--blueLine:#324B69;
+--railBg:#0B100D;--railBg2:#0F1511;--railInk:#AEB8B1;--railInk2:#69746D;--railLine:#1D2620;--railHover:#18201B;
+--shadow1:0 1px 2px rgba(0,0,0,.35);
+--shadow2:0 1px 2px rgba(0,0,0,.4),0 10px 28px -8px rgba(0,0,0,.5);
+--shadow3:0 2px 6px rgba(0,0,0,.4),0 24px 60px -12px rgba(0,0,0,.6);
+--bgGlass:rgba(15,21,18,.78);
+}
+@keyframes mcShimmer{0%{background-position:120% 0}100%{background-position:-20% 0}}
+@keyframes mcFadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes mcPop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes mcSlide{from{transform:translateX(48px);opacity:0}to{transform:none;opacity:1}}
+@keyframes mcPulse{0%{box-shadow:0 0 0 0 rgba(63,188,124,.55)}70%{box-shadow:0 0 0 5px rgba(63,188,124,0)}100%{box-shadow:0 0 0 0 rgba(63,188,124,0)}}
+</style>
+</helmet>
+<div class="mc" data-theme="{{ theme }}" style="font-family:'Geist',system-ui,sans-serif;height:100vh;min-width:1240px;min-height:720px;box-sizing:border-box;background:linear-gradient(155deg,#22A957 0%,#128044 100%);padding:11px;-webkit-font-smoothing:antialiased">
+<div style="height:100%;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;background:var(--railBg);box-shadow:0 30px 80px -20px rgba(0,0,0,.45);position:relative">
+
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;background:var(--railBg);border-bottom:1px solid var(--railLine)">
+    <div style="display:flex;gap:2px">
+      <button title="Channels" style="width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9.5 4 7.5 20M16.5 4l-2 16M4.5 9.2h16M3.5 14.8h16"></path></svg></button>
+      <button title="Sort" style="width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h9M4 12h6M4 17.5h4M18 7v10.5m0 0-3-3m3 3 3-3"></path></svg></button>
+      <button title="Create new" style="width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center">
+      <div onClick="{{ openPalette }}" style="width:min(640px,100%);height:32px;display:flex;align-items:center;gap:9px;padding:0 12px;border-radius:9px;background:var(--railHover);border:1px solid var(--railLine);color:var(--railInk2);cursor:pointer;transition:border-color .15s" style-hover="border-color:#2E3A33">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+        <span style="flex:1;font-size:12.5px">Search rooms</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--railLine);color:var(--railInk2)">⌘K</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:2px;align-items:center">
+      <button title="Back" style="width:30px;height:30px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 9 12l5.5 6"></path></svg></button>
+      <button title="Forward" style="width:30px;height:30px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer;margin-right:8px" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6 15 12l-5.5 6"></path></svg></button>
+      <button title="Directory" style="width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"></rect><circle cx="9.5" cy="10.5" r="2"></circle><path d="M6.5 16c.5-1.6 1.7-2.3 3-2.3s2.5.7 3 2.3M15.5 9.5h3M15.5 13h3"></path></svg></button>
+      <button title="Do not disturb" style="width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6.3 9a6 6 0 0 1 11.4-1.2c.8 4.2 2.3 5.2 2.3 5.2H8M10 19a2.2 2.2 0 0 0 4 0M4 4l16 16"></path></svg></button>
+      <button title="Settings" style="width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--railInk2);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--railHover);color:var(--railInk)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8"></path></svg></button>
+      <div style="position:relative;margin-left:6px;cursor:pointer">
+        <div style="width:29px;height:29px;border-radius:8px;background:linear-gradient(135deg,#2FA268,#186B44);display:grid;place-items:center;color:#fff;font-size:11px;font-weight:600">CN</div>
+        <span style="position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:99px;background:#3FBC7C;border:2px solid var(--railBg);animation:mcPulse 2.6s ease-out infinite"></span>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+    <div style="width:62px;flex:none;background:var(--railBg);border-right:1px solid var(--railLine);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:10px">
+      <div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#22A957,#0F7A3C);display:grid;place-items:center;color:#fff;font-weight:700;font-size:16px;outline:2px solid #3FBC7C;outline-offset:2px;cursor:pointer">M</div>
+      <div style="width:22px;height:1px;background:var(--railLine)"></div>
+      <div style="position:relative;cursor:pointer" style-hover="transform:translateY(-1px)">
+        <div style="width:36px;height:36px;border-radius:10px;background:#3B2340;display:grid;place-items:center;color:#E8C5EE;font-weight:600;font-size:13px">S</div>
+        <span style="position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;border-radius:99px;background:#D5375B;color:#fff;font-size:9.5px;font-weight:600;display:grid;place-items:center;padding:0 4px;border:2px solid var(--railBg)">6</span>
+      </div>
+      <div style="width:36px;height:36px;border-radius:10px;background:#2B3B6E;display:grid;place-items:center;color:#C4CFF2;font-weight:600;font-size:13px;cursor:pointer" style-hover="transform:translateY(-1px)">T</div>
+      <div style="width:36px;height:36px;border-radius:10px;background:#0E4C42;display:grid;place-items:center;color:#9ADCC9;cursor:pointer" style-hover="transform:translateY(-1px)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9.5L4 20.5z"></path></svg></div>
+      <div style="width:36px;height:36px;border-radius:10px;border:1.5px dashed var(--railLine);display:grid;place-items:center;color:var(--railInk2);cursor:pointer;margin-top:2px" style-hover="border-color:var(--railInk2);color:var(--railInk)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
+    </div>
+
+    <div style="width:96px;flex:none;background:var(--railBg);border-right:1px solid var(--railLine);display:flex;flex-direction:column;align-items:center;padding:14px 8px;gap:2px;position:relative">
+      <div style="font-size:13px;font-weight:700;letter-spacing:-.01em;margin-bottom:10px"><span style="color:#F2F5F3">Matter</span><span style="color:#E4484D">Chat</span></div>
+      <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--railInk2);margin-bottom:8px">MENU</div>
+      <div style="position:absolute;left:8px;width:80px;border-radius:11px;background:rgba(63,188,124,.16);top:{{ indTop }};height:{{ indH }};opacity:{{ indOp }};transition:top .28s cubic-bezier(.2,.8,.3,1),height .28s cubic-bezier(.2,.8,.3,1),opacity .3s"></div>
+      <div ref="{{ nav.chats.ref }}" onClick="{{ nav.chats.click }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 4px;border-radius:11px;color:{{ nav.chats.c }};cursor:pointer;transition:color .2s;position:relative;z-index:1" style-hover="color:var(--railInk)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9.5L4 20.5z"></path></svg><span style="font-size:10.5px;font-weight:500">Chats</span></div>
+      <div ref="{{ nav.boards.ref }}" onClick="{{ nav.boards.click }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 4px;border-radius:11px;color:{{ nav.boards.c }};cursor:pointer;transition:color .2s;position:relative;z-index:1" style-hover="color:var(--railInk)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="6.6" height="6.6" rx="1.8"></rect><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.8"></rect><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.8"></rect><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.8"></rect></svg><span style="font-size:10.5px;font-weight:600">Boards</span></div>
+      <div style="margin:8px 0 2px;font-size:11px;font-weight:700"><span style="color:#F2F5F3">Lit</span><span style="color:#6D7BF2">Box</span></div>
+      <div ref="{{ nav.files.ref }}" onClick="{{ nav.files.click }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 4px;border-radius:11px;color:{{ nav.files.c }};cursor:pointer;transition:color .2s;position:relative;z-index:1" style-hover="color:var(--railInk)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 3.5h7.5L19 8v12.5H7z"></path><path d="M14.5 3.5V8H19"></path></svg><span style="font-size:10.5px;font-weight:500">Files</span></div>
+      <div ref="{{ nav.activity.ref }}" onClick="{{ nav.activity.click }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 4px;border-radius:11px;color:{{ nav.activity.c }};cursor:pointer;transition:color .2s;position:relative;z-index:1" style-hover="color:var(--railInk)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.3 9.2a5.7 5.7 0 0 1 11.4 0c0 4.4 1.9 5.6 1.9 5.6H4.4s1.9-1.2 1.9-5.6M10 18.8a2.1 2.1 0 0 0 4 0"></path></svg><span style="font-size:10.5px;font-weight:500">Activity</span></div>
+      <div ref="{{ nav.search.ref }}" onClick="{{ nav.search.click }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 4px;border-radius:11px;color:{{ nav.search.c }};cursor:pointer;transition:color .2s;position:relative;z-index:1" style-hover="color:var(--railInk)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg><span style="font-size:10.5px;font-weight:500">Search</span></div>
+      <div ref="{{ nav.admin.ref }}" onClick="{{ nav.admin.click }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 4px;border-radius:11px;color:{{ nav.admin.c }};cursor:pointer;transition:color .2s;position:relative;z-index:1" style-hover="color:var(--railInk)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8"></path></svg><span style="font-size:10.5px;font-weight:500">Admin</span></div>
+      <div style="flex:1"></div>
+      <div style="position:relative">
+        <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#2FA268,#186B44);display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:600;cursor:pointer">CN</div>
+        <span style="position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:99px;background:#3FBC7C;border:2px solid var(--railBg);animation:mcPulse 2.6s ease-out infinite"></span>
+      </div>
+    </div>
+
+    <!-- boards panel -->
+    <div style="width:236px;flex:none;background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 10px 12px;transition:background .2s">
+      <div style="display:flex;align-items:center;padding:0 8px 12px">
+        <span style="font-size:15px;font-weight:650;color:var(--ink)">Boards</span>
+        <span style="flex:1"></span>
+        <button style="width:26px;height:26px;border-radius:7px;border:0;background:transparent;color:var(--ink3);display:grid;place-items:center;cursor:pointer" style-hover="background:var(--border);color:var(--ink)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.16em;color:var(--ink3);padding:2px 8px 8px">PIPELINES</div>
+      <sc-for list="{{ boardItems }}" as="b" hint-placeholder-count="10">
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:9px;font-size:13px;color:{{ b.c }};background:{{ b.bg }};font-weight:{{ b.w }};cursor:pointer;transition:background .12s;position:relative" style-hover="background:{{ b.hbg }}">
+          <span style="position:absolute;left:-1px;top:7px;bottom:7px;width:3px;border-radius:0 3px 3px 0;background:{{ b.bar }}"></span>
+          <span style="color:{{ b.ic }};display:grid;place-items:center">{{ b.icon }}</span>
+          <span>{{ b.label }}</span>
+        </div>
+      </sc-for>
+      <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.16em;color:var(--ink3);padding:14px 8px 8px">GENERAL</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:9px;font-size:13px;color:var(--ink2);cursor:pointer;transition:background .12s" style-hover="background:var(--border)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="6.6" height="6.6" rx="1.8"></rect><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.8"></rect><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.8"></rect><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.8"></rect></svg>
+        <span>All boards</span>
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding:10px 8px 2px;border-top:1px solid var(--border)">
+        <div style="font-size:14px;font-weight:700"><span style="color:var(--ink)">Matter</span><span style="color:#E4484D">Chat</span></div>
+        <a href="#" style="font-size:11px;color:var(--ink3);text-decoration:underline">Powered by Omnis AI</a>
+      </div>
+    </div>
+
+    <!-- content -->
+    <div style="flex:1;min-width:0;background:var(--bg);display:flex;flex-direction:column;transition:background .2s">
+      <div style="flex:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:var(--bgGlass);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--greenSoft);border:1px solid var(--greenLine);display:grid;place-items:center;color:var(--greenInk)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20v-6M11 20V6M17 20v-9M21 20H3"></path></svg></div>
+        <h1 style="margin:0;font-size:19px;font-weight:650;letter-spacing:-.02em;color:var(--ink)">Reports</h1>
+        <span style="flex:1"></span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);padding:4px 10px;border-radius:99px;border:1px solid var(--border);background:var(--surface)"><span style="width:7px;height:7px;border-radius:99px;background:#3FBC7C;animation:mcPulse 2.6s ease-out infinite"></span>CasePro synced</span><button style="height:31px;padding:0 13px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--ink);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow1);transition:all .15s" style-hover="border-color:var(--ink3)">Export</button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:22px 28px 60px;animation:mcFadeUp .35s ease both">
+        <div style="max-width:1040px;margin:0 auto">
+          <div style="font-size:15px;font-weight:650;color:var(--ink)">Financial</div>
+          <div style="margin-top:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+            <sc-for list="{{ stats }}" as="s" hint-placeholder-count="5">
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:14px 15px 10px;cursor:pointer;transition:all .15s" style-hover="box-shadow:var(--shadow2);transform:translateY(-1px)">
+                <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.label }}</div>
+                <div style="margin-top:7px;font-size:20px;font-weight:650;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums">{{ s.value }}</div>
+                <div style="margin-top:2px;font-size:11px;color:var(--ink3)">{{ s.sub }}</div>
+                <svg style="display:block;margin-top:9px" width="100%" height="24" viewBox="0 0 120 26" preserveAspectRatio="none"><polyline fill="none" stroke="{{ s.c }}" stroke-width="1.6" vector-effect="non-scaling-stroke" points="{{ s.pts }}"></polyline></svg>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);padding:16px 18px;display:flex;align-items:center;gap:20px">
+            <div>
+              <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:var(--ink3)">OPEN MATTERS</div>
+              <div style="margin-top:5px;font-size:24px;font-weight:650;color:var(--ink);font-variant-numeric:tabular-nums">127</div>
+            </div>
+            <div style="flex:1">
+              <div style="height:8px;border-radius:99px;overflow:hidden;display:flex;border:1px solid var(--border)">
+                <sc-for list="{{ mix }}" as="m" hint-placeholder-count="5"><div style="height:100%;background:{{ m.c }};width:{{ m.w }}"></div></sc-for>
+              </div>
+              <div style="margin-top:9px;display:flex;gap:16px;flex-wrap:wrap">
+                <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink2)"><span style="width:8px;height:8px;border-radius:3px;background:{{ l.c }}"></span>{{ l.label }} <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">{{ l.n }}</span></span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:15px;font-weight:650;color:var(--ink);margin-top:30px">Pipeline aging</div>
+          <div style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow1);overflow:hidden">
+            <div style="display:grid;grid-template-columns:1.4fr .9fr .9fr .7fr .9fr;padding:9px 18px;background:var(--surface2);border-bottom:1px solid var(--border)">
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3)">STAGE</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3);text-align:right">OPEN MATTERS</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3);text-align:right">TIME IN STAGE</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3);text-align:right">P90</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--ink3);text-align:right">STUCK MATTERS</span>
+            </div>
+            <sc-for list="{{ aging }}" as="r" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:1.4fr .9fr .9fr .7fr .9fr;align-items:center;padding:10px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s" style-hover="background:var(--surface2)">
+                <span style="font-size:13px;font-weight:600;color:var(--ink)">{{ r.stage }}</span>
+                <span style="text-align:right">
+                  <span style="font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600">{{ r.open }}</span>
+                  <span style="display:block;margin-top:4px;margin-left:auto;height:3px;border-radius:99px;background:var(--surface2);overflow:hidden;max-width:90px"><span style="display:block;height:100%;border-radius:99px;background:var(--green);width:{{ r.pct }}"></span></span>
+                </span>
+                <span style="font-size:12.5px;color:var(--ink2);text-align:right;font-variant-numeric:tabular-nums">{{ r.time }}</span>
+                <span style="font-size:12.5px;color:var(--ink2);text-align:right;font-variant-numeric:tabular-nums">{{ r.p90 }}</span>
+                <span style="font-size:12.5px;color:var(--ink2);text-align:right;font-variant-numeric:tabular-nums">{{ r.stuck }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- command palette -->
+  <sc-if value="{{ palette }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePalette }}" style="position:absolute;inset:0;z-index:60;background:rgba(8,12,10,.45);backdrop-filter:blur(3px);display:flex;justify-content:center;align-items:flex-start;padding-top:14vh">
+      <div onClick="{{ stop }}" style="width:min(540px,90vw);border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow3);overflow:hidden;animation:mcPop .18s cubic-bezier(.2,.8,.3,1) both">
+        <div style="display:flex;align-items:center;gap:9px;padding:13px 15px;border-bottom:1px solid var(--border)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+          <span style="flex:1;font-size:13.5px;color:var(--ink3)">Type a command or search…</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border2);color:var(--ink3)">ESC</span>
+        </div>
+        <div style="padding:7px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:var(--ink3);padding:6px 9px 4px">QUICK ACTIONS</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;background:var(--greenSoft);color:var(--ink);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--greenInk)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg><span style="flex:1;font-size:13px;font-weight:500">New matter</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">⌘N</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;color:var(--ink);cursor:pointer" style-hover="background:var(--surface2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="8" r="3.5"></circle><path d="M4 19.5c.6-3.2 3-4.8 6-4.8s5.4 1.6 6 4.8M18 6v5M15.5 8.5h5"></path></svg><span style="flex:1;font-size:13px;font-weight:500">New lead</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">⌘L</span></div>
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:var(--ink3);padding:10px 9px 4px">NAVIGATE</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;color:var(--ink);cursor:pointer" style-hover="background:var(--surface2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M8 3v4M16 3v4M4 10.5h16"></path></svg><span style="flex:1;font-size:13px;font-weight:500">Go to Deadlines</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">G D</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;color:var(--ink);cursor:pointer" style-hover="background:var(--surface2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linecap="round"><path d="M5 20v-6M11 20V6M17 20v-9M21 20H3"></path></svg><span style="flex:1;font-size:13px;font-weight:500">Go to Reports</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--ink3)">G R</span></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;\&quot;light\&quot;|\&quot;dark\&quot;&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  state = { palette: false, ind: { top: 0, h: 0, on: false }, active: "boards" };
+  componentDidMount() {
+    this._key = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); this.setState(s => ({ palette: !s.palette })); }
+      else if (e.key === "Escape") this.setState({ palette: false });
+    };
+    window.addEventListener("keydown", this._key);
+    setTimeout(() => this.moveInd("boards"), 80);
+  }
+  componentWillUnmount() { window.removeEventListener("keydown", this._key); }
+  moveInd(k) { const n = (this._nav || {})[k]; if (n) this.setState({ ind: { top: n.offsetTop, h: n.offsetHeight, on: true }, active: k }); }
+  renderVals() {
+    const theme = this.props.theme ?? "light";
+    this._nav = this._nav || {};
+    const nav = {};
+    ["chats", "boards", "files", "activity", "search", "admin"].forEach(k => {
+      nav[k] = { ref: (n) => { if (n) this._nav[k] = n; }, click: () => this.moveInd(k), c: this.state.active === k ? "#7CD8A8" : "var(--railInk2)" };
+    });
+    const bi = (label, active) => ({ label, icon: "", c: active ? "var(--greenInk)" : "var(--ink2)", bg: active ? "var(--greenSoft)" : "transparent", hbg: active ? "var(--greenSoft)" : "var(--border)", w: active ? 600 : 400, ic: active ? "var(--greenInk)" : "var(--ink3)", bar: active ? "var(--green)" : "transparent" });
+    const boardItems = ["Matters", "Deadlines", "Caseload", "Reports", "Leads", "Templates", "Referral source", "Marketing ROI", "Intake reports", "Source-to-settlement"].map(l => bi(l, l === "Reports"));
+    const stats = [
+      { label: "DEMAND OUTSTANDING", value: "$2,495,000", sub: "across active demands", pts: "0,22 15,19 30,20 45,14 60,16 75,10 90,12 105,7 120,9", c: "var(--green)" },
+      { label: "SETTLED VALUE", value: "$160,062", sub: "6 matters", pts: "0,24 15,23 30,20 45,21 60,17 75,18 90,13 105,12 120,8", c: "var(--green)" },
+      { label: "PROJECTED FEES", value: "$53,354", sub: "33% effective rate", pts: "0,20 15,22 30,18 45,19 60,15 75,16 90,12 105,13 120,10", c: "var(--green)" },
+      { label: "TOTAL BILLED", value: "$3,189,212", sub: "lifetime", pts: "0,25 15,22 30,21 45,18 60,15 75,13 90,10 105,8 120,5", c: "var(--green)" },
+      { label: "TOTAL BALANCE", value: "$2,603,322", sub: "outstanding", pts: "0,10 15,12 30,9 45,13 60,15 75,14 90,17 105,16 120,19", c: "var(--red)" }
+    ];
+    const mix = [{ c: "var(--green)", w: "13%" }, { c: "var(--amber)", w: "2%" }, { c: "var(--blue)", w: "35%" }, { c: "#7A5FB8", w: "46%" }, { c: "var(--border2)", w: "4%" }];
+    const legend = [["Intake", "var(--green)", "17"], ["Initial Review", "var(--amber)", "2"], ["Investigation", "var(--blue)", "45"], ["Pre-Litigation", "#7A5FB8", "58"], ["Pre-Lit Settled", "var(--border2)", "5"]].map(x => ({ label: x[0], c: x[1], n: x[2] }));
+    const aging = [["Intake", 17, "2d", "4d", 0, "13%"], ["Initial Review", 2, "4d", "4d", 0, "2%"], ["Investigation", 45, "3d", "4d", 0, "35%"], ["Pre-Litigation", 58, "2d", "4d", 0, "46%"], ["Pre-Lit Settled", 5, "1d", "1d", 0, "4%"]].map(r => ({ stage: r[0], open: r[1], time: r[2], p90: r[3], stuck: r[4], pct: r[5] }));
+    return { theme, nav, boardItems, indTop: this.state.ind.top + "px", indH: this.state.ind.h + "px", indOp: this.state.ind.on ? 1 : 0,
+      palette: this.state.palette, openPalette: () => this.setState({ palette: true }), closePalette: () => this.setState({ palette: false }), stop: (e) => e.stopPropagation(), stats, mix, legend, aging };
+  }
+}
+</script>
+</body>
+</html>
