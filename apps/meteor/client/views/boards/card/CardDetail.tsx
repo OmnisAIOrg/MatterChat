@@ -56,12 +56,12 @@ const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 			<Box mbe={6} pbe={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
 				{t('Comment')}
 			</Box>
-			{card.comments.length === 0 && (
+			{(card.comments ?? []).length === 0 && (
 				<Box fontScale='c1' color='hint'>
 					{t('No_results_found')}
 				</Box>
 			)}
-			{card.comments.map((comment) => (
+			{(card.comments ?? []).map((comment) => (
 				<Box
 					key={comment.id}
 					mbe={6}

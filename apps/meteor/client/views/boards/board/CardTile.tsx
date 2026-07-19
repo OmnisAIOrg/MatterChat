@@ -96,10 +96,12 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 	);
 
 	const { cover } = card;
-	const coverImage = cover ? resolveCoverImage(cover, card.attachments) : undefined;
+	const coverImage = cover ? resolveCoverImage(cover, card.attachments ?? []) : undefined;
 
-	const doneCount = card.checklists.reduce((sum, cl) => sum + cl.items.filter((i) => i.done).length, 0);
-	const totalCount = card.checklists.reduce((sum, cl) => sum + cl.items.length, 0);
+	// Guard required arrays: CasePro-synced cards seeded before these fields existed lack them in
+	// Mongo, and the type declares them required — so an unguarded read crashes the whole board.
+	const doneCount = (card.checklists ?? []).reduce((sum, cl) => sum + (cl.items ?? []).filter((i) => i.done).length, 0);
+	const totalCount = (card.checklists ?? []).reduce((sum, cl) => sum + (cl.items ?? []).length, 0);
 	const childCount = (card.relations ?? []).filter((r) => r.type === 'child').length;
 	const loggedMinutes = (card.timeEntries ?? []).reduce((sum, e) => sum + e.minutes, 0);
 
