@@ -66,10 +66,11 @@ const LeadsCardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: Le
 		onToggleSelect?.(card._id, e);
 	};
 
-	// Resolve label definitions
+	// Resolve label definitions. `card.labels` is optional and undefined on CasePro-synced
+	// lead cards — guard it, same P0 as MattersCardTile (undefined.map crashes the board).
 	const labelMap = useMemo(() => new Map((labelDefs ?? []).map((l) => [l.id, l] as const)), [labelDefs]);
 	const cardLabels = useMemo(
-		() => card.labels.map((id) => labelMap.get(id)).filter((l): l is IBoardLabelDef => Boolean(l)),
+		() => (card.labels ?? []).map((id) => labelMap.get(id)).filter((l): l is IBoardLabelDef => Boolean(l)),
 		[card.labels, labelMap],
 	);
 
