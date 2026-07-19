@@ -101,6 +101,7 @@ import type {
 	IBoardsAutomationRunsModel,
 	IBoardsSubscriptionsModel,
 	IBoardsNotificationsModel,
+	IBoardUserNotificationPrefsModel,
 	IBoardsSavedViewsModel,
 	IBoardsFormsModel,
 } from '@rocket.chat/model-typings';
@@ -242,6 +243,7 @@ export const BoardsAutomations = proxify<IBoardsAutomationsModel>('IBoardsAutoma
 export const BoardsAutomationRuns = proxify<IBoardsAutomationRunsModel>('IBoardsAutomationRunsModel');
 export const BoardsSubscriptions = proxify<IBoardsSubscriptionsModel>('IBoardsSubscriptionsModel');
 export const BoardsNotifications = proxify<IBoardsNotificationsModel>('IBoardsNotificationsModel');
+export const BoardsUserNotificationPrefs = proxify<IBoardUserNotificationPrefsModel>('IBoardUserNotificationPrefsModel');
 export const BoardsSavedViews = proxify<IBoardsSavedViewsModel>('IBoardsSavedViewsModel');
 export const BoardsForms = proxify<IBoardsFormsModel>('IBoardsFormsModel');
 export const OmnichannelServiceLevelAgreements = proxify<IOmnichannelServiceLevelAgreementsModel>(
