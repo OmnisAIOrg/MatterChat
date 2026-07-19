@@ -70,6 +70,15 @@ const injectStyles = (): void => {
 .mclg-omnis-icon { width: 20px !important; height: 20px !important; }
 .mclg-enso-img { width: 182px !important; height: 148px !important; }
 
+/* DESKTOP (Electron): the wrapper uses a frameless hiddenInset title bar and expects the web
+   content to provide the draggable region + host the macOS traffic lights. This full-screen
+   login has no NavBar, so WITHOUT this the window can't be moved and the lights float loose.
+   Make the left brand chamber + a top strip draggable; keep every interactive control no-drag.
+   In a normal browser -webkit-app-region is a harmless no-op. */
+.mclg-dragbar { position: absolute; top: 0; left: 0; right: 0; height: 46px; -webkit-app-region: drag; z-index: 55; }
+.mclg-left { -webkit-app-region: drag; }
+.mclg-card, .mclg-card *, .mclg-field, .mclg-primary, .mclg-omnis, .mclg-eye, .mclg-root a, .mclg-root button, .mclg-root input { -webkit-app-region: no-drag; }
+
 @media (max-width: 960px) {
 	.mclg-frame { padding: 0 !important; }
 	.mclg-shell { border-radius: 0 !important; grid-template-columns: 1fr !important; }
@@ -199,6 +208,11 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 							backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
 						}}
 					/>
+
+					{/* Desktop window-drag strip (hosts the macOS traffic lights; lets the frameless
+					    window be moved). No-op in a browser. */}
+					<div className='mclg-dragbar' />
+
 
 					{/* ============ LEFT — BRAND CHAMBER ============ */}
 					<div
@@ -404,7 +418,7 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 							overflowY: 'auto',
 						}}
 					>
-						<div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 420, animation: 'mclgFadeUp .6s cubic-bezier(.2,.7,.3,1) both' }}>
+						<div className='mclg-card' style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 420, animation: 'mclgFadeUp .6s cubic-bezier(.2,.7,.3,1) both' }}>
 							<form
 								onSubmit={submit}
 								style={{
