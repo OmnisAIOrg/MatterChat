@@ -10,6 +10,7 @@ import {
 	isBoardsCaseProListMattersProps,
 	isBoardsCaseProListStagesProps,
 	isBoardsCaseProStatusProps,
+	isBoardsCaseProSyncStatusProps,
 	isBoardsCaseProTaskSyncSetProps,
 	isBoardsMattersPlaybooksListProps,
 	isBoardsMattersPlaybooksSeedProps,
@@ -22,6 +23,8 @@ import {
 	validateBadRequestErrorResponse,
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
+
+import { Boards } from '@rocket.chat/models';
 
 import { caseProTransportDiagnostics } from '../../../../server/lib/boards/casepro';
 import {
@@ -199,6 +202,51 @@ API.v1.post(
 		const { boardId } = this.bodyParams;
 		const result = await seedFromCasePro(uid, boardId);
 		return API.v1.success({ result });
+	},
+);
+
+// ---------------------------------------------------------------------------
+// boards.casepro.syncStatus — auto-sync status endpoint for UI polling
+// ---------------------------------------------------------------------------
+
+API.v1.get(
+	'boards.casepro.syncStatus',
+	{
+		authRequired: true,
+		query: isBoardsCaseProSyncStatusProps,
+		response: {
+			200: successSchema,
+			400: validateBadRequestErrorResponse,
+			401: validateUnauthorizedErrorResponse,
+		},
+	},
+	async function action() {
+		const uid = this.userId;
+		if (!(await hasPermissionAsync(uid, 'boards-casepro-sync'))) {
+			return API.v1.unauthorized();
+		}
+
+		// Get the matters board (the primary consumer of this endpoint).
+		const boards = await Boards.findByPipelineType('matters').toArray();
+		const board = boards.find((b) => !b.archived);
+
+		if (!board) {
+			// No board yet; return empty status.
+			return API.v1.success({
+				syncing: false,
+				lastSyncFinishedAt: undefined,
+				lastSyncError: undefined,
+			});
+		}
+
+		const syncStatus = board.caseproSync?.syncStatus ?? {};
+		const syncing = Boolean(syncStatus.lastSyncStartedAt) && !syncStatus.lastSyncFinishedAt;
+
+		return API.v1.success({
+			syncing,
+			lastSyncFinishedAt: syncStatus.lastSyncFinishedAt,
+			lastSyncError: syncStatus.lastSyncError,
+		});
 	},
 );
 

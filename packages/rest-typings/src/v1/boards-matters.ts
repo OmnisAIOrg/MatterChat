@@ -198,6 +198,22 @@ const BoardsCaseProTaskSyncSetSchema = {
 
 export const isBoardsCaseProTaskSyncSetProps = ajv.compile<BoardsCaseProTaskSyncSetProps>(BoardsCaseProTaskSyncSetSchema);
 
+// boards.casepro.syncStatus — auto-sync status poll (GET /v1/boards.casepro.syncStatus)
+// Returns the current sync state for UI polling: { syncing, lastSyncFinishedAt?, lastSyncError? }
+
+type BoardsCaseProSyncStatusProps = Record<string, never>;
+
+const BoardsCaseProSyncStatusSchema = {
+	type: 'object',
+	properties: {},
+	required: [],
+	additionalProperties: false,
+};
+
+export const isBoardsCaseProSyncStatusProps = ajvQuery.compile<BoardsCaseProSyncStatusProps>(
+	BoardsCaseProSyncStatusSchema,
+);
+
 // ---------------------------------------------------------------------------
 // boards.matters.playbooks.* (M5)
 // ---------------------------------------------------------------------------

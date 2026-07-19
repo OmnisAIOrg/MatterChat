@@ -254,16 +254,16 @@ const ExternalTile = ({
 
 	return (
 		<>
-			<GenericMenu
-				title={t('Workspace_options', { defaultValue: 'Workspace options' })}
-				items={menuItems}
-				placement='right-start'
-				button={
-					<Box
-						is='button'
-						type='button'
-						className={tileClass}
-						onClick={onClick}
+			{/* Wrapper is position:relative so the kebab menu-trigger can overlay the tile's
+			    corner as a SIBLING of the tile button — clicking the TILE selects the workspace
+			    (the original behavior a prior change broke by making the whole tile the menu
+			    trigger), clicking the kebab opens Reconnect/Disconnect. */}
+			<Box style={{ position: 'relative' }}>
+				<Box
+					is='button'
+					type='button'
+					className={tileClass}
+					onClick={onClick}
 						title={name}
 						aria-label={name}
 						aria-current={isSelected ? 'true' : undefined}
@@ -337,9 +337,40 @@ const ExternalTile = ({
 								{formatBadgeCount(badgeValue)}
 							</Box>
 						)}
-					</Box>
-				}
-			/>
+				</Box>
+				<GenericMenu
+					title={t('Workspace_options', { defaultValue: 'Workspace options' })}
+					items={menuItems}
+					placement='right-start'
+					button={
+						<Box
+							is='button'
+							type='button'
+							aria-label={t('Workspace_options', { defaultValue: 'Workspace options' })}
+							style={{
+								position: 'absolute',
+								bottom: '-4px',
+								right: '-4px',
+								width: '16px',
+								height: '16px',
+								borderRadius: '50%',
+								background: 'rgba(0,0,0,0.75)',
+								color: '#ffffff',
+								border: `1.5px solid ${RAIL_BG}`,
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								fontSize: '11px',
+								lineHeight: 1,
+								padding: 0,
+								cursor: 'pointer',
+							}}
+						>
+							⋯
+						</Box>
+					}
+				/>
+			</Box>
 
 			{/* Disconnect confirmation modal */}
 			{showDisconnectConfirm && (

@@ -4,6 +4,7 @@ export * from './playbooks';
 export * from './deadlines';
 export * from './reports';
 export * from './caseProClient';
+export * from './caseProSync';
 export type {
 	ICaseProClient,
 	CaseProStage,
