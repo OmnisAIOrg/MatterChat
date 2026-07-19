@@ -26,6 +26,7 @@ const OAuthAuthorizationPage = lazy(() => import('../views/oauth/OAuthAuthorizat
 const OAuthErrorPage = lazy(() => import('../views/oauth/OAuthErrorPage'));
 const NotFoundPage = lazy(() => import('../views/notFound/NotFoundPage'));
 const CallHistoryPage = lazy(() => import('../views/mediaCallHistory/CallHistoryPage'));
+const UpdatesPage = lazy(() => import('../views/updates'));
 
 declare module '@rocket.chat/ui-contexts' {
 	interface IRouterPaths {
@@ -120,6 +121,10 @@ declare module '@rocket.chat/ui-contexts' {
 		'call-history': {
 			pathname: `/call-history${`/details/${string}` | ''}`;
 			pattern: '/call-history/:tab?/:historyId?';
+		};
+		'updates': {
+			pathname: '/updates';
+			pattern: '/updates';
 		};
 	}
 }
@@ -260,6 +265,15 @@ router.defineRoutes([
 		element: appLayout.wrap(
 			<MainLayout>
 				<CallHistoryPage />
+			</MainLayout>,
+		),
+	},
+	{
+		path: '/updates',
+		id: 'updates',
+		element: appLayout.wrap(
+			<MainLayout>
+				<UpdatesPage />
 			</MainLayout>,
 		),
 	},
