@@ -907,141 +907,110 @@ GET    /api/v1/boards.cards.subtasks
 
 ---
 
-## 9. Client SMS Bridge
+## 9. Client SMS Bridge (via CasePro)
 
 ### Problem & User Story
 
-Legal clients and opposing counsel send status updates, signatures, payments via SMS. These messages scatter across team members' phones and disappear from firm records. Compliance requires logging all client communications. Firms want to route SMS into MatterChat as searchable, archived channels tied to specific matters for unified history.
+Legal clients and opposing counsel send status updates, signatures, payments via SMS. These messages scatter across team members' phones and disappear from firm records. Compliance requires logging all client communications. Rather than MatterChat standing up its own SMS infrastructure, we leverage CasePro's existing client-SMS threads: MatterChat provides a live chat surface where matter-bound channels mirror SMS threads bidirectionally.
 
-**User story:** "As a case manager, I need SMS messages from clients and opposing counsel to land as threads in MatterChat channels tied to their matters, so our team stays informed, all communication is archived, and we meet compliance requirements."
+**User story:** "As a case manager, I need SMS messages from clients to appear as live threads in the matter's MatterChat channel, and to send SMS replies directly from MatterChat, so our team stays informed and all communication stays in our matter context—with CasePro as the compliance log."
 
 ### UX Flow
 
-1. **Setup:** Admin → "Integrations" → "SMS Bridge" → set up Twilio account (or similar provider) → provision one phone number per firm → webhook URL auto-configured
-2. **Client SMS arrives:** Inbound SMS to firm number → Twilio webhook → routes to matter-bound channel as a new thread
-3. **Thread in channel:** SMS from "+1-555-0123 (John Client)" lands as a "system" message + starts thread → team can reply in thread (replies send as SMS back to client)
-4. **Matter linking:** SMS channel creation auto-links to `matterId` if phone number already contacts a known client in CasePro
-5. **Compliance:** All SMS logged in `SMSLog` collection with timestamps, parties, content hash (HIPAA-friendly storage)
-6. **Templates:** Case manager can create SMS templates ("Discovery cutoff reminder") → preview + send to multiple clients from one button
+1. **Setup:** No admin SMS config needed. CasePro owns the Twilio account + phone numbers + SMS thread lifecycle.
+2. **Inbound (client SMS → MatterChat):** Client texts CasePro's firm number → CasePro logs + fires webhook to MatterChat → inbound text appears as a message in the matter's SMS channel, attributed via client alias (similar to external-workspace connectors)
+3. **Outbound (MatterChat → client SMS):** Team member types in SMS channel → message send routes through CasePro's `send_sms` API endpoint → CasePro remains the system of record + compliance log
+4. **Matter binding:** SMS channel is created per matter (mirrors CasePro's thread_id); all participants with legal role + matter-channel membership can see the thread
+5. **Standalone-first rule:** With no CasePro configured, the SMS channel feature is simply hidden (graceful degradation, never a hard dependency)
 
 ### Data Model
 
-**New collection: `SMSChannel`** (binds phone number to matter)
+**Extend existing `IBoardChannel`** (via existing MatterChat CasePro transport pattern):
 ```typescript
-interface ISMSChannel extends IRocketChatRecord {
-  // Twilio/provider metadata
-  provider: 'twilio' | 'other';
-  phoneNumber: string; // firm's provisioned number
-  inboundNumber: string; // client's number (linked)
+interface IBoardChannel {
+  // ... existing fields ...
   
-  // Matter binding
-  matterId?: string; // CasePro matter ID (if known)
-  rid: IRoom['_id']; // Rocket.Chat channel this SMS maps to
-  
-  // Governance
-  workspaceId: string; // Rocket.Chat workspace
-  createdBy: IUser['_id'];
-  createdAt: Date;
-  
-  // Compliance
-  archived: boolean; // soft-delete
-  retentionDays: number; // SMS retention policy
-}
-
-interface ISMSLog extends IRocketChatRecord {
-  // Message metadata
-  provider: 'twilio';
-  providerId: string; // Twilio MessageSid
-  
-  direction: 'inbound' | 'outbound'; // perspective of firm
-  fromNumber: string;
-  toNumber: string;
-  
-  // Content
-  body: string;
-  contentHash: string; // SHA256 for audit (can verify without storing plaintext in some contexts)
-  
-  // Binding
-  smsChannelId: ISMSChannel['_id'];
-  matterId?: string;
-  
-  // Track delivery
-  status: 'received' | 'sent' | 'failed' | 'queued';
-  timestamp: Date;
-  deliveredAt?: Date;
-}
-
-interface ISMSTemplate extends IRocketChatRecord {
-  name: string; // "Discovery Cutoff Reminder"
-  body: string; // template text + variables: {{client_name}}, {{deadline}}
-  workspaceId: string;
-  createdBy: IUser['_id'];
+  // CasePro SMS thread binding (optional)
+  smsSync?: {
+    casepro_thread_id: string; // CasePro SMS thread ID
+    linkedAt: Date;
+    lastSyncAt: Date;
+    syncDirection: 'bi-directional'; // always two-way
+    casepro_client_id: string; // client in CasePro (for compliance log)
+  };
 }
 ```
 
-**Extend CasePro integration:** if client phone number exists in CasePro contacts, auto-link inbound SMS to known matter.
+**No new collections** — SMS history is already in CasePro; MatterChat stores only the channel → thread binding.
+
+**Webhook contract (CasePro → MatterChat)** — implemented by CasePro-side:
+```typescript
+interface ICaseProSMSWebhook {
+  event: 'sms.inbound';
+  matter_id: string;
+  thread_id: string;
+  from_number: string;
+  client_id: string; // CasePro client ID for alias
+  client_name: string;
+  body: string;
+  timestamp: Date;
+}
+```
 
 ### API Surface
 
 ```
-POST   /api/v1/sms.channel.create
-  - body: { inboundNumber, matterId? }
-  - creates ISMSChannel + Rocket.Chat channel
-  - response: { channelId, smsChannelId }
+POST   /api/v1/boards.channels.sms-sync.link
+  - body: { channelId, matterId, casepro_thread_id }
+  - binds MatterChat channel to CasePro SMS thread
+  - response: { success, syncEnabled: boolean }
+  - gated: channel admin + matter-team member
 
-POST   /api/v1/sms.send
-  - body: { smsChannelId, body } | { phoneNumber, body, matterId? }
-  - sends SMS via Twilio
-  - response: { messageId, status }
+POST   /api/v1/boards.channels.sms-sync.send
+  - body: { channelId, body }
+  - sends message via CasePro send_sms API (not direct Twilio)
+  - response: { messageId, status, casepro_delivery_id }
+  - gated: channel member with legal role
 
-POST   /api/v1/sms.send-from-template
-  - body: { templateId, smsChannelIds: [], variables: {} }
-  - bulk send to multiple clients from template
-  - response: { messageIds: [], failedChannels?: string[] }
+POST   /api/internal/webhooks/casepro/sms/inbound
+  - body: ICaseProSMSWebhook
+  - CasePro calls this when inbound SMS arrives
+  - creates message in MatterChat channel (attributed via client alias)
+  - response: { success, message_id }
 
-GET    /api/v1/sms.logs
-  - query: { smsChannelId, offset, count, startDate?, endDate? }
-  - compliance audit log
-  - response: { logs: ISMSLog[], total }
-
-GET    /api/v1/sms.templates.list
-  - response: { templates: ISMSTemplate[] }
-
-POST   /api/v1/sms.templates.create
-  - body: { name, body }
-  - response: { templateId }
-
-// Webhook (inbound SMS) — internal only
-POST   /api/internal/webhooks/sms/inbound
-  - body: Twilio JSON payload
-  - parses, creates channel if needed, posts to Rocket.Chat room
-  - response: 200 OK
+GET    /api/v1/boards.channels.sms-sync.status
+  - query: { channelId }
+  - response: { linked: bool, thread_id, lastSync, syncHealth }
 ```
 
 ### Permissions
 
-- **Create SMS channel:** workspace admin + board admin (for the matter's board)
-- **Send SMS:** board member+ (same as chat in channel)
-- **View logs:** workspace admin (HIPAA-sensitive)
-- **Manage templates:** workspace admin
+- **Link SMS channel:** channel admin + must be matter-team member + legal role required
+- **Send SMS reply:** channel member+ with legal role (inherited from matter permissions)
+- **View SMS thread:** same as channel membership (no additional gate)
+- **Compliance audit:** CasePro owns logs (MatterChat has read-only visibility if audit requested)
 
 ### Dependencies / Blast Radius
 
-- **Internal:** new MongoDB collections + Twilio SDK integration; webhook handler; extend CasePro matter-finder (phone lookup); new admin settings panel for SMS config
-- **External:** Twilio account + provisioned phone number (cost ~$1-2/month + per-message fees ~$0.0075); webhook security via HMAC (Twilio signs all requests)
-- **Performance:** inbound messages async (fire-and-forget Twilio ACK, then create channel + post); SMS thread creation batched if multiple inbound same number
-- **Compliance:** SMS content logged but can be redacted on demand (e.g., if PII disclosed); retention policy configurable (default 7 years for legal matter)
+- **Internal:** extend `server/lib/boards/casepro/transport.ts` to wire SMS send + webhook receiver; new route under `boards.channels.sms-sync.*`; UI button to link channel to SMS thread
+- **External:** CasePro-side additions required:
+  - SMS thread query API (list threads for a matter; used to populate link UI)
+  - SMS send API endpoint (MatterChat calls this to send replies)
+  - Webhook push on inbound SMS (fires to MatterChat webhook endpoint)
+  - Event/polling fallback if webhook unavailable (follow connector reconcile pattern)
+- **Performance:** inbound messages async (webhook → message creation is non-blocking); queries cached (Redis)
+- **Graceful degradation:** if CasePro is unconfigured, SMS channel feature hidden; existing SMS channels degrade to read-only (display threads but disable send)
 
 ### Build Estimate
 
-**L** (Large, 4–5 days): Twilio integration + webhook (1 day); SMS channel + routing logic (1 day); admin SMS config panel (0.5 day); templates + bulk send (1 day); compliance logging + audit UI (1 day); testing + HIPAA review (0.5 day)
+**M** (Medium, 2–3 days): extend CasePro transport for SMS send API; wire webhook receiver + message creation; UI link button + status display; testing against CasePro staging
 
 ### Rollout / Flag Strategy
 
-**Feature flag:** `SMS_BRIDGE_ENABLED` (default: false). Rollout:
-1. Alpha: single matter, manual channel creation, no templates
-2. Beta: auto-link from CasePro contacts, add templates
-3. GA: full rollout; Twilio failover for SMS delivery; compliance dashboard
+**Feature flag:** `SMS_BRIDGE_CASEPRO_ENABLED` (default: false). Rollout:
+1. Alpha: read-only SMS threads (display only, no send until CasePro API ready)
+2. Beta: bidirectional with CasePro send API live
+3. GA: fully enabled; per-workspace toggle if CasePro SMS disabled
 
 ---
 
