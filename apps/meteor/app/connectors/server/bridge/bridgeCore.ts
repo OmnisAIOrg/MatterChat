@@ -32,6 +32,7 @@ import { Random } from '@rocket.chat/random';
 
 import { callbacks } from '../../../../server/lib/callbacks';
 import { SystemLogger } from '../../../../server/lib/logger/system';
+import { settings } from '../../../settings/server';
 import { createRoom } from '../../../lib/server/functions/createRoom';
 import { sendMessage } from '../../../lib/server/functions/sendMessage';
 import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
@@ -311,12 +312,28 @@ export function rcEmojiToProviderName(reaction: string): string {
 }
 
 /**
+ * Extended-sync gate (reactions + edits + deletes, the PR #75 additions). DEFAULT OFF, so the
+ * bridge behaves like pre-#75 pure message mirroring unless an admin explicitly enables it. Read
+ * best-effort — if settings aren't ready yet, stay OFF (safe default).
+ */
+export function extendedBridgeSyncEnabled(): boolean {
+	try {
+		return Boolean(settings.get('Slack_Bridge_Sync_Reactions'));
+	} catch {
+		return false;
+	}
+}
+
+/**
  * OUTBOUND EDIT mirror: an owner-authored edit of a message the bridge posted out
  * (customFields.connectorBridge stamp with inbound:false) is mirrored via provider.updateMessage.
  * Bridge-INSERTED messages (`ext-…` ids) never reach here (guard in onMessageSaved), and inbound
  * never edits our outbound posts, so edit mirroring cannot loop.
  */
 async function onMessageEdited(message: IMessage, room: IRoom | undefined): Promise<IMessage> {
+	if (!extendedBridgeSyncEnabled()) {
+		return message; // Extended sync off → edits stay local (pre-#75 behavior).
+	}
 	try {
 		const ctx = await bridgedOutboundContext(room);
 		if (!ctx || message.u?._id !== ctx.doc.userId) {
@@ -343,6 +360,9 @@ async function onMessageEdited(message: IMessage, room: IRoom | undefined): Prom
  * cannot loop either.
  */
 async function onMessageDeleted(message: IMessage, room: IRoom | undefined): Promise<void> {
+	if (!extendedBridgeSyncEnabled()) {
+		return; // Extended sync off → deletes stay local (pre-#75 behavior).
+	}
 	try {
 		if (isBridgeMessageId(message._id)) {
 			return;
@@ -374,6 +394,9 @@ async function onMessageDeleted(message: IMessage, room: IRoom | undefined): Pro
  * Our own mirror sets the `in:` key so the provider's resulting reaction event is dropped inbound.
  */
 async function onReactionChanged(message: IMessage, user: IUser, reaction: string, add: boolean): Promise<void> {
+	if (!extendedBridgeSyncEnabled()) {
+		return; // Extended sync off → reactions are not mirrored out (pre-#75 behavior).
+	}
 	try {
 		const room = await Rooms.findOneById(message.rid);
 		const ctx = await bridgedOutboundContext(room ?? undefined);

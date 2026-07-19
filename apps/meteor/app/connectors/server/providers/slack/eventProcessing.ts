@@ -37,7 +37,7 @@ import { SystemLogger } from '../../../../../server/lib/logger/system';
 import { deleteMessage } from '../../../../lib/server/functions/deleteMessage';
 import { updateMessage } from '../../../../lib/server/functions/updateMessage';
 import { setReaction } from '../../../../reactions/server/setReaction';
-import { ingestExternalMessage } from '../../bridge/bridgeCore';
+import { extendedBridgeSyncEnabled, ingestExternalMessage } from '../../bridge/bridgeCore';
 import { extMessageId } from '../../bridge/bridgeIds';
 import { EchoSuppressionSet, echoSuppression, reactionEcho, reactionEchoKey } from '../../bridge/echoSuppression';
 import { toProviderConnection } from '../../runtimeConnection';
@@ -289,6 +289,9 @@ async function processReaction(teamId: string, action: SlackReactionAction): Pro
  * Never throws.
  */
 export async function processSlackReactionEvent(teamId: string, action: SlackReactionAction): Promise<void> {
+	if (!extendedBridgeSyncEnabled()) {
+		return; // Extended sync off → inbound Slack reactions are ignored (pre-#75 behavior).
+	}
 	try {
 		await processReaction(teamId, action);
 	} catch (err) {

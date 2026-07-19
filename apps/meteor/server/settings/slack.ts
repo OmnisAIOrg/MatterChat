@@ -48,6 +48,17 @@ export const createSlackSettings = () =>
 			i18nDescription: 'Slack_Enabled_Description',
 		});
 
+		// Extended bridge sync (reactions + edits + deletes), added in the reactions port (PR #75).
+		// DEFAULT OFF: the bridge reverts to pure message mirroring (the known-good pre-#75 behavior).
+		// Turn ON only once reactions/edits/deletes are verified live end-to-end. Gating lives in
+		// bridge/bridgeCore.ts (outbound mirrors) + providers/slack/eventProcessing.ts (inbound reactions).
+		await this.add('Slack_Bridge_Sync_Reactions', false, {
+			type: 'boolean',
+			public: false,
+			i18nLabel: 'Slack_Bridge_Sync_Reactions',
+			i18nDescription: 'Slack_Bridge_Sync_Reactions_Description',
+		});
+
 		// Slack app Client ID — NOT a secret. Default = the founder's registered Slack app.
 		await this.add('Slack_OAuth_Client_Id', '7931694564787.11447444567381', {
 			type: 'string',
