@@ -46,6 +46,8 @@ import '../app/push-notifications/server';
 import '../app/retention-policy/server';
 import '../app/slackbridge/server';
 import '../app/connectors/server';
+// MATTERCHAT: Chi Admin Assistant — admin-only AI ops bot DM intake (gated OFF by default).
+import './lib/chi/admin';
 // CasePro CLIENT-message two-way sync — outbound leg (afterSaveMessage hook, gated OFF by default).
 import './lib/boards/casepro-clientsync/startup';
 // CasePro inbound webhook receiver (/_casepro/webhook) — signed case-update events → matter channels.

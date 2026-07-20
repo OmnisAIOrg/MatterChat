@@ -36,6 +36,8 @@ import { createSetupWSettings } from './setup-wizard';
 import { createSlackBridgeSettings } from './slackbridge';
 import { createSmarshSettings } from './smarsh';
 import { createGoogleSettings } from './google';
+// MATTERCHAT: Chi Admin Assistant (in-app AI ops bot) settings group.
+import { createChiAssistantSettings } from './chi-assistant';
 import { createSlackSettings } from './slack';
 import { createTeamsSettings } from './teams';
 import { createThreadSettings } from './threads';
@@ -83,6 +85,7 @@ await Promise.all([
 	createSlackBridgeSettings(),
 	createSmarshSettings(),
 	createGoogleSettings(),
+	createChiAssistantSettings(),
 	createSlackSettings(),
 	createTeamsSettings(),
 	createThreadSettings(),
