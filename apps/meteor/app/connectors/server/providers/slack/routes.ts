@@ -29,11 +29,17 @@ import { CredentialTokens, Users, ExternalWorkspaceConnections } from '@rocket.c
 import { Random } from '@rocket.chat/random';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 import { Meteor } from 'meteor/meteor';
-import { Cookies } from 'meteor/ostrio:cookies';
-import { RoutePolicy } from 'meteor/routepolicy';
+import { Cookies, RoutePolicy } from 'meteor/ostrio:cookies';
 import { WebApp } from 'meteor/webapp';
 
-import { getSlackConfig, isSlackConfigured, SLACK_AUTHORIZE_ENDPOINT, SLACK_TOKEN_ENDPOINT, redirectUri, SLACK_USER_SCOPES } from './config';
+import {
+	getSlackConfig,
+	isSlackConfigured,
+	SLACK_AUTHORIZE_ENDPOINT,
+	SLACK_TOKEN_ENDPOINT,
+	redirectUri,
+	SLACK_USER_SCOPES,
+} from './config';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
 import { finishDesktopConnectorCallback, isDesktopAuthorizeRequest, isDesktopState } from '../../desktopOAuth';
 import { encryptCredentials } from '../../tokenCrypto';

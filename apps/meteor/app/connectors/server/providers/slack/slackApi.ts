@@ -71,11 +71,7 @@ export type SlackFetchOptions = {
  * Build the Slack request: method name appended to the API base, params form-encoded. The bearer
  * token authenticates as the signed-in user.
  */
-function buildRequest(
-	method: string,
-	tokens: SlackTokens,
-	options: SlackFetchOptions,
-): { url: string; init: Record<string, unknown> } {
+function buildRequest(method: string, tokens: SlackTokens, options: SlackFetchOptions): { url: string; init: Record<string, unknown> } {
 	const url = `${SLACK_API_BASE}/${method}`;
 	const httpMethod = options.method || 'GET';
 

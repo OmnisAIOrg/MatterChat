@@ -215,6 +215,7 @@ async function processNewMessage(teamId: string, action: Extract<SlackMessageAct
 	pushInboundToClients(
 		buildInboundPushTargets(allConnections, (connectionId) => echoSuppression.has(connectionId, action.ts), {
 			channelExternalId: action.channel,
+			channelKind: action.channelType,
 			externalId: mapped.externalId,
 			author: mapped.authorDisplayName,
 			text: mapped.text,
