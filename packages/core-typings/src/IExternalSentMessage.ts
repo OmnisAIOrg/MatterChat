@@ -37,3 +37,23 @@ export interface IExternalSentMessage extends IRocketChatRecord {
 	 */
 	source?: 'sent' | 'inbound' | 'history';
 }
+
+/**
+ * Live-push payload for one inbound external message, emitted on the `notify-user` stream as
+ * `${userId}/external-inbound` the moment an Events-API delivery is persisted to the browse
+ * store (see app/connectors/server/providers/slack/inboundPush.ts). Carries ROUTING info + a
+ * short preview only — never the full message body; the client re-reads the durable store.
+ */
+export interface IExternalInboundNotification {
+	provider: ExternalProvider;
+	/** The recipient user's own connection doc id (query-key routing on the client). */
+	connectionId: string;
+	channelExternalId: string;
+	/** Provider-native message id (Slack `ts`). */
+	externalId: string;
+	/** Author display name when resolvable (raw provider id otherwise). */
+	author?: string;
+	/** First ~140 chars of the message, for the notification body. */
+	preview?: string;
+	tsMs?: number;
+}

@@ -31,6 +31,7 @@ import { ExternalSentMessages, ExternalWorkspaceConnections, Messages, Rooms, Us
 
 import type { SlackMessageAction, SlackReactionAction } from './eventMessageMapping';
 import { slackTsToEpochMs, toProviderMessage } from './eventMessageMapping';
+import { buildInboundPushTargets, pushInboundToClients } from './inboundPush';
 import type { SlackTokens } from './slackApi';
 import { slackFetch } from './slackApi';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
@@ -206,6 +207,20 @@ async function processNewMessage(teamId: string, action: Extract<SlackMessageAct
 	// BROWSE LANE: persist for every connection on this workspace so the message becomes native to
 	// MatterChat and an already-open channel picks it up on its next poll — no history re-read.
 	await recordInboundForBrowse(allConnections, action.channel, mapped, tsMs);
+
+	// LIVE PUSH: tell every recipient's client NOW (stream event → instant render + notification).
+	// The poll above remains only as a safety net; without this, inbound sat invisible until the
+	// next 10s foreground poll and never raised a notification (founder bug 2026-07-20). Echo-safe:
+	// the author's own outbound echo is skipped per connection via the same echo set the bridge uses.
+	pushInboundToClients(
+		buildInboundPushTargets(allConnections, (connectionId) => echoSuppression.has(connectionId, action.ts), {
+			channelExternalId: action.channel,
+			externalId: mapped.externalId,
+			author: mapped.authorDisplayName,
+			text: mapped.text,
+			tsMs,
+		}),
+	);
 
 	for (const { doc, bridge, connection } of targets) {
 		// Fast-path echo drop: the ts chat.postMessage returned for THIS connection's own outbound
