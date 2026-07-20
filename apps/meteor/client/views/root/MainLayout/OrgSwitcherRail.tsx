@@ -18,15 +18,16 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import ConnectWorkspaceModal from './ConnectWorkspaceModal';
-import { isDesktopApp } from '../../../lib/desktop/desktopBridge';
 import { externalConnectionIdFromSelection, externalSelectionId, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
+import { useExternalInboundPush } from './useExternalInboundPush';
 import type { ExternalUnreadCounts } from './useExternalUnreadSummary';
 import { useExternalUnreadSummary } from './useExternalUnreadSummary';
 import type { ConnectedExternalWorkspace } from './useExternalWorkspaces';
 import { useExternalWorkspaces } from './useExternalWorkspaces';
 import type { SwitchableOrg } from './useOrgSwitcher';
 import { useOrgSwitcher } from './useOrgSwitcher';
+import { isDesktopApp } from '../../../lib/desktop/desktopBridge';
 
 /**
  * OrgSwitcherRail — the GREEN "Variant B" WORKSPACE switcher (the leftmost of the two rails).
@@ -264,79 +265,75 @@ const ExternalTile = ({
 					type='button'
 					className={tileClass}
 					onClick={onClick}
-						title={name}
-						aria-label={name}
-						aria-current={isSelected ? 'true' : undefined}
-						style={{
-							backgroundColor: branding.color,
-							opacity: isSelected ? 1 : 0.82,
-							boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
-						}}
-					>
-						<branding.Mark size={22} />
+					title={name}
+					aria-label={name}
+					aria-current={isSelected ? 'true' : undefined}
+					style={{
+						backgroundColor: branding.color,
+						opacity: isSelected ? 1 : 0.82,
+						boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
+					}}
+				>
+					<branding.Mark size={22} />
 
-						{/* Warning badge for error/consent_required status */}
-						{hasError && (
-							<Box
-								aria-label={
-									connection.status === 'error'
-										? t('Connection_Error', { defaultValue: 'Connection error — needs attention' })
-										: t('Consent_Required', { defaultValue: 'Consent required' })
-								}
-								style={{
-									position: 'absolute',
-									top: '-4px',
-									right: '-4px',
-									width: '17px',
-									height: '17px',
-									borderRadius: '50%',
-									background: '#F04747',
-									border: `2px solid ${RAIL_BG}`,
-									display: 'flex',
-									alignItems: 'center',
-									justifyContent: 'center',
-									color: '#ffffff',
-									fontSize: '11px',
-									fontWeight: 700,
-									pointerEvents: 'none',
-								}}
-							>
-								!
-							</Box>
-						)}
+					{/* Warning badge for error/consent_required status */}
+					{hasError && (
+						<Box
+							aria-label={
+								connection.status === 'error'
+									? t('Connection_Error', { defaultValue: 'Connection error — needs attention' })
+									: t('Consent_Required', { defaultValue: 'Consent required' })
+							}
+							style={{
+								position: 'absolute',
+								top: '-4px',
+								right: '-4px',
+								width: '17px',
+								height: '17px',
+								borderRadius: '50%',
+								background: '#F04747',
+								border: `2px solid ${RAIL_BG}`,
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								color: '#ffffff',
+								fontSize: '11px',
+								fontWeight: 700,
+								pointerEvents: 'none',
+							}}
+						>
+							!
+						</Box>
+					)}
 
-						{/* Unread badge (displayed when no error) */}
-						{!hasError && hasUnread && (
-							<Box
-								aria-label={
-									showMentions
-										? `${unread.mentionCount} mentions, ${unread.unreadCount} unread`
-										: `${unread.unreadCount} unread`
-								}
-								style={{
-									position: 'absolute',
-									top: '-4px',
-									right: '-4px',
-									minWidth: '17px',
-									height: '17px',
-									borderRadius: '9px',
-									background: UNREAD_BADGE,
-									color: '#ffffff',
-									fontSize: '10px',
-									fontWeight: 600,
-									lineHeight: 1,
-									display: 'flex',
-									alignItems: 'center',
-									justifyContent: 'center',
-									border: `2px solid ${RAIL_BG}`,
-									padding: '0 4px',
-									boxSizing: 'border-box',
-									pointerEvents: 'none',
-								}}
-							>
-								{formatBadgeCount(badgeValue)}
-							</Box>
-						)}
+					{/* Unread badge (displayed when no error) */}
+					{!hasError && hasUnread && (
+						<Box
+							aria-label={showMentions ? `${unread.mentionCount} mentions, ${unread.unreadCount} unread` : `${unread.unreadCount} unread`}
+							style={{
+								position: 'absolute',
+								top: '-4px',
+								right: '-4px',
+								minWidth: '17px',
+								height: '17px',
+								borderRadius: '9px',
+								background: UNREAD_BADGE,
+								color: '#ffffff',
+								fontSize: '10px',
+								fontWeight: 600,
+								lineHeight: 1,
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								border: `2px solid ${RAIL_BG}`,
+								padding: '0 4px',
+								boxSizing: 'border-box',
+								pointerEvents: 'none',
+							}}
+						>
+							{formatBadgeCount(badgeValue)}
+						</Box>
+					)}
 				</Box>
 				<GenericMenu
 					title={t('Workspace_options', { defaultValue: 'Workspace options' })}
@@ -550,6 +547,9 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactElement | null => {
 	const { t } = useTranslation();
 	const { isMobile, sidebar } = useLayout();
+	// Live inbound push for connected external workspaces (subscribe once — desktop mount only;
+	// the drawer re-mount passes enabled=false so events never double-fire).
+	useExternalInboundPush(!inDrawer);
 	const { orgs, switchOrg, connectSlack, connectTeams, connectGoogle } = useOrgSwitcher();
 	const { selectedOrgId, setSelectedOrgId } = useOrgSwitcherSelection();
 	const router = useRouter();

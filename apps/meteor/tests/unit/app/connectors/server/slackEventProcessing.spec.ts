@@ -12,6 +12,10 @@ const TEAM = 'T123';
 const CHANNEL = 'C0123456789';
 
 const findByBridgedChannel = sinon.stub();
+// Browse-lane additions (2026-07-19) the original stub map never covered — their absence made
+// processNewMessage throw before ingest and broke 11 tests (pre-existing, healed 2026-07-20).
+const findByProviderAndOrg = sinon.stub();
+const recordSeenBatch = sinon.stub();
 const setBridgedChannelLastInboundAt = sinon.stub();
 const messagesFindOneById = sinon.stub();
 const messagesFindOne = sinon.stub();
@@ -26,7 +30,8 @@ const setReactionStub = sinon.stub();
 
 const processing = proxyquire.noCallThru().load('../../../../../app/connectors/server/providers/slack/eventProcessing', {
 	'@rocket.chat/models': {
-		ExternalWorkspaceConnections: { findByBridgedChannel, setBridgedChannelLastInboundAt },
+		ExternalWorkspaceConnections: { findByBridgedChannel, findByProviderAndOrg, setBridgedChannelLastInboundAt },
+		ExternalSentMessages: { recordSeenBatch },
 		Messages: { findOneById: messagesFindOneById, findOne: messagesFindOne },
 		Rooms: { findOneById: roomsFindOneById },
 		Users: { findOneById: usersFindOneById },
@@ -38,12 +43,18 @@ const processing = proxyquire.noCallThru().load('../../../../../app/connectors/s
 	'../../../../lib/server/functions/deleteMessage': { deleteMessage },
 	'../../../../lib/server/functions/updateMessage': { updateMessage },
 	'../../../../reactions/server/setReaction': { setReaction: setReactionStub },
-	'../../bridge/bridgeCore': { ingestExternalMessage },
+	'../../bridge/bridgeCore': { ingestExternalMessage, extendedBridgeSyncEnabled: sinon.stub().returns(true) },
 	// Hand the module OUR loaded echoSuppression instance so the singleton the spec seeds via
 	// echoSuppression.add() is the very one the processing code consults (the tsx ESM/CJS dual
 	// module caches would otherwise hand proxyquire a second instance).
 	'../../bridge/echoSuppression': echoSuppressionModule,
 	'../../runtimeConnection': { toProviderConnection },
+	// Live-push emitter drags in the notifications streamer (Meteor) — stub the EMITTER only;
+	// target selection stays the real pure module (inboundPushTargets) so its logic is exercised.
+	'./inboundPush': {
+		buildInboundPushTargets: require('../../../../../app/connectors/server/providers/slack/inboundPushTargets').buildInboundPushTargets,
+		pushInboundToClients: sinon.stub(),
+	},
 });
 
 const { acceptSlackEvent, clearProfileCache, processSlackMessageEvent, processSlackReactionEvent, slackEventDedup } = processing;
@@ -63,6 +74,10 @@ const cursorOf = (docs: unknown[]) => ({ toArray: async () => docs });
 describe('Slack event processing', () => {
 	beforeEach(() => {
 		findByBridgedChannel.reset();
+		findByProviderAndOrg.reset();
+		findByProviderAndOrg.returns(cursorOf([]));
+		recordSeenBatch.reset();
+		recordSeenBatch.resolves(undefined);
 		setBridgedChannelLastInboundAt.reset();
 		setBridgedChannelLastInboundAt.resolves({});
 		messagesFindOneById.reset();
@@ -314,7 +329,14 @@ describe('Slack event processing', () => {
 
 	describe('processSlackReactionEvent', () => {
 		const TS = '9.000001';
-		const reactionAction = (add: boolean) => ({ kind: 'reaction' as const, add, channel: CHANNEL, ts: TS, user: 'U2', reaction: 'thumbsup' });
+		const reactionAction = (add: boolean) => ({
+			kind: 'reaction' as const,
+			add,
+			channel: CHANNEL,
+			ts: TS,
+			user: 'U2',
+			reaction: 'thumbsup',
+		});
 
 		it('applies an external reaction to the bridged message as the owner', async () => {
 			const doc = makeDoc('connR');

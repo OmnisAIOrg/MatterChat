@@ -26,6 +26,7 @@ import type {
 	MessageAttachment,
 	ISession,
 	PresenceStatusCode,
+	IExternalInboundNotification,
 } from '@rocket.chat/core-typings';
 import type { ServerMediaSignal } from '@rocket.chat/media-signaling';
 import type * as UiKit from '@rocket.chat/ui-kit';
@@ -172,6 +173,8 @@ export interface StreamerEvents {
 		},
 		{ key: `${string}/e2ekeyRequest`; args: [string, string] },
 		{ key: `${string}/notification`; args: [INotificationDesktop] },
+		// MATTERCHAT: live push for external-connector inbound messages (Slack/Teams browse lane).
+		{ key: `${string}/external-inbound`; args: [IExternalInboundNotification] },
 		{ key: `${string}/call.hangup`; args: [{ roomId: string }] },
 		{ key: `${string}/uiInteraction`; args: [UiKit.ServerInteraction] },
 		{
