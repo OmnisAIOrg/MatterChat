@@ -225,3 +225,10 @@
   stylesheet — invisible in document.styleSheets, no animation, layout box stays correct,
   only paint scales. Counter with `transform: none !important` on any custom-page img (and
   re-assert intentional transforms like the ensō reflection's scaleY(-1) with !important).
+---
+
+### 2026-07-20 — Chi Admin Assistant: in-app admin ops bot (DM @chi.bot), BYO-LLM, code-enforced safety
+**Chose:** a native afterSaveMessage DM handler + LLM tool-loop under `server/lib/chi/admin/`, reusing the EXISTING `chi.bot` user + the same internal fns the admin REST uses (`saveUser`, `setUserActiveStatus`, `createRoom`, audited settings writes). Authority is the SENDER's (every tool re-checks `admin` role at exec time — the bot has no standing); destructive/bulk actions park for a typed `confirm`; audit → a private channel (no new Mongo collection in v1). BYO-LLM via a settings group with provider PRESETS (Anthropic/OpenAI/Cerebras/Groq/OpenRouter/custom → wire family + endpoint + default model).
+**Rejected:** (a) routing through the external AI-Agents platform (the `/chi` relay) — that's for matter Q&A over CasePro MCP; admin ops need to run IN-PROCESS against RC internals with the admin's own authority, and BYO-key keeps it self-contained. (b) a bespoke permission — reused core `admin` role so it tracks exactly what the person can already do. (c) giving the bot its own elevated identity — rejected on purpose; the whole safety model is that Chi executes AS the asking admin and is powerless for non-admins.
+**Transport note:** model calls MUST resolve `serverFetch` across Meteor's CJS/ESM interop shapes (a bare `const { serverFetch } = await import()` yields `undefined` at runtime → silent "could not reach"). Mirror the static-import precedent in `boards/ai/provider.ts`.
+

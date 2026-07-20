@@ -1,3 +1,23 @@
+# HANDOFF — 2026-07-20 (Chi Admin Assistant BUILT + live-verified on :3100)
+
+**NEW FEATURE on branch `feature/chi-admin-assistant` (off `staging` @ b6b357d5): the Chi Admin Assistant** — admins DM `@chi.bot` in plain English and Chi EXECUTES admin work via an LLM tool-loop. All additive under `apps/meteor/server/lib/chi/admin/` (+ `server/settings/chi-assistant.ts`, i18n keys, 2 marked one-line registry imports in `importPackages.ts` + `settings/index.ts`). OFF by default.
+
+**What it does:** users (create / bulk create ≤100 / roles / activate-deactivate / password reset), channels (create + add members), Slack provisioning (status/configure/connect-link), workspace_info, allowlisted settings read/write. Safety enforced IN CODE not prompt: every tool re-checks the SENDER's `admin` role (non-admins refused, zero tools); destructive/bulk calls PARK until the admin types `confirm` (deterministic re-run); every executed action → private `#chi-admin-audit` channel (secrets masked); prompts/replies never logged.
+
+**BYO-LLM** (Admin → Settings → Chi Assistant): provider dropdown Anthropic / OpenAI / **Cerebras** / **Groq** / **OpenRouter** / custom — endpoint baked in per provider (`admin/providers.ts`), just paste the matching key. Model field BLANK = provider default.
+
+**Live-verified on :3100 with a real Anthropic key** (create user, list, deactivate→confirm→executed all green; audit + email-auto-verify confirmed; DB checked). 30 unit tests green (helpers/llm/confirm/providers).
+
+**TWO BUGS found by live testing + fixed (both committed):**
+1. `could not reach the model endpoint` — model transport used a DYNAMIC `import('@rocket.chat/server-fetch')` whose `serverFetch` named export is `undefined` under Meteor interop (works in plain Node — standalone curl passed while the server threw). Fixed: resolve fn across all interop shapes (named/default.named/default), mirroring the STATIC import in `boards/ai/provider.ts`. Catch now surfaces the REAL thrown message. **The same latent bug still exists in `server/lib/chi/client.ts` (the /chi relay) line ~55 — fix it the same way when that path is next touched.**
+2. Confirm flow was NARRATED by the model, not executed (nothing parked → `confirm` found nothing). Fixed via system-prompt: MUST call the tool; platform auto-intercepts destructive/bulk calls for confirmation; never narrate a park you didn't create.
+
+**COLD-START GOTCHA:** the FIRST model call right after boot can fail with node-fetch `reason: (empty)` (abort while Meteor finishes booting). Give the server ~8s after `SERVER RUNNING` before the first DM. Not a code bug.
+
+**NEXT:** open draft PR `feature/chi-admin-assistant` → `staging` (founder-tests-before-merge). After promote, enable in Admin → Chi Assistant + paste key. Local test rig: `bash chi-e2e.sh` in the session scratchpad (mock LLM on :9333) OR real key via the DB setting. Local admin creds in `TEST-CREDS.md` (`e2e-test` / documented pw).
+
+---
+
 # HANDOFF.md — current state (read after CLAUDE.md)
 > Live state for resuming. **"checkpoint matterchat" updates this before a session ends.** Decisions + reasoning in `DECISIONS.md`; full onboarding in `MATTERCHAT-ONBOARDING.md`; feature inventory in `docs/current-status.md`.
 
