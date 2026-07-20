@@ -22,6 +22,10 @@ export const createChiAssistantSettings = () =>
 			values: [
 				{ key: 'anthropic', i18nLabel: 'Chi_Assistant_Provider_Anthropic' },
 				{ key: 'openai', i18nLabel: 'Chi_Assistant_Provider_OpenAI' },
+				{ key: 'cerebras', i18nLabel: 'Chi_Assistant_Provider_Cerebras' },
+				{ key: 'groq', i18nLabel: 'Chi_Assistant_Provider_Groq' },
+				{ key: 'openrouter', i18nLabel: 'Chi_Assistant_Provider_OpenRouter' },
+				{ key: 'custom', i18nLabel: 'Chi_Assistant_Provider_Custom' },
 			],
 			public: false,
 			i18nLabel: 'Chi_Assistant_Provider',
@@ -34,7 +38,7 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Assistant_API_Key',
 			i18nDescription: 'Chi_Assistant_API_Key_Description',
 		});
-		await this.add('Chi_Assistant_Model', 'claude-sonnet-5', {
+		await this.add('Chi_Assistant_Model', '', {
 			type: 'string',
 			public: false,
 			i18nLabel: 'Chi_Assistant_Model',

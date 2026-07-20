@@ -23,6 +23,7 @@ import { clearPendingAction, hasPendingAction, parkPendingAction, takePendingAct
 import { isCancelText, isConfirmText } from './helpers';
 import type { ChiTurn, LlmConfig, ToolCall } from './llm';
 import { llmStep } from './llm';
+import { resolveProvider } from './providers';
 import { describeToolCall, findTool, runTool, toolDefs } from './tools';
 import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
 import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
@@ -51,9 +52,14 @@ function llmConfig(): LlmConfig | undefined {
 	if (!apiKey) {
 		return undefined;
 	}
-	const provider = settings.get('Chi_Assistant_Provider') === 'openai' ? 'openai' : 'anthropic';
-	const model = String(settings.get('Chi_Assistant_Model') || '').trim() || (provider === 'openai' ? 'gpt-4o' : 'claude-sonnet-5');
-	return { provider, apiKey, model, baseUrl: String(settings.get('Chi_Assistant_Base_URL') || '').trim() || undefined };
+	// Provider preset (Anthropic / OpenAI / Cerebras / Groq / OpenRouter / custom) resolves to the
+	// wire family + endpoint + default model; Base URL / Model settings override when set.
+	const { family, baseUrl, model } = resolveProvider(
+		String(settings.get('Chi_Assistant_Provider') || ''),
+		String(settings.get('Chi_Assistant_Base_URL') || ''),
+		String(settings.get('Chi_Assistant_Model') || ''),
+	);
+	return { provider: family, apiKey, model, baseUrl };
 }
 
 function systemPrompt(actor: IUser): string {

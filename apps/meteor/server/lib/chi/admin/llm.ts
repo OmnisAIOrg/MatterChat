@@ -45,11 +45,26 @@ export type LlmFetch = (
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_TOKENS = 2048;
 
-/** Lazy default transport — keeps unit tests free of the @rocket.chat/server-fetch import. */
+/**
+ * Lazy default transport — keeps unit tests free of the @rocket.chat/server-fetch import.
+ *
+ * GOTCHA (cost a live debugging loop): under Meteor's module interop a dynamic
+ * `import('@rocket.chat/server-fetch')` does NOT reliably expose the named `serverFetch`
+ * export — `mod.serverFetch` came back `undefined`, so calling it threw and every model
+ * call degraded to "could not reach". The identical code works in plain Node. Resolve the
+ * function across all interop shapes (named / default.named / default-is-fn), mirroring the
+ * proven STATIC import in server/lib/boards/ai/provider.ts.
+ */
 const defaultFetch: LlmFetch = async (url, options) => {
-	const { serverFetch } = await import('@rocket.chat/server-fetch');
+	const mod = (await import('@rocket.chat/server-fetch')) as Record<string, unknown> & { default?: Record<string, unknown> };
+	const serverFetch = (mod.serverFetch || mod.default?.serverFetch || mod.default) as
+		| ((u: string, o: Record<string, unknown>) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>)
+		| undefined;
+	if (typeof serverFetch !== 'function') {
+		throw new Error('server-fetch transport unavailable (interop)');
+	}
 	// Operator-configured LLM endpoint (our own key/gateway) — same SSRF stance as lib/chi/client.ts.
-	return serverFetch(url, { ...options, ignoreSsrfValidation: true } as Parameters<typeof serverFetch>[1]);
+	return serverFetch(url, { ...options, ignoreSsrfValidation: true });
 };
 
 const trimBase = (url: string | undefined, fallback: string): string => (url || '').trim().replace(/\/+$/, '') || fallback;
@@ -211,7 +226,11 @@ export async function llmStep(
 			return { ok: false, note: 'The model endpoint returned an unexpected shape.' };
 		}
 		return { ok: true, ...parsed };
-	} catch {
-		return { ok: false, note: 'Could not reach the model endpoint (network/timeout).' };
+	} catch (err) {
+		// Surface the real transport error (endpoint host + error class) in the note so a
+		// misconfigured provider is diagnosable in-chat instead of a blind "could not reach".
+		// Contains no key/body — just the thrown message. The caller logs it server-side.
+		const message = err instanceof Error ? err.message : String(err);
+		return { ok: false, note: `Could not reach the model endpoint — ${message}` };
 	}
 }
