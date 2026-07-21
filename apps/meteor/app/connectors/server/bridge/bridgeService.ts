@@ -31,6 +31,7 @@ import { createChannelSubscription, deleteSubscription, renewSubscription } from
 import { toProviderConnection } from '../runtimeConnection';
 import { createBridgedRoom, ingestExternalMessage, registerBridgeOutbound } from './bridgeCore';
 import { roomImportId } from './bridgeIds';
+import { inboundChannelKindOf, recordAndPushInbound } from './inboundBrowse';
 
 /** Renew any subscription with less runway than this (spec: renew at ~T-12h). */
 const RENEW_BEFORE_MS = 12 * 60 * 60 * 1000;
@@ -38,6 +39,9 @@ const RENEW_BEFORE_MS = 12 * 60 * 60 * 1000;
 const RENEWAL_SWEEP_MS = 30 * 60 * 1000;
 /** How many recent messages the activation backfill seeds the new room with. */
 const ACTIVATION_BACKFILL_LIMIT = 25;
+
+/** Poll-lane messages older than this never live-push (a long-dead bridge catching up must not buzz). */
+const FRESH_PUSH_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 export type BridgeError = { error: string; message: string; status?: number };
 
@@ -162,7 +166,8 @@ export async function backfillBridge(
 	let ingested = 0;
 	let newestMs = bridge.lastInboundAt?.getTime() ?? 0;
 	for (const message of collected) {
-		if (await ingestExternalMessage(doc, bridge, message, ownerExternalId)) {
+		const inserted = await ingestExternalMessage(doc, bridge, message, ownerExternalId);
+		if (inserted) {
 			ingested++;
 		}
 		// `ts` is ISO-8601 (Teams/Google) OR a Slack "seconds.micros" ts — Date.parse yields NaN on
@@ -170,6 +175,18 @@ export async function backfillBridge(
 		// never advances on Slack bridges and every sweep re-reads the full history window.
 		const parsedMs = Date.parse(message.ts);
 		const tsMs = Number.isNaN(parsedMs) ? slackTsToEpochMs(message.ts) : parsedMs;
+		// Poll-lane browse + push: a NEWLY-ingested, recent message on an INCREMENTAL backfill
+		// (cursor set — never the activation seed, which must not storm 200 notifications) also
+		// feeds the `source:'inbound'` browse store and live-pushes. This is Google's only inbound
+		// lane (no webhook) and the recovery lane for Teams/Slack missed windows. Idempotent with
+		// the webhook lanes: they ingest first, so this `inserted` stays false for anything they
+		// already delivered.
+		if (inserted && since && tsMs !== undefined && Date.now() - tsMs < FRESH_PUSH_WINDOW_MS) {
+			await recordAndPushInbound([{ doc, selfExternalId: ownerExternalId }], bridge.channelExternalId, message, {
+				channelKind: inboundChannelKindOf(doc.provider, bridge.channelExternalId),
+				tsMs,
+			});
+		}
 		if (tsMs !== undefined && tsMs > newestMs) {
 			newestMs = tsMs;
 		}

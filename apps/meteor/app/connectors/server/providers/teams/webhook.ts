@@ -49,6 +49,8 @@ import { updateMessage } from '../../../../lib/server/functions/updateMessage';
 import { ingestExternalMessage } from '../../bridge/bridgeCore';
 import { extMessageId } from '../../bridge/bridgeIds';
 import { backfillBridge, reconcileBridges } from '../../bridge/bridgeService';
+import type { InboundRecipient } from '../../bridge/inboundBrowse';
+import { inboundChannelKindOf, recordAndPushInbound } from '../../bridge/inboundBrowse';
 import { toProviderConnection } from '../../runtimeConnection';
 
 /** Bound the raw request body (Graph notification batches are a few KB; 1 MB is generous). */
@@ -267,6 +269,8 @@ async function processNotification(item: IncomingNotification, parsed: ParsedNot
 	if (inserted && !Number.isNaN(tsMs)) {
 		await ExternalWorkspaceConnections.setBridgedChannelLastInboundAt(doc._id, bridge.channelExternalId, new Date(tsMs));
 	}
+	let anyInserted = inserted;
+	const recipients: InboundRecipient[] = [{ doc, selfExternalId: ownerExternalId }];
 
 	// …then every other connection sharing this channel (their bridges have no own subscription).
 	const sharers = await ExternalWorkspaceConnections.findByBridgedChannel('teams', doc.externalOrgId, bridge.channelExternalId).toArray();
@@ -285,14 +289,29 @@ async function processNotification(item: IncomingNotification, parsed: ParsedNot
 			sharerConnection && typeof sharerConnection.credentials.externalAadUserId === 'string'
 				? sharerConnection.credentials.externalAadUserId
 				: undefined;
+		recipients.push({ doc: sharer, selfExternalId: sharerExternalId });
 		try {
 			const sharerInserted = await ingestExternalMessage(sharer, sharerBridge, mapped, sharerExternalId);
+			anyInserted ||= sharerInserted;
 			if (sharerInserted && !Number.isNaN(tsMs)) {
 				await ExternalWorkspaceConnections.setBridgedChannelLastInboundAt(sharer._id, sharerBridge.channelExternalId, new Date(tsMs));
 			}
 		} catch (err) {
 			SystemLogger.warn({ msg: 'Teams webhook fan-out ingest failed', connectionId: sharer._id, err: String(err) });
 		}
+	}
+
+	// BROWSE + LIVE PUSH (Slack-parity port 2026-07-21): persist a `source:'inbound'` row for
+	// everyone sharing this conversation — that row is what the store-computed unread dots count —
+	// and emit `${userId}/external-inbound` for instant render + DM sound/banner. Without this
+	// lane Teams inbound only mirrored into bridged rooms: no dot, no notification, browse view
+	// waited for its next poll. Gated on anyInserted so a Graph REdelivery (all ingests deduped)
+	// re-fires nothing; the author's own echo is push-suppressed per connection inside.
+	if (anyInserted) {
+		await recordAndPushInbound(recipients, bridge.channelExternalId, mapped, {
+			channelKind: inboundChannelKindOf('teams', bridge.channelExternalId),
+			tsMs: Number.isNaN(tsMs) ? undefined : tsMs,
+		});
 	}
 }
 
