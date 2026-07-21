@@ -124,7 +124,8 @@ class ChiOrb extends HTMLElement {
     st.textContent=this._thinking?'THINKING':(this._listening?'LISTENING':'');
     st.style.color=(this._thinking||this._listening)?'#30d158':this._theme.dim;
     st.style.textShadow=(this._thinking||this._listening)?'0 0 12px rgba(48,209,88,.8)':'none';
-    r.getElementById('halo').style.opacity=this._thinking?'1':'0';
+    var halo=r.getElementById('halo');
+    if(halo){ halo.style.opacity=this._thinking?'1':'0'; halo.style.animation=this._thinking?'chiHalo 1.4s ease-in-out infinite':'none'; }
     r.getElementById('markloop').style.display=(this._thinking||this._listening)?'':'none';
     var mic=r.getElementById('micbtn');
     if(mic){ mic.style.background=this._listening?'rgba(48,209,88,.25)':'rgba(255,255,255,.08)'; mic.style.color=this._listening?'#30d158':this._theme.dim; }
@@ -144,7 +145,7 @@ class ChiOrb extends HTMLElement {
     }
     this.shadowRoot.innerHTML='<style>'+kf+':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}</style>'+
       '<div style="position:relative;width:520px;height:520px;">'+
-      '<div id="halo" style="position:absolute;inset:-22px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,0) 50%, rgba(48,209,88,.55) 66%, rgba(48,209,88,.95) 74%, rgba(48,209,88,.55) 82%, rgba(48,209,88,0) 94%);box-shadow:0 0 60px 12px rgba(48,209,88,.6);transition:opacity .5s;opacity:0;animation:chiHalo 1.4s ease-in-out infinite;"></div>'+
+      '<div id="halo" style="position:absolute;inset:-22px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,0) 50%, rgba(48,209,88,.55) 66%, rgba(48,209,88,.95) 74%, rgba(48,209,88,.55) 82%, rgba(48,209,88,0) 94%);box-shadow:0 0 60px 12px rgba(48,209,88,.6);transition:opacity .4s;opacity:0;"></div>'+
       '<div style="position:absolute;inset:16px;border-radius:50%;pointer-events:none;background:conic-gradient(from 210deg, rgba(255,255,255,.38), rgba(255,255,255,.03) 22%, rgba(255,255,255,.20) 48%, rgba(255,255,255,.03) 74%, rgba(255,255,255,.38));box-shadow:0 24px 70px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);"></div>'+
       '<div style="position:absolute;inset:18px;border-radius:50%;pointer-events:none;background:#0a0c0f;box-shadow:inset 0 2px 6px rgba(255,255,255,.10), inset 0 -3px 8px rgba(0,0,0,.8);"></div>'+
       '<div style="position:absolute;inset:26px;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;background:'+t.win+';border:1px solid '+t.winBorder+';box-shadow:inset 0 2px 1px rgba(255,255,255,.26), inset 0 -2px 2px rgba(0,0,0,.65), inset 0 -46px 90px rgba(0,0,0,.25), 0 12px 26px rgba(0,0,0,.5);">'+

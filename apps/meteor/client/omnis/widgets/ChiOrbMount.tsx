@@ -157,10 +157,13 @@ export const ChiOrbMount = (): ReactElement => {
 			// composer on keystrokes when it doesn't see a focused <input> — the orb's input lives in a
 			// shadow root, so activeElement is the host and RC mis-fires). Swallow keyboard/clipboard
 			// events at the host, in BOTH phases, so they never reach the document-level handlers.
+			// BUBBLE phase only: this fires AFTER the orb's own input handlers (Enter→send, typing), then
+			// stops the event before it bubbles to MatterChat's document-level shortcuts. A capture-phase
+			// listener here would swallow the event BEFORE the orb's input ever sees it — which is exactly
+			// what broke Enter-to-send.
 			const swallow = (e: Event): void => e.stopPropagation();
 			(['keydown', 'keyup', 'keypress', 'input', 'beforeinput', 'paste', 'cut', 'copy'] as const).forEach((type) => {
 				el?.addEventListener(type, swallow);
-				el?.addEventListener(type, swallow, true);
 			});
 			orbElRef.current = el;
 			hostRef.current.appendChild(el);
