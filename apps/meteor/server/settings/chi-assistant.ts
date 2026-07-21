@@ -62,4 +62,43 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Assistant_Allow_Settings_Writes',
 			i18nDescription: 'Chi_Assistant_Allow_Settings_Writes_Description',
 		});
+
+		// ── Realtime voice (talk ↔ Chi talks back, OpenAI Realtime API over WebRTC) ─────────────
+		// The real API key never reaches the browser: the client fetches a short-lived ephemeral
+		// token from /v1/chi.realtime-session (minted server-side with the key below).
+		await this.add('Chi_Realtime_Voice_Enabled', false, {
+			type: 'boolean',
+			public: true, // the orb needs to know whether to offer the voice-call button
+			i18nLabel: 'Chi_Realtime_Voice_Enabled',
+			i18nDescription: 'Chi_Realtime_Voice_Enabled_Description',
+		});
+		await this.add('Chi_Realtime_API_Key', '', {
+			type: 'password',
+			secret: true,
+			public: false,
+			i18nLabel: 'Chi_Realtime_API_Key',
+			i18nDescription: 'Chi_Realtime_API_Key_Description', // OpenAI key; falls back to Chi_Assistant_API_Key when the provider is OpenAI
+		});
+		await this.add('Chi_Realtime_Model', 'gpt-4o-realtime-preview', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Chi_Realtime_Model',
+			i18nDescription: 'Chi_Realtime_Model_Description',
+		});
+		await this.add('Chi_Realtime_Voice', 'alloy', {
+			type: 'select',
+			values: [
+				{ key: 'alloy', i18nLabel: 'alloy' },
+				{ key: 'ash', i18nLabel: 'ash' },
+				{ key: 'ballad', i18nLabel: 'ballad' },
+				{ key: 'coral', i18nLabel: 'coral' },
+				{ key: 'echo', i18nLabel: 'echo' },
+				{ key: 'sage', i18nLabel: 'sage' },
+				{ key: 'shimmer', i18nLabel: 'shimmer' },
+				{ key: 'verse', i18nLabel: 'verse' },
+			],
+			public: false,
+			i18nLabel: 'Chi_Realtime_Voice',
+			i18nDescription: 'Chi_Realtime_Voice_Description',
+		});
 	});
