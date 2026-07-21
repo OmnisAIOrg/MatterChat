@@ -35,8 +35,19 @@ import { inboundChannelKindOf, recordAndPushInbound } from './inboundBrowse';
 
 /** Renew any subscription with less runway than this (spec: renew at ~T-12h). */
 const RENEW_BEFORE_MS = 12 * 60 * 60 * 1000;
-/** Renewal sweep period. */
+/** Renewal sweep period (subscription lifecycle + full reconcile — heavy, stays slow). */
 const RENEWAL_SWEEP_MS = 30 * 60 * 1000;
+/**
+ * FAST INBOUND POLL period. The 30-min reconcile is far too slow to feel live, and the real-time
+ * webhook is NOT reliably available for every provider — Microsoft Teams change-notifications
+ * require a billed "Teams Protected APIs" Azure registration (evaluation mode has a tiny per-app
+ * cap that silently stops delivering), and Google Chat has no per-space push at all. READING
+ * messages needs none of that, so this lightweight lane just re-runs backfillBridge (message pull +
+ * dedup + live push) for every active bridge on a short cadence — near-real-time inbound that does
+ * NOT depend on the webhook. Idempotent with the webhook/Events-API lanes (deterministic _id dedup),
+ * so where instant push DOES work (Slack), this finds nothing new and is a cheap no-op.
+ */
+const FAST_INBOUND_POLL_MS = 30 * 1000;
 /** How many recent messages the activation backfill seeds the new room with. */
 const ACTIVATION_BACKFILL_LIMIT = 25;
 
@@ -395,9 +406,54 @@ export async function listMyBridges(userId: string): Promise<ClientBridge[]> {
 
 let runtimeStarted = false;
 let sweepRunning = false;
+let fastPollRunning = false;
 
 /** The providers the reconcile sweep covers (the ones with an inbound realtime/poll loop). */
 const RECONCILED_PROVIDERS = new Set<IExternalWorkspaceConnection['provider']>(['teams', 'slack', 'google']);
+
+/**
+ * Fast inbound poll: message pull ONLY (no subscription create/renew), for every active bridge on
+ * every connected connection, on the short FAST_INBOUND_POLL_MS cadence. This is the near-real-time
+ * inbound path that does NOT rely on the provider webhook — the reliable fallback when Teams push is
+ * ungated-only ("Teams Protected APIs" billing not set up) or Google has no push. backfillBridge
+ * already dedups (deterministic _id) and live-pushes newly-ingested recent messages, so a message
+ * that also arrives by webhook/Events-API is ingested once and this lane is a no-op for it.
+ */
+async function fastInboundPoll(): Promise<void> {
+	if (fastPollRunning || sweepRunning) {
+		// Skip if a poll or the heavy reconcile is already in flight — avoid overlapping Graph reads.
+		return;
+	}
+	fastPollRunning = true;
+	try {
+		const docs = await ExternalWorkspaceConnections.findAllWithBridges().toArray();
+		for (const doc of docs) {
+			if (doc.status !== 'connected' || !RECONCILED_PROVIDERS.has(doc.provider)) {
+				continue;
+			}
+			const connection = toProviderConnection(doc);
+			if (!connection) {
+				continue;
+			}
+			const ownerExternalId = ownerExternalIdOf(connection);
+			for (const bridge of doc.bridgedChannels || []) {
+				try {
+					await backfillBridge(doc, bridge, connection, ownerExternalId);
+				} catch (err) {
+					// Transient read/auth error — the next tick retries; the 30-min reconcile handles auth-death.
+					SystemLogger.warn({
+						msg: 'Fast inbound poll failed for channel (will retry next tick)',
+						connectionId: doc._id,
+						channelExternalId: bridge.channelExternalId,
+						err: String(err),
+					});
+				}
+			}
+		}
+	} finally {
+		fastPollRunning = false;
+	}
+}
 
 /**
  * One reconcile pass over every Teams, Slack AND Google connection with bridges:
@@ -488,4 +544,10 @@ export function startBridgeRuntime(): void {
 	setInterval(() => {
 		void reconcileBridges().catch((err) => SystemLogger.error({ msg: 'Bridge renewal sweep failed', err: String(err) }));
 	}, RENEWAL_SWEEP_MS);
+
+	// Near-real-time inbound WITHOUT depending on the provider webhook (Teams push needs billed
+	// "Teams Protected APIs" registration; Google has no push). Message pull only, short cadence.
+	setInterval(() => {
+		void fastInboundPoll().catch((err) => SystemLogger.error({ msg: 'Fast inbound poll failed', err: String(err) }));
+	}, FAST_INBOUND_POLL_MS);
 }
