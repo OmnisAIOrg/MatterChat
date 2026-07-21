@@ -3,6 +3,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { askChi } from './askChi';
 import { loadOmnisWidget, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
+import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
+
+/**
+ * Desktop (Electron) bridge exposed by MatterChat-Desktop's preload. Present only in the desktop
+ * app: there, pop-out opens a NATIVE always-on-top window (Electron has no Document PiP), and that
+ * window relays navigate actions back here so the main app moves, not the panel.
+ */
+type DesktopBridge = {
+	isDesktop?: boolean;
+	popOutChi?: () => void;
+	closeChiWindow?: () => void;
+	onChiWindowClosed?: (cb: () => void) => void;
+	onNavigate?: (cb: (p: { rid: string; name: string; t: string }) => void) => void;
+	navigateFromOrb?: (p: unknown) => void;
+};
+const desktopBridge = (): DesktopBridge | undefined => (window as unknown as { matterchatDesktop?: DesktopBridge }).matterchatDesktop;
 
 /**
  * Floating Chi assistant orb — the same `<chi-orb>` used across Omnis products, wired to MatterChat's
@@ -43,9 +59,27 @@ export const ChiOrbMount = (): ReactElement => {
 	const orbElRef = useRef<HTMLElement | null>(null);
 	const pipWinRef = useRef<Window | null>(null);
 	const [poppedOut, setPoppedOut] = useState(false);
-	// Document Picture-in-Picture = a real, always-on-top OS window we can move the orb into, so it
-	// lives OUTSIDE the app window (Chrome/Edge; Electron when its Chromium enables it).
-	const pipSupported = 'documentPictureInPicture' in window;
+	// Document Picture-in-Picture (browsers) OR the desktop app's native window bridge — either lets
+	// the orb live OUTSIDE the app window.
+	const desktop = desktopBridge();
+	const canPopOut = 'documentPictureInPicture' in window || Boolean(desktop?.isDesktop);
+
+	// Desktop only: when the popped-out native Chi window relays a navigate, drive the MAIN app here;
+	// and restore the in-app orb when that window closes.
+	useEffect(() => {
+		const d = desktopBridge();
+		if (!d?.isDesktop) {
+			return;
+		}
+		d.onNavigate?.((p) => {
+			try {
+				roomCoordinator.openRouteLink(p.t as Parameters<typeof roomCoordinator.openRouteLink>[0], { rid: p.rid, name: p.name });
+			} catch {
+				/* ignore */
+			}
+		});
+		d.onChiWindowClosed?.(() => setPoppedOut(false));
+	}, []);
 
 	// Create the web component once its bundle is loaded, and wire the Chi adapter.
 	useEffect(() => {
@@ -145,6 +179,13 @@ export const ChiOrbMount = (): ReactElement => {
 	);
 
 	const popOut = useCallback(async () => {
+		// Desktop app: open the NATIVE always-on-top Chi window (Electron has no Document PiP).
+		const d = desktopBridge();
+		if (d?.isDesktop && d.popOutChi) {
+			d.popOutChi();
+			setPoppedOut(true);
+			return;
+		}
 		const orb = orbElRef.current;
 		const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow: (o: unknown) => Promise<Window> } })
 			.documentPictureInPicture;
@@ -217,7 +258,14 @@ export const ChiOrbMount = (): ReactElement => {
 				<button
 					type='button'
 					title='Bring Chi back into the window'
-					onClick={() => pipWinRef.current?.close()}
+					onClick={() => {
+						const d = desktopBridge();
+						if (d?.isDesktop) {
+							d.closeChiWindow?.();
+						} else {
+							pipWinRef.current?.close();
+						}
+					}}
 					style={{
 						display: 'flex',
 						alignItems: 'center',
@@ -255,7 +303,7 @@ export const ChiOrbMount = (): ReactElement => {
 					<span style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,.5)' }} />
 					<span style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,.5)' }} />
 				</div>
-				{pipSupported && (
+				{canPopOut && (
 					<button
 						type='button'
 						title='Pop Chi out into its own window'
