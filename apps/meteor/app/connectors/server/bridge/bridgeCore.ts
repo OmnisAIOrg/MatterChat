@@ -187,18 +187,30 @@ export async function ingestExternalMessage(
 		// External senders render via the ALIAS mechanism — never ghost RC accounts (spec §4.3).
 		...(senderIsOwner ? {} : { alias: message.authorDisplayName || message.authorExternalId }),
 		...(tmid ? { tmid } : {}),
-		customFields: {
-			connectorBridge: {
-				provider: doc.provider,
-				connectionId: doc._id,
-				externalId: message.externalId,
-				authorExternalId: message.authorExternalId,
-				inbound: true,
-			},
-		},
 	};
 
 	await sendMessage(sender, rcMessage, room, { upsert: true });
+	// STAMP AFTER SAVE, exactly like the outbound leg (Messages.updateOne below in onMessageSaved):
+	// sendMessage's validateMessage rejects customFields outright when the workspace-level
+	// Message_CustomFields setting is off ('Custom fields not enabled' — the SECOND silent killer
+	// of bridge inbound, unmasked once the impersonate fix let messages get this far). The stamp is
+	// internal bridge metadata (echo dedup + edit/delete lookup), not user-entered custom fields, so
+	// it must never depend on that admin setting. The deterministic _id + in-memory echo set cover
+	// the instant between insert and stamp.
+	await Messages.updateOne(
+		{ _id: rcMessageId },
+		{
+			$set: {
+				'customFields.connectorBridge': {
+					provider: doc.provider,
+					connectionId: doc._id,
+					externalId: message.externalId,
+					authorExternalId: message.authorExternalId,
+					inbound: true,
+				},
+			},
+		},
+	);
 	return true;
 }
 
