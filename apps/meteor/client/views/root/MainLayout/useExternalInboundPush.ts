@@ -82,6 +82,12 @@ export const useExternalInboundPush = (enabled = true): void => {
 			throttledPerKey('unread-summary', () => {
 				void queryClient.invalidateQueries({ queryKey: ['external-workspaces.unreadSummary'] });
 			});
+			// The sidebar's per-row unread pills read the channels/directChats lists — refresh them on
+			// the same throttle so dots appear live (server overlays store-computed counts onto rows).
+			throttledPerKey(`lists:${event.connectionId}`, () => {
+				void queryClient.invalidateQueries({ queryKey: ['external-workspaces.directChats', event.connectionId] });
+				void queryClient.invalidateQueries({ queryKey: ['external-workspaces.channels', event.connectionId] });
+			});
 
 			// Notifications: DMs only, not while staring at that conversation, cooldown per channel.
 			if (!isDm(event.channelKind)) {

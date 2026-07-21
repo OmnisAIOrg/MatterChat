@@ -97,6 +97,13 @@ export interface IExternalWorkspaceConnection extends IRocketChatRecord {
 	externalOrgName: string;
 	/** Current lifecycle status. */
 	status: ExternalWorkspaceConnectionStatus;
+	/**
+	 * Per-conversation last-seen markers for store-computed unread state, keyed by BASE64URL-encoded
+	 * channel external id (raw Teams ids contain characters illegal in Mongo field names). Written by
+	 * markMyRead when the owner opens a conversation; read by the unread overlays. Optional/additive —
+	 * absent = nothing seen yet (every stored inbound message counts as unread).
+	 */
+	lastSeenByChannel?: Record<string, Date>;
 	/** OAuth scopes actually granted on this connection (empty until consent completes). */
 	scopes: string[];
 	/**

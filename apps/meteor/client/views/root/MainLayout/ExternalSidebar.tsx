@@ -248,19 +248,17 @@ const Section = ({
 	const [open, setOpen] = useState(true);
 	return (
 		<Box>
-			<Box
-				is='button'
-				type='button'
-				onClick={(): void => setOpen((prev) => !prev)}
-				className={sectionHeadingClass}
-				aria-expanded={open}
-			>
+			<Box is='button' type='button' onClick={(): void => setOpen((prev) => !prev)} className={sectionHeadingClass} aria-expanded={open}>
 				<Icon name={open ? 'chevron-down' : 'chevron-right'} size='x16' color='hint' />
 				<Icon name={icon} size='x14' color='hint' />
 				<Box is='span' withTruncatedText flexGrow={1}>
 					{title}
 				</Box>
-				{count > 0 ? <Box is='span' className={countBadgeClass}>{count > 99 ? '99+' : count}</Box> : null}
+				{count > 0 ? (
+					<Box is='span' className={countBadgeClass}>
+						{count > 99 ? '99+' : count}
+					</Box>
+				) : null}
 			</Box>
 
 			{open && (
@@ -498,6 +496,7 @@ const ExternalSidebar = (): ReactElement => {
 										<Box is='span' withTruncatedText flexGrow={1} fontWeight={unread ? 700 : undefined}>
 											{channel.name}
 										</Box>
+										<UnreadPill unreadCount={channel.unreadCount} mentionCount={channel.mentionCount} />
 										<UnreadPill unreadCount={channel.unreadCount} mentionCount={channel.mentionCount} />
 									</Box>
 								);
