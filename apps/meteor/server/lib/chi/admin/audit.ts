@@ -10,6 +10,7 @@
 import type { IUser } from '@rocket.chat/core-typings';
 import { Rooms } from '@rocket.chat/models';
 
+import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
 import { createRoom } from '../../../../app/lib/server/functions/createRoom';
 import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
 import { settings } from '../../../../app/settings/server';
@@ -24,9 +25,10 @@ const channelName = (): string =>
 		.trim() || DEFAULT_CHANNEL;
 
 /**
- * Post one audit line. Creates the private audit channel on first use (bot + the acting admin
- * as members — later admins get added the first time THEY trigger an audited action). Audit
- * must never break the action it records: failures log and return.
+ * Post one audit line. Creates the private audit channel on first use (bot + the acting user
+ * as members — but ONLY when that user is an admin; non-admin self-service calls are audited
+ * without ever seating the non-admin in the audit channel). Audit must never break the action
+ * it records: failures log and return.
  */
 export async function postAuditEntry(actor: IUser, line: string): Promise<void> {
 	try {
@@ -34,7 +36,8 @@ export async function postAuditEntry(actor: IUser, line: string): Promise<void> 
 		const name = channelName();
 		let room = await Rooms.findOneByName(name);
 		if (!room) {
-			const created = await createRoom('p', name, bot, actor.username ? [actor.username] : [], false, false, {
+			const seatActor = actor.username && (await hasRoleAsync(actor._id, 'admin'));
+			const created = await createRoom('p', name, bot, seatActor && actor.username ? [actor.username] : [], false, false, {
 				description: 'Chi Admin Assistant audit log — every executed admin action lands here.',
 			});
 			room = await Rooms.findOneById(created.rid);

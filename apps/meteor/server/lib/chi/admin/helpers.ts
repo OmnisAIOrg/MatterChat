@@ -106,6 +106,53 @@ export function parseBulkUsers(blob: string, takenUsernames: ReadonlySet<string>
 	return { rows, errors };
 }
 
+/** Hard cap for one bulk_set_user_notification_sound call. */
+export const BULK_PREFS_MAX = 1000;
+
+export type SoundOption = { _id: string; name: string };
+
+/**
+ * The stock notification sounds every workspace ships with (mirror of the client fallback in
+ * client/providers/CustomSoundProvider/lib/helpers.ts) — CustomSounds rows add to these.
+ */
+export const DEFAULT_SOUND_IDS = [
+	'chime',
+	'door',
+	'beep',
+	'chelle',
+	'ding',
+	'droplet',
+	'highbell',
+	'seasons',
+	'telephone',
+	'outbound-call-ringing',
+	'call-ended',
+	'dialtone',
+	'ringtone',
+] as const;
+
+/**
+ * Normalize a human sound reference for matching: trim, lowercase, drop an audio file extension
+ * ("Notification.wav" → "notification") and separators, so ids, display names and file names
+ * all land on the same key.
+ */
+export function normalizeSoundKey(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/\.(wav|mp3|ogg|m4a|aac)$/, '')
+		.replace(/[^a-z0-9]/g, '');
+}
+
+/** Match a requested sound against the available options by id first, then display name. */
+export function matchSound(query: string, options: readonly SoundOption[]): SoundOption | undefined {
+	const key = normalizeSoundKey(query);
+	if (!key) {
+		return undefined;
+	}
+	return options.find((o) => normalizeSoundKey(o._id) === key) ?? options.find((o) => normalizeSoundKey(o.name) === key);
+}
+
 /** A human-typed confirmation? (the deterministic gate for destructive tools) */
 export function isConfirmText(text: string): boolean {
 	return /^(confirm|yes|y)\.?$/i.test(text.trim());

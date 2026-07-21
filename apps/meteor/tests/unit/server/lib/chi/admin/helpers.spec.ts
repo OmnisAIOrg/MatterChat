@@ -3,6 +3,7 @@ import { describe, it } from 'mocha';
 
 import {
 	BULK_CREATE_MAX,
+	DEFAULT_SOUND_IDS,
 	auditArgs,
 	deriveUsername,
 	isCancelText,
@@ -11,6 +12,8 @@ import {
 	isSettingReadable,
 	isSettingWritable,
 	maskSecret,
+	matchSound,
+	normalizeSoundKey,
 	parseBulkUsers,
 } from '../../../../../../server/lib/chi/admin/helpers';
 
@@ -88,6 +91,34 @@ describe('chi admin helpers', () => {
 			expect(line).to.not.include('super-secret-value');
 			expect(line).to.include('"name":"ok"');
 			expect(auditArgs({ blob: 'x'.repeat(1000) }).length).to.be.lessThan(450);
+		});
+	});
+
+	describe('sound matching (per-user notification preference tools)', () => {
+		const options = [
+			...DEFAULT_SOUND_IDS.map((id) => ({ _id: id, name: id })),
+			{ _id: 'custom-abc123', name: 'Notification' },
+			{ _id: 'custom-def456', name: 'Team Chime 2' },
+		];
+
+		it('normalizes file names, case and separators onto one key', () => {
+			expect(normalizeSoundKey('Notification.wav')).to.equal('notification');
+			expect(normalizeSoundKey('  High-Bell.MP3 ')).to.equal('highbell');
+			expect(normalizeSoundKey('Team Chime 2')).to.equal('teamchime2');
+			expect(normalizeSoundKey('')).to.equal('');
+		});
+		it('matches stock sound ids case-insensitively', () => {
+			expect(matchSound('Chime', options)?._id).to.equal('chime');
+			expect(matchSound('HIGHBELL', options)?._id).to.equal('highbell');
+		});
+		it('matches custom sounds by display name, extension tolerated', () => {
+			expect(matchSound('Notification.wav', options)?._id).to.equal('custom-abc123');
+			expect(matchSound('team chime 2', options)?._id).to.equal('custom-def456');
+		});
+		it('prefers an id match over a name match and rejects unknowns', () => {
+			expect(matchSound('chime', [...options, { _id: 'x', name: 'chime' }])?._id).to.equal('chime');
+			expect(matchSound('does-not-exist', options)).to.equal(undefined);
+			expect(matchSound('', options)).to.equal(undefined);
 		});
 	});
 });

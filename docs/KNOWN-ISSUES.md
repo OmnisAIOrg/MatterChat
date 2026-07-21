@@ -90,8 +90,28 @@ of 2026-07-19 were a **frontend crash on legacy card shapes** (see migration v33
 
 ---
 
+## 🟠 Teams/GChat inbound parity (ported 2026-07-21 — constraints that REMAIN)
+The Slack live-inbound stack (browse-store `source:'inbound'` rows → store-computed unread dots +
+`external-inbound` live push/notifications) is now provider-generic and wired for Teams (webhook
+lane, `providers/teams/webhook.ts`) and for the reconcile/backfill poll lane
+(`bridge/bridgeService.ts` — Google's ONLY inbound transport, and the missed-window recovery for
+Teams/Slack). Shared module: `bridge/inboundBrowse.ts`. What canNOT be fixed in code:
+- **Teams live push needs deploy config:** Admin → Teams Client ID/Secret AND the
+  `TEAMS_WEBHOOK_CLIENT_STATE_SECRET` env (plus `Teams_Webhook_Public_Base_Url` behind an ingress
+  alias). Without the secret, Graph subscriptions are never created (fail-closed) and Teams
+  inbound degrades to the 30-min reconcile poll — dots/notifications arrive late, not never.
+- **Only BRIDGED conversations are live.** Teams subscriptions exist per bridged channel/chat;
+  a non-bridged Teams DM opened from the rail has no push and no store rows. (Tenant-wide
+  `/me/chats/getAllMessages` subscription = larger follow-up.) Same for Google (poll is per-bridge).
+- **Teams CHANNEL read-state never syncs back to Teams** — Graph has no delegated "mark channel
+  read" (DMs DO sync via `markChatReadForUser`). The red dot inside native MS Teams clears for
+  DMs only; MatterChat's own dots clear for everything.
+- **Google Chat can't be told a space was read** (no API) and its space ids don't distinguish
+  DM-vs-room, so GChat pushes update dots silently (no sound scoping).
+
 ## 🟡 Founder-side config (unblocks features already built)
-- **Teams:** paste Client ID + Client Secret (Azure app reg → Certificates & secrets) in Admin → Teams.
+- **Teams:** paste Client ID + Client Secret (Azure app reg → Certificates & secrets) in Admin → Teams,
+  and set `TEAMS_WEBHOOK_CLIENT_STATE_SECRET` on the deploy for live inbound (see 🟠 above).
 - **Google Chat:** paste OAuth Client ID + Secret (Google Cloud Console) in Admin → GoogleChat.
 - **Slack reactions:** add `reaction_added`/`reaction_removed` user events + `reactions:read/write`
   scopes to the Slack app, then reconnect the workspace.
