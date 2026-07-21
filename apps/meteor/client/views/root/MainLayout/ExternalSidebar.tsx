@@ -497,6 +497,7 @@ const ExternalSidebar = (): ReactElement => {
 											{channel.name}
 										</Box>
 										<UnreadPill unreadCount={channel.unreadCount} mentionCount={channel.mentionCount} />
+										<UnreadPill unreadCount={channel.unreadCount} mentionCount={channel.mentionCount} />
 									</Box>
 								);
 							})}
