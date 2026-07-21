@@ -64,15 +64,16 @@ describe('chi admin helpers', () => {
 		});
 	});
 
-	describe('settings allowlists + masking', () => {
-		it('reads are prefix-scoped', () => {
+	describe('settings access + masking (widened 2026-07-20: any setting, secrets masked)', () => {
+		it('reads allow any non-empty id', () => {
 			expect(isSettingReadable('Slack_Enabled')).to.be.true;
-			expect(isSettingReadable('Site_Url')).to.be.true;
-			expect(isSettingReadable('LDAP_Password')).to.be.false;
+			expect(isSettingReadable('LDAP_Password')).to.be.true;
+			expect(isSettingReadable('  ')).to.be.false;
 		});
-		it('writes are exact-id scoped', () => {
+		it('writes allow any non-empty id (double-gated + confirmed at the tool layer)', () => {
 			expect(isSettingWritable('Slack_Enabled')).to.be.true;
-			expect(isSettingWritable('Site_Url')).to.be.false;
+			expect(isSettingWritable('Site_Url')).to.be.true;
+			expect(isSettingWritable('')).to.be.false;
 		});
 		it('flags secret ids and masks values without leaking them', () => {
 			expect(isSecretSetting('Slack_OAuth_Client_Secret')).to.be.true;

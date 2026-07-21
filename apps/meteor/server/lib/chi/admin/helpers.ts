@@ -7,30 +7,24 @@
 /** Hard cap for one bulk_create_users call — keeps a single DM from minting an unbounded fleet. */
 export const BULK_CREATE_MAX = 100;
 
-/** Settings the assistant may READ. Prefixes; API-key style ids are masked on top of this. */
-const SETTING_READ_ALLOWLIST = ['Slack_', 'SlackBridge_', 'Chi_Assistant_', 'Accounts_', 'SMTP_', 'From_Email', 'Site_Url', 'Site_Name'];
-
-/** Settings the assistant may WRITE (behind Chi_Assistant_Allow_Settings_Writes + confirm). */
-const SETTING_WRITE_ALLOWLIST = [
-	'Slack_Enabled',
-	'Slack_OAuth_Client_Id',
-	'Slack_OAuth_Client_Secret',
-	'Slack_Signing_Secret',
-	'Slack_Bridge_Sync_Reactions',
-	'SlackBridge_Enabled',
-	'Accounts_RegistrationForm',
-	'Accounts_EmailVerification',
-];
+/**
+ * Settings access contract (widened 2026-07-20 on founder direction — "admin capability on
+ * everything"): Chi may READ any setting and WRITE any setting. The guardrails that remain are
+ * the ones that matter: secret VALUES are always masked on read/echo (never leave the server in
+ * chat), writes stay double-gated behind Chi_Assistant_Allow_Settings_Writes + an in-chat
+ * confirm, and every write is audited. The old allowlists are kept as functions so call sites
+ * and tests keep a single seam if scoping ever needs to come back.
+ */
 
 /** Setting ids whose VALUES must never be echoed back into chat/audit. */
 const SECRET_SETTING_MARKERS = ['Secret', 'Password', 'API_Key', 'Token'];
 
 export function isSettingReadable(id: string): boolean {
-	return SETTING_READ_ALLOWLIST.some((p) => id === p || id.startsWith(p));
+	return id.trim().length > 0;
 }
 
 export function isSettingWritable(id: string): boolean {
-	return SETTING_WRITE_ALLOWLIST.includes(id);
+	return id.trim().length > 0;
 }
 
 export function isSecretSetting(id: string): boolean {
