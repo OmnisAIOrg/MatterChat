@@ -461,16 +461,81 @@ const slackConnectLink: ChiTool = {
 	},
 };
 
+const searchSettings: ChiTool = {
+	def: {
+		name: 'search_settings',
+		description:
+			'Search workspace settings by id/group/section substring (e.g. "Teams", "notification", "SMTP"). Returns matching setting ids with group and value (secret values masked). Read-only — the discovery tool to use BEFORE get_setting/set_setting when the exact id is unknown.',
+		inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+	},
+	async execute(input) {
+		const q = str(input.query);
+		if (q.length < 2) {
+			throw new Error('query must be at least 2 characters.');
+		}
+		const re = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+		const rows = await Settings.find(
+			{ $or: [{ _id: re }, { group: re }, { section: re }] },
+			{ projection: { _id: 1, group: 1, section: 1, type: 1, value: 1 }, sort: { _id: 1 }, limit: 40 },
+		).toArray();
+		if (!rows.length) {
+			return `No settings matching "${q}". Note: per-user notification PREFERENCES are stored on user profiles, not workspace settings — this searches workspace settings only.`;
+		}
+		const lines = rows.map((r) => {
+			const masked = isSecretSetting(r._id) || r.type === 'password';
+			return `- ${r._id} [${r.group || '-'}${r.section ? `/${r.section}` : ''}] = ${masked ? maskSecret(r.value) : JSON.stringify(r.value)}`;
+		});
+		return `${rows.length} setting(s):\n${lines.join('\n')}${rows.length === 40 ? '\n(capped at 40 — narrow the query)' : ''}`;
+	},
+};
+
+const connectorStatus: ChiTool = {
+	def: {
+		name: 'connector_status',
+		description:
+			'External-workspace connector health for slack, teams and google (gchat): connector settings for that provider (secrets masked) + how many users have connected + whether the asking admin has connected. Read-only.',
+		inputSchema: {
+			type: 'object',
+			properties: { provider: { type: 'string', description: 'slack | teams | google; omit for all three.' } },
+		},
+	},
+	async execute(input, actor) {
+		const wanted = str(input.provider).toLowerCase();
+		const providers = ['slack', 'teams', 'google'].filter((p) => !wanted || p === wanted);
+		if (!providers.length) {
+			throw new Error('provider must be slack, teams or google.');
+		}
+		const out: string[] = [];
+		for (const provider of providers) {
+			const prefix = provider.charAt(0).toUpperCase() + provider.slice(1);
+			const rows = await Settings.find(
+				{ _id: { $regex: `^${prefix}_` } },
+				{ projection: { _id: 1, type: 1, value: 1 }, sort: { _id: 1 }, limit: 15 },
+			).toArray();
+			const connections = await ExternalWorkspaceConnections.col.countDocuments({ provider });
+			const mine = await ExternalWorkspaceConnections.col.findOne({ provider, userId: actor._id });
+			out.push(`**${provider}**`);
+			for (const r of rows) {
+				const masked = isSecretSetting(r._id) || r.type === 'password';
+				out.push(`- ${r._id} = ${masked ? maskSecret(r.value) : JSON.stringify(r.value)}`);
+			}
+			out.push(`- connected users: ${connections}; you: ${mine ? (mine as { status?: string }).status || 'connected' : 'not connected'}`);
+		}
+		return out.join('\n');
+	},
+};
+
 const getSetting: ChiTool = {
 	def: {
 		name: 'get_setting',
-		description: 'Read one workspace setting by id (allowlisted groups only; secret values come back masked). Read-only.',
+		description:
+			'Read one workspace setting by exact id (any setting; secret values always come back masked). Use search_settings first when unsure of the id. Read-only.',
 		inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
 	},
 	async execute(input) {
 		const id = str(input.id);
 		if (!isSettingReadable(id)) {
-			throw new Error(`Setting "${id}" is outside the assistant's read allowlist.`);
+			throw new Error(`Setting id looks empty/invalid.`);
 		}
 		const value = settings.get(id);
 		if (value === undefined) {
@@ -484,7 +549,7 @@ const setSetting: ChiTool = {
 	def: {
 		name: 'set_setting',
 		description:
-			'Change one allowlisted workspace setting (Slack connector + a few account toggles). Only works when "Allow settings writes" is enabled in Chi Assistant admin settings. Requires confirmation.',
+			'Change ANY workspace setting by exact id — the same power the admin settings UI has. Only works when "Allow settings writes" is enabled in Chi Assistant admin settings; always requires an in-chat confirm; every write is audited. Use search_settings first when unsure of the id.',
 		inputSchema: {
 			type: 'object',
 			properties: { id: { type: 'string' }, value: { description: 'New value (string or boolean).' } },
@@ -501,7 +566,7 @@ const setSetting: ChiTool = {
 		}
 		const id = str(input.id);
 		if (!isSettingWritable(id)) {
-			throw new Error(`Setting "${id}" is not in the assistant's write allowlist.`);
+			throw new Error(`Setting id looks empty/invalid.`);
 		}
 		const value = typeof input.value === 'boolean' ? input.value : str(input.value);
 		const audited = updateAuditedByUser({ _id: actor._id, username: actor.username, ip: '', useragent: 'chi-admin-assistant' });
@@ -528,6 +593,8 @@ export const CHI_ADMIN_TOOLS: ChiTool[] = [
 	slackStatus,
 	slackConfigure,
 	slackConnectLink,
+	searchSettings,
+	connectorStatus,
 	getSetting,
 	setSetting,
 ];
