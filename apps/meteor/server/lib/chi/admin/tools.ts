@@ -461,6 +461,36 @@ const slackConnectLink: ChiTool = {
 	},
 };
 
+const slackSetupGuide: ChiTool = {
+	def: {
+		name: 'slack_setup_guide',
+		description:
+			'The complete Slack onboarding runbook (admin app setup + per-user connect + troubleshooting). Use it to WALK an admin through bringing their Slack org into MatterChat step by step, or to diagnose "messages not arriving" complaints. Read-only. Pair with connector_status/slack_configure to check and apply as you go.',
+		inputSchema: { type: 'object', properties: {} },
+	},
+	async execute() {
+		const site = String(settings.get('Site_Url') || 'https://app.matterchat.com').replace(/\/+$/, '');
+		return [
+			'SLACK ONBOARDING RUNBOOK (full guide: docs/SLACK-CONNECT-GUIDE.md in the repo)',
+			'',
+			'MENTAL MODEL: two lanes. (1) Workspace view — each user browses/sends their own Slack inside MatterChat. (2) Bridged rooms — a Slack conversation mirrored into a real MatterChat channel (both ways; external senders appear via the Bridge bot with their name).',
+			'',
+			'ADMIN SETUP (once):',
+			'1. api.slack.com/apps → Create App (or open the existing one).',
+			`2. OAuth & Permissions → Redirect URL: ${site}/_slack/oauth/callback ; User Token Scopes: channels:read channels:history groups:read groups:history im:read im:history im:write mpim:read mpim:history chat:write users:read team:read (+ reactions:read reactions:write for reaction sync).`,
+			`3. Event Subscriptions → ON → Request URL: ${site}/_slack/events (must show Verified — needs step 4's signing secret saved FIRST) → under "Subscribe to events on behalf of users" add ALL FOUR: message.im, message.mpim, message.channels, message.groups (+ reaction_added/reaction_removed).`,
+			'   ⚠️ #1 MISTAKE: putting message.im under BOT events — bots never see personal DMs; inbound will silently never arrive. Must be USER events.',
+			'4. Copy Client ID + Client Secret + Signing Secret from Basic Information → apply here via the slack_configure tool (or Admin → Settings → Slack). Reinstall the Slack app if prompted.',
+			'',
+			`EACH USER (30s): left rail ＋ → Connect Slack (or ${site}/_slack/oauth/start) → Allow. RECONNECT RULE: after ANY scope/event change, every already-connected user must Disconnect → Connect again — grants only refresh on a new authorization.`,
+			'',
+			'TROUBLESHOOT (most common first): outbound-works-inbound-dead = user events missing/under bot events → fix + reinstall + everyone reconnects; Request URL won’t verify = signing secret mismatch; events fine but a user gets nothing = that user connected before the change → reconnect; no DM sound/banner = browser notification permission; bridged room silent from the other side = fixed 2026-07-21, update the build.',
+			'',
+			'CHECK AS YOU GO: connector_status shows settings/secrets presence + who is connected; workspace_info shows the site URL the Slack app must point at.',
+		].join('\n');
+	},
+};
+
 const searchSettings: ChiTool = {
 	def: {
 		name: 'search_settings',
@@ -595,6 +625,7 @@ export const CHI_ADMIN_TOOLS: ChiTool[] = [
 	slackConnectLink,
 	searchSettings,
 	connectorStatus,
+	slackSetupGuide,
 	getSetting,
 	setSetting,
 ];
