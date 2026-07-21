@@ -53,6 +53,8 @@ export type SlackMessageAction =
 	| {
 			kind: 'new';
 			channel: string;
+			/** Slack conversation kind ('im'|'mpim'|'channel'|'group') — drives DM-scoped notifications downstream. */
+			channelType?: string;
 			ts: string;
 			user: string;
 			text: string;
@@ -103,7 +105,7 @@ export function extractReactionEvent(event: Record<string, unknown>): SlackReact
 		return null;
 	}
 	const item = event.item as { type?: unknown; channel?: unknown; ts?: unknown } | undefined;
-	if (!item || item.type !== 'message') {
+	if (item?.type !== 'message') {
 		return null;
 	}
 	const channel = asBoundedString(item.channel);
@@ -225,6 +227,7 @@ export function extractMessageEvent(event: Record<string, unknown>): SlackMessag
 	return {
 		kind: 'new',
 		channel,
+		...(typeof msg.channel_type === 'string' ? { channelType: msg.channel_type } : {}),
 		ts,
 		user,
 		text: typeof msg.text === 'string' ? msg.text : '',

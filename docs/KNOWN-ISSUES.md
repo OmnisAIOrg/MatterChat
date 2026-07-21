@@ -26,7 +26,16 @@ deferred work so nothing is lost. Fix carefully — several of these are archite
      doesn't depend on `conversations.history`), OR
   3. Re-architect browse to be Events-API-driven with a persistent local message store (like the bridge).
 
-### 2. The **bridge** is in a worse state than before wave 3
+### 2. ✅ RESOLVED 2026-07-21 — bridge inbound was dying on TWO stacked silent errors
+- **Was:** "bridged Slack rooms degraded / never receive the other side" (below, kept for history).
+- **Root causes (both live-reproduced with a signed-event E2E; each error was warn-logged only, invisible in the UI):**
+  1. `sendMessage`'s `validateMessage` requires the `message-impersonate` permission for ANY message with an `alias`. Bridge inbound from the OTHER party always sets `alias` and was sent AS the human connection owner → `'Not enough permission'` → dropped. The owner's echoes carry no alias — outbound looked fine, so the bug read as "flaky inbound" for days.
+  2. Once past (1): `'Custom fields not enabled'` — validateMessage rejects `message.customFields` when the workspace `Message_CustomFields` setting is off (default). The bridge's `connectorBridge` stamp rode inside sendMessage; the outbound leg never hit this because it stamps AFTER save via `Messages.updateOne`.
+- **Fixes:** aliased inbound is now authored by the dedicated `connector.bridge` BOT (role `bot` holds `message-impersonate` — stock-RC bridge pattern; `bridge/bridgeBot.ts`), and the stamp moved to post-save `Messages.updateOne`, mirroring outbound.
+- **Lesson that outlives the fix:** when a pipeline "mostly works but eats specific items", grep the server log for the item BEFORE theorizing — both killers were sitting in plain `SystemLogger.warn` lines the whole time. And any bridge write path must be exercised by an E2E that asserts the message IN THE ROOM, not just an accepted webhook.
+
+#### (original report, 2026-07-19)
+##### was: The **bridge** is in a worse state than before wave 3
 - **Symptom (founder-reported 7/19):** bridged Slack rooms degraded vs. prior.
 - **NOTE:** wave 3 did NOT touch the bridge or the Slack inbound read (verified — empty git history
   for `app/connectors/server/bridge/` and `SlackProvider.syncMessages` across wave 3). So this is

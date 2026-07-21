@@ -13,7 +13,7 @@ export type InboundPushTarget = { userId: string; payload: IExternalInboundNotif
 export function buildInboundPushTargets(
 	docs: Pick<IExternalWorkspaceConnection, '_id' | 'userId' | 'provider'>[],
 	hasEcho: (connectionId: string) => boolean,
-	event: { channelExternalId: string; externalId: string; author?: string; text?: string; tsMs?: number },
+	event: { channelExternalId: string; channelKind?: string; externalId: string; author?: string; text?: string; tsMs?: number },
 ): InboundPushTarget[] {
 	if (!event.externalId || !event.channelExternalId) {
 		return [];
@@ -29,6 +29,7 @@ export function buildInboundPushTargets(
 				provider: doc.provider,
 				connectionId: doc._id,
 				channelExternalId: event.channelExternalId,
+				...(event.channelKind ? { channelKind: event.channelKind } : {}),
 				externalId: event.externalId,
 				...(event.author ? { author: event.author } : {}),
 				...(event.text ? { preview: event.text.slice(0, PREVIEW_MAX) } : {}),

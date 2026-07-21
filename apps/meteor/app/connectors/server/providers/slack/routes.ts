@@ -30,10 +30,21 @@ import { Random } from '@rocket.chat/random';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 import { Meteor } from 'meteor/meteor';
 import { Cookies } from 'meteor/ostrio:cookies';
+// eslint-disable-next-line import/no-duplicates -- NOT a duplicate: eslint's resolver cannot see
+// meteor/* packages and its autofix once MERGED this into the ostrio:cookies import, importing
+// RoutePolicy from a package that does not export it — undefined at boot, RoutePolicy.declare
+// crashed the whole server (2026-07-20). Keep these two imports separate.
 import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
-import { getSlackConfig, isSlackConfigured, SLACK_AUTHORIZE_ENDPOINT, SLACK_TOKEN_ENDPOINT, redirectUri, SLACK_USER_SCOPES } from './config';
+import {
+	getSlackConfig,
+	isSlackConfigured,
+	SLACK_AUTHORIZE_ENDPOINT,
+	SLACK_TOKEN_ENDPOINT,
+	redirectUri,
+	SLACK_USER_SCOPES,
+} from './config';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
 import { finishDesktopConnectorCallback, isDesktopAuthorizeRequest, isDesktopState } from '../../desktopOAuth';
 import { encryptCredentials } from '../../tokenCrypto';

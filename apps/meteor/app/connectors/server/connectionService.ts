@@ -16,6 +16,7 @@ import { ExternalWorkspaceConnections, ExternalSentMessages } from '@rocket.chat
 import { Meteor } from 'meteor/meteor';
 
 import type { IProviderChannel, IProviderConnection, IProviderDirectChat, IProviderMember, IProviderMessage } from './ChatProvider';
+import { encodeChannelKey, storeUnreadCounts } from './channelSeen';
 import { providerRegistry } from './providerRegistry';
 import { isGoogleConfigured } from './providers/google/config';
 import { isSlackConfigured } from './providers/slack/config';
@@ -249,6 +250,29 @@ async function resolveDiscoveryConnection(
  * `connectionId` is optional: when omitted, the user's most recent `connected` connection for
  * `provider` is used (the rail tile knows the provider, not necessarily the connection id).
  */
+/** How far back store-computed unread looks. Older inbound noise ages out of the badge. */
+const STORE_UNREAD_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const STORE_UNREAD_ROW_CAP = 2000;
+
+/**
+ * Store-computed unread per channel for ONE connection: inbound rows newer than the owner's
+ * last-seen markers (see channelSeen.ts — this is what makes badges provider-independent; the
+ * provider APIs report 0 for Slack non-Marketplace apps). Best-effort: any failure = empty map.
+ */
+async function storeUnreadForConnection(doc: IExternalWorkspaceConnection): Promise<Map<string, number>> {
+	try {
+		const rows = await ExternalSentMessages.col
+			.find(
+				{ userId: doc.userId, connectionId: doc._id, source: 'inbound', createdAt: { $gt: new Date(Date.now() - STORE_UNREAD_WINDOW_MS) } },
+				{ projection: { channelExternalId: 1, createdAt: 1 }, limit: STORE_UNREAD_ROW_CAP },
+			)
+			.toArray();
+		return storeUnreadCounts(rows as { channelExternalId: string; createdAt: Date }[], doc.lastSeenByChannel);
+	} catch {
+		return new Map();
+	}
+}
+
 export async function listMyChannels(
 	userId: string,
 	opts: { connectionId?: string; provider?: ExternalProvider },
@@ -268,16 +292,20 @@ export async function listMyChannels(
 		// re-encrypted + persisted the rotated tokens on the connection document.
 
 		// Group the flat channel list by team (the provider qualifies names as `Team / Channel`).
+		const storeCounts = await storeUnreadForConnection(doc);
 		const byTeam = new Map<string, ClientChannel[]>();
 		for (const ch of channels) {
 			const { teamName, name } = splitChannelLabel(ch, doc.externalOrgName || 'Microsoft Teams');
+			const storeUnread = storeCounts.get(ch.externalId) ?? 0;
 			const entry: ClientChannel = {
 				externalId: ch.externalId,
 				name,
 				teamName,
 				isPrivate: ch.isPrivate,
 				topic: ch.topic,
-				...(ch.unreadCount !== undefined ? { unreadCount: ch.unreadCount } : {}),
+				// Store-computed unread wins over the provider's number when higher (provider reports 0
+				// for Slack non-Marketplace apps; our own store sees every bridged inbound message).
+				...(Math.max(ch.unreadCount ?? 0, storeUnread) > 0 ? { unreadCount: Math.max(ch.unreadCount ?? 0, storeUnread) } : {}),
 				...(ch.mentionCount !== undefined ? { mentionCount: ch.mentionCount } : {}),
 				...(ch.lastActivity !== undefined ? { lastActivity: ch.lastActivity } : {}),
 			};
@@ -359,11 +387,14 @@ export async function listMyDirectChats(
 			return { chats: [], connection: toClientConnection(doc) };
 		}
 		const chats = await provider.listDirectChats(connection);
+		const storeCounts = await storeUnreadForConnection(doc);
 		const clientChats: ClientDirectChat[] = chats.map((c: IProviderDirectChat) => ({
 			externalId: c.externalId,
 			name: c.name,
 			isGroup: c.isGroup,
-			...(c.unreadCount !== undefined ? { unreadCount: c.unreadCount } : {}),
+			...(Math.max(c.unreadCount ?? 0, storeCounts.get(c.externalId) ?? 0) > 0
+				? { unreadCount: Math.max(c.unreadCount ?? 0, storeCounts.get(c.externalId) ?? 0) }
+				: {}),
 			...(c.mentionCount !== undefined ? { mentionCount: c.mentionCount } : {}),
 			...(c.lastActivity !== undefined ? { lastActivity: c.lastActivity } : {}),
 			...(c.avatarUrl ? { avatarUrl: c.avatarUrl } : {}),
@@ -592,7 +623,7 @@ export async function listMyMessages(
 							connectionId: loaded.doc._id,
 							provider: loaded.doc.provider,
 							channelExternalId: opts.channelExternalId,
-							externalId: m.externalId as string,
+							externalId: m.externalId,
 							text: m.text,
 							...(m.author ? { author: m.author } : {}),
 							...(m.authorAvatarUrl ? { authorAvatarUrl: m.authorAvatarUrl } : {}),
@@ -815,6 +846,15 @@ export async function unreadSummaryForMyConnections(userId: string): Promise<Unr
 		// Default every connection to 0/0; only an actual provider report raises it.
 		let unreadCount = 0;
 		let mentionCount = 0;
+		// Store-computed floor first (provider-independent; see storeUnreadForConnection).
+		try {
+			const storeCounts = await storeUnreadForConnection(doc);
+			for (const n of storeCounts.values()) {
+				unreadCount += n;
+			}
+		} catch {
+			// keep 0 — best-effort
+		}
 		try {
 			if (doc.status === 'connected') {
 				const connection = toProviderConnection(doc);
@@ -822,7 +862,7 @@ export async function unreadSummaryForMyConnections(userId: string): Promise<Unr
 					const provider = providerRegistry.get(doc.provider);
 					const summary = await provider.unreadSummary?.(connection);
 					if (summary) {
-						unreadCount = summary.unreadCount;
+						unreadCount = Math.max(unreadCount, summary.unreadCount);
 						mentionCount = summary.mentionCount;
 					}
 				}
@@ -850,6 +890,17 @@ export async function markMyRead(
 	const loaded = await loadOwnedConnection(userId, opts.connectionId);
 	if ('error' in loaded) {
 		return loaded;
+	}
+
+	// OUR read-state first (authoritative for store-computed unread): stamp the last-seen marker on
+	// the connection doc so badges clear regardless of whether the provider supports read-sync.
+	try {
+		await ExternalWorkspaceConnections.col.updateOne(
+			{ _id: loaded.doc._id },
+			{ $set: { [`lastSeenByChannel.${encodeChannelKey(opts.externalId)}`]: new Date() } },
+		);
+	} catch (err) {
+		SystemLogger.warn({ msg: 'lastSeen marker write failed', connectionId: loaded.doc._id, err: String(err) });
 	}
 
 	try {

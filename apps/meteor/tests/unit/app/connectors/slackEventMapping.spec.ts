@@ -16,7 +16,7 @@ describe('Slack event message mapping', () => {
 		it('extracts a plain channel message', () => {
 			expect(
 				extractMessageEvent({ type: 'message', channel: CHANNEL, channel_type: 'channel', user: 'U1', text: 'hello', ts: '1.000001' }),
-			).to.deep.equal({ kind: 'new', channel: CHANNEL, ts: '1.000001', user: 'U1', text: 'hello' });
+			).to.deep.equal({ kind: 'new', channel: CHANNEL, channelType: 'channel', ts: '1.000001', user: 'U1', text: 'hello' });
 		});
 
 		it('extracts a private-channel (group) message', () => {
@@ -121,13 +121,13 @@ describe('Slack event message mapping', () => {
 		it('extracts a 1:1 DM (im) message', () => {
 			expect(
 				extractMessageEvent({ type: 'message', channel: 'D0AAAAAAAA1', channel_type: 'im', user: 'U1', text: 'dm hello', ts: '10.000001' }),
-			).to.deep.equal({ kind: 'new', channel: 'D0AAAAAAAA1', ts: '10.000001', user: 'U1', text: 'dm hello' });
+			).to.deep.equal({ kind: 'new', channel: 'D0AAAAAAAA1', channelType: 'im', ts: '10.000001', user: 'U1', text: 'dm hello' });
 		});
 
 		it('extracts a group DM (mpim) message', () => {
 			expect(
 				extractMessageEvent({ type: 'message', channel: 'G0BBBBBBBB2', channel_type: 'mpim', user: 'U2', text: 'group dm', ts: '11.5' }),
-			).to.deep.equal({ kind: 'new', channel: 'G0BBBBBBBB2', ts: '11.5', user: 'U2', text: 'group dm' });
+			).to.deep.equal({ kind: 'new', channel: 'G0BBBBBBBB2', channelType: 'mpim', ts: '11.5', user: 'U2', text: 'group dm' });
 		});
 
 		it('carries thread replies in DMs like channels', () => {

@@ -232,3 +232,14 @@
 **Rejected:** (a) routing through the external AI-Agents platform (the `/chi` relay) — that's for matter Q&A over CasePro MCP; admin ops need to run IN-PROCESS against RC internals with the admin's own authority, and BYO-key keeps it self-contained. (b) a bespoke permission — reused core `admin` role so it tracks exactly what the person can already do. (c) giving the bot its own elevated identity — rejected on purpose; the whole safety model is that Chi executes AS the asking admin and is powerless for non-admins.
 **Transport note:** model calls MUST resolve `serverFetch` across Meteor's CJS/ESM interop shapes (a bare `const { serverFetch } = await import()` yields `undefined` at runtime → silent "could not reach"). Mirror the static-import precedent in `boards/ai/provider.ts`.
 
+
+---
+
+### 2026-07-21 — Bridge inbound authored by a dedicated bot; internal stamps written post-save
+**Chose:** aliased inbound (messages from the external party) rides under the `connector.bridge` bot (role `bot` ⇒ `message-impersonate`), and the `connectorBridge` customFields stamp is applied AFTER save via `Messages.updateOne` — mirroring the outbound leg.
+**Rejected:** (a) granting `message-impersonate` to humans/roles — real impersonation risk beyond the bridge; (b) enabling workspace `Message_CustomFields` — admin-visible surface + schema coupling for what is internal metadata; (c) raw `Messages.insertOne` bypassing sendMessage — loses the whole native pipeline (streams, unread, notifications), which is exactly what we want bridged rooms to have.
+**Why it took days:** both failures were warn-level log lines under a UI that showed nothing. The lesson is codified in CLAUDE.md (grep the log first) and the bridge E2E now asserts the message IN the room.
+
+### 2026-07-21 — Store-computed unread + live push over provider-reported state
+**Chose:** unread pills and the rail summary computed from OUR durable inbound store vs per-conversation `lastSeenByChannel` markers (base64url-keyed on the connection doc), overlaid as `max(provider, store)`; realtime via a typed `notify-user` `external-inbound` event + a narrow, per-key-throttled client refetch; notifications DM-scoped with a per-conversation cooldown.
+**Rejected:** provider unread APIs as the source (Slack restricts them for non-Marketplace apps — permanently 0), and v1's invalidate-everything push (stampeded RC's REST rate limiter — "connection issues").

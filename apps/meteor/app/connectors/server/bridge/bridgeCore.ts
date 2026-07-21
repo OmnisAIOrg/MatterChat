@@ -30,16 +30,19 @@ import { isEditedMessage } from '@rocket.chat/core-typings';
 import { ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 
+import { getBridgeBotUser } from './bridgeBot';
+import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } from './bridgeIds';
+import { echoSuppression, reactionEcho, reactionEchoKey } from './echoSuppression';
 import { callbacks } from '../../../../server/lib/callbacks';
 import { SystemLogger } from '../../../../server/lib/logger/system';
-import { settings } from '../../../settings/server';
 import { createRoom } from '../../../lib/server/functions/createRoom';
 import { sendMessage } from '../../../lib/server/functions/sendMessage';
+import { settings } from '../../../settings/server';
 import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
 import { toProviderConnection } from '../runtimeConnection';
-import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } from './bridgeIds';
-import { echoSuppression, reactionEcho, reactionEchoKey } from './echoSuppression';
+
+const BRIDGE_BOT_FALLBACK_USERNAME = 'connector.bridge';
 
 const CALLBACK_ID = 'ConnectorBridge_Out';
 
@@ -169,27 +172,45 @@ export async function ingestExternalMessage(
 		}
 	}
 
+	// AUTHOR: the owner's own echoes ride under the owner; messages from EXTERNAL senders are
+	// authored by the bridge bot and rendered via ALIAS. The bot is load-bearing, not cosmetic:
+	// validateMessage requires `message-impersonate` for ANY aliased message, humans don't have it,
+	// and sending aliased inbound as the owner threw 'Not enough permission' — silently killing
+	// every message from the other party (the founder's days-long "bridged room gets nothing" bug).
+	const sender = senderIsOwner ? owner : await getBridgeBotUser();
 	const rcMessage: Partial<IMessage> & { _id: string; rid: string; msg: string } = {
 		_id: rcMessageId,
 		rid: bridge.rid,
 		msg: message.text,
 		ts: parseExternalTs(message.ts),
-		u: { _id: owner._id, username: owner.username },
+		u: { _id: sender._id, username: sender.username ?? BRIDGE_BOT_FALLBACK_USERNAME },
 		// External senders render via the ALIAS mechanism — never ghost RC accounts (spec §4.3).
 		...(senderIsOwner ? {} : { alias: message.authorDisplayName || message.authorExternalId }),
 		...(tmid ? { tmid } : {}),
-		customFields: {
-			connectorBridge: {
-				provider: doc.provider,
-				connectionId: doc._id,
-				externalId: message.externalId,
-				authorExternalId: message.authorExternalId,
-				inbound: true,
-			},
-		},
 	};
 
-	await sendMessage(owner, rcMessage, room, { upsert: true });
+	await sendMessage(sender, rcMessage, room, { upsert: true });
+	// STAMP AFTER SAVE, exactly like the outbound leg (Messages.updateOne below in onMessageSaved):
+	// sendMessage's validateMessage rejects customFields outright when the workspace-level
+	// Message_CustomFields setting is off ('Custom fields not enabled' — the SECOND silent killer
+	// of bridge inbound, unmasked once the impersonate fix let messages get this far). The stamp is
+	// internal bridge metadata (echo dedup + edit/delete lookup), not user-entered custom fields, so
+	// it must never depend on that admin setting. The deterministic _id + in-memory echo set cover
+	// the instant between insert and stamp.
+	await Messages.updateOne(
+		{ _id: rcMessageId },
+		{
+			$set: {
+				'customFields.connectorBridge': {
+					provider: doc.provider,
+					connectionId: doc._id,
+					externalId: message.externalId,
+					authorExternalId: message.authorExternalId,
+					inbound: true,
+				},
+			},
+		},
+	);
 	return true;
 }
 
@@ -286,9 +307,11 @@ async function onMessageSaved(message: IMessage, room: IRoom | undefined): Promi
  * Shared outbound gates for edit/delete/reaction mirroring: bridged room, loaded doc+bridge,
  * active connection, readable credentials. Returns null (mirror nothing) on any miss.
  */
-async function bridgedOutboundContext(
-	room: IRoom | undefined,
-): Promise<{ doc: IExternalWorkspaceConnection; bridge: IBridgedChannel; connection: NonNullable<ReturnType<typeof toProviderConnection>> } | null> {
+async function bridgedOutboundContext(room: IRoom | undefined): Promise<{
+	doc: IExternalWorkspaceConnection;
+	bridge: IBridgedChannel;
+	connection: NonNullable<ReturnType<typeof toProviderConnection>>;
+} | null> {
 	if (!room || !Array.isArray(room.importIds) || !room.importIds.some(isBridgeRoomImportId)) {
 		return null;
 	}
@@ -336,11 +359,11 @@ async function onMessageEdited(message: IMessage, room: IRoom | undefined): Prom
 	}
 	try {
 		const ctx = await bridgedOutboundContext(room);
-		if (!ctx || message.u?._id !== ctx.doc.userId) {
+		if (message.u?._id !== ctx?.doc.userId) {
 			return message;
 		}
 		const stamp = message.customFields?.connectorBridge;
-		if (!stamp || stamp.inbound !== false || !stamp.externalId || !message.msg?.trim()) {
+		if (stamp?.inbound !== false || !stamp.externalId || !message.msg?.trim()) {
 			return message;
 		}
 		const provider = providerRegistry.get(ctx.doc.provider);
@@ -368,11 +391,11 @@ async function onMessageDeleted(message: IMessage, room: IRoom | undefined): Pro
 			return;
 		}
 		const ctx = await bridgedOutboundContext(room);
-		if (!ctx || message.u?._id !== ctx.doc.userId) {
+		if (message.u?._id !== ctx?.doc.userId) {
 			return;
 		}
 		const stamp = message.customFields?.connectorBridge;
-		if (!stamp || stamp.inbound !== false || !stamp.externalId) {
+		if (stamp?.inbound !== false || !stamp.externalId) {
 			return;
 		}
 		const provider = providerRegistry.get(ctx.doc.provider);
@@ -400,7 +423,7 @@ async function onReactionChanged(message: IMessage, user: IUser, reaction: strin
 	try {
 		const room = await Rooms.findOneById(message.rid);
 		const ctx = await bridgedOutboundContext(room ?? undefined);
-		if (!ctx || user._id !== ctx.doc.userId) {
+		if (user._id !== ctx?.doc.userId) {
 			return;
 		}
 		const stamp = message.customFields?.connectorBridge;

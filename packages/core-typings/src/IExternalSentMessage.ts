@@ -49,6 +49,8 @@ export interface IExternalInboundNotification {
 	/** The recipient user's own connection doc id (query-key routing on the client). */
 	connectionId: string;
 	channelExternalId: string;
+	/** Conversation kind ('im'|'mpim'|'channel'|'group') — clients scope sounds/banners to DMs. */
+	channelKind?: string;
 	/** Provider-native message id (Slack `ts`). */
 	externalId: string;
 	/** Author display name when resolvable (raw provider id otherwise). */

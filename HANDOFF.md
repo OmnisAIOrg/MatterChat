@@ -1,3 +1,15 @@
+# HANDOFF — 2026-07-21 (Slack arc: push + unread + BRIDGE-INBOUND root cause; Chi full admin; all → PR #136)
+
+**PROD (app.matterchat.com) currently e20f48ea** = live-push v1 + Chi Admin Assistant with FULL settings surface (search/read/write any setting, connector_status; founder uses it with his key). **PR #136 (branch `feat/external-unread-dots`) is the complete next package, founder-approved to ship:** store-computed unread pills (channels+DMs, slack/teams/google) + refetch-storm fix + DM-scoped notifications + **the bridge-inbound fix** (impersonate + custom-fields — see docs/KNOWN-ISSUES.md §2 RESOLVED and CLAUDE.md gotchas; bridge/bridgeBot.ts is new) + docs/SLACK-CONNECT-GUIDE.md (user-facing onboarding; Chi serves it via the slack_setup_guide tool).
+
+**Verification rigs (session scratchpad, rebuild-and-run then run):** `push-e2e.sh` (signed event → DDP frame w/ channelKind → browse store → unreadSummary 1→markRead→0; NOTE fake Slack ts MUST be current epoch or it falls outside the 14-day unread window) and `bridge-e2e.sh` (seeded bridged room + signed event → asserts the message IN the RC room). DDP listener: `ddp-listen.mjs`.
+
+**Slack app config truth** (the half code can't fix): the four `message.*` events must be under **"Subscribe to events on behalf of users"** (bot events never cover personal DMs), Request URL `/_slack/events` verified, redirect `/_slack/oauth/callback`, and users must DISCONNECT/RECONNECT after any scope/event change. All spelled out in docs/SLACK-CONNECT-GUIDE.md.
+
+**Deploy pipeline notes:** merge gate = `mergeable == MERGEABLE` (CodeQL fails repo-wide, non-required → UNSTABLE is normal); after any MatterChat-New manifest apply, re-promote the current SHA. Prod replicas MUST stay 1 until INSTANCE_IP wiring (see manifest comment).
+
+---
+
 # HANDOFF — 2026-07-20 (Chi Admin Assistant BUILT + live-verified on :3100)
 
 **NEW FEATURE on branch `feature/chi-admin-assistant` (off `staging` @ b6b357d5): the Chi Admin Assistant** — admins DM `@chi.bot` in plain English and Chi EXECUTES admin work via an LLM tool-loop. All additive under `apps/meteor/server/lib/chi/admin/` (+ `server/settings/chi-assistant.ts`, i18n keys, 2 marked one-line registry imports in `importPackages.ts` + `settings/index.ts`). OFF by default.

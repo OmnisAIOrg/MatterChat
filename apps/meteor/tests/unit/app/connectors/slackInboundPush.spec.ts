@@ -44,6 +44,6 @@ describe('slack inbound push targets', () => {
 
 	it('omits empty optional fields rather than sending empties', () => {
 		const [t] = buildInboundPushTargets([DOCS[0]], () => false, { channelExternalId: 'D1', externalId: 'ts1' });
-		expect(t.payload).to.not.have.any.keys('author', 'preview', 'tsMs');
+		expect(t.payload).to.not.have.any.keys('author', 'preview', 'tsMs', 'channelKind');
 	});
 });
