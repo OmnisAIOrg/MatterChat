@@ -5,30 +5,42 @@
  * (`saveUser`, `setUserActiveStatus`, `createRoom`, `addUserToRoom`, audited settings writes) —
  * Chi has no private powers. Two invariants enforced HERE, not in the prompt:
  *
- *  1. AUTHORITY IS THE SENDER'S: `runTool` re-checks the acting user's `admin` role at
- *     execution time. The bot user never executes anything under its own identity.
- *  2. DANGEROUS ⇒ CONFIRM: tools with a `needsConfirm` verdict do not run until the admin
+ *  1. AUTHORITY IS THE SENDER'S: every tool executes AS the calling user, never as the bot or
+ *     a service account. `runTool` re-checks the caller's authority at execution time: tools
+ *     default to `access: 'admin'` (requires the admin ROLE); `access: 'user'` tools are open
+ *     to every user but must scope any cross-user target through `resolveTargetUser`, which
+ *     enforces the SAME permission ids the admin console/REST API enforce (e.g.
+ *     users.setPreferences → 'edit-other-user-info'). Chi is a thin client over the existing
+ *     RBAC layer — never a bypass. SHIPPING RULE: no new tool lands without declaring its
+ *     `access` and routing cross-user targets through `resolveTargetUser`.
+ *  2. DANGEROUS ⇒ CONFIRM: tools with a `needsConfirm` verdict do not run until the caller
  *     types `confirm` (service parks the exact call in confirm.ts — deterministic re-run).
  *
  * Results are plain strings for the model to relay; secret values are masked before they can
  * reach chat or audit. Every EXECUTED tool is mirrored to the audit channel by the service.
  */
 import type { IUser } from '@rocket.chat/core-typings';
-import { ExternalWorkspaceConnections, Rooms, Settings, Users } from '@rocket.chat/models';
+import { CustomSounds, ExternalWorkspaceConnections, Rooms, Settings, Users } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
 import {
 	BULK_CREATE_MAX,
+	BULK_PREFS_MAX,
+	DEFAULT_SOUND_IDS,
 	auditArgs,
 	deriveUsername,
 	isSecretSetting,
 	isSettingReadable,
 	isSettingWritable,
 	maskSecret,
+	matchSound,
+	normalizeSoundKey,
 	parseBulkUsers,
 } from './helpers';
+import type { SoundOption } from './helpers';
 import type { ToolDef } from './llm';
+import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
 import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
 import { addUserToRoom } from '../../../../app/lib/server/functions/addUserToRoom';
 import { createRoom } from '../../../../app/lib/server/functions/createRoom';
@@ -36,10 +48,20 @@ import { saveUser } from '../../../../app/lib/server/functions/saveUser';
 import { setUserActiveStatus } from '../../../../app/lib/server/functions/setUserActiveStatus';
 import { notifyOnSettingChangedById } from '../../../../app/lib/server/lib/notifyListener';
 import { settings } from '../../../../app/settings/server';
+import { saveUserPreferences } from '../../../methods/saveUserPreferences';
 import { updateAuditedByUser } from '../../../settings/lib/auditedSettingUpdates';
+
+export type ChiToolAccess = 'admin' | 'user';
 
 export type ChiTool = {
 	def: ToolDef;
+	/**
+	 * Who may invoke it. 'admin' (the default) requires the workspace admin ROLE. 'user' tools
+	 * are offered to every user — they must enforce per-target scoping themselves via
+	 * `resolveTargetUser` (self is always allowed; anyone else needs the same permission id the
+	 * admin console checks for that operation).
+	 */
+	access?: ChiToolAccess;
 	/** Return a one-line plan summary when this call must be human-confirmed first. */
 	needsConfirm?: (input: Record<string, unknown>) => string | undefined;
 	execute: (input: Record<string, unknown>, actor: IUser) => Promise<string>;
@@ -57,6 +79,64 @@ async function requireUserByUsername(username: string): Promise<IUser> {
 	}
 	return user;
 }
+
+/**
+ * Resolve the user a self-or-other tool acts on. No username (or the caller's own) → the caller
+ * themselves, always allowed. Anyone else → the caller must hold the SAME permission id the
+ * admin console/REST API enforces for that operation (users.setPreferences →
+ * 'edit-other-user-info'; users.info full view → 'view-full-other-user-info').
+ */
+async function resolveTargetUser(actor: IUser, username: string, permissionForOthers: string): Promise<IUser> {
+	if (!username || username.replace(/^@/, '').toLowerCase() === (actor.username || '').toLowerCase()) {
+		return actor;
+	}
+	const target = await requireUserByUsername(username.replace(/^@/, ''));
+	if (target._id === actor._id) {
+		return actor;
+	}
+	if (!(await hasPermissionAsync(actor._id, permissionForOthers))) {
+		throw new Error(
+			`You can only do this for your own account — acting on @${target.username} needs the "${permissionForOthers}" permission (ask a workspace admin).`,
+		);
+	}
+	return target;
+}
+
+/** Stock sounds + this workspace's uploaded custom sounds (what the Sound dropdown lists). */
+async function availableSounds(): Promise<SoundOption[]> {
+	const custom = await CustomSounds.find({}, { projection: { name: 1 }, limit: 200 }).toArray();
+	return [...DEFAULT_SOUND_IDS.map((id) => ({ _id: id, name: id })), ...custom.map((s) => ({ _id: s._id, name: s.name || s._id }))];
+}
+
+/** Turn a human sound reference ("chime", "Notification.wav", "none") into the stored sound id. */
+async function resolveSoundId(query: string): Promise<string> {
+	if (!query) {
+		throw new Error('sound is required.');
+	}
+	if (normalizeSoundKey(query) === 'none') {
+		return 'none';
+	}
+	const options = await availableSounds();
+	const match = matchSound(query, options);
+	if (!match) {
+		throw new Error(`No sound named "${query}". Available: none, ${options.map((o) => o._id).join(', ')}.`);
+	}
+	return match._id;
+}
+
+/** The per-user preference keys the notification tools read (the Account → Notifications surface). */
+const NOTIFICATION_PREF_KEYS = [
+	'newMessageNotification',
+	'newRoomNotification',
+	'notificationsSoundVolume',
+	'masterVolume',
+	'muteFocusedConversations',
+	'desktopNotifications',
+	'pushNotifications',
+	'emailNotificationMode',
+	'unreadAlert',
+	'enableMobileRinging',
+] as const;
 
 /* ── the tools ─────────────────────────────────────────────────────────────────────── */
 
@@ -509,7 +589,7 @@ const searchSettings: ChiTool = {
 			{ projection: { _id: 1, group: 1, section: 1, type: 1, value: 1 }, sort: { _id: 1 }, limit: 40 },
 		).toArray();
 		if (!rows.length) {
-			return `No settings matching "${q}". Note: per-user notification PREFERENCES are stored on user profiles, not workspace settings — this searches workspace settings only.`;
+			return `No settings matching "${q}". Note: per-user notification PREFERENCES are stored on user profiles, not workspace settings — use get_user_preferences / set_user_notification_sound for those.`;
 		}
 		const lines = rows.map((r) => {
 			const masked = isSecretSetting(r._id) || r.type === 'password';
@@ -608,6 +688,127 @@ const setSetting: ChiTool = {
 	},
 };
 
+const getUserPreferences: ChiTool = {
+	def: {
+		name: 'get_user_preferences',
+		description:
+			'Read a user\'s notification/profile preferences (notification sound, desktop/mobile alerts, email mode — the Account → Notifications surface). Omit username to read your own. Reading ANOTHER user needs the view-full-other-user-info permission (admins have it). Read-only.',
+		inputSchema: {
+			type: 'object',
+			properties: { username: { type: 'string', description: 'Defaults to the requesting user.' } },
+		},
+	},
+	access: 'user',
+	async execute(input, actor) {
+		const target = await resolveTargetUser(actor, str(input.username), 'view-full-other-user-info');
+		const stored =
+			((await Users.findOneById<IUser>(target._id, { projection: { 'settings.preferences': 1 } }))?.settings?.preferences ?? {}) as Record<
+				string,
+				unknown
+			>;
+		const lines = NOTIFICATION_PREF_KEYS.map((key) => {
+			const own = stored[key];
+			const value = own !== undefined ? own : settings.get(`Accounts_Default_User_Preferences_${key}`);
+			const suffix = own === undefined ? ' (workspace default)' : '';
+			return `- ${key}: ${value === undefined ? '(unset)' : JSON.stringify(value)}${suffix}`;
+		});
+		return `Preferences for **${target.username}**:\n${lines.join('\n')}\nChange the sound with set_user_notification_sound.`;
+	},
+};
+
+const setUserNotificationSound: ChiTool = {
+	def: {
+		name: 'set_user_notification_sound',
+		description:
+			'Set a user\'s default new-message notification sound — the exact "Sound" dropdown under Account → Notifications (admin: Users → user → Preferences). Omit username to change your own; changing ANOTHER user needs the edit-other-user-info permission (admins have it). Accepts a sound name/id ("chime", "ding", "Notification.wav"); "none" silences it.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				username: { type: 'string', description: 'Defaults to the requesting user.' },
+				sound: { type: 'string', description: 'Sound name or id; "none" to silence.' },
+			},
+			required: ['sound'],
+		},
+	},
+	access: 'user',
+	async execute(input, actor) {
+		const target = await resolveTargetUser(actor, str(input.username), 'edit-other-user-info');
+		const soundId = await resolveSoundId(str(input.sound));
+		await saveUserPreferences({ newMessageNotification: soundId }, target._id);
+		return `Default notification sound for **${target.username}** is now **${soundId}** (applies immediately, no re-login needed).`;
+	},
+};
+
+const bulkSetUserNotificationSound: ChiTool = {
+	def: {
+		name: 'bulk_set_user_notification_sound',
+		description: `Set the default new-message notification sound for MANY users at once: pass usernames, or all=true for every active user (max ${BULK_PREFS_MAX}). Needs the edit-other-user-info permission for any user other than yourself. Always requires confirmation before running.`,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				usernames: { type: 'array', items: { type: 'string' } },
+				all: { type: 'boolean', description: 'Target every active user instead of a list.' },
+				sound: { type: 'string', description: 'Sound name or id; "none" to silence.' },
+			},
+			required: ['sound'],
+		},
+	},
+	access: 'user',
+	needsConfirm(input) {
+		const sound = str(input.sound);
+		if (input.all === true) {
+			return `Set the default notification sound to "${sound}" for ALL active users`;
+		}
+		const names = strArr(input.usernames);
+		if (!names.length) {
+			return undefined; // nothing parseable — let execute() explain without a confirm dance
+		}
+		const preview = names.slice(0, 5).join(', ') + (names.length > 5 ? ` +${names.length - 5} more` : '');
+		return `Set the default notification sound to "${sound}" for ${names.length} user(s): ${preview}`;
+	},
+	async execute(input, actor) {
+		const soundId = await resolveSoundId(str(input.sound));
+		const failed: string[] = [];
+		let targets: Pick<IUser, '_id' | 'username'>[] = [];
+		if (input.all === true) {
+			targets = await Users.find<IUser>(
+				{ type: 'user', active: true },
+				{ projection: { username: 1 }, limit: BULK_PREFS_MAX + 1 },
+			).toArray();
+		} else {
+			for (const username of strArr(input.usernames)) {
+				try {
+					targets.push(await requireUserByUsername(username.replace(/^@/, '')));
+				} catch (err) {
+					failed.push(`- ${username}: ${err instanceof Error ? err.message : String(err)}`);
+				}
+			}
+		}
+		if (!targets.length) {
+			return `Nothing to do — pass usernames or all=true.${failed.length ? `\nProblems:\n${failed.join('\n')}` : ''}`;
+		}
+		if (targets.length > BULK_PREFS_MAX) {
+			throw new Error(`Refusing: ${targets.length} users exceeds the per-call cap of ${BULK_PREFS_MAX}. Split the list.`);
+		}
+		if (targets.some((t) => t._id !== actor._id) && !(await hasPermissionAsync(actor._id, 'edit-other-user-info'))) {
+			throw new Error('Changing OTHER users needs the "edit-other-user-info" permission — you can only change your own sound.');
+		}
+		const done: string[] = [];
+		for (const t of targets) {
+			try {
+				await saveUserPreferences({ newMessageNotification: soundId }, t._id);
+				done.push(t.username || t._id);
+			} catch (err) {
+				failed.push(`- ${t.username || t._id}: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+		return [
+			`Default notification sound set to **${soundId}** for ${done.length}/${targets.length} user(s).`,
+			failed.length ? `\n**Skipped/failed:**\n${failed.join('\n')}` : '',
+		].join('');
+	},
+};
+
 /* ── registry + runner ─────────────────────────────────────────────────────────────── */
 
 export const CHI_ADMIN_TOOLS: ChiTool[] = [
@@ -628,25 +829,34 @@ export const CHI_ADMIN_TOOLS: ChiTool[] = [
 	slackSetupGuide,
 	getSetting,
 	setSetting,
+	getUserPreferences,
+	setUserNotificationSound,
+	bulkSetUserNotificationSound,
 ];
 
-export const toolDefs = (): ToolDef[] => CHI_ADMIN_TOOLS.map((t) => t.def);
+export const toolAccess = (tool: ChiTool): ChiToolAccess => tool.access ?? 'admin';
+
+/** The tool surface offered to a caller: admins see everything, everyone else only 'user' tools. */
+export const toolDefs = ({ isAdmin }: { isAdmin: boolean }): ToolDef[] =>
+	CHI_ADMIN_TOOLS.filter((t) => isAdmin || toolAccess(t) === 'user').map((t) => t.def);
 
 export const findTool = (name: string): ChiTool | undefined => CHI_ADMIN_TOOLS.find((t) => t.def.name === name);
 
 export type ToolRunResult = { ok: boolean; content: string };
 
 /**
- * Execute one tool AS the acting admin. Re-checks the admin role on EVERY call (the
- * conversation may outlive a demotion). Never throws — errors become tool-visible strings.
+ * Execute one tool AS the calling user. Re-checks the caller's authority on EVERY call (the
+ * conversation may outlive a demotion): admin-scoped tools require the admin role; 'user'
+ * tools run for anyone and scope their own targets. Never throws — errors become
+ * tool-visible strings.
  */
 export async function runTool(name: string, input: Record<string, unknown>, actor: IUser): Promise<ToolRunResult> {
 	const tool = findTool(name);
 	if (!tool) {
 		return { ok: false, content: `Unknown tool "${name}".` };
 	}
-	if (!(await hasRoleAsync(actor._id, 'admin'))) {
-		return { ok: false, content: 'The requesting user is not a workspace admin — refusing.' };
+	if (toolAccess(tool) === 'admin' && !(await hasRoleAsync(actor._id, 'admin'))) {
+		return { ok: false, content: 'That action needs the workspace admin role — the requesting user does not have it.' };
 	}
 	try {
 		const content = await tool.execute(input, actor);
