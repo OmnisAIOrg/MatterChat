@@ -62,6 +62,10 @@ class VersionCompiler {
 							handleError(err);
 						});
 					})
+					// Connection-level failures (ETIMEDOUT/EHOSTUNREACH to releases.rocket.chat) land on
+					// the REQUEST object, not the response — without this handler they are an unhandled
+					// 'error' event that kills the entire meteor build (hit 2026-07-21).
+					.on('error', handleError)
 					.end();
 			});
 
