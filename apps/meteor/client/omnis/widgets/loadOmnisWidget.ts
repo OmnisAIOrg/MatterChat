@@ -30,3 +30,9 @@ export function loadOmnisWidget(src: string): Promise<void> {
 }
 
 export const OMNIS_WIDGET_ASSET_BASE = '/omnis-widgets/enso-assets/';
+
+// Bump this whenever a widget bundle (chi-orb.js / word-clock-widget.js) changes — static public
+// assets keep their filename across deploys, so browsers/Electron cache the OLD file until the query
+// changes. This guarantees users load the new bundle immediately (no hard-refresh needed).
+export const OMNIS_WIDGET_VERSION = '2';
+export const omnisWidgetSrc = (file: string): string => `/omnis-widgets/${file}?v=${OMNIS_WIDGET_VERSION}`;
