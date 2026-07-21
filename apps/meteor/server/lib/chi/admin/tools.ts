@@ -852,6 +852,46 @@ const openConversation: ChiTool = {
 	},
 };
 
+const DESKTOP_RELEASES_URL = 'https://github.com/OmnisAIOrg/MatterChat-Desktop-releases/releases/latest';
+
+const getDesktopApp: ChiTool = {
+	def: {
+		name: 'get_desktop_app',
+		description:
+			'Give the user the MatterChat DESKTOP app: the download link and step-by-step install instructions for macOS / Windows / Linux. Use whenever they ask to download / get / install the desktop (or Mac / Windows) app.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				platform: { type: 'string', description: 'Optional: "mac" | "windows" | "linux" to tailor the steps.' },
+			},
+		},
+	},
+	access: 'user',
+	async execute(input) {
+		const platform = str(input.platform).toLowerCase();
+		const steps: Record<string, string> = {
+			mac: '**macOS** (Apple Silicon): on the releases page download `MatterChat-<version>-arm64-mac.zip`, unzip it, drag **MatterChat.app** into your Applications folder, then open it.',
+			windows: '**Windows**: download `MatterChat-Setup-<version>.exe` and run it — it installs and launches automatically.',
+			linux: '**Linux**: download the `.AppImage` (`chmod +x` then run) or the `.deb` (`sudo dpkg -i matterchat-desktop_*.deb`).',
+		};
+		const wanted = platform.includes('mac')
+			? [steps.mac]
+			: platform.includes('win')
+				? [steps.windows]
+				: platform.includes('lin')
+					? [steps.linux]
+					: [steps.mac, steps.windows, steps.linux];
+		return [
+			'**MatterChat Desktop** — grab it here:',
+			DESKTOP_RELEASES_URL,
+			'',
+			...wanted,
+			'',
+			'It signs in with your usual MatterChat account and auto-updates after the first install.',
+		].join('\n');
+	},
+};
+
 /* ── registry + runner ─────────────────────────────────────────────────────────────── */
 
 export const CHI_ADMIN_TOOLS: ChiTool[] = [
@@ -876,6 +916,7 @@ export const CHI_ADMIN_TOOLS: ChiTool[] = [
 	setUserNotificationSound,
 	bulkSetUserNotificationSound,
 	openConversation,
+	getDesktopApp,
 ];
 
 export const toolAccess = (tool: ChiTool): ChiToolAccess => tool.access ?? 'admin';
