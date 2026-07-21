@@ -1,6 +1,7 @@
 import { Box, SidebarDivider, SidebarFooter as Footer } from '@rocket.chat/fuselage';
 
 import { SidebarFooterWatermark } from './SidebarFooterWatermark';
+import { WordClockMount } from '../../omnis/widgets/WordClockMount';
 
 // The MatterChat wordmark keeps its ORIGINAL red, even on the green theme.
 const MATTERCHAT_RED = '#e1140a';
@@ -17,6 +18,7 @@ const MATTERCHAT_RED = '#e1140a';
 const SidebarFooterDefault = () => {
 	return (
 		<Footer>
+			<WordClockMount />
 			<SidebarDivider />
 			<Box is='footer' pbs={12} pbe={4} pi={16}>
 				<Box is='span' style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1 }}>

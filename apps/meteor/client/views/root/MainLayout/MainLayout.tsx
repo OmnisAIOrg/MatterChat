@@ -6,6 +6,7 @@ import AuthenticationCheck from './AuthenticationCheck';
 import EmbeddedPreload from './EmbeddedPreload';
 import Preload from './Preload';
 import { useCustomScript } from './useCustomScript';
+import { ChiOrbMount } from '../../../omnis/widgets/ChiOrbMount';
 
 type MainLayoutProps = {
 	children?: ReactNode;
@@ -30,6 +31,9 @@ const MainLayout = ({ children = null }: MainLayoutProps) => {
 		<Preload>
 			<AuthenticationCheck>
 				<Suspense fallback={null}>{children}</Suspense>
+				{/* Floating, draggable Chi assistant orb (wired to the @chi.bot pipeline). Authenticated,
+				    non-embedded views only. position:fixed so tree placement is cosmetic. */}
+				<ChiOrbMount />
 			</AuthenticationCheck>
 		</Preload>
 	);
