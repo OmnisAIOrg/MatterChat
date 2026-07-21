@@ -29,7 +29,12 @@ import { CredentialTokens, Users, ExternalWorkspaceConnections } from '@rocket.c
 import { Random } from '@rocket.chat/random';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 import { Meteor } from 'meteor/meteor';
-import { Cookies, RoutePolicy } from 'meteor/ostrio:cookies';
+import { Cookies } from 'meteor/ostrio:cookies';
+// eslint-disable-next-line import/no-duplicates -- NOT a duplicate: eslint's resolver cannot see
+// meteor/* packages and its autofix once MERGED this into the ostrio:cookies import, importing
+// RoutePolicy from a package that does not export it — undefined at boot, RoutePolicy.declare
+// crashed the whole server (2026-07-20). Keep these two imports separate.
+import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import {
