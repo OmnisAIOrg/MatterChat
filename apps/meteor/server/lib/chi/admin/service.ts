@@ -20,6 +20,8 @@
 import type { IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
 import { Messages, Users } from '@rocket.chat/models';
 
+import type { ChiClientAction } from './actions';
+import { withClientActions } from './actions';
 import { postAuditEntry } from './audit';
 import { clearPendingAction, hasPendingAction, parkPendingAction, takePendingAction } from './confirm';
 import { isCancelText, isConfirmText } from './helpers';
@@ -206,4 +208,100 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 		SystemLogger.error({ msg: 'Chi admin assistant failed', err: String(err) });
 		await finish('❌ Something broke on my side while working on that. Check the server logs, then try again.');
 	}
+}
+
+export type ChiOrbHistory = { who: 'me' | 'chi'; text: string };
+export type ChiOrbTurnResult = { reply: string; actions: ChiClientAction[]; needsConfirm: boolean };
+
+/**
+ * Run ONE Chi turn for the floating orb (client copilot) and RETURN the reply + any client UI
+ * actions — the same LLM loop, tools, caller-scoping, confirm/park and audit as the DM handler, but
+ * request/response instead of DM messages, and with the client-action collector open so tools like
+ * open_conversation can drive the user's screen. Authority is the caller's: admins get the full
+ * registry, everyone else the self-service + navigation tools; runTool re-enforces per call.
+ *
+ * Confirm parking uses a synthetic per-user room key ("orb:<uid>") so a dangerous call parks and the
+ * user's next "confirm" (a fresh turn) resolves it deterministically — identical to the DM flow.
+ */
+export async function runChiOrbTurn(sender: IUser, text: string, history: ChiOrbHistory[] = []): Promise<ChiOrbTurnResult> {
+	const trimmed = (text || '').trim();
+	if (!trimmed) {
+		return { reply: '', actions: [], needsConfirm: false };
+	}
+	if (!isChiAdminEnabled()) {
+		return { reply: 'Chi is not enabled on this workspace yet — ask an admin to turn it on.', actions: [], needsConfirm: false };
+	}
+	const config = llmConfig();
+	if (!config) {
+		return { reply: NOT_CONFIGURED_REPLY, actions: [], needsConfirm: false };
+	}
+	const isAdmin = await hasRoleAsync(sender._id, 'admin');
+	const orbRid = `orb:${sender._id}`;
+
+	if (isConfirmText(trimmed)) {
+		const parked = takePendingAction(orbRid, sender._id);
+		if (!parked) {
+			return { reply: 'Nothing is waiting for confirmation (the 5-minute window may have passed). Tell me again what to do.', actions: [], needsConfirm: false };
+		}
+		const { result, actions } = await withClientActions(() => runTool(parked.toolName, parked.input, sender));
+		await postAuditEntry(
+			sender,
+			`🛡️ @${sender.username} confirmed **${describeToolCall(parked.toolName, parked.input)}** → ${result.ok ? 'ok' : `error: ${result.content.slice(0, 200)}`}`,
+		);
+		return { reply: result.ok ? `✅ Done.\n${result.content}` : `❌ That failed: ${result.content}`, actions, needsConfirm: false };
+	}
+	if (isCancelText(trimmed)) {
+		clearPendingAction(orbRid, sender._id);
+		return { reply: 'Cancelled — nothing was executed.', actions: [], needsConfirm: false };
+	}
+	clearPendingAction(orbRid, sender._id);
+
+	const turns: ChiTurn[] = [];
+	for (const h of history.slice(-HISTORY_LIMIT)) {
+		const t = (h.text || '').trim();
+		if (!t || t === THINKING) {
+			continue;
+		}
+		turns.push(h.who === 'chi' ? { kind: 'assistant', text: t } : { kind: 'user', text: t });
+	}
+	turns.push({ kind: 'user', text: trimmed });
+
+	const tools = toolDefs({ isAdmin });
+	const system = systemPrompt(sender, isAdmin);
+
+	const { result, actions } = await withClientActions<Omit<ChiOrbTurnResult, 'actions'>>(async () => {
+		try {
+			for (let i = 0; i < MAX_ITERATIONS; i++) {
+				const step = await llmStep(config, system, turns, tools);
+				if (!step.ok) {
+					return { reply: `❌ ${step.note}`, needsConfirm: false };
+				}
+				if (!step.toolCalls.length) {
+					return { reply: clip(step.text || 'Done.'), needsConfirm: false };
+				}
+				turns.push({ kind: 'assistant', text: step.text || undefined, toolCalls: step.toolCalls });
+				const results: { id: string; name: string; content: string; isError?: boolean }[] = [];
+				for (let c = 0; c < step.toolCalls.length; c++) {
+					const call = step.toolCalls[c];
+					const summary = findTool(call.name)?.needsConfirm?.(call.input);
+					if (summary) {
+						return { reply: parkAndAsk(orbRid, sender, call, summary, step.toolCalls.length - c - 1), needsConfirm: true };
+					}
+					const toolResult = await runTool(call.name, call.input, sender);
+					await postAuditEntry(
+						sender,
+						`🛡️ @${sender.username} → **${describeToolCall(call.name, call.input)}** → ${toolResult.ok ? 'ok' : `error: ${toolResult.content.slice(0, 200)}`}`,
+					);
+					results.push({ id: call.id, name: call.name, content: toolResult.content, isError: !toolResult.ok });
+				}
+				turns.push({ kind: 'toolResults', results });
+			}
+			return { reply: 'I hit my per-message action limit — ask me to continue.', needsConfirm: false };
+		} catch (err) {
+			SystemLogger.error({ msg: 'Chi orb turn failed', err: String(err) });
+			return { reply: '❌ Something broke on my side while working on that.', needsConfirm: false };
+		}
+	});
+
+	return { ...result, actions };
 }

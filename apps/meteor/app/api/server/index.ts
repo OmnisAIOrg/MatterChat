@@ -27,6 +27,7 @@ import './v1/call-history';
 import './v1/cross-firm';
 import './v1/webpush';
 import './v1/channels';
+import './v1/chi';
 import './v1/chat';
 import './v1/cloud';
 import './v1/commands';
