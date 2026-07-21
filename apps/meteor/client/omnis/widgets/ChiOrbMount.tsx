@@ -1,7 +1,10 @@
+import { useSetting } from '@rocket.chat/ui-contexts';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { askChi } from './askChi';
+import { startChiVoice } from './chiRealtimeVoice';
+import type { ChiVoiceHandle } from './chiRealtimeVoice';
 import { loadOmnisWidget, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
 
@@ -59,6 +62,49 @@ export const ChiOrbMount = (): ReactElement => {
 	const orbElRef = useRef<HTMLElement | null>(null);
 	const pipWinRef = useRef<Window | null>(null);
 	const [poppedOut, setPoppedOut] = useState(false);
+	const realtimeEnabled = Boolean(useSetting('Chi_Realtime_Voice_Enabled'));
+	const voiceRef = useRef<ChiVoiceHandle | null>(null);
+	const [voiceState, setVoiceState] = useState<'off' | 'connecting' | 'live'>('off');
+
+	// Push a spoken-conversation line into the orb's transcript so the voice call has a visual record.
+	const pushVoiceLine = useCallback((who: 'me' | 'chi', text: string) => {
+		const orb = orbElRef.current as (HTMLElement & { history?: { who: string; text: string }[]; _sync?: () => void }) | null;
+		if (!orb?.history) {
+			return;
+		}
+		orb.history.push({ who, text });
+		orb._sync?.();
+	}, []);
+
+	const toggleVoice = useCallback(async () => {
+		if (voiceRef.current) {
+			voiceRef.current.stop();
+			voiceRef.current = null;
+			setVoiceState('off');
+			return;
+		}
+		setVoiceState('connecting');
+		try {
+			voiceRef.current = await startChiVoice({
+				onEvent: (e) => {
+					if (e.kind === 'status') {
+						setVoiceState(e.status === 'live' ? 'live' : e.status === 'connecting' ? 'connecting' : 'off');
+						if (e.status === 'ended') {
+							voiceRef.current = null;
+						}
+					} else if (e.kind === 'transcript' && e.final) {
+						pushVoiceLine(e.who, e.text);
+					}
+				},
+			});
+		} catch {
+			setVoiceState('off');
+			voiceRef.current = null;
+		}
+	}, [pushVoiceLine]);
+
+	// Tidy up the call if the widget unmounts.
+	useEffect(() => () => voiceRef.current?.stop(), []);
 	// Document Picture-in-Picture (browsers) OR the desktop app's native window bridge — either lets
 	// the orb live OUTSIDE the app window.
 	const desktop = desktopBridge();
@@ -327,6 +373,33 @@ export const ChiOrbMount = (): ReactElement => {
 						<svg width='9' height='9' viewBox='0 0 12 12' fill='none'>
 							<path d='M4.5 2 H10 V7.5 M10 2 L5 7' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' />
 							<path d='M8 7 V10 H2 V4 H5' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' />
+						</svg>
+					</button>
+				)}
+				{realtimeEnabled && (
+					<button
+						type='button'
+						title={voiceState === 'off' ? 'Talk to Chi (voice)' : 'End voice call'}
+						onClick={() => {
+							void toggleVoice();
+						}}
+						style={{
+							width: 20,
+							height: 16,
+							borderRadius: 8,
+							cursor: 'pointer',
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'center',
+							padding: 0,
+							color: voiceState === 'off' ? 'rgba(255,255,255,.7)' : '#30d158',
+							background: voiceState === 'off' ? 'rgba(20,24,29,.72)' : 'rgba(48,209,88,.22)',
+							border: `1px solid ${voiceState === 'off' ? 'rgba(255,255,255,.16)' : 'rgba(48,209,88,.5)'}`,
+						}}
+					>
+						<svg width='9' height='9' viewBox='0 0 16 16' fill='none'>
+							<rect x='6' y='1.5' width='4' height='8' rx='2' stroke='currentColor' strokeWidth='1.4' />
+							<path d='M3.5 7.5 c0 2.5 2 4.5 4.5 4.5 s4.5 -2 4.5 -4.5 M8 12 v2.5' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' />
 						</svg>
 					</button>
 				)}
