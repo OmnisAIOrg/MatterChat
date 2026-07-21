@@ -65,10 +65,22 @@ class ChiOrb extends HTMLElement {
   _mic(){
     var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return;
     var self=this;
-    if(this._listening){ try{this._rec.stop();}catch(e){} return; }
-    var rec=new SR(); this._rec=rec; rec.lang=this.getAttribute('lang')||'en-US'; rec.interimResults=false;
-    rec.onresult=function(e){ var t=e.results[0][0].transcript; var inp=self.shadowRoot.getElementById('in'); if(inp) inp.value=t; if(self.onvoice) self.onvoice(t); self._send(); };
-    rec.onend=function(){ self._listening=false; self._sync(); };
+    if(this._listening){ try{this._rec.stop();}catch(e){} return; } // 2nd click = stop → onend sends
+    var rec=new SR(); this._rec=rec; rec.lang=this.getAttribute('lang')||'en-US';
+    // CONTINUOUS so it doesn't cut off after ~1s of silence; interim results stream the transcript
+    // live into the input. Sending happens when the user stops (clicks the mic again) or recognition
+    // ends, so a natural pause doesn't fire a half-formed message.
+    rec.continuous=true; rec.interimResults=true; self._voiceFinal='';
+    rec.onresult=function(e){
+      var interim='';
+      for(var i=e.resultIndex;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) self._voiceFinal+=r[0].transcript; else interim+=r[0].transcript; }
+      var inp=self.shadowRoot.getElementById('in'); if(inp) inp.value=(self._voiceFinal+interim).trim();
+    };
+    rec.onend=function(){
+      self._listening=false; self._sync();
+      var inp=self.shadowRoot.getElementById('in'); var t=inp?(inp.value||'').trim():'';
+      if(t){ if(self.onvoice) self.onvoice(t); self._send(); }
+    };
     rec.onerror=function(){ self._listening=false; self._sync(); };
     this._listening=true; this._sync(); rec.start();
   }
