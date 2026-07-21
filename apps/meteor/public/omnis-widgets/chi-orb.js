@@ -65,24 +65,33 @@ class ChiOrb extends HTMLElement {
   _mic(){
     var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return;
     var self=this;
-    if(this._listening){ try{this._rec.stop();}catch(e){} return; } // 2nd click = stop → onend sends
-    var rec=new SR(); this._rec=rec; rec.lang=this.getAttribute('lang')||'en-US';
-    // CONTINUOUS so it doesn't cut off after ~1s of silence; interim results stream the transcript
-    // live into the input. Sending happens when the user stops (clicks the mic again) or recognition
-    // ends, so a natural pause doesn't fire a half-formed message.
-    rec.continuous=true; rec.interimResults=true; self._voiceFinal='';
-    rec.onresult=function(e){
-      var interim='';
-      for(var i=e.resultIndex;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) self._voiceFinal+=r[0].transcript; else interim+=r[0].transcript; }
-      var inp=self.shadowRoot.getElementById('in'); if(inp) inp.value=(self._voiceFinal+interim).trim();
+    // 2nd click = stop: flag it, then stop → onend sends what was dictated and does NOT restart.
+    if(this._listening){ this._voiceStop=true; try{this._rec.stop();}catch(e){} return; }
+    this._voiceStop=false; this._voiceFinal='';
+    // Browsers END speech recognition after a short silence EVEN with continuous=true (and fire a
+    // 'no-speech' error). So we transparently RESTART on those benign stops and only truly end when
+    // the user clicks the mic again — that's real "keep listening until I say stop".
+    var begin=function(){
+      var rec=new SR(); self._rec=rec; rec.lang=self.getAttribute('lang')||'en-US';
+      rec.continuous=true; rec.interimResults=true;
+      rec.onresult=function(e){
+        var interim='';
+        for(var i=e.resultIndex;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) self._voiceFinal+=r[0].transcript; else interim+=r[0].transcript; }
+        var inp=self.shadowRoot.getElementById('in'); if(inp) inp.value=(self._voiceFinal+interim).trim();
+      };
+      rec.onerror=function(ev){
+        // benign silence/abort while still listening → let onend restart; real errors → stop.
+        if(self._voiceStop || !ev || (ev.error!=='no-speech'&&ev.error!=='aborted')) self._voiceStop=true;
+      };
+      rec.onend=function(){
+        if(!self._voiceStop){ try{ rec.start(); return; }catch(e){} } // silence timeout → keep going
+        self._listening=false; self._sync();
+        var inp=self.shadowRoot.getElementById('in'); var t=inp?(inp.value||'').trim():'';
+        if(t){ if(self.onvoice) self.onvoice(t); self._send(); }
+      };
+      try{ rec.start(); }catch(e){ self._listening=false; self._sync(); }
     };
-    rec.onend=function(){
-      self._listening=false; self._sync();
-      var inp=self.shadowRoot.getElementById('in'); var t=inp?(inp.value||'').trim():'';
-      if(t){ if(self.onvoice) self.onvoice(t); self._send(); }
-    };
-    rec.onerror=function(){ self._listening=false; self._sync(); };
-    this._listening=true; this._sync(); rec.start();
+    this._listening=true; this._sync(); begin();
   }
   _send(){
     var input=this.shadowRoot.getElementById('in');
@@ -123,7 +132,7 @@ class ChiOrb extends HTMLElement {
   _render(){
     var t=this._theme, A=this._base, self=this;
     var mask='-webkit-mask:url('+A+'omnis-enso-bristle.svg) center/contain no-repeat;mask:url('+A+'omnis-enso-bristle.svg) center/contain no-repeat;';
-    var kf='@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.25}50%{opacity:.6}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
+    var kf='@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.7}50%{opacity:1}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
     if(this._min){
       this.shadowRoot.innerHTML='<style>'+kf+':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}</style>'+
         '<div id="launch" title="Open Chi" style="position:relative;width:76px;height:76px;cursor:pointer;">'+
@@ -135,7 +144,7 @@ class ChiOrb extends HTMLElement {
     }
     this.shadowRoot.innerHTML='<style>'+kf+':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}</style>'+
       '<div style="position:relative;width:520px;height:520px;">'+
-      '<div id="halo" style="position:absolute;inset:-10px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,0) 58%, rgba(48,209,88,.22) 76%, rgba(48,209,88,0) 92%);transition:opacity .6s;opacity:0;animation:chiHalo 1.6s ease-in-out infinite;"></div>'+
+      '<div id="halo" style="position:absolute;inset:-22px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,0) 50%, rgba(48,209,88,.55) 66%, rgba(48,209,88,.95) 74%, rgba(48,209,88,.55) 82%, rgba(48,209,88,0) 94%);box-shadow:0 0 60px 12px rgba(48,209,88,.6);transition:opacity .5s;opacity:0;animation:chiHalo 1.4s ease-in-out infinite;"></div>'+
       '<div style="position:absolute;inset:16px;border-radius:50%;pointer-events:none;background:conic-gradient(from 210deg, rgba(255,255,255,.38), rgba(255,255,255,.03) 22%, rgba(255,255,255,.20) 48%, rgba(255,255,255,.03) 74%, rgba(255,255,255,.38));box-shadow:0 24px 70px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);"></div>'+
       '<div style="position:absolute;inset:18px;border-radius:50%;pointer-events:none;background:#0a0c0f;box-shadow:inset 0 2px 6px rgba(255,255,255,.10), inset 0 -3px 8px rgba(0,0,0,.8);"></div>'+
       '<div style="position:absolute;inset:26px;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;background:'+t.win+';border:1px solid '+t.winBorder+';box-shadow:inset 0 2px 1px rgba(255,255,255,.26), inset 0 -2px 2px rgba(0,0,0,.65), inset 0 -46px 90px rgba(0,0,0,.25), 0 12px 26px rgba(0,0,0,.5);">'+

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef } from 'react';
 
-import { loadOmnisWidget } from './loadOmnisWidget';
+import { loadOmnisWidget, omnisWidgetSrc } from './loadOmnisWidget';
 import { omnisWordsForToday } from './omnisWords';
 
 /**
@@ -15,7 +15,7 @@ export const WordClockMount = (): ReactElement => {
 	useEffect(() => {
 		let cancelled = false;
 		let el: (HTMLElement & { words?: unknown }) | undefined;
-		void loadOmnisWidget('/omnis-widgets/word-clock-widget.js').then(() => {
+		void loadOmnisWidget(omnisWidgetSrc('word-clock-widget.js')).then(() => {
 			if (cancelled || !hostRef.current) {
 				return;
 			}

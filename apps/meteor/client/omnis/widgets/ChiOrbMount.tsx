@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { askChi } from './askChi';
 import { startChiVoice } from './chiRealtimeVoice';
 import type { ChiVoiceHandle } from './chiRealtimeVoice';
-import { loadOmnisWidget, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
+import { loadOmnisWidget, omnisWidgetSrc, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
 
 /**
@@ -136,7 +136,7 @@ export const ChiOrbMount = (): ReactElement => {
 		if (localStorage.getItem('chi-orb-min') === null) {
 			localStorage.setItem('chi-orb-min', '1');
 		}
-		void loadOmnisWidget('/omnis-widgets/chi-orb.js').then(() => {
+		void loadOmnisWidget(omnisWidgetSrc('chi-orb.js')).then(() => {
 			if (cancelled || !hostRef.current) {
 				return;
 			}
