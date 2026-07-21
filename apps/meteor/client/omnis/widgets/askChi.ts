@@ -1,67 +1,36 @@
 import { sdk } from '../../../app/utils/client/lib/SDKClient';
+import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
 
 /**
- * The Chi orb's `ask` adapter: routes a prompt through the EXISTING `@chi.bot` DM pipeline rather
- * than a parallel endpoint — so every reply rides the same caller-scoped tools, confirm/park flow
- * and #chi-admin-audit trail the DM already enforces. We open (or reuse) the caller's chi.bot DM,
- * post the message as the user, then wait for chi.bot's reply.
- *
- * Chi posts a placeholder (THINKING) and edits it in place to the final answer, so we poll the DM
- * history and return the newest chi.bot message once it is no longer the placeholder.
+ * The Chi orb's `ask` adapter. Calls the caller-scoped Chi copilot endpoint (`/v1/chi.ask` → the
+ * same tools, confirm/park and #chi-admin-audit trail as the @chi.bot DM) and EXECUTES any client
+ * UI actions Chi returns — e.g. navigating the user's screen to the chat they asked for — then
+ * returns the text reply for the orb to render.
  */
-const CHI_BOT_USERNAME = 'chi.bot';
-const THINKING = '⏳ _Chi is working on it…_';
-const POLL_INTERVAL_MS = 1200;
-const MAX_WAIT_MS = 60_000;
+type ChiAction = { type: 'navigate'; rid: string; name: string; t: string } | { type: 'search'; term: string };
+type ChiAskResponse = { reply?: string; actions?: ChiAction[] };
+export type ChiHistory = { who: 'me' | 'chi'; text: string };
 
-let cachedRoomId: string | undefined;
-
-async function chiDmRoomId(): Promise<string> {
-	if (cachedRoomId) {
-		return cachedRoomId;
-	}
-	const res = (await sdk.rest.post('/v1/im.create', { username: CHI_BOT_USERNAME })) as { room?: { _id?: string } };
-	const rid = res?.room?._id;
-	if (!rid) {
-		throw new Error('Could not open the Chi conversation');
-	}
-	cachedRoomId = rid;
-	return rid;
-}
-
-type HistoryMessage = { _id: string; msg?: string; ts?: string; u?: { username?: string } };
-
-async function latestBotReply(roomId: string, afterTs: number): Promise<string | undefined> {
-	const res = (await sdk.rest.get('/v1/im.history', { roomId, count: 10 })) as { messages?: HistoryMessage[] };
-	const messages = res?.messages ?? [];
-	// history returns newest-first; find the freshest chi.bot message posted after our prompt.
-	const reply = messages.find(
-		(m) => m.u?.username === CHI_BOT_USERNAME && m.msg && m.msg !== THINKING && new Date(m.ts ?? 0).getTime() >= afterTs,
-	);
-	return reply?.msg;
-}
-
-const wait = (ms: number): Promise<void> =>
-	new Promise((resolve) => {
-		setTimeout(resolve, ms);
-	});
-
-export async function askChi(text: string): Promise<string> {
-	const roomId = await chiDmRoomId();
-	const sentAt = Date.now();
-	await sdk.rest.post('/v1/chat.postMessage', { roomId, text });
-
-	const deadline = Date.now() + MAX_WAIT_MS;
-	while (Date.now() < deadline) {
-		await wait(POLL_INTERVAL_MS);
-		try {
-			const reply = await latestBotReply(roomId, sentAt);
-			if (reply) {
-				return reply;
-			}
-		} catch {
-			// transient; keep polling until the deadline
+function runAction(action: ChiAction): void {
+	try {
+		if (action.type === 'navigate') {
+			// Chi only ever returns rooms the user already belongs to (resolved server-side from THEIR
+			// subscriptions), so this drives the UI within the user's own authority.
+			roomCoordinator.openRouteLink(action.t as Parameters<typeof roomCoordinator.openRouteLink>[0], {
+				rid: action.rid,
+				name: action.name,
+			});
 		}
+	} catch {
+		/* navigation is best-effort; the text reply still lands */
 	}
-	return 'Chi is taking longer than usual — check the chi.bot direct message for the reply.';
+}
+
+export async function askChi(text: string, history: ChiHistory[] = []): Promise<string> {
+	const res = (await (sdk.rest.post as (e: string, p: unknown) => Promise<unknown>)('/v1/chi.ask', {
+		text,
+		history,
+	})) as ChiAskResponse;
+	(res.actions ?? []).forEach(runAction);
+	return res.reply || '…';
 }

@@ -20,9 +20,11 @@
  * reach chat or audit. Every EXECUTED tool is mirrored to the audit channel by the service.
  */
 import type { IUser } from '@rocket.chat/core-typings';
-import { CustomSounds, ExternalWorkspaceConnections, Rooms, Settings, Users } from '@rocket.chat/models';
+import { CustomSounds, ExternalWorkspaceConnections, Rooms, Settings, Subscriptions, Users } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
+
+import { emitClientAction } from './actions';
 
 import {
 	BULK_CREATE_MAX,
@@ -809,6 +811,47 @@ const bulkSetUserNotificationSound: ChiTool = {
 	},
 };
 
+const openConversation: ChiTool = {
+	def: {
+		name: 'open_conversation',
+		description:
+			'Navigate the user\'s screen to one of THEIR conversations — a channel, private group, or direct message they belong to. Use whenever they ask to "go to", "open", "take me to", or "show me" a chat/person. Matches by name against the conversations they\'re in; opens the best match.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: { type: 'string', description: 'Channel / group / person name to open (e.g. "general", "acme-slack-general", a username).' },
+			},
+			required: ['query'],
+		},
+	},
+	access: 'user',
+	async execute(input, actor) {
+		const query = str(input.query)
+			.replace(/^[#@]/, '')
+			.trim();
+		if (!query) {
+			return 'Tell me which conversation to open.';
+		}
+		// ONLY the caller's own subscriptions — Chi opens what the user already has access to, nothing else.
+		const subs = await Subscriptions.find<{ rid: string; name?: string; fname?: string; t: string }>(
+			{ 'u._id': actor._id, 'open': { $ne: false } },
+			{ projection: { rid: 1, name: 1, fname: 1, t: 1 } },
+		).toArray();
+		const q = query.toLowerCase();
+		const norm = (s?: string): string => (s || '').toLowerCase();
+		const match =
+			subs.find((s) => norm(s.name) === q || norm(s.fname) === q) ||
+			subs.find((s) => norm(s.name).startsWith(q) || norm(s.fname).startsWith(q)) ||
+			subs.find((s) => norm(s.name).includes(q) || norm(s.fname).includes(q));
+		if (!match) {
+			return `You're not in a conversation matching "${query}", so there's nothing for me to open. I can only take you to chats you already belong to.`;
+		}
+		const name = match.name || match.fname || query;
+		emitClientAction({ type: 'navigate', rid: match.rid, name, t: match.t });
+		return `Opening **${name}**.`;
+	},
+};
+
 /* ── registry + runner ─────────────────────────────────────────────────────────────── */
 
 export const CHI_ADMIN_TOOLS: ChiTool[] = [
@@ -832,6 +875,7 @@ export const CHI_ADMIN_TOOLS: ChiTool[] = [
 	getUserPreferences,
 	setUserNotificationSound,
 	bulkSetUserNotificationSound,
+	openConversation,
 ];
 
 export const toolAccess = (tool: ChiTool): ChiToolAccess => tool.access ?? 'admin';

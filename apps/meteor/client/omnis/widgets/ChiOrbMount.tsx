@@ -54,10 +54,19 @@ export const ChiOrbMount = (): ReactElement => {
 			if (cancelled || !hostRef.current) {
 				return;
 			}
-			el = document.createElement('chi-orb') as HTMLElement & { ask?: (text: string) => Promise<string> };
+			el = document.createElement('chi-orb') as HTMLElement & {
+				ask?: (text: string, history: { who: 'me' | 'chi'; text: string }[]) => Promise<string>;
+			};
 			el.setAttribute('theme', 'dark');
 			el.setAttribute('asset-base', OMNIS_WIDGET_ASSET_BASE);
-			el.ask = (text: string): Promise<string> => askChi(text);
+			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<string> => askChi(text, history);
+			// Suggested chips reflecting what Chi can actually do for a member (it navigates the UI +
+			// manages your account; admins get the full ops surface on top).
+			(el as HTMLElement & { actions?: { label: string; command: string }[] }).actions = [
+				{ label: 'What can you do?', command: 'What can you help me with?' },
+				{ label: 'Take me to a chat', command: 'Open my general channel' },
+				{ label: 'My notification sound', command: 'What is my current notification sound?' },
+			];
 			hostRef.current.appendChild(el);
 		});
 		return () => {
