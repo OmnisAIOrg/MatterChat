@@ -31,6 +31,19 @@ const order = [
 	'Conversations',
 ] as const;
 
+/**
+ * Per-provider sidebar sections for connector-bridged rooms (rooms mirroring an external
+ * conversation, tagged `connectorBridge` at creation) — one clearly-labeled group per provider
+ * so Slack, Teams and Google Chat bridges never mix into one anonymous pile (founder ask
+ * 2026-07-21). Fixed order: Slack, Teams, Google Chat.
+ */
+const BRIDGE_GROUP_BY_PROVIDER: Record<string, string> = {
+	slack: 'Slack_Bridges',
+	teams: 'Teams_Bridges',
+	google: 'Google_Chat_Bridges',
+};
+const BRIDGE_GROUP_ORDER = ['Slack_Bridges', 'Teams_Bridges', 'Google_Chat_Bridges'];
+
 type useRoomListReturnType = {
 	roomList: Array<SubscriptionWithRoom>;
 	groupsCount: number[];
@@ -79,6 +92,8 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 			const matters = new Set();
 			// Omnis channel folders: one dynamic group per user-assigned folder label (key `folder:<name>`).
 			const folders = new Map<string, Set<any>>();
+			// Connector bridges: one group per provider (Slack_Bridges / Teams_Bridges / Google_Chat_Bridges).
+			const bridges = new Map<string, Set<any>>();
 
 			rooms.forEach((room) => {
 				if (room.archived) {
@@ -124,6 +139,16 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 					const bucket = folders.get(key) ?? new Set();
 					bucket.add(room);
 					folders.set(key, bucket);
+					return;
+				}
+
+				// Bridged external conversations get their own per-provider section — never mixed
+				// into Channels/DMs, so a user always knows which room is a Slack/Teams/GChat mirror.
+				if (sidebarGroupByType && room.connectorBridge?.provider) {
+					const key = BRIDGE_GROUP_BY_PROVIDER[room.connectorBridge.provider] ?? `bridge:${room.connectorBridge.provider}`;
+					const bucket = bridges.get(key) ?? new Set();
+					bucket.add(room);
+					bridges.set(key, bucket);
 					return;
 				}
 
@@ -181,19 +206,33 @@ export const useRoomList = ({ collapsedGroups }: { collapsedGroups?: string[] })
 
 			!sidebarGroupByType && groups.set('Conversations', conversation);
 
-			// Add a group per folder, then weave the folder keys into the ordered key list just above
-			// "Channels" so folders sit with the channel groups (alpha-sorted for stability).
+			// Add a group per bridge provider (fixed Slack → Teams → Google Chat order, unknown
+			// providers alpha-sorted after), then a group per folder; weave both into the ordered
+			// key list just above "Channels" so they sit with the channel groups.
+			const bridgeKeys = sidebarGroupByType
+				? [...bridges.keys()].sort((a, b) => {
+						const ai = BRIDGE_GROUP_ORDER.indexOf(a);
+						const bi = BRIDGE_GROUP_ORDER.indexOf(b);
+						return (ai === -1 ? BRIDGE_GROUP_ORDER.length : ai) - (bi === -1 ? BRIDGE_GROUP_ORDER.length : bi) || a.localeCompare(b);
+					})
+				: [];
+			bridgeKeys.forEach((key) => {
+				const bucket = bridges.get(key);
+				bucket && bucket.size && groups.set(key, bucket);
+			});
+
 			const folderKeys = sidebarGroupByType ? [...folders.keys()].sort() : [];
 			folderKeys.forEach((key) => {
 				const bucket = folders.get(key);
 				bucket && bucket.size && groups.set(key, bucket);
 			});
 
+			const wovenKeys = [...bridgeKeys, ...folderKeys];
 			const channelsIndex = sidebarOrder.indexOf('Channels');
 			const orderedKeys: string[] =
-				folderKeys.length && channelsIndex >= 0
-					? [...sidebarOrder.slice(0, channelsIndex), ...folderKeys, ...sidebarOrder.slice(channelsIndex)]
-					: [...sidebarOrder, ...folderKeys];
+				wovenKeys.length && channelsIndex >= 0
+					? [...sidebarOrder.slice(0, channelsIndex), ...wovenKeys, ...sidebarOrder.slice(channelsIndex)]
+					: [...sidebarOrder, ...wovenKeys];
 
 			const { groupsCount, groupsList, roomList, groupedUnreadInfo } = orderedKeys.reduce(
 				(acc, key) => {

@@ -30,7 +30,8 @@ const RoomListCollapser = ({ groupTitle, unreadCount: unreadGroupCount, collapse
 	// unlike the virtuoso group count, stays truthful while the group is collapsed. Standard groups
 	// (Channels, Direct Messages, …) keep their plain labels, preserving current behavior.
 	const groupSize = unreadGroupCount?.groupSize;
-	const showCount = (isFolder || groupTitle === 'Matters') && typeof groupSize === 'number' && groupSize > 0;
+	const isBridgeGroup = groupTitle === 'Slack_Bridges' || groupTitle === 'Teams_Bridges' || groupTitle === 'Google_Chat_Bridges';
+	const showCount = (isFolder || isBridgeGroup || groupTitle === 'Matters') && typeof groupSize === 'number' && groupSize > 0;
 	const displayLabel = showCount ? `${groupLabel} (${groupSize})` : groupLabel;
 
 	return (

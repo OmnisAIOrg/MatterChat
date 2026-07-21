@@ -42,4 +42,10 @@ export type SubscriptionWithRoom = ISubscription &
 	} & Pick<Partial<IRoomWithRetentionPolicy>, 'retention'> & {
 		lowerCaseName: string;
 		lowerCaseFName: string;
+		/**
+		 * Connector-bridge tag (Omnis fork): present on rooms mirroring an external Slack/Teams/
+		 * Google Chat conversation (from `room.customFields.connectorBridge`, stamped at bridge
+		 * creation) — drives the per-provider bridge sections in the sidebar.
+		 */
+		connectorBridge?: { provider: string; connectionId: string; channelExternalId: string };
 	};
