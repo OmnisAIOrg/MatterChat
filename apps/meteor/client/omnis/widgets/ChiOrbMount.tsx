@@ -225,11 +225,17 @@ export const ChiOrbMount = (): ReactElement => {
 	);
 
 	const popOut = useCallback(async () => {
-		// Desktop app: open the NATIVE always-on-top Chi window (Electron has no Document PiP).
+		// Desktop app: open the NATIVE always-on-top Chi window (Electron has no Document PiP). Only
+		// hide the in-app orb AFTER the native window actually opens — if popOutChi rejects (older
+		// desktop build without the handler, or it failed), keep the orb so Chi never just vanishes.
 		const d = desktopBridge();
 		if (d?.isDesktop && d.popOutChi) {
-			d.popOutChi();
-			setPoppedOut(true);
+			try {
+				await d.popOutChi();
+				setPoppedOut(true);
+			} catch {
+				/* desktop app can't pop out — leave the in-app orb exactly where it is */
+			}
 			return;
 		}
 		const orb = orbElRef.current;
