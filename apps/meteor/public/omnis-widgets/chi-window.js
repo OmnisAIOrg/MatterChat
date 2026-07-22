@@ -141,6 +141,7 @@
 	function stopVoice() {
 		if (rtc) { try { rtc.pc.close(); } catch (e) {} try { rtc.mic.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} rtc = null; }
 		micBtn.style.color = '#dfe3e8'; micBtn.style.background = 'rgba(20,24,29,.72)'; micBtn.title = 'Talk to Chi (voice)';
+		var orb = document.querySelector('chi-orb'); if (orb) orb.realtime = false; // back to the chat version
 	}
 	async function startVoice() {
 		try {
@@ -160,6 +161,8 @@
 			if (!ans.ok) { micBtn.title = 'Voice connection refused'; try { pc.close(); } catch (e) {} mic.getTracks().forEach(function (t) { t.stop(); }); stopVoice(); return; }
 			await pc.setRemoteDescription({ type: 'answer', sdp: await ans.text() });
 			rtc = { pc: pc, mic: mic }; micBtn.title = 'End voice call';
+			// Flip the orb to its realtime LISTENING version; tapping it ends the call.
+			var orb = document.querySelector('chi-orb'); if (orb) { orb.realtime = true; orb.onvoiceend = stopVoice; }
 		} catch (e) { micBtn.title = 'Mic blocked — allow microphone access'; stopVoice(); }
 	}
 	micBtn.addEventListener('click', function () { if (rtc) stopVoice(); else startVoice(); });
@@ -173,9 +176,9 @@
 		orb.setAttribute('asset-base', '/omnis-widgets/enso-assets/');
 		orb.ask = ask;
 		orb.actions = [
-			{ label: 'What can you do?', command: 'What can you help me with?' },
-			{ label: 'Take me to a chat', command: 'Open my general channel' },
-			{ label: 'My notification sound', command: 'What is my current notification sound?' },
+			{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
+			{ label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' },
+			{ label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' },
 		];
 		orb.style.cssText = '-webkit-app-region:no-drag;transform-origin:center;';
 		wrap.appendChild(orb);

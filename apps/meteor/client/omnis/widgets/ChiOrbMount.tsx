@@ -103,6 +103,28 @@ export const ChiOrbMount = (): ReactElement => {
 		}
 	}, [pushVoiceLine]);
 
+	// Always-current ref so the orb's voice callbacks (wired once at element creation) call the latest
+	// toggleVoice, and so the orb flips to/from its LISTENING version as the realtime call state changes.
+	const toggleVoiceRef = useRef(toggleVoice);
+	toggleVoiceRef.current = toggleVoice;
+	useEffect(() => {
+		const el = orbElRef.current as (HTMLElement & { realtime?: boolean }) | null;
+		if (el) {
+			el.realtime = voiceState === 'live' || voiceState === 'connecting';
+		}
+	}, [voiceState]);
+	useEffect(() => {
+		const el = orbElRef.current;
+		if (!el) {
+			return;
+		}
+		if (realtimeEnabled) {
+			el.setAttribute('realtime-available', '1');
+		} else {
+			el.removeAttribute('realtime-available');
+		}
+	}, [realtimeEnabled]);
+
 	// Tidy up the call if the widget unmounts.
 	useEffect(() => () => voiceRef.current?.stop(), []);
 	// Document Picture-in-Picture (browsers) OR the desktop app's native window bridge — either lets
@@ -143,15 +165,31 @@ export const ChiOrbMount = (): ReactElement => {
 			el = document.createElement('chi-orb') as HTMLElement & {
 				ask?: (text: string, history: { who: 'me' | 'chi'; text: string }[]) => Promise<string>;
 			};
-			el.setAttribute('theme', 'dark');
+			el.setAttribute('theme', 'dark'); // default; the orb's own theme switcher persists the user's pick
 			el.setAttribute('asset-base', OMNIS_WIDGET_ASSET_BASE);
+			if (realtimeEnabled) {
+				el.setAttribute('realtime-available', '1');
+			}
 			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<string> => askChi(text, history);
-			// Suggested chips reflecting what Chi can actually do for a member (it navigates the UI +
-			// manages your account; admins get the full ops surface on top).
-			(el as HTMLElement & { actions?: { label: string; command: string }[] }).actions = [
-				{ label: 'What can you do?', command: 'What can you help me with?' },
-				{ label: 'Take me to a chat', command: 'Open my general channel' },
-				{ label: 'My notification sound', command: 'What is my current notification sound?' },
+			// Realtime voice ↔ the orb's LISTENING version: the orb's voice control asks us to START a
+			// call; tapping the LISTENING view (or a chip) asks us to END it. We mirror the live call
+			// state onto orb.realtime (below) so the orb flips between its chat and listening versions.
+			const orbApi = el as HTMLElement & { onvoicestart?: () => void; onvoiceend?: () => void; actions?: { label: string; command: string }[] };
+			orbApi.onvoicestart = (): void => {
+				if (!voiceRef.current) {
+					void toggleVoiceRef.current();
+				}
+			};
+			orbApi.onvoiceend = (): void => {
+				if (voiceRef.current) {
+					void toggleVoiceRef.current();
+				}
+			};
+			// Action chips wired to real capabilities (catch-up / mentions / drafting).
+			orbApi.actions = [
+				{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
+				{ label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' },
+				{ label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' },
 			];
 			// Isolate the orb from MatterChat's global keyboard shortcuts (RC steals focus to the channel
 			// composer on keystrokes when it doesn't see a focused <input> — the orb's input lives in a
