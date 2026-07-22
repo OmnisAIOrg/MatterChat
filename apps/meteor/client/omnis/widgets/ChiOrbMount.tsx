@@ -59,6 +59,12 @@ export const ChiOrbMount = (): ReactElement => {
 	// becomes explicit {x,y} left/top coords. This avoids any first-paint measurement race.
 	const [pos, setPos] = useState<Pos | null>(() => loadPos() ?? null);
 	const drag = useRef<{ dx: number; dy: number } | null>(null);
+	// Minimized state (mirrored from the orb via its 'chi-min' event) drives two things: the control
+	// bar hides so the launcher is JUST the ensō + realtime button, and the whole orb becomes a
+	// click-hold drag handle (dead-zone → a plain click still expands it).
+	const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem('chi-orb-min') === '1');
+	const orbDrag = useRef<{ dx: number; dy: number; sx: number; sy: number; moved: boolean } | null>(null);
+	const draggedRef = useRef(false);
 	const orbElRef = useRef<HTMLElement | null>(null);
 	const pipWinRef = useRef<Window | null>(null);
 	const [poppedOut, setPoppedOut] = useState(false);
@@ -103,28 +109,6 @@ export const ChiOrbMount = (): ReactElement => {
 		}
 	}, [pushVoiceLine]);
 
-	// Always-current ref so the orb's voice callbacks (wired once at element creation) call the latest
-	// toggleVoice, and so the orb flips to/from its LISTENING version as the realtime call state changes.
-	const toggleVoiceRef = useRef(toggleVoice);
-	toggleVoiceRef.current = toggleVoice;
-	useEffect(() => {
-		const el = orbElRef.current as (HTMLElement & { realtime?: boolean }) | null;
-		if (el) {
-			el.realtime = voiceState === 'live' || voiceState === 'connecting';
-		}
-	}, [voiceState]);
-	useEffect(() => {
-		const el = orbElRef.current;
-		if (!el) {
-			return;
-		}
-		if (realtimeEnabled) {
-			el.setAttribute('realtime-available', '1');
-		} else {
-			el.removeAttribute('realtime-available');
-		}
-	}, [realtimeEnabled]);
-
 	// Tidy up the call if the widget unmounts.
 	useEffect(() => () => voiceRef.current?.stop(), []);
 	// Document Picture-in-Picture (browsers) OR the desktop app's native window bridge — either lets
@@ -167,25 +151,13 @@ export const ChiOrbMount = (): ReactElement => {
 			};
 			el.setAttribute('theme', 'dark'); // default; the orb's own theme switcher persists the user's pick
 			el.setAttribute('asset-base', OMNIS_WIDGET_ASSET_BASE);
-			if (realtimeEnabled) {
-				el.setAttribute('realtime-available', '1');
-			}
+			// NOTE: realtime voice is NOT offered on the web orb — it is a capability of the SEPARATE
+			// desktop app's native Chi window (chi-window.js), which runs realtime + a transparent
+			// background. The web app can't run realtime reliably (browser mic/WebRTC/autoplay), so the
+			// orb here stays chat + dictation only; no `realtime-available`.
 			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<string> => askChi(text, history);
-			// Realtime voice ↔ the orb's LISTENING version: the orb's voice control asks us to START a
-			// call; tapping the LISTENING view (or a chip) asks us to END it. We mirror the live call
-			// state onto orb.realtime (below) so the orb flips between its chat and listening versions.
-			const orbApi = el as HTMLElement & { onvoicestart?: () => void; onvoiceend?: () => void; actions?: { label: string; command: string }[] };
-			orbApi.onvoicestart = (): void => {
-				if (!voiceRef.current) {
-					void toggleVoiceRef.current();
-				}
-			};
-			orbApi.onvoiceend = (): void => {
-				if (voiceRef.current) {
-					void toggleVoiceRef.current();
-				}
-			};
 			// Action chips wired to real capabilities (catch-up / mentions / drafting).
+			const orbApi = el as HTMLElement & { actions?: { label: string; command: string }[] };
 			orbApi.actions = [
 				{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
 				{ label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' },
@@ -203,6 +175,8 @@ export const ChiOrbMount = (): ReactElement => {
 			(['keydown', 'keyup', 'keypress', 'input', 'beforeinput', 'paste', 'cut', 'copy'] as const).forEach((type) => {
 				el?.addEventListener(type, swallow);
 			});
+			// Mirror the orb's minimized state so the control bar hides + the orb becomes a drag handle.
+			el.addEventListener('chi-min', (ev: Event): void => setMinimized(Boolean((ev as CustomEvent<{ min: boolean }>).detail?.min)));
 			orbElRef.current = el;
 			hostRef.current.appendChild(el);
 		});
@@ -264,6 +238,54 @@ export const ChiOrbMount = (): ReactElement => {
 		},
 		[],
 	);
+
+	// Whole-orb drag (minimized only): press-and-hold the ensō itself and move it anywhere. A 4px
+	// dead-zone distinguishes a drag from a click, so a plain click still expands the orb.
+	const onOrbDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+		const rect = containerRef.current?.getBoundingClientRect();
+		orbDrag.current = { dx: e.clientX - (rect?.left ?? 0), dy: e.clientY - (rect?.top ?? 0), sx: e.clientX, sy: e.clientY, moved: false };
+		draggedRef.current = false;
+		try {
+			e.currentTarget.setPointerCapture(e.pointerId);
+		} catch {
+			/* ignore */
+		}
+	}, []);
+	const onOrbMove = useCallback(
+		(e: ReactPointerEvent<HTMLDivElement>) => {
+			const d = orbDrag.current;
+			if (!d) {
+				return;
+			}
+			if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) {
+				return;
+			}
+			d.moved = true;
+			draggedRef.current = true;
+			setPos(clamp(e.clientX - d.dx, e.clientY - d.dy));
+		},
+		[clamp],
+	);
+	const onOrbUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+		const d = orbDrag.current;
+		if (!d) {
+			return;
+		}
+		orbDrag.current = null;
+		if (d.moved) {
+			setPos((p) => {
+				if (p) {
+					localStorage.setItem(POS_KEY, JSON.stringify(p));
+				}
+				return p;
+			});
+		}
+		try {
+			e.currentTarget.releasePointerCapture(e.pointerId);
+		} catch {
+			/* ignore */
+		}
+	}, []);
 
 	const popOut = useCallback(async () => {
 		// Desktop app: open the NATIVE always-on-top Chi window (Electron has no Document PiP). Only
@@ -384,6 +406,7 @@ export const ChiOrbMount = (): ReactElement => {
 
 	return (
 		<div ref={containerRef} style={containerStyle}>
+			{!minimized && (
 			<div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: -6, zIndex: 1 }}>
 				<div
 					title='Drag Chi anywhere'
@@ -451,7 +474,20 @@ export const ChiOrbMount = (): ReactElement => {
 					</button>
 				)}
 			</div>
-			<div ref={hostRef} />
+			)}
+			<div
+				ref={hostRef}
+				style={{ touchAction: 'none' }}
+				onPointerDown={minimized ? onOrbDown : undefined}
+				onPointerMove={minimized ? onOrbMove : undefined}
+				onPointerUp={minimized ? onOrbUp : undefined}
+				onClickCapture={(e): void => {
+					if (draggedRef.current) {
+						e.stopPropagation();
+						draggedRef.current = false;
+					}
+				}}
+			/>
 		</div>
 	);
 };

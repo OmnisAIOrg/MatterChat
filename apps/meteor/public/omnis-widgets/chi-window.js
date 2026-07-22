@@ -151,6 +151,16 @@
 			var pc = new RTCPeerConnection();
 			var audio = new Audio(); audio.autoplay = true;
 			pc.addEventListener('track', function (e) { audio.srcObject = e.streams[0]; });
+			// Ask macOS for mic access (TCC) FIRST. In the packaged desktop app this window loads a
+			// remote origin, so getUserMedia fails silently without an explicit ask via the desktop
+			// bridge. On the web (no bridge) this is skipped and getUserMedia runs normally.
+			try {
+				var b = window.matterchatDesktop;
+				if (b && b.micAsk) {
+					var g = await b.micAsk();
+					if (g && g.microphone === false) { micBtn.title = 'Mic blocked — allow it in System Settings › Privacy › Microphone'; stopVoice(); return; }
+				}
+			} catch (e) { /* fall through to getUserMedia, which will surface any real error */ }
 			var mic = await navigator.mediaDevices.getUserMedia({ audio: true });
 			mic.getTracks().forEach(function (t) { pc.addTrack(t, mic); });
 			pc.createDataChannel('oai-events');
@@ -174,6 +184,12 @@
 		var orb = document.createElement('chi-orb');
 		orb.setAttribute('theme', 'dark');
 		orb.setAttribute('asset-base', '/omnis-widgets/enso-assets/');
+		// This IS the desktop app's Chi window: realtime IS available here (transparent native window,
+		// its own WebRTC). Offer the orb's realtime UI (minimized mic + LISTENING) and wire its start/
+		// end back to this window's OpenAI-realtime session.
+		orb.setAttribute('realtime-available', '1');
+		orb.onvoicestart = startVoice;
+		orb.onvoiceend = stopVoice;
 		orb.ask = ask;
 		orb.actions = [
 			{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
