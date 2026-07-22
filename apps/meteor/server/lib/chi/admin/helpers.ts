@@ -153,13 +153,16 @@ export function matchSound(query: string, options: readonly SoundOption[]): Soun
 	return options.find((o) => normalizeSoundKey(o._id) === key) ?? options.find((o) => normalizeSoundKey(o.name) === key);
 }
 
-/** A human-typed confirmation? (the deterministic gate for destructive tools) */
+/** A human-typed (or voice-relayed) confirmation? The deterministic gate for destructive tools.
+ *  Anchored to the WHOLE message so a qualified reply ("yes but change the email") never counts —
+ *  that must fall through and re-plan. Voice paraphrases ("sure", "go ahead", "do it") are accepted
+ *  because the realtime orb relays the member's spoken affirmation, not a literal "yes". */
 export function isConfirmText(text: string): boolean {
-	return /^(confirm|yes|y)\.?$/i.test(text.trim());
+	return /^(confirm(ed)?|yes|yeah|yep|yup|yup!|sure|ok|okay|k|y|go ahead|do it|please do|sounds good|correct)[.!]?$/i.test(text.trim());
 }
 
 export function isCancelText(text: string): boolean {
-	return /^(cancel|no|abort|stop)\.?$/i.test(text.trim());
+	return /^(cancel|no|nope|nah|abort|stop|don'?t|do not|never ?mind|forget it)[.!]?$/i.test(text.trim());
 }
 
 /** Compact single-line JSON for audit lines, with secret-looking keys masked. */

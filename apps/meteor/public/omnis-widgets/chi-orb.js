@@ -87,6 +87,7 @@
 			this.onvoice = null;
 			this.onvoicestart = null;
 			this.onvoiceend = null;
+			this.onaction = null;       // host hook: run an action chip (desktop wires this to the live voice turn)
 			this._listening = false;   // chat mic (Web Speech dictation)
 			this._realtime = false;    // realtime voice takeover
 			this.history = [];
@@ -119,6 +120,16 @@
 			if (Array.isArray(this.actions) && this.actions.length) return this.actions;
 			var a = this.getAttribute('actions'); if (a) { try { return JSON.parse(a); } catch (e) { /* noop */ } }
 			return [{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' }, { label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' }, { label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' }];
+		}
+		// Host-driven: swap the recommended action chips (e.g. the realtime model's suggest_actions). In the
+		// LISTENING view we repaint the chips in place (the delegated click handler resolves them fresh).
+		updateActions(list) {
+			if (!Array.isArray(list) || !list.length) return;
+			this.actions = list;
+			if (this._realtime && !this._min) {
+				var box = this.shadowRoot.getElementById('chips'), t = this._theme;
+				if (box) box.innerHTML = list.map(function (a, i) { return '<button data-i="' + i + '" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + String(a.label).replace(/</g, '&lt;') + '</button>'; }).join('');
+			}
 		}
 		_haloCss(kind) { // '', 'thinking', 'realtime'
 			if (kind === 'thinking') return 'opacity:1;background:' + GHALO + ';box-shadow:0 0 55px 10px rgba(48,209,88,.55);animation:chiHalo 1.4s ease-in-out infinite;';
@@ -265,7 +276,7 @@
 			/* ---- LISTENING version (realtime voice) ---- */
 			if (this._realtime) {
 				var chipsL = this._actionsList().map(function (a, i) {
-					return '<button data-i="' + i + '" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + a.label.replace(/</g, '&lt;') + '</button>';
+					return '<button data-i="' + i + '" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + String(a.label).replace(/</g, '&lt;') + '</button>';
 				}).join('');
 				var innerL =
 					'<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px 70px;text-align:center;">' +
@@ -282,8 +293,10 @@
 				var win = this.shadowRoot.getElementById('win');
 				if (win) win.addEventListener('click', function (e) { if (e.target.closest('#chips')) return; if (self.onvoiceend) self.onvoiceend(); self.realtime = false; });
 				var chipsElL = this.shadowRoot.getElementById('chips');
-				var actsL = this._actionsList();
-				if (chipsElL) chipsElL.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; e.stopPropagation(); self._send(actsL[+b.dataset.i].command); });
+				// Resolve the command FRESH on click (updateActions may have swapped the list) and route it
+				// through the host's onaction hook when present (desktop → speak it into the live voice call),
+				// falling back to a plain text turn on the web.
+				if (chipsElL) chipsElL.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; e.stopPropagation(); var cmd = (self._actionsList()[+b.dataset.i] || {}).command; if (!cmd) return; if (self.onaction) self.onaction(cmd); else self._send(cmd); });
 				this._wireShell();
 				return;
 			}
