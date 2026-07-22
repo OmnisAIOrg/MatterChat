@@ -79,7 +79,7 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Realtime_API_Key',
 			i18nDescription: 'Chi_Realtime_API_Key_Description', // OpenAI key; falls back to Chi_Assistant_API_Key when the provider is OpenAI
 		});
-		await this.add('Chi_Realtime_Model', 'gpt-4o-realtime-preview', {
+		await this.add('Chi_Realtime_Model', 'gpt-realtime', {
 			type: 'string',
 			public: false,
 			i18nLabel: 'Chi_Realtime_Model',

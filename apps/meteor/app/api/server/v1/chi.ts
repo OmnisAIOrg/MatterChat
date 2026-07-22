@@ -79,19 +79,39 @@ API.v1.addRoute(
 			if (!key) {
 				return API.v1.failure('Realtime voice has no OpenAI API key configured (Admin → Settings → Chi Assistant).');
 			}
-			const model = String(settings.get('Chi_Realtime_Model') || 'gpt-4o-realtime-preview').trim();
+			// OpenAI REMOVED the beta mint endpoint (POST /v1/realtime/sessions now 404s) — this is the GA
+			// flow: mint an ephemeral ek_ secret via /v1/realtime/client_secrets ({session:{...}} body,
+			// token at top-level `value`), which the browser uses against /v1/realtime/calls. Mirrors our
+			// proven-working EvidenceHunt implementation. The old beta model ids are retired with it, and
+			// prior installs have `gpt-4o-realtime-preview` PERSISTED in the settings DB — map those forward.
+			const configuredModel = String(settings.get('Chi_Realtime_Model') || '').trim();
+			const model = !configuredModel || configuredModel.startsWith('gpt-4o-realtime') ? 'gpt-realtime' : configuredModel;
 			const voice = String(settings.get('Chi_Realtime_Voice') || 'alloy').trim();
 			try {
-				const res = await fetch('https://api.openai.com/v1/realtime/sessions', {
+				const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
 					method: 'POST',
 					headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-					body: JSON.stringify({ model, voice, instructions: REALTIME_INSTRUCTIONS }),
+					body: JSON.stringify({
+						session: {
+							type: 'realtime',
+							model,
+							instructions: REALTIME_INSTRUCTIONS,
+							audio: {
+								// gpt-4o-mini-transcribe over whisper-1: whisper hallucinates phantom utterances on
+								// ambient noise. semantic_vad waits for the sentence to finish instead of a fixed
+								// silence window that cuts the speaker off mid-thought.
+								input: { transcription: { model: 'gpt-4o-mini-transcribe' }, turn_detection: { type: 'semantic_vad', eagerness: 'auto' } },
+								output: { voice },
+							},
+						},
+					}),
+					signal: AbortSignal.timeout(15000),
 				});
-				const data = (await res.json()) as { client_secret?: { value?: string; expires_at?: number }; error?: { message?: string } };
-				if (!res.ok || !data?.client_secret?.value) {
+				const data = (await res.json()) as { value?: string; expires_at?: number; error?: { message?: string } };
+				if (!res.ok || !data?.value) {
 					return API.v1.failure(data?.error?.message || 'Could not start a realtime voice session.');
 				}
-				return API.v1.success({ token: data.client_secret.value, expiresAt: data.client_secret.expires_at, model, voice });
+				return API.v1.success({ token: data.value, expiresAt: data.expires_at, model, voice });
 			} catch (err) {
 				return API.v1.failure(err instanceof Error ? err.message : 'Realtime voice session failed.');
 			}

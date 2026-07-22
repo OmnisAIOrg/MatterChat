@@ -133,12 +133,14 @@
 			var audio = new Audio(); audio.autoplay = true;
 			pc.addEventListener('track', function (e) { audio.srcObject = e.streams[0]; });
 			var mic;
-			try { mic = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+			try { mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
 			catch (e) { toast('Microphone is blocked — allow it in System Settings → Privacy & Security → Microphone, then try again.', 7000); try { pc.close(); } catch (_) { /* noop */ } stopVoice(); return; }
 			mic.getTracks().forEach(function (t) { pc.addTrack(t, mic); });
 			pc.createDataChannel('oai-events');
 			var offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-			var ans = await fetch('https://api.openai.com/v1/realtime?model=' + encodeURIComponent(s.model || 'gpt-4o-realtime-preview'), {
+			// GA WebRTC endpoint (/v1/realtime/calls) — the old /v1/realtime?model=… was the removed beta
+			// flow. Bearer = the ephemeral ek_ secret minted server-side; response text is the SDP answer.
+			var ans = await fetch('https://api.openai.com/v1/realtime/calls?model=' + encodeURIComponent(s.model || 'gpt-realtime'), {
 				method: 'POST', body: offer.sdp, headers: { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/sdp' },
 			});
 			if (!ans.ok) { toast('Voice connection was refused — try again in a moment.', 5000); try { pc.close(); } catch (e) { /* noop */ } mic.getTracks().forEach(function (t) { t.stop(); }); stopVoice(); return; }
