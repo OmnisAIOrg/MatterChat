@@ -95,7 +95,7 @@
 			this._pendingConfirm = false;   // a destructive action is parked server-side awaiting Confirm/Cancel
 			this._min = localStorage.getItem('chi-orb-min') === '1';
 		}
-		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available', 'window-controls']; }
+		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available', 'window-controls', 'popout-control']; }
 		attributeChangedCallback() { if (this.shadowRoot && this.shadowRoot.childNodes.length) this._render(); }
 		connectedCallback() { this._render(); }
 
@@ -111,6 +111,7 @@
 		_toggle() { this._min = !this._min; localStorage.setItem('chi-orb-min', this._min ? '1' : '0'); this.dispatchEvent(new CustomEvent('chi-min', { detail: { min: this._min }, bubbles: true, composed: true })); this._render(); }
 		_hasRealtime() { return this.getAttribute('realtime-available') === '1'; }
 		_hasWinCtrl() { return this.getAttribute('window-controls') === '1'; } // desktop native-window mode: grip drags the window, adds close/frame controls
+		_hasPopout() { return this.getAttribute('popout-control') === '1'; }   // in-app web mode: a pop-out ring control (next to theme), grip drags the in-app container
 
 		_bubble(m) {
 			var t = this._theme;
@@ -232,7 +233,8 @@
 			var ctrl = function (id, title, top, right, left, svg) {
 				return '<div id="' + id + '" title="' + title + '" style="position:absolute;top:' + top + 'px;' + (right != null ? 'right:' + right + 'px;' : 'left:' + left + 'px;') + 'z-index:7;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;' + t.ctrl + '">' + svg + '</div>';
 			};
-			var winCtrl = this._hasWinCtrl();
+			var winCtrl = this._hasWinCtrl(), popout = this._hasPopout();
+			var topLeftTaken = winCtrl || popout; // close (desktop) or pop-out (in-app) sits in the top-left slot; theme drops below it
 			return '' +
 				// In desktop window mode the window is sized to hug the orb and scaling is centered (50% 50%);
 				// on the web the orb scales up from its base (50% 100%) so it grows without shifting off-anchor.
@@ -247,9 +249,12 @@
 				// top grip handle (drag) — pointer drag is owned by the host; click-hold to move.
 				'<div id="grip" title="Hold to move" style="position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:7;width:46px;height:15px;border-radius:8px;cursor:grab;display:flex;align-items:center;justify-content:center;gap:3px;background:linear-gradient(#2b2f34,#0e1013);box-shadow:inset 0 1px 1px rgba(255,255,255,.18), 0 1px 2px rgba(0,0,0,.5);">' +
 					'<i style="width:14px;height:2px;border-radius:2px;background:rgba(255,255,255,.5);display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55);display:block;"></i></div>' +
-				// left cluster: [close ▸ theme ▸ frame] — close + frame only exist in desktop window mode.
+				// left cluster: [close|pop-out ▸ theme ▸ frame]. Top-left slot = close (desktop window) or
+				// pop-out (in-app); frame only exists in desktop window mode. Same slot next to the theme
+				// clicker in both, so the affordance stays put whether Chi is in-app or popped out.
 				(winCtrl ? ctrl('closebtn', 'Bring Chi back into the app', 74, null, 74, '<svg width="13" height="13" viewBox="0 0 12 12"><path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>') : '') +
-				ctrl('themebtn', 'Switch theme', winCtrl ? 108 : 74, null, 74, '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" stroke-linecap="round"/></svg>') +
+				(popout ? ctrl('popoutbtn', 'Pop Chi out into its own window', 74, null, 74, '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2 H10 V7.5 M10 2 L5 7" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 7 V10 H2 V4 H5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg>') : '') +
+				ctrl('themebtn', 'Switch theme', topLeftTaken ? 108 : 74, null, 74, '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" stroke-linecap="round"/></svg>') +
 				(winCtrl ? ctrl('framebtn', 'Show the window frame / resize', 142, null, 74, '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="10" height="10" rx="2" stroke-dasharray="2.2 1.8"/><path d="M6 8 9 5M9 8V5H6"/></svg>') : '') +
 				// right cluster: collapse-to-ensō (distinct inward-arrows glyph), then enlarge (+) / shrink (−) size
 				ctrl('minbtn', 'Collapse to the ensō', 74, 74, null, '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M8 11.5V8h3.5"/><path d="M6 6 2.75 2.75M8 8l3.25 3.25"/></svg>') +
@@ -370,14 +375,16 @@
 			var sb = r.getElementById('shrinkbtn'); if (sb) sb.addEventListener('click', function (e) { e.stopPropagation(); self._resize(-0.1); });
 			var cb = r.getElementById('closebtn'); if (cb) cb.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-close', { bubbles: true, composed: true })); });
 			var fb = r.getElementById('framebtn'); if (fb) fb.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-frame', { bubbles: true, composed: true })); });
-			this._winDrag(r.getElementById('grip')); // the top grip is the ONE drag handle (desktop window mode)
+			var pob = r.getElementById('popoutbtn'); if (pob) pob.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
+			this._winDrag(r.getElementById('grip')); // the top grip above the ensō is the ONE drag handle
 		}
 
-		// Desktop window mode only: turn `el` into a native-window drag source. Tracks the pointer in SCREEN
-		// coords (immune to the window moving under it) and emits chi-drag deltas the host relays to the
-		// Electron window. A drag sets _justDragged so a trailing click (e.g. the launcher's expand) is skipped.
+		// Turn `el` (the grip, or the minimized launcher) into THE drag handle. Tracks the pointer in SCREEN
+		// coords (immune to the surface moving under it) and emits chi-drag deltas the host relays — to the
+		// Electron window when popped out, or to the in-app container otherwise. A drag sets _justDragged so a
+		// trailing click (e.g. the launcher's expand) is skipped. This is the ONLY drag affordance in every mode.
 		_winDrag(el) {
-			if (!el || !this._hasWinCtrl()) return;
+			if (!el) return;
 			var self = this, st = null;
 			el.style.touchAction = 'none';
 			el.addEventListener('pointerdown', function (e) {
