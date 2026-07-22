@@ -51,7 +51,7 @@ class ChiOrb extends HTMLElement {
   connectedCallback(){ this._render(); }
   get _theme(){ return THEMES[this.getAttribute('theme')] || THEMES.dark; }
   get _base(){ return this.getAttribute('asset-base') || 'enso-assets/'; }
-  _toggle(){ this._min=!this._min; localStorage.setItem('chi-orb-min', this._min?'1':'0'); this._render(); }
+  _toggle(){ this._min=!this._min; localStorage.setItem('chi-orb-min', this._min?'1':'0'); this._render(); this.dispatchEvent(new CustomEvent('chi-toggle',{detail:{min:this._min},bubbles:true,composed:true})); }
   _bubble(m){
     var t=this._theme;
     return 'max-width:82%;padding:9px 14px;font-size:13px;line-height:1.5;animation:chiMsgIn .4s cubic-bezier(.2,.7,.3,1) both;' +
