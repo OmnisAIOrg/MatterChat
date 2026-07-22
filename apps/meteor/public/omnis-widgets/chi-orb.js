@@ -93,7 +93,7 @@
 			this._thinking = false;
 			this._min = localStorage.getItem('chi-orb-min') === '1';
 		}
-		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available']; }
+		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available', 'window-controls']; }
 		attributeChangedCallback() { if (this.shadowRoot && this.shadowRoot.childNodes.length) this._render(); }
 		connectedCallback() { this._render(); }
 
@@ -104,10 +104,11 @@
 		get _theme() { return THEMES[this._themeKey] || THEMES.dark; }
 		get _base() { return this.getAttribute('asset-base') || 'enso-assets/'; }
 		get _scale() { var s = parseFloat(localStorage.getItem('chi-orb-scale')); return s >= 0.7 && s <= 1.5 ? s : 1; }
-		_resize(d) { localStorage.setItem('chi-orb-scale', Math.max(0.7, Math.min(1.5, this._scale + d)).toFixed(2)); this._render(); }
+		_resize(d) { localStorage.setItem('chi-orb-scale', Math.max(0.7, Math.min(1.5, this._scale + d)).toFixed(2)); this.dispatchEvent(new CustomEvent('chi-resize', { detail: { scale: this._scale }, bubbles: true, composed: true })); this._render(); }
 		_cycleTheme() { var i = THEME_ORDER.indexOf(this._themeKey); localStorage.setItem('chi-orb-theme', THEME_ORDER[(i + 1) % THEME_ORDER.length]); this._render(); }
 		_toggle() { this._min = !this._min; localStorage.setItem('chi-orb-min', this._min ? '1' : '0'); this.dispatchEvent(new CustomEvent('chi-min', { detail: { min: this._min }, bubbles: true, composed: true })); this._render(); }
 		_hasRealtime() { return this.getAttribute('realtime-available') === '1'; }
+		_hasWinCtrl() { return this.getAttribute('window-controls') === '1'; } // desktop native-window mode: grip drags the window, adds close/frame controls
 
 		_bubble(m) {
 			var t = this._theme;
@@ -199,8 +200,11 @@
 			var ctrl = function (id, title, top, right, left, svg) {
 				return '<div id="' + id + '" title="' + title + '" style="position:absolute;top:' + top + 'px;' + (right != null ? 'right:' + right + 'px;' : 'left:' + left + 'px;') + 'z-index:7;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;' + t.ctrl + '">' + svg + '</div>';
 			};
+			var winCtrl = this._hasWinCtrl();
 			return '' +
-				'<div style="position:relative;width:520px;height:520px;transform:scale(' + this._scale + ');transform-origin:50% 100%;">' +
+				// In desktop window mode the window is sized to hug the orb and scaling is centered (50% 50%);
+				// on the web the orb scales up from its base (50% 100%) so it grows without shifting off-anchor.
+				'<div style="position:relative;width:520px;height:520px;transform:scale(' + this._scale + ');transform-origin:' + (winCtrl ? '50% 50%' : '50% 100%') + ';">' +
 				'<div id="halo" data-base="' + haloBase + '" style="' + haloBase + this._haloCss(this._realtime ? 'realtime' : '') + '"></div>' +
 				'<div style="position:absolute;inset:14px;border-radius:50%;pointer-events:none;background:' + metal + ';box-shadow:0 26px 60px rgba(0,0,0,.45), 0 6px 16px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 6px rgba(0,0,0,.28);"></div>' +
 				'<div style="position:absolute;inset:24px;border-radius:50%;pointer-events:none;background:radial-gradient(circle at 50% 30%, #3a3f45, #14171b);box-shadow:inset 0 2px 5px rgba(0,0,0,.7);"></div>' +
@@ -211,8 +215,10 @@
 				// top grip handle (drag) — pointer drag is owned by the host; click-hold to move.
 				'<div id="grip" title="Hold to move" style="position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:7;width:46px;height:15px;border-radius:8px;cursor:grab;display:flex;align-items:center;justify-content:center;gap:3px;background:linear-gradient(#2b2f34,#0e1013);box-shadow:inset 0 1px 1px rgba(255,255,255,.18), 0 1px 2px rgba(0,0,0,.5);">' +
 					'<i style="width:14px;height:2px;border-radius:2px;background:rgba(255,255,255,.5);display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55);display:block;"></i></div>' +
-				// left: theme switch
-				ctrl('themebtn', 'Switch theme', 74, null, 74, '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" stroke-linecap="round"/></svg>') +
+				// left cluster: [close ▸ theme ▸ frame] — close + frame only exist in desktop window mode.
+				(winCtrl ? ctrl('closebtn', 'Bring Chi back into the app', 74, null, 74, '<svg width="13" height="13" viewBox="0 0 12 12"><path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>') : '') +
+				ctrl('themebtn', 'Switch theme', winCtrl ? 108 : 74, null, 74, '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" stroke-linecap="round"/></svg>') +
+				(winCtrl ? ctrl('framebtn', 'Show the window frame / resize', 142, null, 74, '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="10" height="10" rx="2" stroke-dasharray="2.2 1.8"/><path d="M6 8 9 5M9 8V5H6"/></svg>') : '') +
 				// right cluster: collapse-to-ensō (distinct inward-arrows glyph), then enlarge (+) / shrink (−) size
 				ctrl('minbtn', 'Collapse to the ensō', 74, 74, null, '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M8 11.5V8h3.5"/><path d="M6 6 2.75 2.75M8 8l3.25 3.25"/></svg>') +
 				ctrl('growbtn', 'Enlarge', 108, 74, null, '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>') +
@@ -233,19 +239,26 @@
 			if (this._min) {
 				var rt = this._realtime;
 				this.shadowRoot.innerHTML = head +
-					'<div id="launch" title="Open Chi (hold to move)" style="position:relative;width:80px;height:80px;cursor:grab;transform:scale(' + this._scale + ');transform-origin:50% 100%;">' +
+					'<div id="launch" title="Open Chi (hold to move)" style="position:relative;width:80px;height:80px;cursor:grab;transform:scale(' + this._scale + ');transform-origin:' + (this._hasWinCtrl() ? '50% 50%' : '50% 100%') + ';">' +
 					(rt ? '<div style="position:absolute;inset:-9px;border-radius:50%;pointer-events:none;box-shadow:0 0 24px 6px rgba(59,155,255,.6);animation:chiHalo 1.5s ease-in-out infinite;"></div>' : '') +
 					'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:80px;height:80px;filter:' + (t.markFilter || 'drop-shadow(0 3px 12px rgba(0,0,0,.55))') + ';">' +
 					'<div style="position:absolute;inset:0;' + mask + '">' + ripples() + '</div>' +
 					(this._hasRealtime() ? '<div id="micdot" title="' + (rt ? 'End voice call' : 'Talk to Chi') + '" style="position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:' + GREEN + ';box-shadow:0 3px 10px rgba(48,209,88,.55);' + (rt ? 'animation:chiPulse 1.1s ease-in-out infinite;' : '') + '">' + (rt ? '<svg width="10" height="10" viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1.5" fill="#fff"/></svg>' : '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"><path d="M4 8v0M6.5 6v4M9.5 4.5v7M12 6.5v3"/></svg>') + '</div>' : '') +
 					'</div>';
-				this.shadowRoot.getElementById('launch').addEventListener('click', function () { self._toggle(); });
+				var launchEl = this.shadowRoot.getElementById('launch');
+				launchEl.addEventListener('click', function () { if (self._justDragged) { self._justDragged = false; return; } self._toggle(); });
+				this._winDrag(launchEl); // hold-and-move repositions the puck (desktop window mode); a plain click expands
 				var md = this.shadowRoot.getElementById('micdot');
-				if (md) md.addEventListener('click', function (e) {
-					e.stopPropagation();
-					if (self._realtime) { if (self.onvoiceend) self.onvoiceend(); self.realtime = false; }
-					else { if (self.onvoicestart) self.onvoicestart(); self.realtime = true; }
-				});
+				if (md) {
+					md.addEventListener('pointerdown', function (e) { e.stopPropagation(); }); // press the mic, don't start a window drag
+					md.addEventListener('click', function (e) {
+						e.stopPropagation();
+						// START only calls the host; the host flips orb.realtime=true once the call actually connects
+						// (so a failed start no longer flashes LISTENING then snaps back). STOP ends immediately.
+						if (self._realtime) { if (self.onvoiceend) self.onvoiceend(); self.realtime = false; }
+						else if (self.onvoicestart) self.onvoicestart();
+					});
+				}
 				return;
 			}
 
@@ -307,7 +320,7 @@
 			var mic = this.shadowRoot.getElementById('micbtn');
 			if (SR) mic.addEventListener('click', function () { self._mic(); }); else mic.style.display = 'none';
 			var vb = this.shadowRoot.getElementById('voicebtn');
-			if (vb) vb.addEventListener('click', function () { if (self.onvoicestart) self.onvoicestart(); self.realtime = true; });
+			if (vb) vb.addEventListener('click', function () { if (self.onvoicestart) self.onvoicestart(); }); // host flips realtime=true on connect
 			var chipsEl = this.shadowRoot.getElementById('chips'), acts = this._actionsList();
 			Array.prototype.forEach.call(chipsEl.children, function (b, i) { b.textContent = acts[i].label; });
 			chipsEl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; self._send(acts[+b.dataset.i].command); });
@@ -321,6 +334,33 @@
 			var mb = r.getElementById('minbtn'); if (mb) mb.addEventListener('click', function (e) { e.stopPropagation(); self._toggle(); });
 			var gb = r.getElementById('growbtn'); if (gb) gb.addEventListener('click', function (e) { e.stopPropagation(); self._resize(0.1); });
 			var sb = r.getElementById('shrinkbtn'); if (sb) sb.addEventListener('click', function (e) { e.stopPropagation(); self._resize(-0.1); });
+			var cb = r.getElementById('closebtn'); if (cb) cb.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-close', { bubbles: true, composed: true })); });
+			var fb = r.getElementById('framebtn'); if (fb) fb.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-frame', { bubbles: true, composed: true })); });
+			this._winDrag(r.getElementById('grip')); // the top grip is the ONE drag handle (desktop window mode)
+		}
+
+		// Desktop window mode only: turn `el` into a native-window drag source. Tracks the pointer in SCREEN
+		// coords (immune to the window moving under it) and emits chi-drag deltas the host relays to the
+		// Electron window. A drag sets _justDragged so a trailing click (e.g. the launcher's expand) is skipped.
+		_winDrag(el) {
+			if (!el || !this._hasWinCtrl()) return;
+			var self = this, st = null;
+			el.style.touchAction = 'none';
+			el.addEventListener('pointerdown', function (e) {
+				self._justDragged = false;
+				st = { x: e.screenX, y: e.screenY, id: e.pointerId, moved: false };
+				try { el.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+			});
+			el.addEventListener('pointermove', function (e) {
+				if (!st) return;
+				var dx = e.screenX - st.x, dy = e.screenY - st.y;
+				if (!st.moved && dx * dx + dy * dy < 16) return; // ~4px dead-zone → a click still expands
+				st.moved = true; st.x = e.screenX; st.y = e.screenY;
+				self.dispatchEvent(new CustomEvent('chi-drag', { detail: { dx: dx, dy: dy }, bubbles: true, composed: true }));
+			});
+			var up = function () { if (st) { if (st.moved) self._justDragged = true; if (st.id != null) { try { el.releasePointerCapture(st.id); } catch (_) { /* noop */ } } } st = null; };
+			el.addEventListener('pointerup', up);
+			el.addEventListener('pointercancel', up);
 		}
 	}
 	if (!customElements.get('chi-orb')) customElements.define('chi-orb', ChiOrb);
