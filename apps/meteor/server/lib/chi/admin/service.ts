@@ -18,10 +18,12 @@
  * cross-user targets) — the bot has no standing of its own.
  */
 import type { IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
-import { Messages, Users } from '@rocket.chat/models';
+import { Messages, Subscriptions, Users } from '@rocket.chat/models';
 
 import type { ChiClientAction } from './actions';
 import { withClientActions } from './actions';
+import type { ChiTurnContext } from './turnctx';
+import { withChiContext } from './turnctx';
 import { postAuditEntry } from './audit';
 import { clearPendingAction, hasPendingAction, parkPendingAction, takePendingAction } from './confirm';
 import { isCancelText, isConfirmText } from './helpers';
@@ -63,30 +65,40 @@ function llmConfig(): LlmConfig | undefined {
 	return { provider: family, apiKey, model, baseUrl };
 }
 
-function systemPrompt(actor: IUser, isAdmin: boolean): string {
+/** Shared description of the WORKSPACE capabilities every caller (member or admin) has. */
+const WORKSPACE_CAPABILITIES = [
+	'You are a self-driving workspace, not a chatbot: you NAVIGATE the app, RETRIEVE across the user\'s conversations, EXECUTE actions, and REASON — all as the user, over only what they can already see. Your workspace tools:',
+	'- NAVIGATE: open_conversation (go to a channel/DM/person they\'re in), open_profile (DM a person), go_to (home / boards / directory / admin), open_search (open the search bar for a term).',
+	'- FIND: search_messages ("where did we discuss X"), find_channels, find_people, who_is (one person + shared channels), find_files (documents shared in their chats).',
+	'- READ & REASON: read_recent_messages returns a channel\'s recent transcript so YOU summarize it, answer questions, list open questions, or find a decision — call it for "summarize this channel", "what did we decide", "catch me up on #X". catch_me_up gathers unread + mentions + due tasks + upcoming deadlines for you to summarize ("what did I miss", "what needs my attention", "who is waiting on me").',
+	'- NOTIFICATIONS: mark_channel_read, mark_all_read, mute_channel.',
+	'- MESSAGES: post_message (send chat as the user — confirmed first), react_to_message.',
+	'- TASKS & DEADLINES (boards): list_my_tasks, complete_task, create_task, upcoming_deadlines.',
+	'When the user says "this"/"here" with no channel named, the tools default to the conversation they are currently viewing (given below when known). Prefer DOING (call the tool) over explaining where something is.',
+].join('\n');
+
+function systemPrompt(actor: IUser, isAdmin: boolean, contextLine?: string): string {
+	const head = `You are Chi, the MatterChat workspace assistant, working 1:1 with @${actor.username} on ${settings.get('Site_Url')}.`;
+	const common = [
+		'Rules:',
+		'- To DO anything, you MUST call the matching tool. NEVER claim you performed an action, and NEVER say something is "parked"/"pending confirmation", unless you actually called the tool this turn. Describing an action is not doing it.',
+		'- Confirmation for sensitive/outward actions (e.g. posting a message, bulk/destructive admin ops) is handled FOR you: just call the tool; the platform intercepts it and asks the user to type `confirm`. Do not ask for confirmation yourself or pre-announce it.',
+		'- Relay tool results faithfully and concisely. If a tool refuses for permissions, explain it plainly. Never invent users, channels, messages, files or settings.',
+		'- Markdown is supported. Keep replies tight — this is a chat, not a report.',
+		contextLine || '',
+		`- Today is ${new Date().toISOString().slice(0, 10)}.`,
+	].filter(Boolean);
+
 	if (!isAdmin) {
-		return [
-			`You are Chi, the MatterChat workspace assistant, chatting 1:1 with @${actor.username} on ${settings.get('Site_Url')}. They are a regular member, NOT a workspace admin.`,
-			'You can help them with their OWN account only: get_user_preferences reads their notification/profile preferences; set_user_notification_sound changes their default notification sound. Every tool call is permission-checked server-side as the requesting user — anything touching other users, channels, or workspace settings will be refused. For those, tell them to ask a workspace admin.',
-			'Rules:',
-			'- To DO anything, you MUST call the matching tool. NEVER claim you performed an action unless you actually called the tool in this turn.',
-			"- Confirmation for sensitive calls is handled FOR you by the platform — just call the tool normally.",
-			'- Relay tool results faithfully and concisely. If a tool refuses for permissions, explain it plainly and point them to an admin.',
-			'- Markdown is supported. Keep replies tight — this is a chat, not a report.',
-		].join('\n');
+		return [head, 'They are a regular member (not a workspace admin), so admin-only tools (managing other users, channels, or workspace settings) will refuse — for those, point them to an admin.', WORKSPACE_CAPABILITIES, ...common].join('\n');
 	}
 	return [
-		`You are Chi, the MatterChat workspace operations assistant, chatting 1:1 with the workspace admin @${actor.username} on ${settings.get('Site_Url')}.`,
-		'You EXECUTE admin work through your tools: users (create, bulk create, roles, activate/deactivate, password resets), per-user notification preferences (get_user_preferences, set_user_notification_sound, bulk_set_user_notification_sound — the Sound dropdown on user profiles), channels (create, add members), connector provisioning + status for Slack/Teams/Google (gchat), workspace info, and FULL workspace settings access — search_settings finds any setting by keyword, get_setting reads it (secrets masked), set_setting changes it (gated + confirmed + audited). When asked about a capability you lack a specific tool for, SEARCH SETTINGS FIRST — most admin surface lives there. Per-user notification preferences live on user profiles, not workspace settings — use the preference tools for those.',
-		'Rules:',
-		'- To DO anything, you MUST call the matching tool. NEVER claim you performed an action, and NEVER say something is "parked" or "pending confirmation", unless you actually called the tool in this turn. Describing an action is not doing it.',
-		"- Confirmation is handled FOR you: when you call a destructive or bulk tool, the platform automatically intercepts it and asks the admin to type `confirm`. So just call the tool normally — do not ask for confirmation yourself, do not wait, do not pre-announce it. The platform posts the confirm prompt; the admin's `confirm` then runs your exact call.",
-		'- Read state with the read-only tools (list_users, workspace_info, connector_status, search_settings, get_setting) before changing things you are unsure about.',
-		'- For "help me connect/bring in our Slack" or any Slack-not-arriving complaint: call slack_setup_guide and WALK them through it step by step, checking with connector_status between steps.',
-		'- Relay tool results faithfully and concisely; temporary passwords must be passed on exactly once with a "share privately" note.',
-		'- Never invent users, channels or settings. If a tool errors, say what failed and suggest the next step.',
-		'- Markdown is supported. Keep replies tight — this is a chat, not a report.',
-		`- Today is ${new Date().toISOString().slice(0, 10)}. The workspace email/SMTP may be down; user creation here already works around it (verified emails + handed-over temp passwords).`,
+		head,
+		'You are also a workspace ADMIN operator. Admin tools: users (create, bulk create, roles, activate/deactivate, password resets), per-user notification preferences (get_user_preferences, set_user_notification_sound, bulk_set_user_notification_sound), channels (create, add members), connector provisioning + status for Slack/Teams/Google, workspace info, and FULL settings access — search_settings finds any setting by keyword, get_setting reads it (secrets masked), set_setting changes it (gated + confirmed + audited). When asked about an admin capability you lack a specific tool for, SEARCH SETTINGS FIRST.',
+		WORKSPACE_CAPABILITIES,
+		'- For "help me connect our Slack" or a connector complaint: call slack_setup_guide and walk them through it, checking connector_status between steps.',
+		'- Temporary passwords must be passed on exactly once with a "share privately" note.',
+		...common,
 	].join('\n');
 }
 
@@ -212,6 +224,25 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 
 export type ChiOrbHistory = { who: 'me' | 'chi'; text: string };
 export type ChiOrbTurnResult = { reply: string; actions: ChiClientAction[]; needsConfirm: boolean };
+/** What the user is currently looking at, sent by the orb so "this channel"/"here" resolve. */
+export type ChiOrbContext = { roomName?: string; focusedMessageId?: string };
+
+/** Resolve the raw client context (a room NAME) to the caller's actual subscription, so context is
+ *  always scoped to a room they belong to (never a leak). Returns undefined when nothing is open. */
+async function resolveOrbContext(uid: string, raw?: ChiOrbContext): Promise<ChiTurnContext | undefined> {
+	const name = (raw?.roomName || '').replace(/^[#@]/, '').trim().toLowerCase();
+	if (!name) {
+		return undefined;
+	}
+	const sub = await Subscriptions.findOne<{ rid: string; name?: string; fname?: string; t: string }>(
+		{ 'u._id': uid, '$or': [{ name: raw?.roomName?.replace(/^[#@]/, '') }, { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }] },
+		{ projection: { rid: 1, name: 1, fname: 1, t: 1 } },
+	);
+	if (!sub) {
+		return undefined;
+	}
+	return { rid: sub.rid, roomName: sub.name || sub.fname, roomType: sub.t, focusedMessageId: raw?.focusedMessageId };
+}
 
 /**
  * Run ONE Chi turn for the floating orb (client copilot) and RETURN the reply + any client UI
@@ -223,7 +254,12 @@ export type ChiOrbTurnResult = { reply: string; actions: ChiClientAction[]; need
  * Confirm parking uses a synthetic per-user room key ("orb:<uid>") so a dangerous call parks and the
  * user's next "confirm" (a fresh turn) resolves it deterministically — identical to the DM flow.
  */
-export async function runChiOrbTurn(sender: IUser, text: string, history: ChiOrbHistory[] = []): Promise<ChiOrbTurnResult> {
+export async function runChiOrbTurn(
+	sender: IUser,
+	text: string,
+	history: ChiOrbHistory[] = [],
+	rawContext?: ChiOrbContext,
+): Promise<ChiOrbTurnResult> {
 	const trimmed = (text || '').trim();
 	if (!trimmed) {
 		return { reply: '', actions: [], needsConfirm: false };
@@ -266,10 +302,14 @@ export async function runChiOrbTurn(sender: IUser, text: string, history: ChiOrb
 	}
 	turns.push({ kind: 'user', text: trimmed });
 
+	const chiCtx = await resolveOrbContext(sender._id, rawContext);
+	const contextLine = chiCtx?.roomName
+		? `- The user is CURRENTLY VIEWING ${chiCtx.roomType === 'd' ? '@' : '#'}${chiCtx.roomName}. When they say "this", "here" or omit a channel, act on that conversation.`
+		: undefined;
 	const tools = toolDefs({ isAdmin });
-	const system = systemPrompt(sender, isAdmin);
+	const system = systemPrompt(sender, isAdmin, contextLine);
 
-	const { result, actions } = await withClientActions<Omit<ChiOrbTurnResult, 'actions'>>(async () => {
+	const { result, actions } = await withClientActions<Omit<ChiOrbTurnResult, 'actions'>>(() => withChiContext(chiCtx ?? {}, async () => {
 		try {
 			for (let i = 0; i < MAX_ITERATIONS; i++) {
 				const step = await llmStep(config, system, turns, tools);
@@ -301,7 +341,7 @@ export async function runChiOrbTurn(sender: IUser, text: string, history: ChiOrb
 			SystemLogger.error({ msg: 'Chi orb turn failed', err: String(err) });
 			return { reply: '❌ Something broke on my side while working on that.', needsConfirm: false };
 		}
-	});
+	}));
 
 	return { ...result, actions };
 }

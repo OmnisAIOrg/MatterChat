@@ -11,7 +11,11 @@ import { AsyncLocalStorage } from 'async_hooks';
  * AsyncLocalStorage scopes the collector to ONE turn even under concurrent requests.
  */
 export type ChiClientAction =
-	| { type: 'navigate'; rid: string; name: string; t: string }
+	// Open one of the user's conversations (channel / group / DM), optionally jumping to a thread.
+	| { type: 'navigate'; rid: string; name: string; t: string; tmid?: string }
+	// Route the user's screen to a named app surface (home / boards / directory / search / admin / activity).
+	| { type: 'route'; path: string; label?: string }
+	// Open the global search UI pre-filled with a term.
 	| { type: 'search'; term: string };
 
 const store = new AsyncLocalStorage<ChiClientAction[]>();

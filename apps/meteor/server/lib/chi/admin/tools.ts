@@ -25,6 +25,7 @@ import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
 import { emitClientAction } from './actions';
+import { CHI_WS_TOOLS } from './ws-tools';
 
 import {
 	BULK_CREATE_MAX,
@@ -917,6 +918,10 @@ export const CHI_ADMIN_TOOLS: ChiTool[] = [
 	bulkSetUserNotificationSound,
 	openConversation,
 	getDesktopApp,
+	// v0.18.0 — the workspace capability layer (navigation · search · conversation
+	// intelligence · notifications · message actions · tasks · deadlines). All
+	// caller-scoped 'user' tools; see ws-tools.ts.
+	...CHI_WS_TOOLS,
 ];
 
 export const toolAccess = (tool: ChiTool): ChiToolAccess => tool.access ?? 'admin';
