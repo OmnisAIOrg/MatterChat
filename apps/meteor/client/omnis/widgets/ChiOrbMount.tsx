@@ -29,6 +29,7 @@ const desktopBridge = (): DesktopBridge | undefined => (window as unknown as { m
  * `chi-popout`; position persists in localStorage, minimized state inside the component.
  */
 const POS_KEY = 'chi-orb-pos';
+const POPPED_KEY = 'chi-popped'; // set by the popped-out window (shared localStorage) → no duplicate orb
 const KEEP_ON_SCREEN = 52; // px of the widget that must stay reachable after a drag
 
 type Pos = { x: number; y: number };
@@ -57,7 +58,9 @@ export const ChiOrbMount = (): ReactElement => {
 	const [pos, setPos] = useState<Pos | null>(() => loadPos() ?? null);
 	const orbElRef = useRef<HTMLElement | null>(null);
 	const pipWinRef = useRef<Window | null>(null);
-	const [poppedOut, setPoppedOut] = useState(false);
+	// Initialize from shared localStorage so a remount/reload while Chi is already popped out never mounts
+	// a duplicate orb — the popped-out window sets this flag and clears it when it closes.
+	const [poppedOut, setPoppedOut] = useState<boolean>(() => localStorage.getItem(POPPED_KEY) === '1');
 
 	// Document Picture-in-Picture (browsers) OR the desktop app's native window bridge — either lets
 	// the orb live OUTSIDE the app window.
@@ -96,6 +99,7 @@ export const ChiOrbMount = (): ReactElement => {
 		if (d?.isDesktop && d.popOutChi) {
 			try {
 				await d.popOutChi();
+				localStorage.setItem(POPPED_KEY, '1');
 				setPoppedOut(true);
 			} catch {
 				/* desktop app can't pop out — leave the in-app orb exactly where it is */
@@ -124,12 +128,14 @@ export const ChiOrbMount = (): ReactElement => {
 			body.style.justifyContent = 'center';
 			body.style.overflow = 'hidden';
 			body.appendChild(orb);
+			localStorage.setItem(POPPED_KEY, '1');
 			setPoppedOut(true);
 			pip.addEventListener('pagehide', () => {
 				if (hostRef.current && orbElRef.current) {
 					hostRef.current.appendChild(orbElRef.current);
 				}
 				pipWinRef.current = null;
+				localStorage.removeItem(POPPED_KEY);
 				setPoppedOut(false);
 			});
 		} catch {
@@ -164,7 +170,26 @@ export const ChiOrbMount = (): ReactElement => {
 				/* ignore */
 			}
 		});
-		d.onChiWindowClosed?.(() => setPoppedOut(false));
+		d.onChiWindowClosed?.(() => {
+			localStorage.removeItem(POPPED_KEY);
+			setPoppedOut(false);
+		});
+	}, []);
+
+	// Reconcile popped-out state with the ACTUAL window across remounts, reloads, workspace switches, and
+	// refocus (the exact "clicked another org → a second Chi appeared" bug). The popped-out window owns the
+	// 'chi-popped' flag in shared localStorage; re-read it on mount, on refocus, and on storage/visibility.
+	useEffect(() => {
+		const sync = (): void => setPoppedOut(localStorage.getItem(POPPED_KEY) === '1');
+		sync();
+		window.addEventListener('focus', sync);
+		window.addEventListener('storage', sync);
+		document.addEventListener('visibilitychange', sync);
+		return () => {
+			window.removeEventListener('focus', sync);
+			window.removeEventListener('storage', sync);
+			document.removeEventListener('visibilitychange', sync);
+		};
 	}, []);
 
 	// Create the web component once its bundle is loaded, and wire the Chi adapter + orb events.
@@ -246,17 +271,21 @@ export const ChiOrbMount = (): ReactElement => {
 	// (the frameless, always-on-top native window can drift off-screen and get lost).
 	if (poppedOut) {
 		const d = desktopBridge();
+		// FIXED position (bottom-left), independent of where the orb was dragged, so the bring-back / Find
+		// Chi controls always live in the same predictable spot.
 		return (
-			<div style={{ ...containerStyle, alignItems: 'flex-end', gap: 6 }}>
+			<div style={poppedControlsStyle}>
 				<button
 					type='button'
 					title='Bring Chi back into the window'
 					onClick={() => {
+						localStorage.removeItem(POPPED_KEY);
 						if (d?.isDesktop) {
 							d.closeChiWindow?.();
 						} else {
 							pipWinRef.current?.close();
 						}
+						setPoppedOut(false);
 					}}
 					style={pillStyle}
 				>
@@ -282,6 +311,18 @@ export const ChiOrbMount = (): ReactElement => {
 			<div ref={hostRef} style={{ touchAction: 'none' }} />
 		</div>
 	);
+};
+
+const poppedControlsStyle: CSSProperties = {
+	position: 'fixed',
+	left: 16,
+	bottom: 60,
+	zIndex: 9998,
+	display: 'flex',
+	flexDirection: 'column',
+	alignItems: 'flex-start',
+	gap: 6,
+	touchAction: 'none',
 };
 
 const pillStyle: CSSProperties = {

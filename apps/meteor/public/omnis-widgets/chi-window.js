@@ -25,6 +25,14 @@
 		{ label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' },
 	];
 
+	// Advertise this popped-out window's existence to the MAIN app window. Both share the same origin +
+	// Electron partition → shared localStorage, so the in-app orb reads this flag and hides itself instead
+	// of mounting a DUPLICATE orb after a reload / workspace switch / refocus while Chi is popped out.
+	try { localStorage.setItem('chi-popped', '1'); } catch (e) { /* noop */ }
+	['pagehide', 'beforeunload', 'unload'].forEach(function (evt) {
+		window.addEventListener(evt, function () { try { localStorage.removeItem('chi-popped'); } catch (e) { /* noop */ } });
+	});
+
 	// Orb geometry (matches chi-orb.js): a 520px shell + ~14px halo ring, plus a little glow breathing room.
 	var ORB_BOX = 548;   // 520 + 14*2 halo
 	var MARGIN = 28;     // transparent breathing room each side (also room for the state glow)
