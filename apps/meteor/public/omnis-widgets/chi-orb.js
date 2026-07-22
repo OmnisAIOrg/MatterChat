@@ -84,7 +84,9 @@ class ChiOrb extends HTMLElement {
         if(self._voiceStop || !ev || (ev.error!=='no-speech'&&ev.error!=='aborted')) self._voiceStop=true;
       };
       rec.onend=function(){
-        if(!self._voiceStop){ try{ rec.start(); return; }catch(e){} } // silence timeout → keep going
+        // A finished SpeechRecognition can't be restarted (InvalidStateError) — spin up a FRESH one
+        // to keep listening across silences. Only truly stop when the user clicked the mic off.
+        if(!self._voiceStop){ setTimeout(begin,150); return; }
         self._listening=false; self._sync();
         var inp=self.shadowRoot.getElementById('in'); var t=inp?(inp.value||'').trim():'';
         if(t){ if(self.onvoice) self.onvoice(t); self._send(); }
