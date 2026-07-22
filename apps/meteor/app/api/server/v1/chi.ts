@@ -5,11 +5,74 @@ import { runChiOrbTurn } from '../../../../server/lib/chi/admin/service';
 import type { ChiOrbHistory, ChiOrbContext } from '../../../../server/lib/chi/admin/service';
 import { settings } from '../../../settings/server';
 
+// Turn discipline is half the fix — ported from EvidenceHunt's realtime prompt, which learned these the
+// hard way ("actions initiated before the user is done / having to wait / it froze / it claimed it did
+// something it didn't"): speak-first-then-act, wait for the finished thought, never claim un-done work,
+// and require an explicit spoken confirm for anything destructive.
 const REALTIME_INSTRUCTIONS =
-	'You are Chi, the MatterChat workspace assistant, talking with a member by voice. Be warm, concise, ' +
-	'and conversational — this is spoken, so keep answers short and natural. You can talk them through their ' +
-	'account, notifications, connectors (Slack/Teams/Google), and how to use MatterChat. For actions that ' +
-	'change things, tell them to type the request to you (the text Chi) so it runs with the right permissions.';
+	'You are Chi, the MatterChat workspace assistant, talking with a member by voice. Speak naturally and keep ' +
+	'every reply SHORT — one to three sentences, never read lists aloud — so you hand the turn back quickly. ' +
+	'Let the member FINISH their thought before you act; do not act on a half-sentence. ' +
+	'You can DO things, not just talk. Whenever they ask you to navigate (open a channel, DM, or view), ' +
+	'summarize, look something up, create or manage users, change an allowed setting, or take ANY action, use ' +
+	'the do_it function with their request in plain natural language — it runs with THE MEMBER’S OWN permissions. ' +
+	'NEVER tell them to type it themselves; you have the same reach they do. ' +
+	'SPEAK FIRST, THEN ACT: the instant you decide to do something, say a 3–6 word acknowledgment FIRST ' +
+	'("Opening that now", "One sec — checking") — THEN call do_it — THEN give a one-line confirmation of what ' +
+	'happened. Dead air while a tool runs reads as a freeze. ' +
+	'Be honest: NEVER say something was posted, created, changed, or opened unless do_it actually returned ' +
+	'success. If you did not call do_it, it did not happen — report failures plainly. ' +
+	'For anything destructive or outward-facing (deleting, creating a user, posting to a channel), do_it will ' +
+	'report that confirmation is required: tell the member EXACTLY what you’re about to do, then wait for an ' +
+	'explicit "yes" before calling do_it again with "yes" (or "no" to cancel). Never assume approval. ' +
+	'If the member corrects anything, immediately call do_it again with the correction. ' +
+	'After you act or answer, when there are obvious next steps, call suggest_actions to give them tappable ' +
+	'buttons. Only answer directly (no tool) for pure questions or small talk.';
+
+// GA flat function schema (type/name/description/parameters at top level — NO nested "function" wrapper).
+// do_it is a single meta-tool: it forwards the member's natural-language request to the SAME chi.ask turn
+// the typed orb uses, so navigation, summaries, user management, settings and the confirm/park flow are all
+// reused with the member's own permissions — no separate realtime tool registry to keep in sync.
+const REALTIME_TOOLS = [
+	{
+		type: 'function',
+		name: 'do_it',
+		description:
+			'Do something for the member in MatterChat: navigate the UI (open a channel/DM/view), summarize a ' +
+			'channel or their day, look someone up, create or manage users, change an allowed setting, or any ' +
+			'other workspace action. Runs with the MEMBER’S OWN permissions and returns what happened. Use ' +
+			'this for ANY actionable request instead of telling them to type it. Pass the request verbatim in ' +
+			'natural language (e.g. "take me to the general channel", "summarize the deals channel", "create a ' +
+			'user named Sam Rivera"). If the result says confirmation is needed, relay that and, when the member ' +
+			'says yes, call do_it again with "yes".',
+		parameters: {
+			type: 'object',
+			properties: { request: { type: 'string', description: 'The member’s request, verbatim, in natural language.' } },
+			required: ['request'],
+		},
+	},
+	{
+		type: 'function',
+		name: 'suggest_actions',
+		description:
+			'Offer up to 3 quick action buttons the member can tap to run next — use whenever there are obvious ' +
+			'next steps. Each action has a short button label and the full natural-language command to run when tapped.',
+		parameters: {
+			type: 'object',
+			properties: {
+				actions: {
+					type: 'array',
+					items: {
+						type: 'object',
+						properties: { label: { type: 'string' }, command: { type: 'string' } },
+						required: ['label', 'command'],
+					},
+				},
+			},
+			required: ['actions'],
+		},
+	},
+];
 
 /**
  * Chi copilot endpoint for the floating orb. Runs ONE Chi turn AS the authenticated user (same
@@ -96,6 +159,7 @@ API.v1.addRoute(
 							type: 'realtime',
 							model,
 							instructions: REALTIME_INSTRUCTIONS,
+							tools: REALTIME_TOOLS,
 							audio: {
 								// gpt-4o-mini-transcribe over whisper-1: whisper hallucinates phantom utterances on
 								// ambient noise. semantic_vad waits for the sentence to finish instead of a fixed

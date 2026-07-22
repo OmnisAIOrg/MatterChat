@@ -87,10 +87,12 @@
 			this.onvoice = null;
 			this.onvoicestart = null;
 			this.onvoiceend = null;
+			this.onaction = null;       // host hook: run an action chip (desktop wires this to the live voice turn)
 			this._listening = false;   // chat mic (Web Speech dictation)
 			this._realtime = false;    // realtime voice takeover
 			this.history = [];
 			this._thinking = false;
+			this._pendingConfirm = false;   // a destructive action is parked server-side awaiting Confirm/Cancel
 			this._min = localStorage.getItem('chi-orb-min') === '1';
 		}
 		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available', 'window-controls']; }
@@ -119,6 +121,16 @@
 			if (Array.isArray(this.actions) && this.actions.length) return this.actions;
 			var a = this.getAttribute('actions'); if (a) { try { return JSON.parse(a); } catch (e) { /* noop */ } }
 			return [{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' }, { label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' }, { label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' }];
+		}
+		// Host-driven: swap the recommended action chips (e.g. the realtime model's suggest_actions). In the
+		// LISTENING view we repaint the chips in place (the delegated click handler resolves them fresh).
+		updateActions(list) {
+			if (!Array.isArray(list) || !list.length) return;
+			this.actions = list;
+			if (this._realtime && !this._min) {
+				var box = this.shadowRoot.getElementById('chips'), t = this._theme;
+				if (box) box.innerHTML = list.map(function (a, i) { return '<button data-i="' + i + '" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + String(a.label).replace(/</g, '&lt;') + '</button>'; }).join('');
+			}
 		}
 		_haloCss(kind) { // '', 'thinking', 'realtime'
 			if (kind === 'thinking') return 'opacity:1;background:' + GHALO + ';box-shadow:0 0 55px 10px rgba(48,209,88,.55);animation:chiHalo 1.4s ease-in-out infinite;';
@@ -158,7 +170,15 @@
 			this.history.push({ who: 'me', text: text });
 			this._thinking = true; this._sync();
 			var self = this;
-			function done(r) { self._thinking = false; self.history.push({ who: 'chi', text: String(r) }); self._sync(); }
+			// The ask hook may resolve to a plain string OR { reply, needsConfirm } — the latter drives the
+			// inline Confirm/Cancel buttons so the member never has to TYPE "confirm".
+			function done(r) {
+				self._thinking = false;
+				var reply = (r && typeof r === 'object') ? r.reply : r;
+				self._pendingConfirm = !!(r && typeof r === 'object' && r.needsConfirm);
+				self.history.push({ who: 'chi', text: String(reply == null ? '…' : reply) });
+				self._sync();
+			}
 			if (this.ask) { Promise.resolve().then(function () { return self.ask(text, self.history.slice()); }).then(done).catch(function () { done(CANNED[0]); }); }
 			else if (window.claude && window.claude.complete) { window.claude.complete('You are Chi, a concise, warm AI assistant. Reply briefly to: ' + text).then(done).catch(function () { done(CANNED[0]); }); }
 			else { setTimeout(function () { done(CANNED[Math.floor(Math.random() * CANNED.length)]); }, (parseFloat(self.getAttribute('think-seconds')) || 2.4) * 1000); }
@@ -175,6 +195,18 @@
 				d.setAttribute('style', 'align-self:flex-start;display:flex;gap:5px;padding:11px 14px;border-radius:4px 18px 18px 18px;' + this._theme.chi);
 				d.innerHTML = '<i style="width:5px;height:5px;border-radius:50%;background:' + GREEN + ';animation:chiDot 1.2s infinite;display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:' + GREEN + ';animation:chiDot 1.2s .2s infinite;display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:' + GREEN + ';animation:chiDot 1.2s .4s infinite;display:block;"></i>';
 				list.appendChild(d);
+			}
+			// Destructive action parked → offer one-click Confirm / Cancel (no typing "confirm"). Clicking
+			// sends the deterministic confirm/cancel token to the SAME turn engine (server park, 5-min window).
+			if (this._pendingConfirm && !this._thinking) {
+				var cr = document.createElement('div');
+				cr.setAttribute('style', 'align-self:flex-start;display:flex;gap:8px;margin:1px 0 3px;animation:chiMsgIn .3s ease both;');
+				cr.innerHTML =
+					'<button id="cf-yes" style="padding:7px 17px;border-radius:14px;cursor:pointer;font:700 12px inherit;border:none;color:#fff;background:rgba(48,209,88,.92);box-shadow:0 2px 9px rgba(48,209,88,.4);">Confirm</button>' +
+					'<button id="cf-no" style="padding:7px 17px;border-radius:14px;cursor:pointer;font:600 12px inherit;' + this._theme.chip + '">Cancel</button>';
+				list.appendChild(cr);
+				cr.querySelector('#cf-yes').addEventListener('click', function () { self._pendingConfirm = false; self._send('confirm'); });
+				cr.querySelector('#cf-no').addEventListener('click', function () { self._pendingConfirm = false; self._send('cancel'); });
 			}
 			var ch = r.getElementById('chips');
 			if (ch) ch.style.display = this.history.some(function (m) { return m.who === 'me'; }) ? 'none' : '';
@@ -265,7 +297,7 @@
 			/* ---- LISTENING version (realtime voice) ---- */
 			if (this._realtime) {
 				var chipsL = this._actionsList().map(function (a, i) {
-					return '<button data-i="' + i + '" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + a.label.replace(/</g, '&lt;') + '</button>';
+					return '<button data-i="' + i + '" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + String(a.label).replace(/</g, '&lt;') + '</button>';
 				}).join('');
 				var innerL =
 					'<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px 70px;text-align:center;">' +
@@ -282,8 +314,10 @@
 				var win = this.shadowRoot.getElementById('win');
 				if (win) win.addEventListener('click', function (e) { if (e.target.closest('#chips')) return; if (self.onvoiceend) self.onvoiceend(); self.realtime = false; });
 				var chipsElL = this.shadowRoot.getElementById('chips');
-				var actsL = this._actionsList();
-				if (chipsElL) chipsElL.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; e.stopPropagation(); self._send(actsL[+b.dataset.i].command); });
+				// Resolve the command FRESH on click (updateActions may have swapped the list) and route it
+				// through the host's onaction hook when present (desktop → speak it into the live voice call),
+				// falling back to a plain text turn on the web.
+				if (chipsElL) chipsElL.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; e.stopPropagation(); var cmd = (self._actionsList()[+b.dataset.i] || {}).command; if (!cmd) return; if (self.onaction) self.onaction(cmd); else self._send(cmd); });
 				this._wireShell();
 				return;
 			}

@@ -18,7 +18,7 @@ type ChiAction =
 	| { type: 'navigate'; rid: string; name: string; t: string; tmid?: string }
 	| { type: 'route'; path: string; label?: string }
 	| { type: 'search'; term: string };
-type ChiAskResponse = { reply?: string; actions?: ChiAction[] };
+type ChiAskResponse = { reply?: string; actions?: ChiAction[]; needsConfirm?: boolean };
 export type ChiHistory = { who: 'me' | 'chi'; text: string };
 
 function runAction(action: ChiAction): void {
@@ -62,12 +62,13 @@ function currentContext(): { roomName?: string } | undefined {
 	return undefined;
 }
 
-export async function askChi(text: string, history: ChiHistory[] = []): Promise<string> {
+export async function askChi(text: string, history: ChiHistory[] = []): Promise<{ reply: string; needsConfirm: boolean }> {
 	const res = (await (sdk.rest.post as (e: string, p: unknown) => Promise<unknown>)('/v1/chi.ask', {
 		text,
 		history,
 		context: currentContext(),
 	})) as ChiAskResponse;
 	(res.actions ?? []).forEach(runAction);
-	return res.reply || '…';
+	// needsConfirm drives the orb's inline Confirm/Cancel buttons (no typing "confirm").
+	return { reply: res.reply || '…', needsConfirm: Boolean(res.needsConfirm) };
 }

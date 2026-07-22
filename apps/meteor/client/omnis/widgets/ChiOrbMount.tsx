@@ -136,7 +136,7 @@ export const ChiOrbMount = (): ReactElement => {
 	// Create the web component once its bundle is loaded, and wire the Chi adapter.
 	useEffect(() => {
 		let cancelled = false;
-		let el: (HTMLElement & { ask?: (text: string, history: unknown) => Promise<string> }) | undefined;
+		let el: (HTMLElement & { ask?: (text: string, history: unknown) => Promise<{ reply: string; needsConfirm: boolean }> }) | undefined;
 		// Start minimized (76px ensō launcher) the first time, so it's out of the way rather than a
 		// 520px orb covering the app; the widget persists the user's choice from then on.
 		if (localStorage.getItem('chi-orb-min') === null) {
@@ -147,7 +147,7 @@ export const ChiOrbMount = (): ReactElement => {
 				return;
 			}
 			el = document.createElement('chi-orb') as HTMLElement & {
-				ask?: (text: string, history: { who: 'me' | 'chi'; text: string }[]) => Promise<string>;
+				ask?: (text: string, history: { who: 'me' | 'chi'; text: string }[]) => Promise<{ reply: string; needsConfirm: boolean }>;
 			};
 			el.setAttribute('theme', 'dark'); // default; the orb's own theme switcher persists the user's pick
 			el.setAttribute('asset-base', OMNIS_WIDGET_ASSET_BASE);
@@ -155,7 +155,7 @@ export const ChiOrbMount = (): ReactElement => {
 			// desktop app's native Chi window (chi-window.js), which runs realtime + a transparent
 			// background. The web app can't run realtime reliably (browser mic/WebRTC/autoplay), so the
 			// orb here stays chat + dictation only; no `realtime-available`.
-			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<string> => askChi(text, history);
+			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<{ reply: string; needsConfirm: boolean }> => askChi(text, history);
 			// Action chips wired to real capabilities (catch-up / mentions / drafting).
 			const orbApi = el as HTMLElement & { actions?: { label: string; command: string }[] };
 			orbApi.actions = [

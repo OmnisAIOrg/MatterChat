@@ -101,21 +101,111 @@
 	function ask(text, history) {
 		return fetch(API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ text: text, history: history }) })
 			.then(function (res) { return res.json().then(function (d) {
-				if (!res.ok || d.success === false) return (d && d.error) || "I couldn't reach Chi just now.";
-				runActions(d.actions); return d.reply || '…';
+				if (!res.ok || d.success === false) return { reply: (d && d.error) || "I couldn't reach Chi just now.", needsConfirm: false };
+				runActions(d.actions); return { reply: d.reply || '…', needsConfirm: !!d.needsConfirm };
 			}); })
-			.catch(function () { return "I couldn't reach Chi just now — check your connection."; });
+			.catch(function () { return { reply: "I couldn't reach Chi just now — check your connection.", needsConfirm: false }; });
 	}
 
 	// ── Realtime voice (OpenAI Realtime over WebRTC) ───────────────────────────────────────────
 	var rtc = null;
+	var starting = false; // a connect is in flight (~2s). A 2nd tap during it must NOT open a 2nd session
+	                      // (EH lesson: two sessions = two voices answering at once).
 	function orbEl() { return document.querySelector('chi-orb'); }
+
+	// Tool-calling over the data channel (mirrors EvidenceHunt's proven GA loop). The voice model has
+	// two tools (declared server-side at mint): do_it(request) and suggest_actions(actions). do_it
+	// routes ANY actionable request through the SAME chi.ask turn the typed orb uses — so navigation,
+	// summaries, user management, settings and the confirm/park flow all run with the member's own
+	// permissions, and we speak the result back. suggest_actions fills the tappable chips.
+	// `outstanding` = tool calls whose result hasn't been sent yet; the response only continues once ALL
+	// are back (a do_it + suggest_actions emitted together must not let the model speak before do_it's
+	// server turn resolves). Reset per session; every handler guards `rtc.dc === dc` so a dying channel's
+	// late events/replies can't corrupt the next session's state.
+	var rtState = { responseActive: false, pendingContinue: false, callNames: null, outstanding: 0 };
+	function dcSend(dc, obj) { try { if (dc && dc.readyState === 'open') dc.send(JSON.stringify(obj)); } catch (e) { /* noop */ } }
+	// Continue the model's turn once tool results are in — deferred if a response is still active (issuing
+	// response.create then is an API error); the response.done handler + a per-reply watchdog re-fire it.
+	function continueTurn(dc) {
+		if (!rtc || rtc.dc !== dc || rtState.outstanding > 0) return;
+		if (rtState.responseActive) rtState.pendingContinue = true; else dcSend(dc, { type: 'response.create' });
+	}
+	// Inject a typed/tapped request into the LIVE voice conversation (same brain as speech — never forks
+	// to a second model). Guarded like a tool continuation so tapping a chip WHILE Chi is speaking doesn't
+	// fire an unguarded response.create (→ active-response error → dead chip).
+	function sendUserTurn(text) {
+		var t = String(text || '').trim(); if (!t || !rtc || !rtc.dc) return;
+		dcSend(rtc.dc, { type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: t }] } });
+		if (rtState.responseActive) rtState.pendingContinue = true; else dcSend(rtc.dc, { type: 'response.create' });
+	}
+	function wireDataChannel(dc) {
+		dc.addEventListener('message', function (evt) {
+			if (!rtc || rtc.dc !== dc) return; // ignore a superseded channel's late events
+			var e; try { e = JSON.parse(evt.data); } catch (_) { return; }
+			switch (e.type) {
+				case 'response.created': rtState.responseActive = true; break;
+				case 'response.done': {
+					rtState.responseActive = false;
+					var st = (e.response && e.response.status) || 'completed';
+					if (st === 'cancelled') { rtState.pendingContinue = false; break; } // user barged in
+					if (rtState.pendingContinue) { rtState.pendingContinue = false; continueTurn(dc); }
+					break;
+				}
+				// GA's function_call_arguments.done carries no name → build call_id→name from output_item.
+				// Count each function_call once (on .added) so continueTurn waits for every sibling call.
+				case 'response.output_item.added':
+					if (e.item && e.item.type === 'function_call' && e.item.call_id) { if (e.item.name) rtState.callNames.set(e.item.call_id, e.item.name); rtState.outstanding++; }
+					break;
+				case 'response.output_item.done':
+					if (e.item && e.item.type === 'function_call' && e.item.call_id && e.item.name) rtState.callNames.set(e.item.call_id, e.item.name);
+					break;
+				case 'response.function_call_arguments.done': {
+					var name = e.name || (rtState.callNames && rtState.callNames.get(e.call_id || '')) || 'do_it';
+					var args = {}; try { args = JSON.parse(e.arguments || '{}'); } catch (_) { /* noop */ }
+					// Send the tool result, decrement the outstanding count, then continue when all are in.
+					// A 6s watchdog re-fires a lost continuation so a dropped response never leaves dead air.
+					var reply = function (output) {
+						if (!rtc || rtc.dc !== dc) return;
+						dcSend(dc, { type: 'conversation.item.create', item: { type: 'function_call_output', call_id: e.call_id, output: output } });
+						if (rtState.outstanding > 0) rtState.outstanding--;
+						continueTurn(dc);
+						setTimeout(function () { if (rtc && rtc.dc === dc && !rtState.responseActive && rtState.pendingContinue) { rtState.pendingContinue = false; dcSend(dc, { type: 'response.create' }); } }, 6000);
+					};
+					if (name === 'suggest_actions') {
+						var acts = Array.isArray(args.actions) ? args.actions.filter(function (a) { return a && typeof a.label === 'string' && typeof a.command === 'string'; }).slice(0, 3) : [];
+						var orb = orbEl(); if (orb && acts.length && orb.updateActions) orb.updateActions(acts);
+						reply('{"ok":true}'); break;
+					}
+					var request = String(args.request || args.text || '').trim();
+					if (!request) { reply('{"ok":false,"error":"empty request"}'); break; }
+					// do_it → the SAME chi.ask turn the typed orb uses (full permissions + navigation +
+					// confirm/park). ask() always resolves to { reply, needsConfirm } (never rejects), so a result
+					// is always sent back. On a parked destructive action, also surface tappable Confirm/Cancel chips.
+					void (function () {
+						ask(request, []).then(function (r) {
+							if (r && r.needsConfirm) { var o = orbEl(); if (o && o.updateActions) o.updateActions([{ label: 'Confirm', command: 'confirm' }, { label: 'Cancel', command: 'cancel' }]); }
+							reply(JSON.stringify({ ok: true, result: String((r && r.reply) || '').slice(0, 1500), needsConfirm: !!(r && r.needsConfirm) }));
+						}).catch(function (err) { reply(JSON.stringify({ ok: false, error: (err && err.message) || 'failed' })); });
+					})();
+					break;
+				}
+				// A tool result / injected turn that raced a VAD-created response is rejected — queue the
+				// continuation so the in-flight response's `done` re-fires it (else the result is never spoken).
+				case 'error':
+					if (e.error && e.error.code === 'conversation_already_has_active_response') { rtState.pendingContinue = true; }
+					else if (e.error && e.error.message) { toast('Voice: ' + e.error.message, 5000); }
+					break;
+				default: break;
+			}
+		});
+	}
 	function stopVoice() {
 		if (rtc) { try { rtc.pc.close(); } catch (e) { /* noop */ } try { rtc.mic.getTracks().forEach(function (t) { t.stop(); }); } catch (e) { /* noop */ } rtc = null; }
 		var orb = orbEl(); if (orb) orb.realtime = false; // back to the chat version
 	}
 	async function startVoice() {
-		if (rtc) return; // already live
+		if (rtc || starting) return; // already live, or a connect is in flight
+		starting = true;
 		try {
 			toast('Connecting to Chi voice…', 6000);
 			var s = await fetch(RT_API, { method: 'POST', headers: authHeaders(), body: '{}' }).then(function (r) { return r.json(); }).catch(function () { return null; });
@@ -132,11 +222,18 @@
 			var pc = new RTCPeerConnection();
 			var audio = new Audio(); audio.autoplay = true;
 			pc.addEventListener('track', function (e) { audio.srcObject = e.streams[0]; });
+			// Surface a dropped connection instead of freezing silently (EH lesson).
+			pc.addEventListener('connectionstatechange', function () {
+				if (!rtc || rtc.pc !== pc) return; // only the live session
+				if (pc.connectionState === 'failed') { toast('Voice connection lost — tap the mic to reconnect.', 6000); stopVoice(); }
+			});
 			var mic;
 			try { mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
 			catch (e) { toast('Microphone is blocked — allow it in System Settings → Privacy & Security → Microphone, then try again.', 7000); try { pc.close(); } catch (_) { /* noop */ } stopVoice(); return; }
 			mic.getTracks().forEach(function (t) { pc.addTrack(t, mic); });
-			pc.createDataChannel('oai-events');
+			rtState = { responseActive: false, pendingContinue: false, callNames: new Map(), outstanding: 0 };
+			var dc = pc.createDataChannel('oai-events');
+			wireDataChannel(dc);
 			var offer = await pc.createOffer(); await pc.setLocalDescription(offer);
 			// GA WebRTC endpoint (/v1/realtime/calls) — the old /v1/realtime?model=… was the removed beta
 			// flow. Bearer = the ephemeral ek_ secret minted server-side; response text is the SDP answer.
@@ -145,10 +242,11 @@
 			});
 			if (!ans.ok) { toast('Voice connection was refused — try again in a moment.', 5000); try { pc.close(); } catch (e) { /* noop */ } mic.getTracks().forEach(function (t) { t.stop(); }); stopVoice(); return; }
 			await pc.setRemoteDescription({ type: 'answer', sdp: await ans.text() });
-			rtc = { pc: pc, mic: mic };
+			rtc = { pc: pc, mic: mic, dc: dc };
 			var orb = orbEl(); if (orb) { orb.realtime = true; orb.onvoiceend = stopVoice; } // flip to LISTENING now that we're live
 			toast('Listening — just talk. Tap the orb to end.', 2800);
 		} catch (e) { toast('Voice couldn’t start. ' + (e && e.message ? e.message : ''), 5000); stopVoice(); }
+		finally { starting = false; }
 	}
 
 	// ── native-window sizing ────────────────────────────────────────────────────────────────
@@ -167,6 +265,9 @@
 		orb.setAttribute('window-controls', '1');          // grip = the one drag handle; adds close/frame ring controls
 		orb.onvoicestart = startVoice;
 		orb.onvoiceend = stopVoice;
+		// While realtime is live, tapping an action chip speaks that request INTO the voice conversation
+		// (same brain) instead of running a separate silent text turn.
+		orb.onaction = sendUserTurn;
 		orb.ask = ask;
 		orb.actions = [
 			{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
