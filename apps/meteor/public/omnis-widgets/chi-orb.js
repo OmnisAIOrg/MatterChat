@@ -92,6 +92,7 @@
 			this._realtime = false;    // realtime voice takeover
 			this.history = [];
 			this._thinking = false;
+			this._pendingConfirm = false;   // a destructive action is parked server-side awaiting Confirm/Cancel
 			this._min = localStorage.getItem('chi-orb-min') === '1';
 		}
 		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available', 'window-controls']; }
@@ -169,7 +170,15 @@
 			this.history.push({ who: 'me', text: text });
 			this._thinking = true; this._sync();
 			var self = this;
-			function done(r) { self._thinking = false; self.history.push({ who: 'chi', text: String(r) }); self._sync(); }
+			// The ask hook may resolve to a plain string OR { reply, needsConfirm } — the latter drives the
+			// inline Confirm/Cancel buttons so the member never has to TYPE "confirm".
+			function done(r) {
+				self._thinking = false;
+				var reply = (r && typeof r === 'object') ? r.reply : r;
+				self._pendingConfirm = !!(r && typeof r === 'object' && r.needsConfirm);
+				self.history.push({ who: 'chi', text: String(reply == null ? '…' : reply) });
+				self._sync();
+			}
 			if (this.ask) { Promise.resolve().then(function () { return self.ask(text, self.history.slice()); }).then(done).catch(function () { done(CANNED[0]); }); }
 			else if (window.claude && window.claude.complete) { window.claude.complete('You are Chi, a concise, warm AI assistant. Reply briefly to: ' + text).then(done).catch(function () { done(CANNED[0]); }); }
 			else { setTimeout(function () { done(CANNED[Math.floor(Math.random() * CANNED.length)]); }, (parseFloat(self.getAttribute('think-seconds')) || 2.4) * 1000); }
@@ -186,6 +195,18 @@
 				d.setAttribute('style', 'align-self:flex-start;display:flex;gap:5px;padding:11px 14px;border-radius:4px 18px 18px 18px;' + this._theme.chi);
 				d.innerHTML = '<i style="width:5px;height:5px;border-radius:50%;background:' + GREEN + ';animation:chiDot 1.2s infinite;display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:' + GREEN + ';animation:chiDot 1.2s .2s infinite;display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:' + GREEN + ';animation:chiDot 1.2s .4s infinite;display:block;"></i>';
 				list.appendChild(d);
+			}
+			// Destructive action parked → offer one-click Confirm / Cancel (no typing "confirm"). Clicking
+			// sends the deterministic confirm/cancel token to the SAME turn engine (server park, 5-min window).
+			if (this._pendingConfirm && !this._thinking) {
+				var cr = document.createElement('div');
+				cr.setAttribute('style', 'align-self:flex-start;display:flex;gap:8px;margin:1px 0 3px;animation:chiMsgIn .3s ease both;');
+				cr.innerHTML =
+					'<button id="cf-yes" style="padding:7px 17px;border-radius:14px;cursor:pointer;font:700 12px inherit;border:none;color:#fff;background:rgba(48,209,88,.92);box-shadow:0 2px 9px rgba(48,209,88,.4);">Confirm</button>' +
+					'<button id="cf-no" style="padding:7px 17px;border-radius:14px;cursor:pointer;font:600 12px inherit;' + this._theme.chip + '">Cancel</button>';
+				list.appendChild(cr);
+				cr.querySelector('#cf-yes').addEventListener('click', function () { self._pendingConfirm = false; self._send('confirm'); });
+				cr.querySelector('#cf-no').addEventListener('click', function () { self._pendingConfirm = false; self._send('cancel'); });
 			}
 			var ch = r.getElementById('chips');
 			if (ch) ch.style.display = this.history.some(function (m) { return m.who === 'me'; }) ? 'none' : '';

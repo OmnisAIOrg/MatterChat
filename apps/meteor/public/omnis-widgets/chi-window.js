@@ -101,14 +101,16 @@
 	function ask(text, history) {
 		return fetch(API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ text: text, history: history }) })
 			.then(function (res) { return res.json().then(function (d) {
-				if (!res.ok || d.success === false) return (d && d.error) || "I couldn't reach Chi just now.";
-				runActions(d.actions); return d.reply || '…';
+				if (!res.ok || d.success === false) return { reply: (d && d.error) || "I couldn't reach Chi just now.", needsConfirm: false };
+				runActions(d.actions); return { reply: d.reply || '…', needsConfirm: !!d.needsConfirm };
 			}); })
-			.catch(function () { return "I couldn't reach Chi just now — check your connection."; });
+			.catch(function () { return { reply: "I couldn't reach Chi just now — check your connection.", needsConfirm: false }; });
 	}
 
 	// ── Realtime voice (OpenAI Realtime over WebRTC) ───────────────────────────────────────────
 	var rtc = null;
+	var starting = false; // a connect is in flight (~2s). A 2nd tap during it must NOT open a 2nd session
+	                      // (EH lesson: two sessions = two voices answering at once).
 	function orbEl() { return document.querySelector('chi-orb'); }
 
 	// Tool-calling over the data channel (mirrors EvidenceHunt's proven GA loop). The voice model has
@@ -177,10 +179,13 @@
 					var request = String(args.request || args.text || '').trim();
 					if (!request) { reply('{"ok":false,"error":"empty request"}'); break; }
 					// do_it → the SAME chi.ask turn the typed orb uses (full permissions + navigation +
-					// confirm/park). ask() always resolves to a string (never rejects), so a result is always sent back.
+					// confirm/park). ask() always resolves to { reply, needsConfirm } (never rejects), so a result
+					// is always sent back. On a parked destructive action, also surface tappable Confirm/Cancel chips.
 					void (function () {
-						ask(request, []).then(function (r) { reply(JSON.stringify({ ok: true, result: String(r).slice(0, 1500) })); })
-							.catch(function (err) { reply(JSON.stringify({ ok: false, error: (err && err.message) || 'failed' })); });
+						ask(request, []).then(function (r) {
+							if (r && r.needsConfirm) { var o = orbEl(); if (o && o.updateActions) o.updateActions([{ label: 'Confirm', command: 'confirm' }, { label: 'Cancel', command: 'cancel' }]); }
+							reply(JSON.stringify({ ok: true, result: String((r && r.reply) || '').slice(0, 1500), needsConfirm: !!(r && r.needsConfirm) }));
+						}).catch(function (err) { reply(JSON.stringify({ ok: false, error: (err && err.message) || 'failed' })); });
 					})();
 					break;
 				}
@@ -199,7 +204,8 @@
 		var orb = orbEl(); if (orb) orb.realtime = false; // back to the chat version
 	}
 	async function startVoice() {
-		if (rtc) return; // already live
+		if (rtc || starting) return; // already live, or a connect is in flight
+		starting = true;
 		try {
 			toast('Connecting to Chi voice…', 6000);
 			var s = await fetch(RT_API, { method: 'POST', headers: authHeaders(), body: '{}' }).then(function (r) { return r.json(); }).catch(function () { return null; });
@@ -216,6 +222,11 @@
 			var pc = new RTCPeerConnection();
 			var audio = new Audio(); audio.autoplay = true;
 			pc.addEventListener('track', function (e) { audio.srcObject = e.streams[0]; });
+			// Surface a dropped connection instead of freezing silently (EH lesson).
+			pc.addEventListener('connectionstatechange', function () {
+				if (!rtc || rtc.pc !== pc) return; // only the live session
+				if (pc.connectionState === 'failed') { toast('Voice connection lost — tap the mic to reconnect.', 6000); stopVoice(); }
+			});
 			var mic;
 			try { mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
 			catch (e) { toast('Microphone is blocked — allow it in System Settings → Privacy & Security → Microphone, then try again.', 7000); try { pc.close(); } catch (_) { /* noop */ } stopVoice(); return; }
@@ -235,6 +246,7 @@
 			var orb = orbEl(); if (orb) { orb.realtime = true; orb.onvoiceend = stopVoice; } // flip to LISTENING now that we're live
 			toast('Listening — just talk. Tap the orb to end.', 2800);
 		} catch (e) { toast('Voice couldn’t start. ' + (e && e.message ? e.message : ''), 5000); stopVoice(); }
+		finally { starting = false; }
 	}
 
 	// ── native-window sizing ────────────────────────────────────────────────────────────────
