@@ -2,7 +2,7 @@ import { Users } from '@rocket.chat/models';
 
 import { API } from '../api';
 import { runChiOrbTurn } from '../../../../server/lib/chi/admin/service';
-import type { ChiOrbHistory } from '../../../../server/lib/chi/admin/service';
+import type { ChiOrbHistory, ChiOrbContext } from '../../../../server/lib/chi/admin/service';
 import { settings } from '../../../settings/server';
 
 const REALTIME_INSTRUCTIONS =
@@ -23,7 +23,10 @@ API.v1.addRoute(
 	{
 		async post() {
 			// This route is not declared in rest-typings, so `this` types as Operations<never>.
-			const { userId, bodyParams } = this as unknown as { userId: string; bodyParams: { text?: unknown; history?: unknown } };
+			const { userId, bodyParams } = this as unknown as {
+				userId: string;
+				bodyParams: { text?: unknown; history?: unknown; context?: unknown };
+			};
 			const text = typeof bodyParams?.text === 'string' ? bodyParams.text : '';
 			if (!text.trim()) {
 				return API.v1.failure('text is required');
@@ -34,11 +37,23 @@ API.v1.addRoute(
 						.map((h) => ({ who: h.who === 'chi' ? 'chi' : 'me', text: typeof h.text === 'string' ? h.text : '' }))
 						.filter((h) => h.text)
 				: [];
+			// What the user is currently viewing (a room name), so "summarize this" / "here" resolve.
+			const ctxRaw = bodyParams?.context;
+			const context: ChiOrbContext | undefined =
+				ctxRaw && typeof ctxRaw === 'object'
+					? {
+							roomName: typeof (ctxRaw as { roomName?: unknown }).roomName === 'string' ? (ctxRaw as { roomName: string }).roomName : undefined,
+							focusedMessageId:
+								typeof (ctxRaw as { focusedMessageId?: unknown }).focusedMessageId === 'string'
+									? (ctxRaw as { focusedMessageId: string }).focusedMessageId
+									: undefined,
+					  }
+					: undefined;
 			const sender = await Users.findOneById(userId);
 			if (!sender) {
 				return API.v1.failure('user not found');
 			}
-			const result = await runChiOrbTurn(sender, text, history);
+			const result = await runChiOrbTurn(sender, text, history, context);
 			return API.v1.success({ reply: result.reply, actions: result.actions, needsConfirm: result.needsConfirm });
 		},
 	},
