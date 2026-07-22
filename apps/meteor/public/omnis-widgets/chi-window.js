@@ -3,12 +3,20 @@
  * External file (CSP blocks inline). Same origin as the app → shares localStorage, so it reads the
  * RC login token and calls the caller-scoped Chi endpoints directly. Adds a control bar (drag / resize
  * / realtime voice / close), since a popped-out orb needs those — the in-app orb gets them from React.
+ *
+ * The window is frameless + transparent. Critically, when the orb minimizes to its 76px launcher we
+ * shrink the NATIVE window to hug it (96x96) — otherwise the original 460x640 transparent rectangle
+ * lingers as an invisible click-blocker over whatever is behind it. In that puck state the whole thing
+ * is manually draggable (a click still expands; a drag repositions).
  */
 (function () {
 	'use strict';
 	var API = '/api/v1/chi.ask';
 	var RT_API = '/api/v1/chi.realtime-session';
 	var bridge = window.matterchatDesktop || {};
+	var BASE_W = 460, BASE_H = 640, MINI = 96;
+	var scale = 1;
+	var minimized = false;
 
 	function authHeaders() {
 		var token = localStorage.getItem('Meteor.loginToken');
@@ -62,17 +70,55 @@
 	wrap.style.cssText = 'flex:1;width:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;';
 	b.appendChild(wrap);
 
-	// resize the native window (main process owns the actual size)
-	var scale = 1;
-	function applySize(delta) {
+	function fullW() { return Math.round(BASE_W * scale); }
+	function fullH() { return Math.round(BASE_H * scale); }
+	function resizeWindow(w, h) { if (bridge.resizeChiWindow) bridge.resizeChiWindow(w, h); }
+
+	// Minimize/expand: shrink the native window to hug the launcher (kills the invisible click-blocker)
+	// and toggle the control bar. Driven by the orb's `chi-toggle` event so the state stays in sync
+	// whether the user hits the orb's minimize button or its launcher.
+	function setMode(min) {
+		minimized = min;
+		bar.style.display = min ? 'none' : 'flex';
+		resizeWindow(min ? MINI : fullW(), min ? MINI : fullH());
+	}
+	document.addEventListener('chi-toggle', function (e) { setMode(!!(e.detail && e.detail.min)); });
+
+	function applyScale(delta) {
 		scale = Math.max(0.6, Math.min(1.6, scale + delta));
-		if (bridge.resizeChiWindow) bridge.resizeChiWindow(scale);
+		if (!minimized) resizeWindow(fullW(), fullH());
 		var orb = document.querySelector('chi-orb');
 		if (orb) orb.style.transform = 'scale(' + scale + ')';
 	}
-	smaller.addEventListener('click', function () { applySize(-0.15); });
-	bigger.addEventListener('click', function () { applySize(0.15); });
+	smaller.addEventListener('click', function () { applyScale(-0.15); });
+	bigger.addEventListener('click', function () { applyScale(0.15); });
 	closeBtn.addEventListener('click', function () { if (bridge.closeChiWindow) bridge.closeChiWindow(); });
+
+	// ── manual drag of the puck ──────────────────────────────────────────────────────────────
+	// In minimized (96x96) mode the enso launcher owns the click (→ expand), so we can't use
+	// `-webkit-app-region:drag` (it would swallow that click). Instead track the pointer: movement past
+	// a threshold repositions the window via IPC; a pointer-up with no movement falls through as a click
+	// (the orb expands). A drag suppresses the trailing click so it doesn't also expand.
+	var drag = null, justDragged = false;
+	document.addEventListener('pointerdown', function (e) {
+		if (!minimized) return;
+		drag = { x: e.screenX, y: e.screenY, moved: false };
+		try { document.documentElement.setPointerCapture(e.pointerId); drag.id = e.pointerId; } catch (_) {}
+	});
+	document.addEventListener('pointermove', function (e) {
+		if (!drag) return;
+		var dx = e.screenX - drag.x, dy = e.screenY - drag.y;
+		if (!drag.moved && dx * dx + dy * dy < 16) return; // ~4px dead-zone
+		drag.moved = true; drag.x = e.screenX; drag.y = e.screenY;
+		if (bridge.moveChiBy) bridge.moveChiBy(dx, dy);
+	});
+	function endDrag() {
+		if (drag) { if (drag.moved) justDragged = true; if (drag.id != null) { try { document.documentElement.releasePointerCapture(drag.id); } catch (_) {} } }
+		drag = null;
+	}
+	document.addEventListener('pointerup', endDrag);
+	document.addEventListener('pointercancel', endDrag);
+	document.addEventListener('click', function (e) { if (justDragged) { justDragged = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
 	// ── Chi text turn ───────────────────────────────────────────────────────────────────────
 	function runActions(actions) {
@@ -133,11 +179,7 @@
 		];
 		orb.style.cssText = '-webkit-app-region:no-drag;transform-origin:center;';
 		wrap.appendChild(orb);
-		// The orb's own minimize belongs to the in-app version — in a dedicated window use the ✕ bar
-		// button (which brings it back into the app) instead of shrinking to a launcher-in-a-window.
-		setTimeout(function () {
-			try { var mb = orb.shadowRoot.getElementById('minbtn'); if (mb) mb.style.display = 'none'; } catch (e) {}
-		}, 80);
+		setMode(false); // start expanded, window already at full size
 	}
 	mount();
 })();
