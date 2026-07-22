@@ -19,6 +19,11 @@
 	var API = '/api/v1/chi.ask';
 	var RT_API = '/api/v1/chi.realtime-session';
 	var bridge = window.matterchatDesktop || {};
+	var DEFAULT_ACTIONS = [
+		{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
+		{ label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' },
+		{ label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' },
+	];
 
 	// Orb geometry (matches chi-orb.js): a 520px shell + ~14px halo ring, plus a little glow breathing room.
 	var ORB_BOX = 548;   // 520 + 14*2 halo
@@ -137,6 +142,20 @@
 		var t = String(text || '').trim(); if (!t || !rtc || !rtc.dc) return;
 		dcSend(rtc.dc, { type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: t }] } });
 		if (rtState.responseActive) rtState.pendingContinue = true; else dcSend(rtc.dc, { type: 'response.create' });
+	}
+	// Tapping the realtime Confirm/Cancel chip resumes the parked action DETERMINISTICALLY (server-side,
+	// via the same confirm token the chat button uses) — NOT by hoping the voice model re-calls do_it,
+	// which is what left it frozen. The action always runs; then we hand the outcome to the model to speak.
+	function runConfirm(token) {
+		var o = orbEl();
+		ask(token, []).then(function (r) {
+			var text = (r && r.reply) || (token === 'confirm' ? 'Done.' : 'Cancelled.');
+			if (o && o.updateActions) o.updateActions(DEFAULT_ACTIONS); // swap the Confirm/Cancel chips back
+			if (rtc && rtc.dc) {
+				dcSend(rtc.dc, { type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'I tapped ' + (token === 'confirm' ? 'Confirm' : 'Cancel') + '. Result: ' + String(text).slice(0, 500) + '. Tell me briefly what happened.' }] } });
+				if (rtState.responseActive) rtState.pendingContinue = true; else dcSend(rtc.dc, { type: 'response.create' });
+			}
+		});
 	}
 	function wireDataChannel(dc) {
 		dc.addEventListener('message', function (evt) {
@@ -266,14 +285,10 @@
 		orb.onvoicestart = startVoice;
 		orb.onvoiceend = stopVoice;
 		// While realtime is live, tapping an action chip speaks that request INTO the voice conversation
-		// (same brain) instead of running a separate silent text turn.
-		orb.onaction = sendUserTurn;
+		// (same brain). Confirm/Cancel are special-cased to the deterministic park-resume so they never freeze.
+		orb.onaction = function (cmd) { if (cmd === 'confirm' || cmd === 'cancel') { runConfirm(cmd); } else { sendUserTurn(cmd); } };
 		orb.ask = ask;
-		orb.actions = [
-			{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
-			{ label: 'Any mentions?', command: 'Do I have any mentions or unread messages?' },
-			{ label: 'Draft a standup update', command: 'Draft a standup update from my recent activity' },
-		];
+		orb.actions = DEFAULT_ACTIONS;
 		b.appendChild(orb);
 
 		// Relay the orb's control events to the native window.
