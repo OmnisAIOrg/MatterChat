@@ -1,7 +1,9 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { askChi } from './askChi';
+import { installDesktopFocusBridge } from './focusBridge';
 import { loadOmnisWidget, omnisWidgetSrc, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
 
@@ -12,9 +14,9 @@ import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
  */
 type DesktopBridge = {
 	isDesktop?: boolean;
-	popOutChi?: () => void;
+	popOutChi?: () => Promise<unknown>; // ipcRenderer.invoke → thenable (awaited in popOut)
 	closeChiWindow?: () => void;
-	findChiWindow?: () => void; // recenter + front the (possibly lost) native Chi window
+	findChiWindow?: () => Promise<unknown>; // recenter + front the (possibly lost) native Chi window
 	onChiWindowClosed?: (cb: () => void) => void;
 	onNavigate?: (cb: (p: { rid: string; name: string; t: string }) => void) => void;
 	navigateFromOrb?: (p: unknown) => void;
@@ -30,7 +32,24 @@ const desktopBridge = (): DesktopBridge | undefined => (window as unknown as { m
  */
 const POS_KEY = 'chi-orb-pos';
 const POPPED_KEY = 'chi-popped'; // set by the popped-out window (shared localStorage) → no duplicate orb
+const DOCK_KEY = 'chi-desktop-docked'; // '1' = user explicitly brought Chi back INTO the app frame
+const ORB_Z = 2147483000; // above the RC sidebar/rail so a dragged orb is never clipped behind it
 const KEEP_ON_SCREEN = 52; // px of the widget that must stay reachable after a drag
+
+// The single source of truth for "is Chi OUT of the app frame?":
+//   • user explicitly docked it in-app        → false
+//   • the popped-out window is confirmed open  → true
+//   • otherwise, DESKTOP defaults to popped-out (Chi lives in its own window); web defaults to in-app.
+function computePopped(): boolean {
+	if (localStorage.getItem(DOCK_KEY) === '1') {
+		return false;
+	}
+	if (localStorage.getItem(POPPED_KEY) === '1') {
+		return true;
+	}
+	const d = desktopBridge();
+	return Boolean(d?.isDesktop && d.popOutChi);
+}
 
 type Pos = { x: number; y: number };
 
@@ -59,8 +78,9 @@ export const ChiOrbMount = (): ReactElement => {
 	const orbElRef = useRef<HTMLElement | null>(null);
 	const pipWinRef = useRef<Window | null>(null);
 	// Initialize from shared localStorage so a remount/reload while Chi is already popped out never mounts
-	// a duplicate orb — the popped-out window sets this flag and clears it when it closes.
-	const [poppedOut, setPoppedOut] = useState<boolean>(() => localStorage.getItem(POPPED_KEY) === '1');
+	// a duplicate orb. On desktop we ALSO default to popped-out (unless the user docked it) so the in-app
+	// orb never flashes before the auto-pop-out effect opens the native window.
+	const [poppedOut, setPoppedOut] = useState<boolean>(computePopped);
 
 	// Document Picture-in-Picture (browsers) OR the desktop app's native window bridge — either lets
 	// the orb live OUTSIDE the app window.
@@ -70,7 +90,6 @@ export const ChiOrbMount = (): ReactElement => {
 	const clamp = useCallback((x: number, y: number): Pos => {
 		const rect = containerRef.current?.getBoundingClientRect();
 		const w = rect?.width || 200;
-		const h = rect?.height || 200;
 		// Allow the widget to go mostly off-screen, but never past the point where KEEP_ON_SCREEN px stays reachable.
 		return {
 			x: Math.min(Math.max(x, KEEP_ON_SCREEN - w), window.innerWidth - KEEP_ON_SCREEN),
@@ -96,6 +115,7 @@ export const ChiOrbMount = (): ReactElement => {
 		// the in-app orb AFTER the native window actually opens — if popOutChi rejects, keep the orb so Chi
 		// never just vanishes.
 		const d = desktopBridge();
+		localStorage.removeItem(DOCK_KEY); // popping out is the opposite of "docked in-app"
 		if (d?.isDesktop && d.popOutChi) {
 			try {
 				await d.popOutChi();
@@ -120,7 +140,7 @@ export const ChiOrbMount = (): ReactElement => {
 			if (orbAny._min && orbAny._toggle) {
 				orbAny._toggle();
 			}
-			const body = pip.document.body;
+			const { body } = pip.document;
 			body.style.margin = '0';
 			body.style.background = 'transparent';
 			body.style.display = 'flex';
@@ -149,6 +169,12 @@ export const ChiOrbMount = (): ReactElement => {
 	const popOutRef = useRef(popOut);
 	popOutRef.current = popOut;
 
+	// Make a clicked desktop notification actually surface the window it navigates to (Electron ignores the
+	// core onclick's renderer window.focus()).
+	useEffect(() => {
+		installDesktopFocusBridge();
+	}, []);
+
 	// Persist the dragged position.
 	useEffect(() => {
 		if (pos) {
@@ -170,7 +196,10 @@ export const ChiOrbMount = (): ReactElement => {
 				/* ignore */
 			}
 		});
+		// Closing the native window (its × = "bring Chi back into the app") docks it in-app; otherwise the
+		// desktop-default would just re-pop it out on the next reconcile.
 		d.onChiWindowClosed?.(() => {
+			localStorage.setItem(DOCK_KEY, '1');
 			localStorage.removeItem(POPPED_KEY);
 			setPoppedOut(false);
 		});
@@ -180,7 +209,7 @@ export const ChiOrbMount = (): ReactElement => {
 	// refocus (the exact "clicked another org → a second Chi appeared" bug). The popped-out window owns the
 	// 'chi-popped' flag in shared localStorage; re-read it on mount, on refocus, and on storage/visibility.
 	useEffect(() => {
-		const sync = (): void => setPoppedOut(localStorage.getItem(POPPED_KEY) === '1');
+		const sync = (): void => setPoppedOut(computePopped());
 		sync();
 		window.addEventListener('focus', sync);
 		window.addEventListener('storage', sync);
@@ -190,6 +219,20 @@ export const ChiOrbMount = (): ReactElement => {
 			window.removeEventListener('storage', sync);
 			document.removeEventListener('visibilitychange', sync);
 		};
+	}, []);
+
+	// DESKTOP DEFAULT: Chi lives in its OWN floating window, not inside the app frame (the in-app orb is
+	// in the way). On load, if the user hasn't explicitly docked it in-app and it isn't already popped out,
+	// pop it out. Remount/reload is a no-op (POPPED_KEY is already set). Web keeps the draggable in-app orb.
+	useEffect(() => {
+		const d = desktopBridge();
+		if (!d?.isDesktop || !d.popOutChi) {
+			return;
+		}
+		if (localStorage.getItem(DOCK_KEY) === '1' || localStorage.getItem(POPPED_KEY) === '1') {
+			return;
+		}
+		void popOutRef.current();
 	}, []);
 
 	// Create the web component once its bundle is loaded, and wire the Chi adapter + orb events.
@@ -260,7 +303,7 @@ export const ChiOrbMount = (): ReactElement => {
 		top: pos ? pos.y : undefined,
 		right: pos ? undefined : 24,
 		bottom: pos ? undefined : 24,
-		zIndex: 9998,
+		zIndex: ORB_Z,
 		display: 'flex',
 		flexDirection: 'column',
 		alignItems: 'center',
@@ -272,13 +315,15 @@ export const ChiOrbMount = (): ReactElement => {
 	if (poppedOut) {
 		const d = desktopBridge();
 		// FIXED position (bottom-left), independent of where the orb was dragged, so the bring-back / Find
-		// Chi controls always live in the same predictable spot.
-		return (
+		// Chi controls always live in the same predictable spot. Portaled to <body> so it escapes the stock
+		// #main-content z-0 stacking context (otherwise it paints under the z-2 sidebar).
+		return createPortal(
 			<div style={poppedControlsStyle}>
 				<button
 					type='button'
 					title='Bring Chi back into the window'
 					onClick={() => {
+						localStorage.setItem(DOCK_KEY, '1'); // user wants Chi in the app frame now
 						localStorage.removeItem(POPPED_KEY);
 						if (d?.isDesktop) {
 							d.closeChiWindow?.();
@@ -293,7 +338,12 @@ export const ChiOrbMount = (): ReactElement => {
 					Chi is in its own window ▸ bring back
 				</button>
 				{Boolean(d?.isDesktop && d?.findChiWindow) && (
-					<button type='button' title='Find Chi — recenter its window on this screen' onClick={() => d?.findChiWindow?.()} style={findStyle}>
+					<button
+						type='button'
+						title='Find Chi — recenter its window on this screen'
+						onClick={() => d?.findChiWindow?.()}
+						style={findStyle}
+					>
 						<svg width='11' height='11' viewBox='0 0 14 14' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round'>
 							<circle cx='7' cy='7' r='2' />
 							<path d='M7 1v2M7 11v2M1 7h2M11 7h2' />
@@ -302,14 +352,18 @@ export const ChiOrbMount = (): ReactElement => {
 					</button>
 				)}
 				<div ref={hostRef} style={{ display: 'none' }} />
-			</div>
+			</div>,
+			document.body,
 		);
 	}
 
-	return (
+	// Portaled to <body> so a dragged orb escapes the stock #main-content z-0 stacking context and is
+	// never clipped behind the z-2 sidebar (a higher z-index alone cannot escape that context).
+	return createPortal(
 		<div ref={containerRef} style={containerStyle}>
 			<div ref={hostRef} style={{ touchAction: 'none' }} />
-		</div>
+		</div>,
+		document.body,
 	);
 };
 
@@ -317,7 +371,7 @@ const poppedControlsStyle: CSSProperties = {
 	position: 'fixed',
 	left: 16,
 	bottom: 60,
-	zIndex: 9998,
+	zIndex: ORB_Z,
 	display: 'flex',
 	flexDirection: 'column',
 	alignItems: 'flex-start',
