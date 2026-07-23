@@ -29,7 +29,7 @@ import { clearPendingAction, hasPendingAction, parkPendingAction, takePendingAct
 import { isCancelText, isConfirmText } from './helpers';
 import type { ChiTurn, LlmConfig, ToolCall } from './llm';
 import { llmStep } from './llm';
-import { resolveProvider } from './providers';
+import { isLocalProvider, resolveProvider } from './providers';
 import { describeToolCall, findTool, runTool, toolDefs } from './tools';
 import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
 import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
@@ -51,18 +51,21 @@ export function isChiAdminEnabled(): boolean {
 }
 
 function llmConfig(): LlmConfig | undefined {
+	const providerId = String(settings.get('Chi_Assistant_Provider') || '');
 	const apiKey = String(settings.get('Chi_Assistant_API_Key') || '').trim();
-	if (!apiKey) {
+	// Local providers (Ollama / LM Studio / llama.cpp on the workspace host) need no key —
+	// a placeholder bearer keeps the OpenAI-compatible adapter's header well-formed.
+	if (!apiKey && !isLocalProvider(providerId)) {
 		return undefined;
 	}
-	// Provider preset (Anthropic / OpenAI / Cerebras / Groq / OpenRouter / custom) resolves to the
-	// wire family + endpoint + default model; Base URL / Model settings override when set.
+	// Provider preset (Anthropic / OpenAI / … / local / custom) resolves to the wire family +
+	// endpoint + default model; Base URL / Model settings override when set.
 	const { family, baseUrl, model } = resolveProvider(
-		String(settings.get('Chi_Assistant_Provider') || ''),
+		providerId,
 		String(settings.get('Chi_Assistant_Base_URL') || ''),
 		String(settings.get('Chi_Assistant_Model') || ''),
 	);
-	return { provider: family, apiKey, model, baseUrl };
+	return { provider: family, apiKey: apiKey || 'local', model, baseUrl };
 }
 
 /** Shared description of the WORKSPACE capabilities every caller (member or admin) has. */

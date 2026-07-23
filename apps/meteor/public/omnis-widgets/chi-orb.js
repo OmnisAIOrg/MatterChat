@@ -318,6 +318,70 @@
 			return 'opacity:0;background:transparent;box-shadow:none;animation:none;';
 		}
 
+		/* ---- Flow — dictation that speeds up writing (clean-room; inspired by VoiceInk's UX,
+		 * none of its code): tap ⚡ → speak → live transcript → optional AI polish (the same
+		 * ask() brain) → lands in the room composer (host event), a Chi turn, or the clipboard. */
+		_flowStart() {
+			var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR || this._flow) return;
+			var self = this;
+			var panel = this.shadowRoot.getElementById('flowpanel'); if (panel) panel.style.display = 'flex';
+			var liveEl = this.shadowRoot.getElementById('flowlive');
+			this._flow = { rec: null, final: '', stop: false };
+			var begin = function () {
+				var rec = new SR(); self._flow.rec = rec; rec.lang = self.getAttribute('lang') || 'en-US';
+				rec.continuous = true; rec.interimResults = true;
+				rec.onresult = function (e) {
+					var interim = '';
+					for (var i = e.resultIndex; i < e.results.length; i++) { var r0 = e.results[i]; if (r0.isFinal) self._flow.final += r0[0].transcript; else interim += r0[0].transcript; }
+					if (liveEl) { liveEl.textContent = (self._flow.final + interim).trim() || 'Listening…'; liveEl.scrollTop = liveEl.scrollHeight; }
+				};
+				rec.onerror = function (ev) { if (self._flow && (self._flow.stop || !ev || (ev.error !== 'no-speech' && ev.error !== 'aborted'))) self._flow.stop = true; };
+				rec.onend = function () { if (self._flow && !self._flow.stop) { try { rec.start(); return; } catch (e2) { /* noop */ } } };
+				try { rec.start(); } catch (e3) { /* mic denied — leave panel showing the hint */ }
+			};
+			begin();
+			this._tick(1);
+		}
+		_flowCancel() {
+			if (this._flow) { this._flow.stop = true; try { this._flow.rec.stop(); } catch (e) { /* noop */ } this._flow = null; }
+			var panel = this.shadowRoot.getElementById('flowpanel'); if (panel) panel.style.display = 'none';
+			var liveEl = this.shadowRoot.getElementById('flowlive'); if (liveEl) liveEl.textContent = 'Listening…';
+		}
+		_flowFinish() {
+			var self = this;
+			if (!this._flow) return;
+			this._flow.stop = true; try { this._flow.rec.stop(); } catch (e) { /* noop */ }
+			var liveEl = this.shadowRoot.getElementById('flowlive');
+			var raw = ((this._flow.final || '') + '').trim() || (liveEl && liveEl.textContent !== 'Listening…' ? String(liveEl.textContent || '').trim() : '');
+			this._flow = null;
+			if (!raw) { this._flowCancel(); return; }
+			var target = localStorage.getItem('chi-flow-target') || 'composer';
+			var polish = localStorage.getItem('chi-flow-polish') !== '0';
+			var deliver = function (text) {
+				self._flowCancel();
+				if (target === 'chi') { self._send(text); return; }
+				if (target === 'copy') {
+					try { navigator.clipboard.writeText(text); } catch (e) { /* noop */ }
+					var st = self.shadowRoot.getElementById('status'); if (st) { st.textContent = 'COPIED'; setTimeout(function () { self._sync(); }, 1200); }
+					self._pluck();
+					return;
+				}
+				// composer (default): the host inserts into the message box (or relays/copies).
+				self.dispatchEvent(new CustomEvent('chi-flow-insert', { detail: { text: text }, bubbles: true, composed: true }));
+				var st2 = self.shadowRoot.getElementById('status'); if (st2) { st2.textContent = 'SENT TO COMPOSER'; setTimeout(function () { self._sync(); }, 1400); }
+				self._pluck();
+			};
+			if (polish && this.ask) {
+				if (liveEl) liveEl.textContent = 'Polishing…';
+				var prompt = 'Clean up this dictation into well-punctuated, natural text. Keep the meaning and tone, remove filler words and false starts. Reply with ONLY the cleaned text, nothing else:\n\n' + raw;
+				Promise.resolve().then(function () { return self.ask(prompt, []); })
+					.then(function (r2) { var out = (r2 && typeof r2 === 'object') ? r2.reply : r2; deliver(String(out || raw).trim() || raw); })
+					.catch(function () { deliver(raw); });
+			} else {
+				deliver(raw);
+			}
+		}
+
 		/* ---- chat mic (Web Speech dictation) — logic unchanged; do not touch ---- */
 		_mic() {
 			var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return;
@@ -360,8 +424,15 @@
 					self.history.push({ kind: 'notif', sender: target.sender, app: 'Reply', color: target.color, avatar: target.avatar, text: 'Got it — thanks! 👍' });
 					self._sync();
 				};
-				if (this.onreply) { Promise.resolve().then(function () { return self.onreply(target, text); }).catch(function () { /* host owns errors */ }); }
-				else { setTimeout(ack, 1400); }
+				if (this.onreply) {
+					Promise.resolve().then(function () { return self.onreply(target, text); }).then(function () {
+						self.history.push({ kind: 'notif', sender: target.sender, app: 'Sent', color: target.color, avatar: target.avatar, text: 'Reply sent ✓' });
+						self._sync();
+					}).catch(function () {
+						self.history.push({ kind: 'notif', sender: target.sender, app: 'Failed', color: '#e0483d', avatar: '!', text: 'Reply failed — try again.' });
+						self._sync();
+					});
+				} else { setTimeout(ack, 1400); }
 				return;
 			}
 			this.history.push({ who: 'me', text: text });
@@ -1233,6 +1304,20 @@
 				'<div id="msgs" style="flex:1;overflow-y:auto;padding:6px 88px 8px;display:flex;flex-direction:column;gap:8px;min-height:0;-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 10%, #000 88%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 10%, #000 88%, transparent 100%);"></div>' +
 				'<div id="chips" style="flex-shrink:0;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:2px 92px 8px;">' + chips + '</div>' +
 				'<div style="flex-shrink:0;padding:6px 96px 44px;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
+					'<div id="flowpanel" style="display:none;width:100%;margin-bottom:6px;flex-direction:column;gap:7px;padding:9px 11px;border-radius:14px;animation:chiMsgIn .3s ease both;' + (t.card || t.chi) + '">' +
+						'<div style="display:flex;align-items:center;gap:7px;"><span style="width:7px;height:7px;border-radius:50%;background:#ff453a;animation:chiHalo 1.2s ease-in-out infinite;"></span><span style="font-size:10px;font-weight:800;letter-spacing:1.4px;">FLOW</span><span style="font-size:10px;opacity:.55;">dictate — it lands where you pick</span></div>' +
+						'<div id="flowlive" style="max-height:64px;overflow-y:auto;font-size:12.5px;line-height:1.45;opacity:.92;">Listening…</div>' +
+						'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+							['composer|Composer', 'chi|Ask Chi', 'copy|Copy'].map(function (o) {
+								var k2 = o.split('|')[0], lb = o.split('|')[1];
+								var selT = (localStorage.getItem('chi-flow-target') || 'composer') === k2;
+								return '<span class="flowt" data-ft="' + k2 + '" style="padding:3px 11px;border-radius:11px;cursor:pointer;font-size:10.5px;font-weight:700;border:1px solid ' + (selT ? 'rgba(48,209,88,.5)' : 'rgba(128,128,128,.3)') + ';background:' + (selT ? 'rgba(48,209,88,.18)' : 'transparent') + ';color:' + (selT ? GREEN : 'inherit') + ';">' + lb + '</span>';
+							}).join('') +
+							'<span class="flowt" id="flowpolish" style="margin-left:auto;padding:3px 11px;border-radius:11px;cursor:pointer;font-size:10.5px;font-weight:700;border:1px solid ' + (localStorage.getItem('chi-flow-polish') !== '0' ? 'rgba(59,155,255,.5)' : 'rgba(128,128,128,.3)') + ';background:' + (localStorage.getItem('chi-flow-polish') !== '0' ? 'rgba(59,155,255,.16)' : 'transparent') + ';color:' + (localStorage.getItem('chi-flow-polish') !== '0' ? '#8fc2ff' : 'inherit') + ';">✨ Polish</span>' +
+							'<span id="flowgo" style="padding:4px 14px;border-radius:11px;cursor:pointer;font-size:10.5px;font-weight:800;background:rgba(48,209,88,.9);color:#fff;box-shadow:0 2px 8px rgba(48,209,88,.4);">Done</span>' +
+							'<span id="flowcancel" style="padding:4px 10px;border-radius:11px;cursor:pointer;font-size:10.5px;font-weight:600;opacity:.65;">Cancel</span>' +
+						'</div>' +
+					'</div>' +
 					'<div id="replybar" style="display:none;width:100%;margin-bottom:6px;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-radius:13px;animation:chiMsgIn .3s ease both;' + t.chi + '">' +
 						'<svg width="12" height="12" viewBox="0 0 12 12" style="opacity:.7;flex-shrink:0;"><path d="M5 2 L2 5 L5 8 M2.5 5 H8 a2 2 0 0 1 2 2 v2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
 						'<span id="replyname" style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>' +
@@ -1241,6 +1326,7 @@
 					'</div>' +
 					'<div id="inputpill" style="width:100%;height:44px;border-radius:22px;display:flex;align-items:center;gap:6px;padding:0 6px 0 16px;transition:border-color .2s, box-shadow .2s;' + t.input + '">' +
 						'<input id="in" placeholder="Ask Chi anything…" style="flex:1;font-size:13px;color:' + t.inputText + ';font-family:inherit;">' +
+						'<div id="flowbtn" class="ctl" title="Flow — dictate anything, fast" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;color:' + t.dim + ';"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 10.5 c1 0 1 -2.4 2 -2.4 s1 3.6 2 3.6 1.2 -5 2.2 -5"/><path d="M10.2 12.6 L14 8.8 a1.1 1.1 0 0 0 -1.6 -1.6 L8.6 11 8.2 13 Z" stroke-linejoin="round"/></svg></div>' +
 						(this._hasRealtime() ? '<div id="voicebtn" class="ctl" title="Talk to Chi (realtime)" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;color:' + t.dim + ';"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8v0M5.5 5.5v5M8 3v10M10.5 5.5v5M13 8v0"/></svg></div>' : '') +
 						'<div id="micbtn" class="ctl" title="Dictate" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;color:' + t.dim + ';"><svg width="14" height="14" viewBox="0 0 16 16"><rect x="6" y="1.5" width="4" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 7.5 c0 2.5 2 4.5 4.5 4.5 s4.5 -2 4.5 -4.5 M8 12 v2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>' +
 						'<div id="sendbtn" title="Send" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(48,209,88,.9);color:#fff;box-shadow:0 2px 8px rgba(48,209,88,.4);"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 13 V3 M4 7 L8 3 L12 7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
@@ -1259,6 +1345,30 @@
 			if (SR) mic.addEventListener('click', function () { self._mic(); }); else mic.style.display = 'none';
 			var rm = this.shadowRoot.getElementById('replymic');
 			if (rm) { if (SR) rm.addEventListener('click', function () { self._mic(); }); else rm.style.display = 'none'; }
+			var fb = this.shadowRoot.getElementById('flowbtn');
+			if (fb) { if (SR) fb.addEventListener('click', function () { if (self._flow) self._flowFinish(); else self._flowStart(); }); else fb.style.display = 'none'; }
+			var fgo = this.shadowRoot.getElementById('flowgo'); if (fgo) fgo.addEventListener('click', function () { self._flowFinish(); });
+			var fca = this.shadowRoot.getElementById('flowcancel'); if (fca) fca.addEventListener('click', function () { self._flowCancel(); });
+			var fpanel = this.shadowRoot.getElementById('flowpanel');
+			if (fpanel) fpanel.addEventListener('click', function (e) {
+				var ft = e.target.closest('.flowt'); if (!ft) return;
+				if (ft.id === 'flowpolish') {
+					var wasP = localStorage.getItem('chi-flow-polish') !== '0';
+					localStorage.setItem('chi-flow-polish', wasP ? '0' : '1');
+					ft.style.border = '1px solid ' + (!wasP ? 'rgba(59,155,255,.5)' : 'rgba(128,128,128,.3)');
+					ft.style.background = !wasP ? 'rgba(59,155,255,.16)' : 'transparent';
+					ft.style.color = !wasP ? '#8fc2ff' : 'inherit';
+					return;
+				}
+				var k3 = ft.getAttribute('data-ft'); if (!k3) return;
+				localStorage.setItem('chi-flow-target', k3);
+				fpanel.querySelectorAll('.flowt[data-ft]').forEach(function (o2) {
+					var selT = o2.getAttribute('data-ft') === k3;
+					o2.style.border = '1px solid ' + (selT ? 'rgba(48,209,88,.5)' : 'rgba(128,128,128,.3)');
+					o2.style.background = selT ? 'rgba(48,209,88,.18)' : 'transparent';
+					o2.style.color = selT ? GREEN : 'inherit';
+				});
+			});
 			var vb = this.shadowRoot.getElementById('voicebtn');
 			if (vb) vb.addEventListener('click', function () { if (self.onvoicestart) self.onvoicestart(); }); // host flips realtime=true on connect
 			var chipsEl = this.shadowRoot.getElementById('chips'), acts = this._actionsList();

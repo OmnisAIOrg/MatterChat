@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { askChi } from './askChi';
+import { insertIntoComposer, sendChiReply } from './chiNotifications';
 import { installDesktopFocusBridge } from './focusBridge';
 import { loadOmnisWidget, omnisWidgetSrc, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
@@ -170,6 +171,34 @@ export const ChiOrbMount = (): ReactElement => {
 		installDesktopFocusBridge();
 	}, []);
 
+	// Relays FROM the popped-out desktop Chi window (separate window, shared localStorage):
+	//  · chi-flow-relay — Flow-dictated text destined for the room composer over here.
+	//  · chi-reply-relay — a notification reply typed in the popout; post it as the member.
+	useEffect(() => {
+		const onStorage = (e: StorageEvent): void => {
+			if (!e.newValue) {
+				return;
+			}
+			try {
+				if (e.key === 'chi-flow-relay') {
+					const { text } = JSON.parse(e.newValue) as { text?: string };
+					if (text && !insertIntoComposer(text)) {
+						void navigator.clipboard?.writeText(text);
+					}
+				} else if (e.key === 'chi-reply-relay') {
+					const { rid, text } = JSON.parse(e.newValue) as { rid?: string; text?: string };
+					if (rid && text) {
+						void sendChiReply({ data: { rid } }, text);
+					}
+				}
+			} catch {
+				/* malformed relay — ignore */
+			}
+		};
+		window.addEventListener('storage', onStorage);
+		return () => window.removeEventListener('storage', onStorage);
+	}, []);
+
 	// Persist the dragged position.
 	useEffect(() => {
 		if (pos) {
@@ -287,6 +316,16 @@ export const ChiOrbMount = (): ReactElement => {
 			}
 			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<{ reply: string; needsConfirm: boolean }> =>
 				askChi(text, history);
+			// Notification-card replies post straight back to the source room, as the member.
+			(el as HTMLElement & { onreply?: (t: { data?: { rid?: string } }, text: string) => Promise<void> }).onreply = (target, text) =>
+				sendChiReply(target, text);
+			// Flow dictation → the room composer (clipboard is the orb's own fallback).
+			el.addEventListener('chi-flow-insert', ((ev: Event): void => {
+				const text = (ev as CustomEvent<{ text: string }>).detail?.text;
+				if (text && !insertIntoComposer(text)) {
+					void navigator.clipboard?.writeText(text);
+				}
+			}) as EventListener);
 			// Action chips wired to real capabilities (catch-up / mentions / drafting).
 			const orbApi = el as HTMLElement & { actions?: { label: string; command: string }[] };
 			orbApi.actions = [

@@ -170,6 +170,16 @@
 			if (!rtc || rtc.dc !== dc) return; // ignore a superseded channel's late events
 			var e; try { e = JSON.parse(evt.data); } catch (_) { return; }
 			switch (e.type) {
+				// Live captions — feed the transcripts the session already emits to the orb's caption
+				// ribbon (blue = the member, green = Chi). Purely visual; no session behavior changes.
+				case 'conversation.item.input_audio_transcription.completed': {
+					var oCap = orbEl(); if (oCap && oCap.caption && e.transcript) oCap.caption('me', e.transcript);
+					break;
+				}
+				case 'response.output_audio_transcript.done': {
+					var oCap2 = orbEl(); if (oCap2 && oCap2.caption && e.transcript) oCap2.caption('chi', e.transcript);
+					break;
+				}
 				case 'response.created': rtState.responseActive = true; break;
 				case 'response.done': {
 					rtState.responseActive = false;
@@ -307,6 +317,42 @@
 		orb.addEventListener('chi-frame', function () { setFrame(!frameShown); });
 
 		setMode(minimized); // size the window to the orb's current state on open
+
+		// ── main-window bridge (shared localStorage; storage events fire cross-window) ──
+		// IN:  chi-notif-relay — a routed notification card from the app window → show it here.
+		// OUT: chi-reply-relay — a reply typed on a card here → the app window posts it (it has
+		//      the live SDK session); we ALSO post directly over REST as a belt-and-suspenders
+		//      (whichever lands first wins server-side idempotency by message id is not needed —
+		//      only REST posts; the relay is the fallback when REST fails).
+		window.addEventListener('storage', function (ev) {
+			if (ev.key !== 'chi-notif-relay' || !ev.newValue) return;
+			try {
+				var relay = JSON.parse(ev.newValue);
+				if (relay && relay.card && orb.notify) orb.notify(relay.card);
+			} catch (e) { /* malformed relay — ignore */ }
+		});
+		orb.onreply = function (target, text) {
+			var rid = target && target.data && target.data.rid;
+			if (!rid) return Promise.reject(new Error('missing room'));
+			return fetch('/api/v1/chat.postMessage', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ roomId: rid, text: text }) })
+				.then(function (res) { return res.json(); })
+				.then(function (d) {
+					if (!d || d.success === false) {
+						// REST refused → relay to the main window's live session as the fallback.
+						try { localStorage.setItem('chi-reply-relay', JSON.stringify({ ts: Date.now(), rid: rid, text: text })); } catch (e) { /* noop */ }
+						throw new Error('rest failed');
+					}
+				});
+		};
+		// Flow dictation finished here → the composer lives in the MAIN window; relay the text
+		// (and copy it locally so it's never lost even if the app window is gone).
+		orb.addEventListener('chi-flow-insert', function (ev) {
+			var text = ev && ev.detail && ev.detail.text;
+			if (!text) return;
+			try { navigator.clipboard.writeText(text); } catch (e) { /* noop */ }
+			try { localStorage.setItem('chi-flow-relay', JSON.stringify({ ts: Date.now(), text: text })); } catch (e) { /* noop */ }
+			toast('Dropped into the app composer — and copied, just in case.', 3200);
+		});
 	}
 	mount();
 })();
