@@ -214,6 +214,35 @@
 		{ name: 'Whisper Large v3 Turbo', size: '1.5 GB', speed: 7.5, acc: 9.4, note: 'Near-max accuracy, fast' },
 		{ name: 'Large v3 Turbo (Quantized)', size: '547 MB', speed: 7.5, acc: 9.4, note: 'Smaller, same accuracy' },
 	];
+	// The in-product feature ledger (Settings → What's new). Mirrors docs/CHI-ASSISTANT.md.
+	var WHATSNEW = [
+		{ label: 'This build — live', items: [
+			'Nest dial redesign · full color editor · 4 themes',
+			'3D drum scrolling with detent ticks + sounds',
+			'Notifications in Chi — cards, reply, banner mode',
+			'Focus timer + catch-up digest',
+			'Hover peek · presence glow · unseen badge',
+			'Flow dictation (⌘⇧F) — dictate anywhere, AI polish',
+			'Workspace transcription — server-held keys, secure',
+			'Dictionary replacements + vocabulary',
+			'Transcription History + words counter',
+			'Live captions during realtime voice',
+			'Language models — cloud + local (Ollama, LM Studio)',
+			'Product connectors (MCP) with signed identity',
+			'Per-user prefs synced to the server',
+			'⌘⇧C summon · drop-anything-on-Chi',
+		] },
+		{ label: 'Coming next', items: [
+			'On-device speech models (Parakeet, Whisper) — downloads',
+			'More speech providers (Deepgram, ElevenLabs, …)',
+			'Connectors: DepoLink, OmnisProof, MedChron, AutoDoc, LitDraft',
+			'Omnis OAuth — one identity across every product',
+			'Email: Outlook + Gmail',
+			'Computer control · files & documents · automations',
+			'Memory, daily briefing, wake word “Hey Chi”',
+			'Per-app dictation modes + custom shortcuts',
+		] },
+	];
 	var CANNED = ["Here's what I found — want me to go deeper?", 'Done. Anything else on your mind?', 'Good question. Short answer: yes — and I can show you why.', "I've drafted that for you. Want it posted to the channel?"];
 	var RIPPLE = 'radial-gradient(circle at 50% 50%, rgba(120,185,255,0) 15%, rgba(130,195,255,.2) 20%, rgba(125,192,255,.42) 25%, rgba(110,190,255,.95) 27%, #ffffff 29.5%, #ffffff 31.5%, rgba(130,200,255,.9) 34%, rgba(90,170,255,0) 38%)';
 	var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1105,7 +1134,7 @@
 					'<span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;">' + icon + label + '</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span></div>';
 			};
 			var body = '';
-			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections', stt: 'Transcription', dict: 'Dictionary', modes: 'Modes', history: 'History', audio: 'Audio' };
+			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections', stt: 'Transcription', dict: 'Dictionary', modes: 'Modes', history: 'History', audio: 'Audio', whatsnew: 'What’s new' };
 			if (panel === 'main') {
 				body =
 					row('<span style="font-size:12px;opacity:.85;">Size</span>' +
@@ -1133,6 +1162,7 @@
 					nav('Modes', 'modes', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="5" height="5" rx="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.4"/></svg>') +
 					nav('History', 'history', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.5 V8 l2.4 1.6"/></svg>') +
 					nav('Audio', 'audio', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="1.8" width="4" height="7.6" rx="2"/><path d="M3.8 7.6 c0 2.4 1.9 4.3 4.2 4.3 s4.2 -1.9 4.2 -4.3 M8 11.9 v2.3"/></svg>') +
+					nav('What’s new', 'whatsnew', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 1.8 l1.5 3.6 3.9 .3 -3 2.6 .9 3.8 L8 10.2 4.7 12.1 5.6 8.3 2.6 5.7 6.5 5.4 Z"/></svg>') +
 					nav('Capabilities', 'caps', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1.8 L9.8 5.6 14 6.2 11 9.1 11.7 13.3 8 11.3 4.3 13.3 5 9.1 2 6.2 6.2 5.6 Z" stroke-linejoin="round"/></svg>') +
 					nav('Connections', 'connections', '<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="4.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 7 L9.6 4.8 M6.4 9 L9.6 11.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>') +
 					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
@@ -1266,6 +1296,17 @@
 					'<div data-drum-base="" style="margin:4px 2px 8px;font-size:10px;opacity:.45;">Built-in browser speech always uses the system default mic.</div>' +
 					'<div data-drum-base="" style="margin:10px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Recording sounds</div>' +
 					'<div class="srow" data-drum-base="" data-tkey="chi-rec-sounds" data-tdef="1" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);"><span style="font-size:12px;opacity:.85;">Start / stop chirps</span>' + sw(localStorage.getItem('chi-rec-sounds') !== '0') + '</div>';
+			} else if (panel === 'whatsnew') {
+				body = WHATSNEW.map(function (g) {
+					var live = g.label.indexOf('live') !== -1;
+					return '<div data-drum-base="" style="display:flex;align-items:center;gap:8px;margin:10px 2px 2px;"><span style="font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">' + g.label + '</span>' + badge('SOON', live) + '</div>' +
+						g.items.map(function (it2) {
+							return '<div data-drum-base="" style="display:flex;align-items:flex-start;gap:8px;padding:6px 2px;border-bottom:1px solid rgba(128,128,128,.10);">' +
+								'<span style="margin-top:5px;width:5px;height:5px;border-radius:50%;flex-shrink:0;background:' + (live ? GREEN : 'rgba(128,128,128,.5)') + ';"></span>' +
+								'<span style="font-size:12px;line-height:1.45;opacity:' + (live ? '.9' : '.6') + ';">' + it2 + '</span></div>';
+						}).join('');
+				}).join('') +
+					'<div data-drum-base="" style="margin:12px 2px;font-size:10px;opacity:.45;">Full inventory &amp; roadmap: docs/CHI-ASSISTANT.md in the MatterChat repo.</div>';
 			} else {
 				body = CONNECTIONS.map(function (g) {
 					var head = '<div data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 2px;">' +
