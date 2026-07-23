@@ -164,8 +164,15 @@
 		get _theme() { return THEMES[this._themeKey] || THEMES.dark; }
 		get _base() { return this.getAttribute('asset-base') || 'enso-assets/'; }
 		get _scale() { var s = parseFloat(localStorage.getItem('chi-orb-scale')); return s >= 0.7 && s <= 1.5 ? s : 1; }
-		get _frameKey() { var f = localStorage.getItem('chi-orb-frame'); return FRAMES[f] ? f : 'steel'; }
-		get _frame() { return FRAMES[this._frameKey]; }
+		get _frameKey() { var f = localStorage.getItem('chi-orb-frame'); return f === 'custom' || FRAMES[f] ? f : 'steel'; }
+		get _frameHue() { var h = parseFloat(localStorage.getItem('chi-orb-frame-hue')); return h >= 0 && h <= 360 ? h : 145; }
+		get _frame() {
+			if (this._frameKey === 'custom') {
+				var h = this._frameHue;
+				return { tint: 'hsl(' + h + ', 72%, 52%)', swatch: 'linear-gradient(135deg, hsl(' + h + ', 78%, 74%) 0%, hsl(' + h + ', 70%, 38%) 100%)', name: 'Custom' };
+			}
+			return FRAMES[this._frameKey];
+		}
 		_resize(d) { localStorage.setItem('chi-orb-scale', Math.max(0.7, Math.min(1.5, this._scale + d)).toFixed(2)); this.dispatchEvent(new CustomEvent('chi-resize', { detail: { scale: this._scale }, bubbles: true, composed: true })); this._render(); }
 		_cycleTheme() { var i = THEME_ORDER.indexOf(this._themeKey); localStorage.setItem('chi-orb-theme', THEME_ORDER[(i + 1) % THEME_ORDER.length]); this._render(); }
 		_cycleFrame() { var i = FRAME_ORDER.indexOf(this._frameKey); localStorage.setItem('chi-orb-frame', FRAME_ORDER[(i + 1) % FRAME_ORDER.length]); this._render(); }
@@ -290,17 +297,20 @@
 		}
 
 		/* ---- Nest 3D drum scrolling ------------------------------------------------------------
-		 * Rows on a rotating cylinder: as a row approaches the top/bottom rim it tilts away
-		 * (rotateX), recedes (translateZ) and dims — like reading engravings on the Nest wheel.
-		 * `strength` scales the effect (chat is subtler than settings). Skipped under
-		 * prefers-reduced-motion. Re-applied on scroll (rAF-throttled) and after any repaint. */
+		 * Rows ride a real cylinder: true angular projection (rotateX + cos-recession +
+		 * inward pull), a whisper of motion blur and dimming at the rims, a short linear
+		 * transform transition for that damped machined-inertia feel, snap detents — and a
+		 * mechanical TICK each time a new row crosses the center line while the user scrolls
+		 * (Sounds toggle in settings; skipped under prefers-reduced-motion). `strength`
+		 * scales the geometry (chat is subtler than settings). */
 		_drumify(el, strength) {
 			if (!el || el._drum) return;
-			el._drum = { k: strength == null ? 1 : strength, raf: 0 };
+			el._drum = { k: strength == null ? 1 : strength, raf: 0, idx: -1, scrolling: 0 };
 			var self = this;
-			el.style.perspective = '900px';
+			el.style.perspective = '820px';
 			el.style.perspectiveOrigin = '50% 50%';
 			el.addEventListener('scroll', function () {
+				el._drum.scrolling = Date.now(); // ticks only fire for user-driven motion, not re-renders
 				if (el._drum.raf) return;
 				el._drum.raf = requestAnimationFrame(function () { el._drum.raf = 0; self._drumApply(el); });
 			}, { passive: true });
@@ -312,34 +322,88 @@
 			var rect = el.getBoundingClientRect();
 			var mid = rect.top + rect.height / 2;
 			var half = rect.height / 2 || 1;
+			var nearest = -1, nearestDist = 1e9;
 			for (var i = 0; i < el.children.length; i++) {
 				var c = el.children[i];
 				var cr = c.getBoundingClientRect();
 				var off = (cr.top + cr.height / 2 - mid) / half; // -1 (top rim) … 0 (center) … 1 (bottom rim)
-				if (off < -1.25 || off > 1.25) { c.style.visibility = 'hidden'; continue; }
+				if (off < -1.3 || off > 1.3) { c.style.visibility = 'hidden'; continue; }
 				c.style.visibility = '';
 				var t = Math.max(-1, Math.min(1, off));
-				var rot = -t * 34 * k;                       // tilt away toward the rim
-				var z = -Math.abs(t) * 60 * k;               // recede into the drum
-				var sc = 1 - Math.abs(t) * 0.06 * k;         // slight shrink at the rim
+				var a = Math.abs(t);
+				if (a < nearestDist) { nearestDist = a; nearest = i; }
+				var th = t * (Math.PI / 2) * 0.82;                    // row's angle on the cylinder
+				var rot = (-th * 180 / Math.PI) * k;                  // tilt away toward the rim
+				var z = -(1 - Math.cos(th)) * 112 * k;                // true cos-recession into the drum
+				var ty = -Math.sin(th) * a * 6 * k;                   // gentle wrap pull (small — rows must never collide)
+				var sc = 1 - a * a * 0.06 * k;                        // gentle ease-squared shrink
+				if (!c._drumInit) {                                    // damped, machined follow — set once
+					c._drumInit = 1;
+					c.style.willChange = 'transform, opacity, filter';
+					c.style.transition = 'transform .09s linear, opacity .14s linear, filter .14s linear';
+				}
 				var base = c.getAttribute('data-drum-base') || '';
-				c.style.transform = base + ' rotateX(' + rot.toFixed(2) + 'deg) translateZ(' + z.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')';
-				c.style.opacity = String(1 - Math.abs(t) * 0.45 * k);
+				c.style.transform = base + ' rotateX(' + rot.toFixed(2) + 'deg) translateZ(' + z.toFixed(1) + 'px) translateY(' + ty.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')';
+				// rim rows dissolve BEFORE they can visually stack — steeper opacity curve than the tilt
+				c.style.opacity = String(Math.max(0, 1 - a * a * 0.72 * k).toFixed(3));
+				// rim treatment: a whisper of blur + darkening, center row gets a subtle lift
+				c.style.filter = a > 0.48 ? 'blur(' + ((a - 0.48) * 2.6 * k).toFixed(2) + 'px) brightness(' + (1 - (a - 0.48) * 0.5 * k).toFixed(3) + ')' : (a < 0.18 ? 'brightness(1.06)' : '');
+			}
+			// Detent tick: a new row crossed the center while the user was actually scrolling.
+			if (nearest !== -1 && nearest !== el._drum.idx) {
+				var was = el._drum.idx;
+				el._drum.idx = nearest;
+				if (was !== -1 && Date.now() - el._drum.scrolling < 140) this._tick();
 			}
 		}
+		/* Mechanical detent click — synthesized (no asset): a tight filtered snap + a low wooden
+		 * body, ~45 ms total. Rate-limited so a fast spin sounds like a dial, not a machine gun.
+		 * Gated by the Sounds toggle (localStorage chi-orb-sound, default ON). */
+		_tick(loud) {
+			if (localStorage.getItem('chi-orb-sound') === '0') return;
+			var now = Date.now();
+			if (!loud && this._lastTick && now - this._lastTick < 38) return;
+			this._lastTick = now;
+			try {
+				var C = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
+				if (C.state === 'suspended') C.resume();
+				var t0 = C.currentTime;
+				var o = C.createOscillator(); o.type = 'square'; o.frequency.value = 2150;
+				var f = C.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1850; f.Q.value = 1.4;
+				var g = C.createGain(); g.gain.setValueAtTime(loud ? 0.10 : 0.05, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.032);
+				o.connect(f); f.connect(g); g.connect(C.destination); o.start(t0); o.stop(t0 + 0.04);
+				var o2 = C.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(620, t0); o2.frequency.exponentialRampToValueAtTime(360, t0 + 0.045);
+				var g2 = C.createGain(); g2.gain.setValueAtTime(loud ? 0.055 : 0.024, t0); g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+				o2.connect(g2); g2.connect(C.destination); o2.start(t0); o2.stop(t0 + 0.06);
+			} catch (e) { /* audio unavailable — stay silent */ }
+		}
 
-		/* ---- the machined stainless shell (shared by both versions) ---- */
+		/* ---- the machined stainless shell (shared by both versions) ----
+		 * Control philosophy (founder direction): the metal stays CLEAN. The only on-face controls
+		 * are a small arc under the grip — [window-frame] · [settings ⚙] · [×] — everything else
+		 * (theme, size, frame finish, pop-out, collapse) lives INSIDE the settings panel. Dictation
+		 * and realtime voice stay on the input pill. × = close window (desktop) / collapse (web). */
 		_shell(innerHTML) {
 			var t = this._theme, f = this._frame, haloBase = 'position:absolute;inset:-14px;border-radius:50%;pointer-events:none;transition:opacity .45s;';
 			// Nest-style stainless: long-throw conic brushed steel + fine knurl + tint + specular sweep.
 			var steel = 'conic-gradient(from 200deg, #e8eaec, #9aa0a6 8%, #caced3 16%, #6f757c 27%, #b7bcc2 38%, #f2f4f6 50%, #a3a9af 60%, #d5d9dd 72%, #767c83 84%, #cfd3d7 93%, #e8eaec)';
 			var ringMask = '-webkit-mask:radial-gradient(circle, transparent 60%, black 61%);mask:radial-gradient(circle, transparent 60%, black 61%);';
-			var ctrl = function (id, title, top, right, left, svg) {
-				return '<div id="' + id + '" class="ctl" title="' + title + '" style="position:absolute;top:' + top + 'px;' + (right != null ? 'right:' + right + 'px;' : 'left:' + left + 'px;') + 'z-index:7;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;' + t.ctrl + '">' + svg + '</div>';
+			var winCtrl = this._hasWinCtrl();
+			// The top arc: buttons follow the glass curvature (outer buttons sit lower). Bare glyphs,
+			// no chrome — they read as etched into the glass.
+			var arcBtn = function (id, title, ty, svg) {
+				return '<div id="' + id + '" class="arcb" title="' + title + '" style="transform:translateY(' + ty + 'px);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:' + t.dim + ';">' + svg + '</div>';
 			};
-			var winCtrl = this._hasWinCtrl(), popout = this._hasPopout();
-			var topLeftTaken = winCtrl || popout; // close (desktop) or pop-out (in-app) sits in the top-left slot; theme drops below it
-			var settingsTop = winCtrl ? 176 : (topLeftTaken ? 142 : 108); // next free slot in the left cluster
+			var gearSvg = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" stroke-linecap="round"/></svg>';
+			var frameSvg = '<svg width="14" height="14" viewBox="0 0 16 16"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.4 2"/></svg>';
+			var xSvg = '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+			var arc = '<div id="arc" style="flex-shrink:0;position:relative;z-index:7;display:flex;align-items:flex-start;justify-content:center;gap:15px;padding-top:14px;">' +
+				(winCtrl ? arcBtn('framebtn', 'Show the window frame / resize', 7, frameSvg) : '') +
+				arcBtn('settingsbtn', 'Chi settings', 0, gearSvg) +
+				(winCtrl
+					? arcBtn('closebtn', 'Bring Chi back into the app', 7, xSvg)
+					: arcBtn('minbtn', 'Collapse to the ensō', 7, xSvg)) +
+			'</div>';
 			return '' +
 				// In desktop window mode the window is sized to hug the orb and scaling is centered (50% 50%);
 				// on the web the orb scales up from its base (50% 100%) so it grows without shifting off-anchor.
@@ -349,8 +413,10 @@
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:' + steel + ';box-shadow:0 70px 130px -34px rgba(0,0,0,.82), 0 26px 60px -18px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 6px rgba(0,0,0,.45);"></div>' +
 				// 2 · machined knurl texture on the band
 				'<div style="position:absolute;inset:2px;border-radius:50%;pointer-events:none;background:repeating-conic-gradient(rgba(255,255,255,.28) 0deg .5deg, rgba(0,0,0,.22) .5deg 1.6deg);opacity:.32;-webkit-mask:radial-gradient(circle, transparent 91%, black 92%);mask:radial-gradient(circle, transparent 91%, black 92%);"></div>' +
-				// 3 · finish tint (Steel = none)
-				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:color;background:' + f.tint + ';"></div>' +
+				// 3 · finish tint (Steel = none; live-updated by the settings hue slider without a re-render)
+				//     two layers: `color` blend carries the hue, `multiply` deepens it to dark anodized metal.
+				'<div id="tint" style="position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:color;background:' + f.tint + ';"></div>' +
+				'<div id="tintshade" style="position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:multiply;opacity:.42;background:' + (f.tint === 'transparent' ? 'transparent' : f.tint) + ';"></div>' +
 				// 4 · slow specular sweep — light traveling around the metal
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;overflow:hidden;' + ringMask + '"><div style="position:absolute;inset:-2%;background:conic-gradient(from 0deg, transparent 0 8%, rgba(255,255,255,.5) 11%, transparent 15%, transparent 55%, rgba(255,255,255,.25) 58%, transparent 62%);mix-blend-mode:screen;animation:chiSweep 14s linear infinite;"></div></div>' +
 				// 5 · inner bevel ring (dark machined step down to the glass)
@@ -360,23 +426,12 @@
 					'<div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 34% at 32% 12%, ' + t.glow + ', transparent 65%);"></div>' +
 					// etched tick ring just inside the glass rim
 					'<div style="position:absolute;inset:0;pointer-events:none;border-radius:50%;background:repeating-conic-gradient(' + t.tick + ' 0deg .4deg, transparent .4deg 3.6deg);opacity:' + t.tickOp + ';-webkit-mask:radial-gradient(circle, transparent 88.5%, black 89.5%, black 95%, transparent 96%);mask:radial-gradient(circle, transparent 88.5%, black 89.5%, black 95%, transparent 96%);"></div>' +
+					arc +
 					innerHTML +
 				'</div>' +
 				// top grip handle (drag) — pointer drag is owned by the host; click-hold to move.
 				'<div id="grip" title="Hold to move" style="position:absolute;top:19px;left:50%;transform:translateX(-50%);z-index:7;width:46px;height:15px;border-radius:8px;cursor:grab;display:flex;align-items:center;justify-content:center;gap:3px;background:linear-gradient(#2b2f34,#0e1013);box-shadow:inset 0 1px 1px rgba(255,255,255,.18), 0 1px 2px rgba(0,0,0,.5);">' +
 					'<i style="width:14px;height:2px;border-radius:2px;background:rgba(255,255,255,.5);display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55);display:block;"></i></div>' +
-				// left cluster: [close|pop-out ▸ theme ▸ frame ▸ settings]. Top-left slot = close (desktop
-				// window) or pop-out (in-app); frame only exists in desktop window mode. Settings (NEW) takes
-				// the next free slot so every prior control keeps its place.
-				(winCtrl ? ctrl('closebtn', 'Bring Chi back into the app', 74, null, 74, '<svg width="13" height="13" viewBox="0 0 12 12"><path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>') : '') +
-				(popout ? ctrl('popoutbtn', 'Pop Chi out into its own window', 74, null, 74, '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2 H10 V7.5 M10 2 L5 7" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 7 V10 H2 V4 H5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg>') : '') +
-				ctrl('themebtn', 'Switch theme', topLeftTaken ? 108 : 74, null, 74, '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" stroke-linecap="round"/></svg>') +
-				(winCtrl ? ctrl('framebtn', 'Show the window frame / resize', 142, null, 74, '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="10" height="10" rx="2" stroke-dasharray="2.2 1.8"/><path d="M6 8 9 5M9 8V5H6"/></svg>') : '') +
-				ctrl('settingsbtn', 'Chi settings', settingsTop, null, 74, '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" stroke-linecap="round"/></svg>') +
-				// right cluster: collapse-to-ensō (distinct inward-arrows glyph), then enlarge (+) / shrink (−) size
-				ctrl('minbtn', 'Collapse to the ensō', 74, 74, null, '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M8 11.5V8h3.5"/><path d="M6 6 2.75 2.75M8 8l3.25 3.25"/></svg>') +
-				ctrl('growbtn', 'Enlarge', 108, 74, null, '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>') +
-				ctrl('shrinkbtn', 'Shrink', 142, 74, null, '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>') +
 				'</div>';
 		}
 
@@ -401,8 +456,20 @@
 						'<span style="font-size:11.5px;opacity:.7;min-width:34px;text-align:center;font-variant-numeric:tabular-nums;">' + Math.round(this._scale * 100) + '%</span>' +
 						'<span id="s-grow" class="sbtn" style="width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(128,128,128,.16);"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 3.5 v9 M3.5 8 h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span></span>') +
 					row('<span style="font-size:12px;opacity:.85;">Theme</span><span id="s-theme" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;text-transform:capitalize;cursor:pointer;">' + this._themeKey + ' ' + chev + '</span>') +
-					row('<span style="font-size:12px;opacity:.85;">Frame</span><span id="s-frame" style="display:flex;align-items:center;gap:7px;font-size:11.5px;opacity:.75;cursor:pointer;"><span style="width:14px;height:14px;border-radius:50%;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35);background:' + f.swatch + ';"></span>' + f.name + ' ' + chev + '</span>') +
+					// Frame finish: preset dots + a fully draggable hue slider (drag anywhere on the bar;
+					// the ring tint + swatch update LIVE while dragging, persisted as a custom finish).
+					row('<span style="font-size:12px;opacity:.85;">Frame</span><span style="display:flex;align-items:center;gap:6px;">' +
+						FRAME_ORDER.map(function (k2) {
+							var sel = k2 === (localStorage.getItem('chi-orb-frame') || 'steel');
+							return '<span class="fdot" data-frame="' + k2 + '" title="' + FRAMES[k2].name + '" style="width:15px;height:15px;border-radius:50%;cursor:pointer;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)' + (sel ? ', 0 0 0 2px ' + GREEN : '') + ';background:' + FRAMES[k2].swatch + ';"></span>';
+						}).join('') +
+						'<span id="s-swatch" title="Custom" style="width:15px;height:15px;border-radius:50%;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)' + (this._frameKey === 'custom' ? ', 0 0 0 2px ' + GREEN : '') + ';background:' + (this._frameKey === 'custom' ? f.swatch : 'conic-gradient(red,#ff0,#0f0,#0ff,#00f,#f0f,red)') + ';"></span></span>') +
+					row('<span id="s-hue" style="position:relative;flex:1;height:14px;border-radius:7px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg, hsl(0,72%,52%), hsl(60,72%,52%), hsl(120,72%,52%), hsl(180,72%,52%), hsl(240,72%,52%), hsl(300,72%,52%), hsl(360,72%,52%));box-shadow:inset 0 1px 3px rgba(0,0,0,.45);">' +
+						'<span id="s-hueknob" style="position:absolute;top:50%;left:' + (this._frameHue / 360 * 100).toFixed(1) + '%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:hsl(' + this._frameHue + ',72%,52%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);pointer-events:none;"></span></span>', 'border-bottom:1px solid rgba(128,128,128,.16);') +
+					row('<span style="font-size:12px;opacity:.85;">Sounds</span>' + sw(localStorage.getItem('chi-orb-sound') !== '0', 's-sound')) +
 					row('<span style="font-size:12px;opacity:.85;">Route notifications to Chi</span>' + sw(localStorage.getItem('chi-notif-route') === '1', 's-route')) +
+					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span id="s-popout" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
+					row('<span style="font-size:12px;opacity:.85;">Collapse to the ensō</span><span id="s-collapse" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-act="collapse') +
 					row('<span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="4.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 7 L9.6 4.8 M6.4 9 L9.6 11.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Connections</span><span id="s-conn" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-open-conn="1');
 			} else {
 				var self = this;
@@ -428,7 +495,7 @@
 					'<span style="font-size:13px;font-weight:800;letter-spacing:.6px;">' + (isConn ? 'Connections' : 'Settings') + '</span>' +
 					'<span id="s-close" style="margin-left:auto;cursor:pointer;opacity:.75;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
 				'</div>' +
-				'<div id="slist" style="flex:1;overflow-y:auto;padding:2px 78px 60px;color:' + t.name + ';scroll-snap-type:y proximity;-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 13%, #000 84%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 13%, #000 84%, transparent 100%);">' + body + '</div>' +
+				'<div id="slist" style="flex:1;overflow-y:auto;padding:16px 78px 70px;color:' + t.name + ';scroll-snap-type:y proximity;-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);">' + body + '</div>' +
 			'</div>';
 		}
 		_wireSettings() {
@@ -440,13 +507,54 @@
 			on('s-grow', function () { self._resize(0.1); });
 			on('s-shrink', function () { self._resize(-0.1); });
 			on('s-theme', function () { self._cycleTheme(); });
-			on('s-frame', function () { self._cycleFrame(); });
+			// Frame finish: preset dots snap to a named finish; the hue bar is a full drag-anywhere
+			// color changer — the ring tint updates LIVE during the drag (no re-render), persists on release.
+			panel.querySelectorAll('.fdot').forEach(function (dot) {
+				dot.addEventListener('click', function (e) {
+					e.stopPropagation();
+					localStorage.setItem('chi-orb-frame', dot.getAttribute('data-frame'));
+					self._tick(1);
+					self._render();
+				});
+			});
+			var hue = r.getElementById('s-hue');
+			if (hue) {
+				var setHue = function (clientX, commit) {
+					var hr = hue.getBoundingClientRect();
+					var p = Math.max(0, Math.min(1, (clientX - hr.left) / (hr.width || 1)));
+					var h = Math.round(p * 360);
+					localStorage.setItem('chi-orb-frame', 'custom');
+					localStorage.setItem('chi-orb-frame-hue', String(h));
+					// live-mutate the ring tint + knob + swatch — a full render mid-drag would drop the pointer
+					var tint = r.getElementById('tint'); if (tint) tint.style.background = 'hsl(' + h + ', 72%, 52%)';
+					var shade = r.getElementById('tintshade'); if (shade) shade.style.background = 'hsl(' + h + ', 72%, 46%)';
+					var knob = r.getElementById('s-hueknob'); if (knob) { knob.style.left = (p * 100).toFixed(1) + '%'; knob.style.background = 'hsl(' + h + ',72%,52%)'; }
+					var swp = r.getElementById('s-swatch'); if (swp) swp.style.background = 'linear-gradient(135deg, hsl(' + h + ', 78%, 74%) 0%, hsl(' + h + ', 70%, 38%) 100%)';
+					if (commit) { self._tick(1); self._render(); }
+				};
+				var dragging = false;
+				hue.addEventListener('pointerdown', function (e) { e.stopPropagation(); dragging = true; try { hue.setPointerCapture(e.pointerId); } catch (_) { /* noop */ } setHue(e.clientX, false); });
+				hue.addEventListener('pointermove', function (e) { if (dragging) setHue(e.clientX, false); });
+				var endHue = function (e) { if (!dragging) return; dragging = false; setHue(e.clientX, true); };
+				hue.addEventListener('pointerup', endHue);
+				hue.addEventListener('pointercancel', function () { if (dragging) { dragging = false; self._render(); } });
+			}
 			on('s-route', function () {
 				var now = localStorage.getItem('chi-notif-route') === '1';
 				localStorage.setItem('chi-notif-route', now ? '0' : '1');
 				self.dispatchEvent(new CustomEvent('chi-notif-route', { detail: { on: !now }, bubbles: true, composed: true }));
 				self._render();
 			});
+			on('s-sound', function () {
+				var wasOn = localStorage.getItem('chi-orb-sound') !== '0';
+				localStorage.setItem('chi-orb-sound', wasOn ? '0' : '1');
+				if (!wasOn) self._tick(1); // audible confirmation the moment sound comes back on
+				self._render();
+			});
+			var pr = panel.querySelector('[data-act="popout"]');
+			if (pr) pr.addEventListener('click', function () { self._settingsOpen = false; self._render(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
+			var cl = panel.querySelector('[data-act="collapse"]');
+			if (cl) cl.addEventListener('click', function () { self._settingsOpen = false; self._toggle(); });
 			var connRow = panel.querySelector('[data-open-conn]');
 			if (connRow) connRow.addEventListener('click', function () { self._settingsPanel = 'connections'; self._render(); });
 			var list = r.getElementById('slist');
@@ -467,7 +575,7 @@
 			var t = this._theme, A = this._base, self = this;
 			var mask = '-webkit-mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;';
 			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
-			var hover = '.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
+			var hover = '.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
 			var head = '<style>' + kf + hover + ':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}button{font-family:inherit}::-webkit-scrollbar{width:0;height:0}</style>';
 
 			/* ---- minimized launcher: JUST the ensō + looping ripple + realtime button (transparent).
@@ -521,7 +629,7 @@
 				this.shadowRoot.innerHTML = head + this._shell(innerL + (this._settingsOpen ? this._settingsHTML() : ''));
 				// Tap anywhere in the window EXCEPT an action chip (or the settings panel) ends the call.
 				var win = this.shadowRoot.getElementById('win');
-				if (win) win.addEventListener('click', function (e) { if (e.target.closest('#chips') || e.target.closest('#settings')) return; if (self.onvoiceend) self.onvoiceend(); self.realtime = false; });
+				if (win) win.addEventListener('click', function (e) { if (e.target.closest('#chips') || e.target.closest('#settings') || e.target.closest('#arc')) return; if (self.onvoiceend) self.onvoiceend(); self.realtime = false; });
 				var chipsElL = this.shadowRoot.getElementById('chips');
 				// Resolve the command FRESH on click (updateActions may have swapped the list) and route it
 				// through the host's onaction hook when present (desktop → speak it into the live voice call),
@@ -537,7 +645,7 @@
 				return '<button data-i="' + i + '" class="chip" style="padding:5px 12px;border-radius:13px;cursor:pointer;font:600 11px inherit;' + t.chip + '"></button>';
 			}).join('');
 			var inner =
-				'<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:30px 0 8px;">' +
+				'<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:2px 0 8px;">' +
 					'<div style="position:relative;width:56px;height:46px;">' +
 						'<div style="position:absolute;left:50%;top:50%;width:110px;height:110px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);background:radial-gradient(circle, ' + t.glow + ' 0%, transparent 62%);"></div>' +
 						'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:' + (t.markFilter || 'drop-shadow(0 0 10px rgba(255,255,255,.2))') + ';">' +
