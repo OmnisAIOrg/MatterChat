@@ -36,7 +36,7 @@
 		dark: {
 			win: 'radial-gradient(115% 115% at 50% 38%, #14171c 0%, #0a0c0f 55%, #040507 100%)',
 			winBorder: 'rgba(255,255,255,.09)', name: '#f2f3f5', dim: 'rgba(255,255,255,.42)',
-			me: 'background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.30);color:#e9f7ee;',
+			me: 'background:linear-gradient(180deg, rgba(48,209,88,.22), rgba(48,209,88,.13));border:1px solid rgba(48,209,88,.32);color:#e9f7ee;box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 4px 12px -6px rgba(0,0,0,.4);',
 			chi: 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11);color:#dfe3e8;box-shadow:0 6px 16px -8px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);',
 			chip: 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#e6e9ee;',
 			input: 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12), inset 0 -6px 14px rgba(0,0,0,.25);', inputText: '#e8eaed',
@@ -68,7 +68,7 @@
 		legal: {
 			win: 'radial-gradient(120% 100% at 50% 0%, rgba(20,32,56,.97) 0%, rgba(10,17,32,.99) 70%)',
 			winBorder: 'rgba(201,168,106,.32)', name: '#e8d9b8', dim: 'rgba(232,217,184,.6)',
-			me: 'background:rgba(201,168,106,.14);border:1px solid rgba(201,168,106,.35);color:#f0e6cd;',
+			me: 'background:linear-gradient(180deg, rgba(201,168,106,.20), rgba(201,168,106,.11));border:1px solid rgba(201,168,106,.38);color:#f0e6cd;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 4px 12px -6px rgba(0,0,0,.4);',
 			chi: 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:#dce3ee;box-shadow:0 6px 16px -8px rgba(0,0,0,.5);',
 			chip: 'background:rgba(201,168,106,.10);border:1px solid rgba(201,168,106,.30);color:#efe8d8;',
 			input: 'background:rgba(201,168,106,.08);border:1px solid rgba(201,168,106,.30);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), inset 0 -6px 14px rgba(0,0,0,.3);', inputText: '#efe8d8',
@@ -250,7 +250,7 @@
 			this.actions = list;
 			if (this._realtime && !this._min) {
 				var box = this.shadowRoot.getElementById('chips'), t = this._theme;
-				if (box) box.innerHTML = list.map(function (a, i) { return '<button data-i="' + i + '" class="chip" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + esc(a.label) + '</button>'; }).join('');
+				if (box) box.innerHTML = list.map(function (a, i) { return '<button data-i="' + i + '" class="chip" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 2px 8px -3px rgba(0,0,0,.3);' + t.chip + '">' + esc(a.label) + '</button>'; }).join('');
 			}
 		}
 		_haloCss(kind) { // '', 'thinking', 'realtime'
@@ -306,6 +306,7 @@
 				return;
 			}
 			this.history.push({ who: 'me', text: text });
+			this._pluck();
 			this._thinking = true; this._sync();
 			// The ask hook may resolve to a plain string OR { reply, needsConfirm } — the latter drives the
 			// inline Confirm/Cancel buttons so the member never has to TYPE "confirm".
@@ -554,9 +555,9 @@
 		_notifCard(m) {
 			var self = this, t = this._theme;
 			var card = document.createElement('div');
-			card.setAttribute('style', 'align-self:flex-start;max-width:92%;display:flex;gap:9px;padding:9px 11px;border-radius:4px 16px 16px 16px;animation:chiMsgIn .45s cubic-bezier(.2,.75,.25,1) both;box-shadow:0 10px 26px -12px rgba(0,0,0,.55);' + (t.card || t.chi));
+			card.setAttribute('style', 'align-self:flex-start;max-width:92%;display:flex;gap:9px;padding:9px 11px;border-radius:4px 16px 16px 16px;animation:chiMsgIn .45s cubic-bezier(.2,.75,.25,1) both;box-shadow:0 10px 26px -12px rgba(0,0,0,.55);border-left:3px solid ' + m.color + ';' + (t.card || t.chi));
 			var av = document.createElement('div');
-			av.setAttribute('style', 'width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;box-shadow:0 3px 8px rgba(0,0,0,.3);background:' + m.color + ';');
+			av.setAttribute('style', 'width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 3px 8px rgba(0,0,0,.35);background:linear-gradient(160deg, ' + m.color + ', ' + m.color + 'cc);');
 			av.textContent = m.avatar;
 			var body = document.createElement('div');
 			body.setAttribute('style', 'flex:1;min-width:0;');
@@ -613,6 +614,18 @@
 				wrap.style.opacity = '0'; wrap.style.transform = 'translate(-50%,-16px)';
 				setTimeout(function () { wrap.remove(); }, 450);
 			}, 4600);
+		}
+		/* Soft send "pluck" — low, quick, quieter than the detent tick. */
+		_pluck() {
+			if (localStorage.getItem('chi-orb-sound') === '0') return;
+			try {
+				var C = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
+				if (C.state === 'suspended') C.resume();
+				var t0 = C.currentTime;
+				var o = C.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(340, t0); o.frequency.exponentialRampToValueAtTime(210, t0 + 0.07);
+				var g = C.createGain(); g.gain.setValueAtTime(0.045, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+				o.connect(g); g.connect(C.destination); o.start(t0); o.stop(t0 + 0.1);
+			} catch (e) { /* silent */ }
 		}
 		/* Soft two-note arrival chime (distinct from the drum tick). Sounds toggle gated. */
 		_chime() {
@@ -769,6 +782,8 @@
 				'<div id="halo" data-base="' + haloBase + '" style="' + haloBase + this._haloCss(this._realtime ? 'realtime' : '') + '"></div>' +
 				// 1 · stainless band (full bleed to the rim)
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:' + steel + ';box-shadow:0 70px 130px -34px rgba(0,0,0,.82), 0 26px 60px -18px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 6px rgba(0,0,0,.45);"></div>' +
+				// 1.5 · radial brush texture (fine spokes, like spun metal)
+				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:repeating-conic-gradient(rgba(255,255,255,.10) 0deg .18deg, transparent .18deg 1.9deg);opacity:.5;-webkit-mask:radial-gradient(circle, transparent 87%, black 88%);mask:radial-gradient(circle, transparent 87%, black 88%);"></div>' +
 				// 2 · machined knurl texture on the band
 				'<div style="position:absolute;inset:2px;border-radius:50%;pointer-events:none;background:repeating-conic-gradient(rgba(255,255,255,.28) 0deg .5deg, rgba(0,0,0,.22) .5deg 1.6deg);opacity:.32;-webkit-mask:radial-gradient(circle, transparent 91%, black 92%);mask:radial-gradient(circle, transparent 91%, black 92%);"></div>' +
 				// 3 · finish tint (Steel = none; live-updated by the settings hue slider without a re-render)
@@ -777,6 +792,8 @@
 				'<div id="tintshade" style="position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:multiply;opacity:.42;background:' + (f.tint === 'transparent' ? 'transparent' : f.tint) + ';"></div>' +
 				// 4 · slow specular sweep — light traveling around the metal
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;overflow:hidden;' + ringMask + '"><div style="position:absolute;inset:-2%;background:conic-gradient(from 0deg, transparent 0 8%, rgba(255,255,255,.5) 11%, transparent 15%, transparent 55%, rgba(255,255,255,.25) 58%, transparent 62%);mix-blend-mode:screen;animation:chiSweep 14s linear infinite;"></div></div>' +
+				// 4.2 · faint counter-rotating under-sweep (depth in the metal)
+				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;overflow:hidden;' + ringMask + '"><div style="position:absolute;inset:-2%;background:conic-gradient(from 180deg, transparent 0 30%, rgba(255,255,255,.12) 33%, transparent 37%);mix-blend-mode:screen;animation:chiSweep 23s linear infinite reverse;"></div></div>' +
 				// 4.5 · focus-dial arc — the wound/remaining time drawn on the metal band
 				'<div id="focusarc" style="position:absolute;inset:3px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .3s;-webkit-mask:radial-gradient(circle, transparent 89.5%, black 90.5%);mask:radial-gradient(circle, transparent 89.5%, black 90.5%);filter:drop-shadow(0 0 7px rgba(59,155,255,.9));"></div>' +
 				// 5 · inner bevel ring (dark machined step down to the glass)
@@ -784,6 +801,10 @@
 				// 6 · black glass face
 				'<div id="win" style="position:absolute;inset:26px;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;background:' + t.win + ';border:1px solid ' + t.winBorder + ';box-shadow:inset 0 3px 10px rgba(255,255,255,.07), inset 0 -6px 14px rgba(0,0,0,.35), ' + t.vignette + ';">' +
 					'<div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 34% at 32% 12%, ' + t.glow + ', transparent 65%);"></div>' +
+					// specular arc — a thin bright reflection hugging the upper-left inner rim
+					'<div style="position:absolute;inset:6px;border-radius:50%;pointer-events:none;background:conic-gradient(from 300deg, transparent 0 8%, rgba(255,255,255,.28) 14%, rgba(255,255,255,.05) 22%, transparent 26%);-webkit-mask:radial-gradient(circle, transparent 95.5%, black 96.5%);mask:radial-gradient(circle, transparent 95.5%, black 96.5%);"></div>' +
+					// traveling glass sheen — a soft diagonal light strip sweeping every ~9s
+					'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;overflow:hidden;"><div style="position:absolute;top:-20%;bottom:-20%;left:0;width:38px;background:linear-gradient(90deg, transparent, rgba(255,255,255,.05), rgba(255,255,255,.10), rgba(255,255,255,.05), transparent);mix-blend-mode:screen;animation:chiSheen 9s ease-in-out infinite;"></div></div>' +
 					// etched tick ring just inside the glass rim
 					'<div style="position:absolute;inset:0;pointer-events:none;border-radius:50%;background:repeating-conic-gradient(' + t.tick + ' 0deg .4deg, transparent .4deg 3.6deg);opacity:' + t.tickOp + ';-webkit-mask:radial-gradient(circle, transparent 88.5%, black 89.5%, black 95%, transparent 96%);mask:radial-gradient(circle, transparent 88.5%, black 89.5%, black 95%, transparent 96%);"></div>' +
 					arc +
@@ -818,7 +839,7 @@
 					row('<span style="font-size:12px;opacity:.85;">Size</span>' +
 						'<span style="display:flex;align-items:center;gap:8px;">' +
 						'<span id="s-shrink" class="sbtn" style="width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(128,128,128,.16);"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.5 8 h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
-						'<span style="font-size:11.5px;opacity:.7;min-width:34px;text-align:center;font-variant-numeric:tabular-nums;">' + Math.round(this._scale * 100) + '%</span>' +
+						'<span id="s-pct" style="font-size:11.5px;opacity:.7;min-width:34px;text-align:center;font-variant-numeric:tabular-nums;">' + Math.round(this._scale * 100) + '%</span>' +
 						'<span id="s-grow" class="sbtn" style="width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(128,128,128,.16);"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 3.5 v9 M3.5 8 h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span></span>') +
 					row('<span style="font-size:12px;opacity:.85;">Theme</span><span id="s-theme" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;text-transform:capitalize;cursor:pointer;">' + this._themeKey + ' ' + chev + '</span>') +
 					// Frame finish: preset dots + a fully draggable hue slider (drag anywhere on the bar;
@@ -834,6 +855,7 @@
 						'<span id="s-padknob" style="position:absolute;left:' + this._frameSat.toFixed(0) + '%;top:' + Math.min(100, Math.max(0, (1 - (this._frameLum - 6) / 88) * 100)).toFixed(0) + '%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:hsl(' + this._frameHue + ',' + this._frameSat + '%,' + this._frameLum + '%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none;"></span></span>', 'border-bottom:none;padding-bottom:4px;') +
 					row('<span id="s-hue" style="position:relative;flex:1;height:14px;border-radius:7px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg, hsl(0,72%,52%), hsl(60,72%,52%), hsl(120,72%,52%), hsl(180,72%,52%), hsl(240,72%,52%), hsl(300,72%,52%), hsl(360,72%,52%));box-shadow:inset 0 1px 3px rgba(0,0,0,.45);">' +
 						'<span id="s-hueknob" style="position:absolute;top:50%;left:' + (this._frameHue / 360 * 100).toFixed(1) + '%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:hsl(' + this._frameHue + ',72%,52%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);pointer-events:none;"></span></span>', 'border-bottom:1px solid rgba(128,128,128,.16);') +
+					row('<span style="font-size:12px;opacity:.85;">Focus timer</span><span style="display:flex;gap:6px;">' + [15, 25, 45].map(function (mn) { return '<span class="fmin" data-min="' + mn + '" style="padding:3px 10px;border-radius:10px;cursor:pointer;font-size:10.5px;font-weight:700;background:rgba(59,155,255,.14);border:1px solid rgba(59,155,255,.35);color:#8fc2ff;">' + mn + 'm</span>'; }).join('') + '</span>') +
 					row('<span style="font-size:12px;opacity:.85;">Sounds</span>' + sw(localStorage.getItem('chi-orb-sound') !== '0', 's-sound')) +
 					row('<span style="font-size:12px;opacity:.85;">Route notifications to Chi</span>' + sw(localStorage.getItem('chi-notif-route') === '1', 's-route')) +
 					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span id="s-popout" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
@@ -872,17 +894,52 @@
 			var on = function (id, fn) { var el = r.getElementById(id); if (el) el.addEventListener('click', function (e) { e.stopPropagation(); fn(); }); };
 			on('s-close', function () { self._settingsOpen = false; self._render(); });
 			on('s-back', function () { self._settingsPanel = 'main'; self._render(); });
-			on('s-grow', function () { self._resize(0.1); });
-			on('s-shrink', function () { self._resize(-0.1); });
-			on('s-theme', function () { self._cycleTheme(); });
+			// In-place switch/size helpers — a full re-render on every click rebuilt the whole face
+			// and reset the list scroll (the "glitchy clicking"). Only theme changes still repaint.
+			var setSw = function (el, onv) {
+				if (!el) return;
+				el.style.background = onv ? GREEN : 'rgba(140,140,150,.45)';
+				if (el.firstElementChild) el.firstElementChild.style.transform = 'translateX(' + (onv ? 15 : 1) + 'px)';
+			};
+			var sizeNudge = function (d2) {
+				localStorage.setItem('chi-orb-scale', Math.max(0.7, Math.min(1.5, self._scale + d2)).toFixed(2));
+				self.dispatchEvent(new CustomEvent('chi-resize', { detail: { scale: self._scale }, bubbles: true, composed: true }));
+				var sh = r.getElementById('shell'); if (sh) sh.style.transform = 'scale(' + self._scale + ')';
+				var pct = r.getElementById('s-pct'); if (pct) pct.textContent = Math.round(self._scale * 100) + '%';
+				self._tick();
+			};
+			on('s-grow', function () { sizeNudge(0.1); });
+			on('s-shrink', function () { sizeNudge(-0.1); });
+			on('s-theme', function () { var sl0 = r.getElementById('slist'); if (sl0) self._slistScrollKeep = sl0.scrollTop; self._cycleTheme(); });
+			panel.querySelectorAll('.fmin').forEach(function (fm) {
+				fm.addEventListener('click', function (e) {
+					e.stopPropagation();
+					self._settingsOpen = false;
+					self._render();
+					self._startFocus(parseInt(fm.getAttribute('data-min'), 10));
+				});
+			});
 			// Frame finish: preset dots snap to a named finish; the hue bar is a full drag-anywhere
 			// color changer — the ring tint updates LIVE during the drag (no re-render), persists on release.
+			var dotRings = function () {
+				var selKey = localStorage.getItem('chi-orb-frame') || 'steel';
+				var base = 'inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)';
+				panel.querySelectorAll('.fdot').forEach(function (d2) {
+					d2.style.boxShadow = base + (d2.getAttribute('data-frame') === selKey ? ', 0 0 0 2px ' + GREEN : '');
+				});
+				var swp2 = r.getElementById('s-swatch');
+				if (swp2) swp2.style.boxShadow = base + (selKey === 'custom' ? ', 0 0 0 2px ' + GREEN : '');
+			};
 			panel.querySelectorAll('.fdot').forEach(function (dot) {
 				dot.addEventListener('click', function (e) {
 					e.stopPropagation();
-					localStorage.setItem('chi-orb-frame', dot.getAttribute('data-frame'));
+					var key2 = dot.getAttribute('data-frame');
+					localStorage.setItem('chi-orb-frame', key2);
+					var fr = FRAMES[key2];
+					var tint = r.getElementById('tint'); if (tint) tint.style.background = fr.tint;
+					var shade = r.getElementById('tintshade'); if (shade) shade.style.background = fr.tint === 'transparent' ? 'transparent' : fr.tint;
+					dotRings();
 					self._tick(1);
-					self._render();
 				});
 			});
 			// Full color editor: hue bar + 2D shade pad share one live-apply path. Everything updates
@@ -900,7 +957,7 @@
 				var pad2 = r.getElementById('s-pad'); if (pad2) pad2.style.background = 'linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(' + h + ',100%,50%))';
 				var pk = r.getElementById('s-padknob'); if (pk) { pk.style.left = s.toFixed(0) + '%'; pk.style.top = Math.min(100, Math.max(0, (1 - (l - 6) / 88) * 100)).toFixed(0) + '%'; pk.style.background = css; }
 				var swp = r.getElementById('s-swatch'); if (swp) swp.style.background = 'linear-gradient(135deg, hsl(' + h + ', ' + s + '%, ' + Math.min(88, l + 22) + '%) 0%, hsl(' + h + ', ' + s + '%, ' + Math.max(12, l - 16) + '%) 100%)';
-				if (commit) { self._tick(1); self._render(); }
+				if (commit) { self._tick(1); dotRings(); }
 			};
 			var wireDrag = function (elx, fromEvent) {
 				if (!elx) return;
@@ -928,13 +985,13 @@
 				var now = localStorage.getItem('chi-notif-route') === '1';
 				localStorage.setItem('chi-notif-route', now ? '0' : '1');
 				self.dispatchEvent(new CustomEvent('chi-notif-route', { detail: { on: !now }, bubbles: true, composed: true }));
-				self._render();
+				setSw(r.getElementById('s-route'), !now);
 			});
 			on('s-sound', function () {
 				var wasOn = localStorage.getItem('chi-orb-sound') !== '0';
 				localStorage.setItem('chi-orb-sound', wasOn ? '0' : '1');
 				if (!wasOn) self._tick(1); // audible confirmation the moment sound comes back on
-				self._render();
+				setSw(r.getElementById('s-sound'), !wasOn);
 			});
 			var pr = panel.querySelector('[data-act="popout"]');
 			if (pr) pr.addEventListener('click', function () { self._settingsOpen = false; self._render(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
@@ -948,19 +1005,34 @@
 					var rowEl = e.target.closest('[data-conn]');
 					if (!rowEl || rowEl.getAttribute('data-locked') === '1') return;
 					var slug = rowEl.getAttribute('data-conn'), radio = rowEl.getAttribute('data-group');
-					if (radio) localStorage.setItem(radio, slug);
-					else { var key = 'chi-conn-' + slug; localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1'); }
-					self._render();
+					if (radio) {
+						localStorage.setItem(radio, slug);
+						// radio: turn the whole group off in place, then this one on
+						list.querySelectorAll('[data-group="' + radio + '"]').forEach(function (sib) {
+							setSw(sib.querySelector('.sw'), sib === rowEl);
+						});
+					} else {
+						var key = 'chi-conn-' + slug;
+						var nowOn = localStorage.getItem(key) !== '1';
+						localStorage.setItem(key, nowOn ? '1' : '0');
+						setSw(rowEl.querySelector('.sw'), nowOn);
+					}
+					self._tick();
 				});
 				this._drumify(list, 1, true);
+				if (this._slistScrollKeep != null) {
+					var ks = this._slistScrollKeep;
+					this._slistScrollKeep = null;
+					requestAnimationFrame(function () { requestAnimationFrame(function () { list.scrollTop = ks; self._drumApply(list); }); });
+				}
 			}
 		}
 
 		_render() {
 			var t = this._theme, A = this._base, self = this;
 			var mask = '-webkit-mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;';
-			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
-			var hover = '#grip:hover{background:rgba(31,157,69,.4);color:#fff}.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
+			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{0%{opacity:0;transform:translateY(14px) scale(.955)}70%{opacity:1;transform:translateY(-2px) scale(1.004)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiBreathe{0%,100%{opacity:.45;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.08)}}@keyframes chiSheen{0%,88%{transform:translateX(-130%) rotate(18deg)}100%{transform:translateX(340%) rotate(18deg)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
+			var hover = '#grip:hover{background:rgba(31,157,69,.4);color:#fff}.ctl:active,.arcb:active,.sbtn:active,.fdot:active{transform:scale(.92) !important}#sendbtn:active{transform:scale(.93) !important}.chip:hover{box-shadow:0 4px 14px -4px rgba(48,209,88,.35), inset 0 1px 0 rgba(255,255,255,.14)}.srow{border-radius:8px}.fmin{transition:transform .12s ease, background .15s}.fmin:hover{transform:translateY(-1px);background:rgba(59,155,255,.28) !important}.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
 			var head = '<style>' + kf + hover + ':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}button{font-family:inherit}::-webkit-scrollbar{width:0;height:0}</style>';
 
 			/* ---- minimized launcher: JUST the ensō + looping ripple + realtime button (transparent).
@@ -1013,7 +1085,7 @@
 			/* ---- LISTENING version (realtime voice) ---- */
 			if (this._realtime) {
 				var chipsL = this._actionsList().map(function (a, i) {
-					return '<button data-i="' + i + '" class="chip" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;' + t.chip + '">' + esc(a.label) + '</button>';
+					return '<button data-i="' + i + '" class="chip" style="padding:7px 15px;border-radius:15px;cursor:pointer;font:600 12px inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 2px 8px -3px rgba(0,0,0,.3);' + t.chip + '">' + esc(a.label) + '</button>';
 				}).join('');
 				var innerL =
 					'<div style="position:absolute;inset:0;pointer-events:none;border-radius:50%;background:radial-gradient(circle at 50% 50%, transparent 52%, rgba(0,0,0,.35) 82%, rgba(0,0,0,.6) 100%);"></div>' +
@@ -1044,12 +1116,12 @@
 
 			/* ---- CHAT version ---- */
 			var chips = this._actionsList().map(function (a, i) {
-				return '<button data-i="' + i + '" class="chip" style="padding:5px 12px;border-radius:13px;cursor:pointer;font:600 11px inherit;' + t.chip + '"></button>';
+				return '<button data-i="' + i + '" class="chip" style="padding:5px 12px;border-radius:13px;cursor:pointer;font:600 11px inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 2px 8px -3px rgba(0,0,0,.3);' + t.chip + '"></button>';
 			}).join('');
 			var inner =
 				'<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:2px 0 8px;">' +
 					'<div style="position:relative;width:56px;height:46px;">' +
-						'<div style="position:absolute;left:50%;top:50%;width:110px;height:110px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);background:radial-gradient(circle, ' + t.glow + ' 0%, transparent 62%);"></div>' +
+						'<div style="position:absolute;left:50%;top:50%;width:110px;height:110px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);background:radial-gradient(circle, ' + t.glow + ' 0%, transparent 62%);animation:chiBreathe 5.5s ease-in-out infinite;"></div>' +
 						'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:' + (t.markFilter || 'drop-shadow(0 0 10px rgba(255,255,255,.2))') + ';">' +
 						'<div id="markloop" style="position:absolute;inset:0;display:none;' + mask + '">' + ripples() + '</div>' +
 					'</div>' +
