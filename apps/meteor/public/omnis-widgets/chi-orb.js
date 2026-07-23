@@ -183,6 +183,36 @@
 			{ slug: 'agents', name: 'Agent teams (sub-agents)' },
 		] },
 	];
+	// Speech-to-text roster for Flow (VoiceInk parity). `wired` = works END-TO-END today from
+	// the browser (key/URL from settings); the rest render fully so the roster is the roadmap.
+	// Keys reuse the LLM store where the provider is the same company (one key, both uses).
+	var STT_PROVIDERS = [
+		{ slug: 'webspeech', name: 'Built-in · browser speech', builtin: true, wired: true, live: true },
+		{ slug: 'stt-openai', name: 'OpenAI · Whisper / 4o-transcribe', wired: true, keyStore: 'chi-llm-openai-key', url: 'https://api.openai.com/v1/audio/transcriptions', model: 'gpt-4o-mini-transcribe' },
+		{ slug: 'stt-groq', name: 'Groq · Whisper large-v3-turbo', wired: true, keyStore: 'chi-llm-groq-key', url: 'https://api.groq.com/openai/v1/audio/transcriptions', model: 'whisper-large-v3-turbo' },
+		{ slug: 'stt-local', name: 'Local Whisper server', wired: true, local: true, urlStore: 'chi-stt-local-url', urlHint: 'http://localhost:9000 (OpenAI-compatible)', model: 'whisper-1' },
+		{ slug: 'stt-gemini', name: 'Gemini', keyStore: 'chi-llm-gemini-key' },
+		{ slug: 'stt-mistral', name: 'Mistral · Voxtral', keyStore: 'chi-stt-mistral-key' },
+		{ slug: 'stt-deepgram', name: 'Deepgram', keyStore: 'chi-stt-deepgram-key' },
+		{ slug: 'stt-elevenlabs', name: 'ElevenLabs', keyStore: 'chi-stt-elevenlabs-key' },
+		{ slug: 'stt-soniox', name: 'Soniox', keyStore: 'chi-stt-soniox-key' },
+		{ slug: 'stt-speechmatics', name: 'Speechmatics', keyStore: 'chi-stt-speechmatics-key' },
+		{ slug: 'stt-assemblyai', name: 'AssemblyAI', keyStore: 'chi-stt-assemblyai-key' },
+		{ slug: 'stt-xai', name: 'xAI', keyStore: 'chi-llm-xai-key' },
+		{ slug: 'stt-cartesia', name: 'Cartesia', keyStore: 'chi-stt-cartesia-key' },
+	];
+	// Downloadable on-device catalog (sizes/speed/accuracy from the VoiceInk-class model zoo).
+	// Downloads need the desktop host — rows render with meters now, Download lands with the BE.
+	var STT_LOCAL_MODELS = [
+		{ name: 'Apple Speech', size: 'built-in', speed: 9, acc: 8.5, note: 'Native on-device (macOS 26+)' },
+		{ name: 'Parakeet V3', size: '494 MB', speed: 9.9, acc: 9.4, note: 'Lightning fast · 25 languages' },
+		{ name: 'Parakeet Unified', size: '1.2 GB', speed: 9.9, acc: 9.5, note: 'Native realtime · English' },
+		{ name: 'Nemotron Multilingual', size: '672 MB', speed: 9.9, acc: 9.0, note: 'NVIDIA streaming model' },
+		{ name: 'Whisper Tiny', size: '75 MB', speed: 9.5, acc: 6.0, note: 'Fastest, least accurate' },
+		{ name: 'Whisper Base', size: '142 MB', speed: 8.5, acc: 7.2, note: 'Good speed/accuracy balance' },
+		{ name: 'Whisper Large v3 Turbo', size: '1.5 GB', speed: 7.5, acc: 9.4, note: 'Near-max accuracy, fast' },
+		{ name: 'Large v3 Turbo (Quantized)', size: '547 MB', speed: 7.5, acc: 9.4, note: 'Smaller, same accuracy' },
+	];
 	var CANNED = ["Here's what I found — want me to go deeper?", 'Done. Anything else on your mind?', 'Good question. Short answer: yes — and I can show you why.', "I've drafted that for you. Want it posted to the channel?"];
 	var RIPPLE = 'radial-gradient(circle at 50% 50%, rgba(120,185,255,0) 15%, rgba(130,195,255,.2) 20%, rgba(125,192,255,.42) 25%, rgba(110,190,255,.95) 27%, #ffffff 29.5%, #ffffff 31.5%, rgba(130,200,255,.9) 34%, rgba(90,170,255,0) 38%)';
 	var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -318,15 +348,89 @@
 			return 'opacity:0;background:transparent;box-shadow:none;animation:none;';
 		}
 
+		/* ---- Flow support: dictionary, history, capture + cloud/local transcription ---- */
+		_dict() { try { var d = JSON.parse(localStorage.getItem('chi-dict') || '[]'); return Array.isArray(d) ? d : []; } catch (e) { return []; } }
+		_applyDictionary(text) {
+			// VoiceInk-style word replacements ("Qi"→"Chi", "wynn"→"Nguyen"), whole-word, case-insensitive.
+			var out = String(text || '');
+			this._dict().forEach(function (e2) {
+				if (!e2 || !e2.o) return;
+				try { out = out.replace(new RegExp('\\b' + String(e2.o).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), e2.r || ''); } catch (e3) { /* bad pattern */ }
+			});
+			return out;
+		}
+		_pushHistory(text) {
+			try {
+				var h = JSON.parse(localStorage.getItem('chi-flow-history') || '[]');
+				if (!Array.isArray(h)) h = [];
+				h.unshift({ ts: Date.now(), text: String(text).slice(0, 2000) });
+				localStorage.setItem('chi-flow-history', JSON.stringify(h.slice(0, 60)));
+				var words = parseInt(localStorage.getItem('chi-flow-words') || '0', 10) + String(text).trim().split(/\s+/).length;
+				localStorage.setItem('chi-flow-words', String(words));
+			} catch (e) { /* quota — fine */ }
+		}
+		_recSound(startNot) {
+			if (localStorage.getItem('chi-orb-sound') === '0' || localStorage.getItem('chi-rec-sounds') === '0') return;
+			try {
+				var C = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
+				if (C.state === 'suspended') C.resume();
+				var t0 = C.currentTime;
+				var o = C.createOscillator(); o.type = 'sine';
+				o.frequency.setValueAtTime(startNot ? 520 : 780, t0);
+				o.frequency.exponentialRampToValueAtTime(startNot ? 780 : 520, t0 + 0.09);
+				var g = C.createGain(); g.gain.setValueAtTime(0.05, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+				o.connect(g); g.connect(C.destination); o.start(t0); o.stop(t0 + 0.13);
+			} catch (e) { /* silent */ }
+		}
+		_sttConfig() {
+			var slug = localStorage.getItem('chi-stt-model') || 'webspeech';
+			for (var i = 0; i < STT_PROVIDERS.length; i++) if (STT_PROVIDERS[i].slug === slug) return STT_PROVIDERS[i];
+			return STT_PROVIDERS[0];
+		}
+		/* Transcribe a recorded clip through the chosen provider (OpenAI-compatible
+		 * audio/transcriptions — OpenAI, Groq, or a local Whisper server). Returns the text. */
+		_transcribe(blob) {
+			var p2 = this._sttConfig();
+			var url = p2.local ? ((localStorage.getItem(p2.urlStore) || '').replace(/\/+$/, '') + '/v1/audio/transcriptions') : p2.url;
+			var key = p2.keyStore ? (localStorage.getItem(p2.keyStore) || '') : '';
+			var model = localStorage.getItem('chi-stt-' + p2.slug + '-model') || p2.model || 'whisper-1';
+			var fd = new FormData();
+			fd.append('file', blob, 'flow.webm');
+			fd.append('model', model);
+			var vocab = (localStorage.getItem('chi-vocab') || '').trim();
+			if (vocab) fd.append('prompt', 'Vocabulary: ' + vocab.slice(0, 600));
+			return fetch(url, { method: 'POST', headers: key ? { Authorization: 'Bearer ' + key } : {}, body: fd })
+				.then(function (res) { return res.json().then(function (d) { if (!res.ok) throw new Error((d && d.error && d.error.message) || ('HTTP ' + res.status)); return String(d.text || '').trim(); }); });
+		}
+
 		/* ---- Flow — dictation that speeds up writing (clean-room; inspired by VoiceInk's UX,
 		 * none of its code): tap ⚡ → speak → live transcript → optional AI polish (the same
 		 * ask() brain) → lands in the room composer (host event), a Chi turn, or the clipboard. */
 		_flowStart() {
-			var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR || this._flow) return;
+			if (this._flow) return;
 			var self = this;
 			var panel = this.shadowRoot.getElementById('flowpanel'); if (panel) panel.style.display = 'flex';
 			var liveEl = this.shadowRoot.getElementById('flowlive');
-			this._flow = { rec: null, final: '', stop: false };
+			var stt = this._sttConfig();
+			this._recSound(true);
+			// Non-built-in model → capture audio and send the clip to the provider on Done.
+			if (stt.slug !== 'webspeech') {
+				this._flow = { recorder: null, chunks: [], stop: false, mode: 'clip' };
+				var dev = localStorage.getItem('chi-mic-device') || '';
+				navigator.mediaDevices.getUserMedia({ audio: dev ? { deviceId: { exact: dev } } : true }).then(function (stream) {
+					if (!self._flow) { stream.getTracks().forEach(function (tk) { tk.stop(); }); return; }
+					var mr = new MediaRecorder(stream);
+					self._flow.recorder = mr; self._flow.stream = stream;
+					mr.ondataavailable = function (ev2) { if (ev2.data && ev2.data.size) self._flow && self._flow.chunks.push(ev2.data); };
+					mr.start(250);
+					if (liveEl) liveEl.textContent = '● Recording with ' + stt.name + ' — tap Done to transcribe.';
+				}).catch(function () { if (liveEl) liveEl.textContent = 'Microphone unavailable — check permissions.'; });
+				this._tick(1);
+				return;
+			}
+			var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+			if (!SR) { if (liveEl) liveEl.textContent = 'Built-in speech is unavailable here — pick a cloud/local model in Settings → Transcription.'; return; }
+			this._flow = { rec: null, final: '', stop: false, mode: 'live' };
 			var begin = function () {
 				var rec = new SR(); self._flow.rec = rec; rec.lang = self.getAttribute('lang') || 'en-US';
 				rec.continuous = true; rec.interimResults = true;
@@ -350,14 +454,44 @@
 		_flowFinish() {
 			var self = this;
 			if (!this._flow) return;
-			this._flow.stop = true; try { this._flow.rec.stop(); } catch (e) { /* noop */ }
+			this._recSound(false);
 			var liveEl = this.shadowRoot.getElementById('flowlive');
+			// Clip mode: stop the recorder, ship the audio to the provider, then run the pipeline.
+			if (this._flow.mode === 'clip') {
+				var fl = this._flow; this._flow = null;
+				try { fl.recorder && fl.recorder.stop(); } catch (e0) { /* noop */ }
+				var finish = function () {
+					try { fl.stream && fl.stream.getTracks().forEach(function (tk) { tk.stop(); }); } catch (e1) { /* noop */ }
+					var blob = new Blob(fl.chunks, { type: 'audio/webm' });
+					if (!blob.size) { self._flowCancel(); return; }
+					if (liveEl) liveEl.textContent = 'Transcribing…';
+					self._transcribe(blob).then(function (text) {
+						if (!text) { if (liveEl) liveEl.textContent = 'Nothing heard — try again.'; return; }
+						self._flowDeliver(text);
+					}).catch(function (err) {
+						if (liveEl) liveEl.textContent = 'Transcription failed: ' + (err && err.message ? err.message : 'check the model key/URL in Settings → Transcription.');
+						self._flow = null;
+					});
+				};
+				if (fl.recorder && fl.recorder.state !== 'inactive') { fl.recorder.onstop = finish; } else { finish(); }
+				return;
+			}
+			this._flow.stop = true; try { this._flow.rec.stop(); } catch (e) { /* noop */ }
 			var raw = ((this._flow.final || '') + '').trim() || (liveEl && liveEl.textContent !== 'Listening…' ? String(liveEl.textContent || '').trim() : '');
 			this._flow = null;
 			if (!raw) { this._flowCancel(); return; }
+			this._flowDeliver(raw);
+			return;
+		}
+		/* Shared post-transcription pipeline: dictionary → optional AI polish → route + history. */
+		_flowDeliver(raw) {
+			var self = this;
+			raw = this._applyDictionary(raw);
+			var liveEl = this.shadowRoot.getElementById('flowlive');
 			var target = localStorage.getItem('chi-flow-target') || 'composer';
 			var polish = localStorage.getItem('chi-flow-polish') !== '0';
 			var deliver = function (text) {
+				self._pushHistory(text);
 				self._flowCancel();
 				if (target === 'chi') { self._send(text); return; }
 				if (target === 'copy') {
@@ -373,7 +507,8 @@
 			};
 			if (polish && this.ask) {
 				if (liveEl) liveEl.textContent = 'Polishing…';
-				var prompt = 'Clean up this dictation into well-punctuated, natural text. Keep the meaning and tone, remove filler words and false starts. Reply with ONLY the cleaned text, nothing else:\n\n' + raw;
+				var vocabHint = (localStorage.getItem('chi-vocab') || '').trim();
+				var prompt = 'Clean up this dictation into well-punctuated, natural text. Keep the meaning and tone, remove filler words and false starts.' + (vocabHint ? ' Preserve these terms exactly: ' + vocabHint.slice(0, 400) + '.' : '') + ' Reply with ONLY the cleaned text, nothing else:\n\n' + raw;
 				Promise.resolve().then(function () { return self.ask(prompt, []); })
 					.then(function (r2) { var out = (r2 && typeof r2 === 'object') ? r2.reply : r2; deliver(String(out || raw).trim() || raw); })
 					.catch(function () { deliver(raw); });
@@ -942,7 +1077,7 @@
 					'<span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;">' + icon + label + '</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span></div>';
 			};
 			var body = '';
-			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections' };
+			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections', stt: 'Transcription', dict: 'Dictionary', modes: 'Modes', history: 'History', audio: 'Audio' };
 			if (panel === 'main') {
 				body =
 					row('<span style="font-size:12px;opacity:.85;">Size</span>' +
@@ -965,6 +1100,11 @@
 					row('<span style="font-size:12px;opacity:.85;">Sounds</span>' + sw(localStorage.getItem('chi-orb-sound') !== '0', 's-sound')) +
 					row('<span style="font-size:12px;opacity:.85;">Route notifications to Chi</span>' + sw(localStorage.getItem('chi-notif-route') === '1', 's-route')) +
 					nav('Language models', 'models', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="4" width="12" height="8" rx="2"/><path d="M5.5 8 h.01 M8 8 h.01 M10.5 8 h.01" stroke-linecap="round" stroke-width="2"/></svg>') +
+					nav('Transcription', 'stt', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 8.5 c.8 0 .8 -2 1.6 -2 s.8 3 1.6 3 .9 -4 1.8 -4 .9 5 1.8 5 .9 -3.5 1.7 -3.5 .8 1.5 1.6 1.5 .9 -2 1.9 -2"/></svg>') +
+					nav('Dictionary', 'dict', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 2.5 h8 a1.5 1.5 0 0 1 1.5 1.5 v9.5 H4.5 A1.5 1.5 0 0 1 3 12 Z" stroke-linejoin="round"/><path d="M3 12 a1.5 1.5 0 0 1 1.5 -1.5 H12.5" stroke-linecap="round"/></svg>') +
+					nav('Modes', 'modes', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="5" height="5" rx="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.4"/></svg>') +
+					nav('History', 'history', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.5 V8 l2.4 1.6"/></svg>') +
+					nav('Audio', 'audio', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="1.8" width="4" height="7.6" rx="2"/><path d="M3.8 7.6 c0 2.4 1.9 4.3 4.2 4.3 s4.2 -1.9 4.2 -4.3 M8 11.9 v2.3"/></svg>') +
 					nav('Capabilities', 'caps', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1.8 L9.8 5.6 14 6.2 11 9.1 11.7 13.3 8 11.3 4.3 13.3 5 9.1 2 6.2 6.2 5.6 Z" stroke-linejoin="round"/></svg>') +
 					nav('Connections', 'connections', '<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="4.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 7 L9.6 4.8 M6.4 9 L9.6 11.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>') +
 					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
@@ -1007,6 +1147,97 @@
 							'<span style="display:flex;align-items:center;gap:7px;min-width:0;"><span style="font-size:12px;opacity:' + (it.live ? '.92' : '.6') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' + badge('SOON', it.live) + '</span>' + sw(on) + '</div>';
 					}).join('');
 				}).join('');
+			} else if (panel === 'stt') {
+				var curStt = localStorage.getItem('chi-stt-model') || 'webspeech';
+				var meter = function (v, warm) {
+					var dots = '';
+					for (var di = 1; di <= 5; di++) dots += '<span style="width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:2px;background:' + (v / 2 >= di ? (warm ? '#f6b93b' : GREEN) : 'rgba(128,128,128,.3)') + ';"></span>';
+					return dots;
+				};
+				var strow = function (m) {
+					var keyv = m.keyStore ? (localStorage.getItem(m.keyStore) || '') : '';
+					var urlv = m.urlStore ? (localStorage.getItem(m.urlStore) || '') : '';
+					var conf = m.builtin || (m.local ? !!urlv : !!keyv);
+					var selS = curStt === m.slug;
+					return '<div data-drum-base="" style="border-bottom:1px solid rgba(128,128,128,.13);">' +
+						'<div class="strow" data-stt="' + m.slug + '" style="display:flex;align-items:center;gap:8px;padding:9px 2px;cursor:pointer;">' +
+							'<span class="stradio" data-stradio="' + m.slug + '" style="width:15px;height:15px;border-radius:50%;flex-shrink:0;border:2px solid ' + (selS ? GREEN : 'rgba(128,128,128,.5)') + ';background:' + (selS ? GREEN : 'transparent') + ';"></span>' +
+							'<span style="flex:1;min-width:0;font-size:12px;opacity:' + (m.wired ? '.92' : '.6') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + m.name + '</span>' +
+							(m.wired ? (m.builtin ? badge('', true) : '') : badge('SOON')) +
+							'<span class="stled" style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + (conf ? GREEN : 'rgba(128,128,128,.4)') + ';"></span>' +
+							(m.builtin ? '' : '<span style="display:inline-flex;opacity:.5;transform:rotate(90deg);">' + chev + '</span>') +
+						'</div>' +
+						(m.builtin ? '' : '<div data-sted="' + m.slug + '" style="display:none;padding:2px 2px 10px 25px;">' +
+							(m.urlStore ? '<input class="min" data-store="' + m.urlStore + '" placeholder="' + (m.urlHint || 'Server URL') + '" value="' + esc(urlv) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' : '') +
+							(m.keyStore ? '<input class="min" data-store="' + m.keyStore + '" type="password" placeholder="API key' + (m.keyStore.indexOf('chi-llm-') === 0 ? ' (shared with Language models)' : '') + '" value="' + esc(keyv) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' : '') +
+							'<input class="min" data-store="chi-stt-' + m.slug + '-model" placeholder="Model — e.g. ' + (m.model || 'whisper-1') + '" value="' + esc(localStorage.getItem('chi-stt-' + m.slug + '-model') || '') + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' +
+						'</div>') +
+					'</div>';
+				};
+				body =
+					'<div data-drum-base="" style="margin:2px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Speech-to-text — Flow uses the selected model</div>' +
+					STT_PROVIDERS.map(strow).join('') +
+					'<div data-drum-base="" style="margin:14px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">On-device model catalog ' + badge('SOON') + '</div>' +
+					STT_LOCAL_MODELS.map(function (m2) {
+						return '<div data-drum-base="" style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
+							'<span style="flex:1;min-width:0;"><span style="font-size:12px;opacity:.85;">' + m2.name + '</span><span style="margin-left:7px;font-size:10px;opacity:.5;">' + m2.size + '</span><br><span style="font-size:9.5px;opacity:.55;">' + m2.note + '</span></span>' +
+							'<span style="font-size:9px;opacity:.6;text-align:right;">speed<br>' + meter(m2.speed) + '</span>' +
+							'<span style="font-size:9px;opacity:.6;text-align:right;">accuracy<br>' + meter(m2.acc, true) + '</span>' +
+							'<span style="padding:3px 10px;border-radius:10px;font-size:10px;font-weight:700;opacity:.45;border:1px solid rgba(128,128,128,.3);">Download</span>' +
+						'</div>';
+					}).join('') +
+					'<div data-drum-base="" style="margin:8px 2px;font-size:10.5px;opacity:.5;">+ Import local model ' + badge('SOON') + '</div>';
+			} else if (panel === 'dict') {
+				var entries = this._dict();
+				body =
+					'<div data-drum-base="" style="display:flex;gap:6px;padding:4px 0 10px;">' +
+						'<input id="dict-o" placeholder="Original (e.g. Qi)" style="flex:1;min-width:0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' +
+						'<input id="dict-r" placeholder="Replacement (e.g. Chi)" style="flex:1;min-width:0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' +
+						'<span id="dict-add" style="padding:7px 13px;border-radius:10px;cursor:pointer;font-size:11px;font-weight:800;background:rgba(48,209,88,.9);color:#fff;">Add</span>' +
+					'</div>' +
+					(entries.length ? entries.map(function (e4, i4) {
+						return '<div data-drum-base="" style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
+							'<span style="flex:1;font-size:12px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e4.o) + '</span><span style="opacity:.4;">→</span>' +
+							'<span style="flex:1;font-size:12px;opacity:.95;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e4.r) + '</span>' +
+							'<span class="dict-del" data-di="' + i4 + '" style="width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.55;background:rgba(128,128,128,.15);">×</span>' +
+						'</div>';
+					}).join('') : '<div data-drum-base="" style="padding:10px 2px;font-size:11.5px;opacity:.5;">Replacements fix words the transcriber keeps getting wrong — "Qi" → "Chi", "wynn" → "Nguyen".</div>') +
+					'<div data-drum-base="" style="margin:14px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Vocabulary — names & terms to preserve</div>' +
+					'<div data-drum-base=""><textarea id="dict-vocab" placeholder="Comma-separated: Nguyen, CasePro, DepoLink, ensō…" style="width:100%;box-sizing:border-box;min-height:54px;padding:8px 10px;border-radius:10px;font-size:11.5px;font-family:inherit;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);resize:none;">' + esc(localStorage.getItem('chi-vocab') || '') + '</textarea></div>';
+			} else if (panel === 'modes') {
+				var sttNow = this._sttConfig();
+				body =
+					'<div data-drum-base="" style="display:flex;align-items:center;gap:8px;padding:9px 2px;"><span style="font-size:12.5px;font-weight:800;">Dictation</span>' + badge('', true) + '<span style="margin-left:auto;font-size:10px;opacity:.5;">default mode</span></div>' +
+					row('<span style="font-size:12px;opacity:.85;">Keyboard shortcut</span><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:7px;background:rgba(128,128,128,.16);">⌘⇧C</span>') +
+					row('<span style="font-size:12px;opacity:.85;">Model</span><span data-nav="stt" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;cursor:pointer;">' + sttNow.name + ' ' + chev + '</span>') +
+					row('<span style="font-size:12px;opacity:.85;">Real-time transcript</span><span style="font-size:10.5px;opacity:.55;">' + (sttNow.slug === 'webspeech' ? 'On (built-in)' : 'Clip mode — transcribes on Done') + '</span>') +
+					'<div class="srow" data-drum-base="" data-tkey="chi-flow-polish" data-tdef="1" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);"><span style="font-size:12px;opacity:.85;">AI enhancement (polish)</span>' + sw(localStorage.getItem('chi-flow-polish') !== '0') + '</div>' +
+					row('<span style="font-size:12px;opacity:.85;">Output</span><span id="modes-target" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;text-transform:capitalize;cursor:pointer;">' + (localStorage.getItem('chi-flow-target') || 'composer') + ' ' + chev + '</span>') +
+					'<div class="srow" data-drum-base="" data-tkey="chi-flow-autosend" data-tdef="0" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);"><span style="display:flex;align-items:center;gap:7px;font-size:12px;opacity:.85;">Auto send ' + badge('SOON') + '</span>' + sw(localStorage.getItem('chi-flow-autosend') === '1') + '</div>' +
+					'<div data-drum-base="" style="margin:10px 2px;font-size:10.5px;opacity:.5;">+ Add mode (per-app profiles) ' + badge('SOON') + '</div>';
+			} else if (panel === 'history') {
+				var hist = [];
+				try { hist = JSON.parse(localStorage.getItem('chi-flow-history') || '[]') || []; } catch (e5) { /* noop */ }
+				var words = localStorage.getItem('chi-flow-words') || '0';
+				body =
+					'<div data-drum-base="" style="display:flex;align-items:center;gap:8px;padding:2px 0 8px;">' +
+						'<input id="hist-q" placeholder="Search transcriptions…" style="flex:1;min-width:0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' +
+						'<span style="font-size:10px;opacity:.55;white-space:nowrap;">' + words + ' words dictated</span>' +
+					'</div>' +
+					(hist.length ? hist.map(function (h2, i5) {
+						var d5 = new Date(h2.ts);
+						return '<div class="histrow" data-drum-base="" data-hi="' + i5 + '" title="Tap to copy · lands in the composer too" style="padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);cursor:pointer;">' +
+							'<div style="font-size:9.5px;opacity:.45;">' + d5.toLocaleString() + '</div>' +
+							'<div style="font-size:12px;line-height:1.4;opacity:.88;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + esc(h2.text) + '</div>' +
+						'</div>';
+					}).join('') : '<div data-drum-base="" style="padding:10px 2px;font-size:11.5px;opacity:.5;">Every Flow dictation lands here.</div>');
+			} else if (panel === 'audio') {
+				body =
+					'<div data-drum-base="" style="margin:2px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Microphone — clip recording</div>' +
+					'<div id="miclist" data-drum-base="" style="padding:2px 0;font-size:11.5px;opacity:.6;">Looking for microphones…</div>' +
+					'<div data-drum-base="" style="margin:4px 2px 8px;font-size:10px;opacity:.45;">Built-in browser speech always uses the system default mic.</div>' +
+					'<div data-drum-base="" style="margin:10px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Recording sounds</div>' +
+					'<div class="srow" data-drum-base="" data-tkey="chi-rec-sounds" data-tdef="1" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);"><span style="font-size:12px;opacity:.85;">Start / stop chirps</span>' + sw(localStorage.getItem('chi-rec-sounds') !== '0') + '</div>';
 			} else {
 				body = CONNECTIONS.map(function (g) {
 					var head = '<div data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 2px;">' +
@@ -1169,6 +1400,58 @@
 						}
 						return;
 					}
+					// speech-model rows: radio = default STT; row tap = expand inline editor
+					var strow = e.target.closest('.strow');
+					if (strow) {
+						var sslug = strow.getAttribute('data-stt');
+						if (e.target.closest('.stradio')) {
+							localStorage.setItem('chi-stt-model', sslug);
+							panel.querySelectorAll('.stradio').forEach(function (rd2) {
+								var selr2 = rd2.getAttribute('data-stradio') === sslug;
+								rd2.style.border = '2px solid ' + (selr2 ? GREEN : 'rgba(128,128,128,.5)');
+								rd2.style.background = selr2 ? GREEN : 'transparent';
+							});
+							self._tick(1);
+						} else {
+							var sted = panel.querySelector('[data-sted="' + sslug + '"]');
+							if (sted) sted.style.display = sted.style.display === 'none' ? 'block' : 'none';
+						}
+						return;
+					}
+					var dd = e.target.closest('.dict-del');
+					if (dd) {
+						var di2 = parseInt(dd.getAttribute('data-di'), 10);
+						var entries2 = self._dict(); entries2.splice(di2, 1);
+						localStorage.setItem('chi-dict', JSON.stringify(entries2));
+						var rowD = dd.parentElement; if (rowD) rowD.remove();
+						self._tick();
+						return;
+					}
+					var hr2 = e.target.closest('.histrow');
+					if (hr2) {
+						try {
+							var hist2 = JSON.parse(localStorage.getItem('chi-flow-history') || '[]');
+							var item = hist2[parseInt(hr2.getAttribute('data-hi'), 10)];
+							if (item && item.text) {
+								try { navigator.clipboard.writeText(item.text); } catch (e6) { /* noop */ }
+								self.dispatchEvent(new CustomEvent('chi-flow-insert', { detail: { text: item.text }, bubbles: true, composed: true }));
+								hr2.style.opacity = '.4'; setTimeout(function () { hr2.style.opacity = ''; }, 350);
+								self._pluck();
+							}
+						} catch (e7) { /* noop */ }
+						return;
+					}
+					var micRow = e.target.closest('[data-mic]');
+					if (micRow) {
+						localStorage.setItem('chi-mic-device', micRow.getAttribute('data-mic'));
+						panel.querySelectorAll('[data-mic]').forEach(function (mr2) {
+							var selm = mr2 === micRow;
+							var rd3 = mr2.querySelector('.micdotr');
+							if (rd3) { rd3.style.border = '2px solid ' + (selm ? GREEN : 'rgba(128,128,128,.5)'); rd3.style.background = selm ? GREEN : 'transparent'; }
+						});
+						self._tick(1);
+						return;
+					}
 					var rowEl = e.target.closest('[data-conn]');
 					if (rowEl && rowEl.getAttribute('data-locked') !== '1') {
 						var cslug = rowEl.getAttribute('data-conn');
@@ -1193,6 +1476,52 @@
 					}
 				});
 				list.addEventListener('keydown', function (e) { e.stopPropagation(); }); // typing a key must not leak to app hotkeys
+				// dictionary: add entry + vocab persistence
+				var dictAdd = r.getElementById('dict-add');
+				if (dictAdd) dictAdd.addEventListener('click', function () {
+					var oI = r.getElementById('dict-o'), rI = r.getElementById('dict-r');
+					var ov = (oI && oI.value || '').trim(), rv = (rI && rI.value || '').trim();
+					if (!ov) return;
+					var entries3 = self._dict(); entries3.push({ o: ov, r: rv });
+					localStorage.setItem('chi-dict', JSON.stringify(entries3));
+					self._tick(1);
+					var sl2 = r.getElementById('slist'); if (sl2) self._slistScrollKeep = sl2.scrollTop;
+					self._render();
+				});
+				var vocabEl = r.getElementById('dict-vocab');
+				if (vocabEl) vocabEl.addEventListener('input', function () { localStorage.setItem('chi-vocab', vocabEl.value); });
+				// modes: output target cycler
+				var mt = r.getElementById('modes-target');
+				if (mt) mt.addEventListener('click', function (e8) {
+					e8.stopPropagation();
+					var order = ['composer', 'chi', 'copy'];
+					var nxt = order[(order.indexOf(localStorage.getItem('chi-flow-target') || 'composer') + 1) % order.length];
+					localStorage.setItem('chi-flow-target', nxt);
+					mt.firstChild.textContent ? (mt.childNodes[0].textContent = nxt + ' ') : null;
+					mt.innerHTML = nxt + ' ' + '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+					self._tick();
+				});
+				// history: live search filter
+				var hq = r.getElementById('hist-q');
+				if (hq) hq.addEventListener('input', function () {
+					var q2 = hq.value.toLowerCase();
+					list.querySelectorAll('.histrow').forEach(function (row2) { row2.style.display = row2.textContent.toLowerCase().indexOf(q2) === -1 ? 'none' : ''; });
+				});
+				// audio: enumerate microphones (labels appear once mic permission has been granted)
+				var micList = r.getElementById('miclist');
+				if (micList && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+					navigator.mediaDevices.enumerateDevices().then(function (devs) {
+						var mics = devs.filter(function (d6) { return d6.kind === 'audioinput'; });
+						var curMic = localStorage.getItem('chi-mic-device') || '';
+						micList.style.opacity = '1';
+						micList.innerHTML = mics.length ? mics.map(function (d7, i7) {
+							var selm2 = curMic ? d7.deviceId === curMic : i7 === 0;
+							return '<div data-mic="' + d7.deviceId + '" style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);cursor:pointer;">' +
+								'<span class="micdotr" style="width:15px;height:15px;border-radius:50%;flex-shrink:0;border:2px solid ' + (selm2 ? 'rgb(48,209,88)' : 'rgba(128,128,128,.5)') + ';background:' + (selm2 ? 'rgb(48,209,88)' : 'transparent') + ';"></span>' +
+								'<span style="font-size:12px;opacity:.88;">' + (d7.label || ('Microphone ' + (i7 + 1))) + '</span></div>';
+						}).join('') : 'No microphones found.';
+					}).catch(function () { micList.textContent = 'Microphone list unavailable.'; });
+				}
 				this._drumify(list, 1, true);
 				if (this._slistScrollKeep != null) {
 					var ks = this._slistScrollKeep;
