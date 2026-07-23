@@ -32,23 +32,18 @@ const desktopBridge = (): DesktopBridge | undefined => (window as unknown as { m
  */
 const POS_KEY = 'chi-orb-pos';
 const POPPED_KEY = 'chi-popped'; // set by the popped-out window (shared localStorage) → no duplicate orb
-const DOCK_KEY = 'chi-desktop-docked'; // '1' = user explicitly brought Chi back INTO the app frame
 const ORB_Z = 2147483000; // above the RC sidebar/rail so a dragged orb is never clipped behind it
 const KEEP_ON_SCREEN = 52; // px of the widget that must stay reachable after a drag
 
-// The single source of truth for "is Chi OUT of the app frame?":
-//   • user explicitly docked it in-app        → false
-//   • the popped-out window is confirmed open  → true
-//   • otherwise, DESKTOP defaults to popped-out (Chi lives in its own window); web defaults to in-app.
+// Desktop only: the user closed the native Chi window THIS session (its × = dismiss). Suppress the
+// auto-pop-out until reload — but do NOT persist it, so Chi still opens on the next app launch. Reset
+// whenever Chi is (re)opened. Web is unaffected (poppedOut = the PiP flag alone).
+let chiDesktopDismissed = false;
+
+// poppedOut here means "the orb lives in a PiP window" (web only — on desktop the render is gated on
+// isDesktop and never shows the in-app orb). Driven solely by the shared 'chi-popped' flag.
 function computePopped(): boolean {
-	if (localStorage.getItem(DOCK_KEY) === '1') {
-		return false;
-	}
-	if (localStorage.getItem(POPPED_KEY) === '1') {
-		return true;
-	}
-	const d = desktopBridge();
-	return Boolean(d?.isDesktop && d.popOutChi);
+	return localStorage.getItem(POPPED_KEY) === '1';
 }
 
 type Pos = { x: number; y: number };
@@ -115,7 +110,7 @@ export const ChiOrbMount = (): ReactElement => {
 		// the in-app orb AFTER the native window actually opens — if popOutChi rejects, keep the orb so Chi
 		// never just vanishes.
 		const d = desktopBridge();
-		localStorage.removeItem(DOCK_KEY); // popping out is the opposite of "docked in-app"
+		chiDesktopDismissed = false; // opening Chi clears any this-session dismissal
 		if (d?.isDesktop && d.popOutChi) {
 			try {
 				await d.popOutChi();
@@ -196,10 +191,10 @@ export const ChiOrbMount = (): ReactElement => {
 				/* ignore */
 			}
 		});
-		// Closing the native window (its × = "bring Chi back into the app") docks it in-app; otherwise the
-		// desktop-default would just re-pop it out on the next reconcile.
+		// The native window's × dismisses Chi for THIS session (no auto-reopen until reload / Find Chi) —
+		// session-scoped so it still opens on the next app launch.
 		d.onChiWindowClosed?.(() => {
-			localStorage.setItem(DOCK_KEY, '1');
+			chiDesktopDismissed = true;
 			localStorage.removeItem(POPPED_KEY);
 			setPoppedOut(false);
 		});
@@ -222,17 +217,48 @@ export const ChiOrbMount = (): ReactElement => {
 	}, []);
 
 	// DESKTOP DEFAULT: Chi lives in its OWN floating window, not inside the app frame (the in-app orb is
-	// in the way). On load, if the user hasn't explicitly docked it in-app and it isn't already popped out,
-	// pop it out. Remount/reload is a no-op (POPPED_KEY is already set). Web keeps the draggable in-app orb.
+	// in the way). On load, open it — unless the user dismissed it this session or it's already open.
 	useEffect(() => {
 		const d = desktopBridge();
 		if (!d?.isDesktop || !d.popOutChi) {
 			return;
 		}
-		if (localStorage.getItem(DOCK_KEY) === '1' || localStorage.getItem(POPPED_KEY) === '1') {
+		if (chiDesktopDismissed || localStorage.getItem(POPPED_KEY) === '1') {
 			return;
 		}
 		void popOutRef.current();
+	}, []);
+
+	// "Find Chi" (rail button). Desktop routes straight to findChiWindow; this handles the WEB path
+	// (and an older desktop build without findChiWindow): focus the PiP if popped, else reveal the in-app
+	// orb at its default resting spot.
+	useEffect(() => {
+		const onSummon = (): void => {
+			const d = desktopBridge();
+			if (d?.isDesktop) {
+				if (d.findChiWindow) {
+					void d.findChiWindow();
+				} else if (d.popOutChi) {
+					void d.popOutChi();
+				}
+				return;
+			}
+			if (pipWinRef.current) {
+				try {
+					pipWinRef.current.focus();
+				} catch {
+					/* ignore */
+				}
+				return;
+			}
+			const orb = orbElRef.current as (HTMLElement & { _min?: boolean; _toggle?: () => void }) | null;
+			if (orb?._min && orb._toggle) {
+				orb._toggle();
+			}
+			setPos(null); // back to the default bottom-right resting spot, on-screen
+		};
+		window.addEventListener('chi:summon', onSummon);
+		return () => window.removeEventListener('chi:summon', onSummon);
 	}, []);
 
 	// Create the web component once its bundle is loaded, and wire the Chi adapter + orb events.
@@ -310,103 +336,28 @@ export const ChiOrbMount = (): ReactElement => {
 		touchAction: 'none',
 	};
 
-	// While popped out, the orb lives in its own OS window; leave a pill to bring it back OR re-find it
-	// (the frameless, always-on-top native window can drift off-screen and get lost).
-	if (poppedOut) {
-		const d = desktopBridge();
-		// FIXED position (bottom-left), independent of where the orb was dragged, so the bring-back / Find
-		// Chi controls always live in the same predictable spot. Portaled to <body> so it escapes the stock
-		// #main-content z-0 stacking context (otherwise it paints under the z-2 sidebar).
-		return createPortal(
-			<div style={poppedControlsStyle}>
-				<button
-					type='button'
-					title='Bring Chi back into the window'
-					onClick={() => {
-						localStorage.setItem(DOCK_KEY, '1'); // user wants Chi in the app frame now
-						localStorage.removeItem(POPPED_KEY);
-						if (d?.isDesktop) {
-							d.closeChiWindow?.();
-						} else {
-							pipWinRef.current?.close();
-						}
-						setPoppedOut(false);
-					}}
-					style={pillStyle}
-				>
-					<span style={{ width: 8, height: 8, borderRadius: '50%', background: '#30d158' }} />
-					Chi is in its own window ▸ bring back
-				</button>
-				{Boolean(d?.isDesktop && d?.findChiWindow) && (
-					<button
-						type='button'
-						title='Find Chi — recenter its window on this screen'
-						onClick={() => d?.findChiWindow?.()}
-						style={findStyle}
-					>
-						<svg width='11' height='11' viewBox='0 0 14 14' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round'>
-							<circle cx='7' cy='7' r='2' />
-							<path d='M7 1v2M7 11v2M1 7h2M11 7h2' />
-						</svg>
-						Find Chi
-					</button>
-				)}
-				<div ref={hostRef} style={{ display: 'none' }} />
-			</div>,
-			document.body,
-		);
+	// DESKTOP: Chi lives ONLY in its own native window — never an in-app orb, never a floating pill (both
+	// were "in the way"). We keep a hidden host for the (unused) orb element; the "Find Chi" rail button
+	// (AppLeftRail) recenters/reopens the native window. The hidden host must exist so the mount effect's
+	// appendChild has a home.
+	if (desktop?.isDesktop) {
+		return createPortal(<div ref={hostRef} style={{ display: 'none' }} />, document.body);
 	}
 
-	// Portaled to <body> so a dragged orb escapes the stock #main-content z-0 stacking context and is
-	// never clipped behind the z-2 sidebar (a higher z-index alone cannot escape that context).
+	// WEB, popped to a Document-PiP window: keep a hidden home for the orb to return to on close. No pill —
+	// the "Find Chi" rail button (chi:summon) brings it back / focuses it.
+	if (poppedOut) {
+		return createPortal(<div ref={hostRef} style={{ display: 'none' }} />, document.body);
+	}
+
+	// WEB, in-app: the draggable orb. Portaled to <body> so it escapes the stock #main-content z-0 stacking
+	// context and is never clipped behind the z-2 sidebar (a higher z-index alone cannot escape that context).
 	return createPortal(
 		<div ref={containerRef} style={containerStyle}>
 			<div ref={hostRef} style={{ touchAction: 'none' }} />
 		</div>,
 		document.body,
 	);
-};
-
-const poppedControlsStyle: CSSProperties = {
-	position: 'fixed',
-	left: 16,
-	bottom: 60,
-	zIndex: ORB_Z,
-	display: 'flex',
-	flexDirection: 'column',
-	alignItems: 'flex-start',
-	gap: 6,
-	touchAction: 'none',
-};
-
-const pillStyle: CSSProperties = {
-	display: 'flex',
-	alignItems: 'center',
-	gap: 6,
-	padding: '6px 12px',
-	borderRadius: 16,
-	cursor: 'pointer',
-	color: '#dfe3e8',
-	font: '600 12px -apple-system, BlinkMacSystemFont, sans-serif',
-	background: 'rgba(20,24,29,.82)',
-	border: '1px solid rgba(48,209,88,.4)',
-	backdropFilter: 'blur(10px)',
-	WebkitBackdropFilter: 'blur(10px)',
-};
-
-const findStyle: CSSProperties = {
-	display: 'flex',
-	alignItems: 'center',
-	gap: 6,
-	padding: '5px 11px',
-	borderRadius: 14,
-	cursor: 'pointer',
-	color: '#8fc2ff',
-	font: '600 11px -apple-system, BlinkMacSystemFont, sans-serif',
-	background: 'rgba(20,24,29,.82)',
-	border: '1px solid rgba(59,155,255,.5)',
-	backdropFilter: 'blur(10px)',
-	WebkitBackdropFilter: 'blur(10px)',
 };
 
 export default ChiOrbMount;

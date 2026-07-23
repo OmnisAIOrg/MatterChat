@@ -27,7 +27,7 @@
  */
 import type { IExternalWorkspaceConnection, IBridgedChannel, IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
 import { isEditedMessage } from '@rocket.chat/core-typings';
-import { ExternalWorkspaceConnections, Messages, Rooms, Users } from '@rocket.chat/models';
+import { ExternalWorkspaceConnections, Messages, Rooms, Subscriptions, Users } from '@rocket.chat/models';
 import { Random } from '@rocket.chat/random';
 
 import { getBridgeBotUser } from './bridgeBot';
@@ -37,6 +37,7 @@ import { callbacks } from '../../../../server/lib/callbacks';
 import { SystemLogger } from '../../../../server/lib/logger/system';
 import { createRoom } from '../../../lib/server/functions/createRoom';
 import { sendMessage } from '../../../lib/server/functions/sendMessage';
+import { notifyOnSubscriptionChangedByRoomIdAndUserId } from '../../../lib/server/lib/notifyListener';
 import { settings } from '../../../settings/server';
 import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
@@ -211,6 +212,22 @@ export async function ingestExternalMessage(
 			},
 		},
 	);
+
+	// Raise the sidebar RED DOT for the owner. Bridged inbound carries the EXTERNAL post's timestamp
+	// (parseExternalTs, preserved for correct ordering/threading), so it trips Rocket.Chat's >60s
+	// "imported message" guard in notifyUsersOnMessage — which skips updateUsersSubscriptions (the alert
+	// setter). Poll/backfill delivery makes almost every bridged message >60s old, so bridged rooms never
+	// lit up. Do here exactly what that path would have: set alert on every subscriber except the sender
+	// (the bot; the owner is the only other), then push the change so the rail updates live. Idempotent
+	// (setAlert is guarded by alert:{$ne:true}); only for messages from the OTHER party, never the owner's own.
+	if (!senderIsOwner) {
+		try {
+			await Subscriptions.setAlertForRoomIdExcludingUserId(bridge.rid, sender._id);
+			void notifyOnSubscriptionChangedByRoomIdAndUserId(bridge.rid, doc.userId);
+		} catch (err) {
+			SystemLogger.warn({ msg: 'Connector bridge inbound: failed to raise unread alert', rid: bridge.rid, err });
+		}
+	}
 	return true;
 }
 

@@ -322,6 +322,18 @@ const AppLeftRail = () => {
 		}
 	});
 
+	// Find Chi: on desktop the assistant lives in its OWN floating window (can drift off-screen) — recenter
+	// + front it. On web (or an older desktop build), summon the in-app orb to reveal + focus itself.
+	const handleFindChi = useStableCallback(() => {
+		const desktop = (window as unknown as { matterchatDesktop?: { isDesktop?: boolean; findChiWindow?: () => Promise<unknown> } })
+			.matterchatDesktop;
+		if (desktop?.isDesktop && desktop.findChiWindow) {
+			void desktop.findChiWindow();
+			return;
+		}
+		window.dispatchEvent(new CustomEvent('chi:summon'));
+	});
+
 	// MATTERCHAT: on phones the MobileTabBar carries the primary nav; this 88px column would eat a
 	// quarter of the viewport. Early-return AFTER all hooks (rules of hooks).
 	if (isMobile) {
@@ -432,6 +444,9 @@ const AppLeftRail = () => {
 				{/* Activity / Search / Updates / Admin are MatterChat-native — hidden in external-workspace mode. */}
 				{!inExternalMode && canViewBoards && renderItem('bell', t('Activity'), handleActivity, Boolean(inboxActive), activityUnread)}
 				{!inExternalMode && renderItem('magnifier', t('Search'), handleSearch, false)}
+				{/* Find Chi — NOT gated on external mode: the floating desktop Chi window can get lost while
+				    you're in any workspace, so it must always be reachable. */}
+				{renderItem('ai', t('Find_Chi', { defaultValue: 'Find Chi' }), handleFindChi, false)}
 				{!inExternalMode && renderItem('megaphone', t('Updates'), handleUpdates, updatesActive, 0, hasUnseenUpdates)}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>

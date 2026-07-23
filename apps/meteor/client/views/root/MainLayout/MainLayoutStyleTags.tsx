@@ -532,8 +532,9 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 .rcx-content--main .messages-list {
 	background-color: var(--mc-premium-bg);
 	padding: 18px 26px 8px;
-	max-width: 860px;
-	margin: 0 auto;
+	/* Full width (not a centered 860px column): the composer and the message list are in separate
+	   containers, so an independent max-width on each centered them differently and they drifted apart
+	   on wide screens. Both stay full-width now → they always share the same left/right edges. */
 }
 
 /* MessageDivider (day separator) styling */
@@ -651,20 +652,12 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	color: var(--mc-premium-ink);
 }
 
-/* Composer section styling (rc-message-box is the footer wrapper) */
+/* Composer section styling (rc-message-box is the footer wrapper). Full width to match the full-width
+   message list (same 26px side padding) — NO independent max-width/centering, which drifted out of
+   alignment with the messages on wide screens. */
 .rcx-content--main .rc-message-box {
 	padding: 14px 26px 18px;
 	background-color: var(--mc-premium-bg);
-}
-
-/* Clamp the composer to the SAME 860px readable column as .messages-list so the input aligns with the
-   messages at every width. A direct-child selector alone is brittle (some composer variants render
-   different children); also target the real Fuselage classes (the input wrapper + the typing line). */
-.rcx-content--main .rc-message-box > div,
-.rcx-content--main .rc-message-box .rcx-input-box__wrapper,
-.rcx-content--main .rc-message-box .rc-message-box__activity-wrapper {
-	max-width: 860px;
-	margin-inline: auto;
 }
 
 /* Message composer (ui-composer MessageComposer component) */
