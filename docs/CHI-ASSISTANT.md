@@ -88,7 +88,10 @@ Mocha/chai unit specs: providers (presets incl. locals), MCP (registry parsing, 
 ## 3 · Still to be done (the honest list)
 
 ### Blockers before production
-- [ ] **Alpha preview workflow skips on PR #160** — fix its trigger, then full QA pass (notifications web+desktop, reply round-trip, Flow→composer selector against the real DOM, captions in a live call)
+> Deploy model: MatterChat has NO per-PR previews — merging PR #160 into `staging` auto-builds
+> and restarts the staging pod (ArgoCD owns the manifests; see matterchat-staging-deploy.yaml).
+> QA happens ON STAGING, then production is promoted separately.
+- [ ] **Merge #160 → staging, then the QA pass on staging** (notifications web+desktop, reply round-trip, Flow→composer selector against the real DOM, captions in a live call, Workspace transcription with a real key)
 - [ ] **Fork-wide CI debt** (boards API types, Bridge CSS lint, ABAC/Virtru specs — none of it Chi) — cleanup branch so PRs run green
 - [ ] **Desktop release tag** so users receive ⌘⇧C/⌘⇧F via auto-update
 
