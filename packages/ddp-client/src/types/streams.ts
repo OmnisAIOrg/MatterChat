@@ -175,6 +175,12 @@ export interface StreamerEvents {
 		{ key: `${string}/notification`; args: [INotificationDesktop] },
 		// MATTERCHAT: live push for external-connector inbound messages (Slack/Teams browse lane).
 		{ key: `${string}/external-inbound`; args: [IExternalInboundNotification] },
+		// MATTERCHAT: Chi local-tools bridge — the server relays a tool call down to the member's
+		// own desktop session (EvidenceHunt / Omnis CC local MCP servers on their Mac).
+		{
+			key: `${string}/chi-local-tool`;
+			args: [{ callId: string; app: string; tool: string; args: Record<string, unknown> }];
+		},
 		{ key: `${string}/call.hangup`; args: [{ roomId: string }] },
 		{ key: `${string}/uiInteraction`; args: [UiKit.ServerInteraction] },
 		{

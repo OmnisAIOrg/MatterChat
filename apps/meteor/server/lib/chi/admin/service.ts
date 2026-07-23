@@ -30,6 +30,7 @@ import { isCancelText, isConfirmText } from './helpers';
 import type { ChiTurn, LlmConfig, ToolCall } from './llm';
 import { llmStep } from './llm';
 import { isLocalProvider, resolveProvider } from './providers';
+import { isLocalTool, localConfirmSummary, localToolDefs, runLocalTool } from './localtools';
 import { isMcpTool, mcpConfirmSummary, mcpToolDefs, runMcpTool } from './mcp';
 import { describeToolCall, findTool, runTool, toolDefs } from './tools';
 import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
@@ -74,13 +75,21 @@ function llmConfig(userModel?: string): LlmConfig | undefined {
 type ChiUserPrefs = { model?: string; connectors?: Record<string, boolean> };
 const userChiPrefs = (u: IUser): ChiUserPrefs => ((u as IUser & { settings?: { chi?: ChiUserPrefs } }).settings?.chi ?? {});
 
-/** Route a call to the built-in registry or an MCP connector (namespaced mcp_<server>_<tool>). */
+/** Route a call to the built-in registry, an MCP connector (mcp_<server>_<tool>), or a
+ *  local desktop app (local_<app>_<tool> — relayed to the member's own Mac). */
 async function runAnyTool(name: string, input: Record<string, unknown>, actor: IUser): Promise<{ ok: boolean; content: string }> {
+	if (isLocalTool(name)) {
+		return runLocalTool(actor._id, name, input);
+	}
 	return isMcpTool(name) ? runMcpTool(name, input, actor) : runTool(name, input, actor);
 }
 
-/** Confirm summary for any call — built-ins consult their needsConfirm, MCP tools the connector gate. */
-async function anyConfirmSummary(name: string, input: Record<string, unknown>): Promise<string | undefined> {
+/** Confirm summary for any call — built-ins consult their needsConfirm, MCP tools the connector
+ *  gate, local desktop tools the manifest's own needsConfirm (or the same write heuristic). */
+async function anyConfirmSummary(name: string, input: Record<string, unknown>, actor?: IUser): Promise<string | undefined> {
+	if (isLocalTool(name)) {
+		return actor ? localConfirmSummary(actor._id, name, input) : undefined;
+	}
 	return isMcpTool(name) ? mcpConfirmSummary(name, input) : findTool(name)?.needsConfirm?.(input);
 }
 
@@ -202,7 +211,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 
 	try {
 		const turns: ChiTurn[] = [...(await historyTurns(room._id, message._id)), { kind: 'user', text }];
-		const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors))];
+		const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors)), ...localToolDefs(sender._id)];
 		const system = systemPrompt(sender, isAdmin);
 
 		for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -220,7 +229,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 			const results: { id: string; name: string; content: string; isError?: boolean }[] = [];
 			for (let c = 0; c < step.toolCalls.length; c++) {
 				const call = step.toolCalls[c];
-				const summary = await anyConfirmSummary(call.name, call.input);
+				const summary = await anyConfirmSummary(call.name, call.input, sender);
 				if (summary) {
 					await finish(parkAndAsk(room._id, sender, call, summary, step.toolCalls.length - c - 1));
 					return;
@@ -325,7 +334,7 @@ export async function runChiOrbTurn(
 	const contextLine = chiCtx?.roomName
 		? `- The user is CURRENTLY VIEWING ${chiCtx.roomType === 'd' ? '@' : '#'}${chiCtx.roomName}. When they say "this", "here" or omit a channel, act on that conversation.`
 		: undefined;
-	const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors))];
+	const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors)), ...localToolDefs(sender._id)];
 	const system = systemPrompt(sender, isAdmin, contextLine);
 
 	const { result, actions } = await withClientActions<Omit<ChiOrbTurnResult, 'actions'>>(() => withChiContext(chiCtx ?? {}, async () => {
@@ -342,7 +351,7 @@ export async function runChiOrbTurn(
 				const results: { id: string; name: string; content: string; isError?: boolean }[] = [];
 				for (let c = 0; c < step.toolCalls.length; c++) {
 					const call = step.toolCalls[c];
-					const summary = await anyConfirmSummary(call.name, call.input);
+					const summary = await anyConfirmSummary(call.name, call.input, sender);
 					if (summary) {
 						return { reply: parkAndAsk(orbRid, sender, call, summary, step.toolCalls.length - c - 1), needsConfirm: true };
 					}
