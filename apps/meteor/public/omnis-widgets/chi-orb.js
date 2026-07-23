@@ -101,13 +101,6 @@
 			{ slug: 'autodoc', name: 'AutoDoc' },
 			{ slug: 'litdraft', name: 'LitDraft' },
 		] },
-		{ label: 'Language models', add: 'Add model', radio: 'chi-model', items: [
-			{ slug: 'claude-sonnet', name: 'Claude · Sonnet 4.5', ready: true, def: true },
-			{ slug: 'claude-opus', name: 'Claude · Opus 4', ready: true },
-			{ slug: 'gpt-4o', name: 'GPT-4o', ready: true },
-			{ slug: 'gemini-pro', name: 'Gemini 2.5 Pro', ready: true },
-			{ slug: 'llama-local', name: 'Llama 3 · local' },
-		] },
 		{ label: 'MCP servers', add: 'Add MCP', items: [
 			{ slug: 'mcp-filesystem', name: 'Filesystem' },
 			{ slug: 'mcp-postgres', name: 'Postgres' },
@@ -122,6 +115,72 @@
 			{ slug: 'litbox-drafts', name: 'LitBox Drafts', ready: true },
 			{ slug: 'gcal', name: 'Google Calendar' },
 			{ slug: 'zapier', name: 'Zapier' },
+		] },
+	];
+	// Language-model roster — mirrors EvidenceHunt's provider-agnostic layer: cloud presets +
+	// OpenAI-compatible locals (Ollama / LM Studio / llama.cpp / custom). Config persists locally
+	// (chi-llm-<slug>-url/key/model) until the workspace BE roster lands.
+	var MODELS = [
+		{ slug: 'anthropic', name: 'Claude · Anthropic', hint: 'claude-sonnet-4-5' },
+		{ slug: 'openai', name: 'OpenAI', hint: 'gpt-4o' },
+		{ slug: 'gemini', name: 'Gemini · Google', hint: 'gemini-2.5-pro' },
+		{ slug: 'xai', name: 'Grok · xAI', hint: 'grok-4' },
+		{ slug: 'groq', name: 'Groq', hint: 'llama-3.3-70b' },
+		{ slug: 'cerebras', name: 'Cerebras', hint: 'llama-3.3-70b' },
+		{ slug: 'openrouter', name: 'OpenRouter', hint: 'openai/gpt-oss-120b' },
+		{ slug: 'deepseek', name: 'DeepSeek', hint: 'deepseek-chat' },
+		{ slug: 'ollama', name: 'Ollama · runs on this computer', local: true, url: 'http://localhost:11434', hint: 'llama3.1:8b' },
+		{ slug: 'lmstudio', name: 'LM Studio · local', local: true, url: 'http://localhost:1234/v1', hint: 'loaded model' },
+		{ slug: 'llamacpp', name: 'llama.cpp · local', local: true, url: 'http://localhost:8080/v1', hint: 'gguf model' },
+		{ slug: 'customllm', name: 'Custom · OpenAI-compatible', local: true, url: '', hint: 'any base URL' },
+	];
+	// Everything an AI assistant can be — LIVE = wired today; SOON = FE reminder of what to build.
+	var CAPS = [
+		{ label: 'Workspace', items: [
+			{ slug: 'voice-cmd', name: 'Voice commands', live: true },
+			{ slug: 'realtime', name: 'Realtime voice conversations', live: true },
+			{ slug: 'navigate', name: 'Navigate the app for me', live: true },
+			{ slug: 'summarize', name: 'Summarize & catch me up', live: true },
+			{ slug: 'draftpost', name: 'Draft & post messages (confirmed)', live: true },
+			{ slug: 'notifs', name: 'Notifications in Chi', live: true },
+			{ slug: 'boards', name: 'Boards, tasks & deadlines', live: true },
+		] },
+		{ label: 'Computer control', items: [
+			{ slug: 'open-apps', name: 'Open apps & files' },
+			{ slug: 'click-type', name: 'Click & type on screen' },
+			{ slug: 'read-screen', name: 'Read what’s on my screen' },
+			{ slug: 'screenshot', name: 'Take screenshots' },
+			{ slug: 'clipboard', name: 'Use the clipboard' },
+			{ slug: 'browser', name: 'Drive the browser' },
+		] },
+		{ label: 'Files & documents', items: [
+			{ slug: 'read-docs', name: 'Read PDFs & documents' },
+			{ slug: 'ocr', name: 'OCR images & scans' },
+			{ slug: 'draft-docs', name: 'Draft documents' },
+			{ slug: 'sheets', name: 'Analyze spreadsheets' },
+			{ slug: 'litbox', name: 'LitBox file access' },
+		] },
+		{ label: 'Communications', items: [
+			{ slug: 'email-draft', name: 'Draft & send email' },
+			{ slug: 'inbox', name: 'Inbox digest' },
+			{ slug: 'calendar', name: 'Calendar & scheduling' },
+			{ slug: 'calls', name: 'Make phone calls (voice agent)' },
+			{ slug: 'sms', name: 'Send texts (SMS)' },
+		] },
+		{ label: 'Intelligence', items: [
+			{ slug: 'memory', name: 'Long-term memory' },
+			{ slug: 'prefs', name: 'Learn my preferences' },
+			{ slug: 'briefing', name: 'Daily briefing' },
+			{ slug: 'proactive', name: 'Proactive suggestions' },
+			{ slug: 'wakeword', name: 'Wake word — “Hey Chi”' },
+			{ slug: 'vision', name: 'See through my camera' },
+			{ slug: 'watch-screen', name: 'Watch my screen & help' },
+		] },
+		{ label: 'Automations', items: [
+			{ slug: 'routines', name: 'Scheduled routines' },
+			{ slug: 'watchers', name: 'Watchers & triggers' },
+			{ slug: 'workflows', name: 'Multi-step workflows' },
+			{ slug: 'agents', name: 'Agent teams (sub-agents)' },
 		] },
 	];
 	var CANNED = ["Here's what I found — want me to go deeper?", 'Done. Anything else on your mind?', 'Good question. Short answer: yes — and I can show you why.', "I've drafted that for you. Want it posted to the channel?"];
@@ -474,36 +533,6 @@
 			if (!this._min) { this._flushPending(); if (!this._realtime) this._sync(); }
 			else if (this._pending.length) this._render(); // launcher badge reflects the queue
 		}
-		_wireFocusDial(shell) {
-			var self = this, st = null;
-			shell.addEventListener('pointerdown', function (e) {
-				if (e.target.closest('#grip') || e.target.closest('#arc') || e.target.closest('#ringminbtn') || e.target.closest('#focuschip') || e.target.closest('#win')) return;
-				var rect = shell.getBoundingClientRect();
-				var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-				var dx = e.clientX - cx, dy = e.clientY - cy;
-				var rr = Math.sqrt(dx * dx + dy * dy) / (rect.width / 2);
-				if (rr < 0.86 || rr > 1.04) return; // only the metal band winds the dial
-				st = { mins: 0 };
-				try { shell.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-				e.preventDefault();
-			});
-			shell.addEventListener('pointermove', function (e) {
-				if (!st) return;
-				var rect = shell.getBoundingClientRect();
-				var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-				var ang = Math.atan2(e.clientX - cx, cy - e.clientY) * 180 / Math.PI; // 0° at 12 o'clock, clockwise
-				if (ang < 0) ang += 360;
-				var mins = Math.max(5, Math.round((ang / 360) * 60 / 5) * 5); // 5-min detents, 5–60
-				if (mins !== st.mins) { st.mins = mins; self._tick(); self._focusPaint(mins / 60, mins * 60000); }
-			});
-			var up = function () {
-				if (!st) return;
-				if (st.mins > 0) self._startFocus(st.mins); else self._focusPaint(0, 0);
-				st = null;
-			};
-			shell.addEventListener('pointerup', up);
-			shell.addEventListener('pointercancel', up);
-		}
 		/* Flush queued notifications into the conversation: ≥4 collapse into a catch-up digest. */
 		_flushPending() {
 			var p = this._pending;
@@ -801,10 +830,6 @@
 				// 6 · black glass face
 				'<div id="win" style="position:absolute;inset:26px;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;background:' + t.win + ';border:1px solid ' + t.winBorder + ';box-shadow:inset 0 3px 10px rgba(255,255,255,.07), inset 0 -6px 14px rgba(0,0,0,.35), ' + t.vignette + ';">' +
 					'<div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 34% at 32% 12%, ' + t.glow + ', transparent 65%);"></div>' +
-					// specular arc — a thin bright reflection hugging the upper-left inner rim
-					'<div style="position:absolute;inset:6px;border-radius:50%;pointer-events:none;background:conic-gradient(from 300deg, transparent 0 8%, rgba(255,255,255,.28) 14%, rgba(255,255,255,.05) 22%, transparent 26%);-webkit-mask:radial-gradient(circle, transparent 95.5%, black 96.5%);mask:radial-gradient(circle, transparent 95.5%, black 96.5%);"></div>' +
-					// traveling glass sheen — a soft diagonal light strip sweeping every ~9s
-					'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;overflow:hidden;"><div style="position:absolute;top:-20%;bottom:-20%;left:0;width:38px;background:linear-gradient(90deg, transparent, rgba(255,255,255,.05), rgba(255,255,255,.10), rgba(255,255,255,.05), transparent);mix-blend-mode:screen;animation:chiSheen 9s ease-in-out infinite;"></div></div>' +
 					// etched tick ring just inside the glass rim
 					'<div style="position:absolute;inset:0;pointer-events:none;border-radius:50%;background:repeating-conic-gradient(' + t.tick + ' 0deg .4deg, transparent .4deg 3.6deg);opacity:' + t.tickOp + ';-webkit-mask:radial-gradient(circle, transparent 88.5%, black 89.5%, black 95%, transparent 96%);mask:radial-gradient(circle, transparent 88.5%, black 89.5%, black 95%, transparent 96%);"></div>' +
 					arc +
@@ -821,20 +846,33 @@
 				'</div>';
 		}
 
-		/* ---- the ⚙ settings overlay (full glass face, drum-scrolled) ---- */
+		/* ---- the ⚙ settings overlay (full glass face, drum-scrolled) ----
+		 * Panels: main ▸ models (cloud + LOCAL LLMs, EvidenceHunt-style) ▸ caps (every assistant
+		 * capability — LIVE today or SOON as the build reminder) ▸ connections (Omnis products,
+		 * MCPs, email, integrations). All interactions mutate in place — no re-render glitches. */
 		_settingsHTML() {
-			var t = this._theme, f = this._frame;
-			var isConn = this._settingsPanel === 'connections';
+			var t = this._theme, f = this._frame, self = this;
+			var panel = this._settingsPanel;
 			var row = function (inner, extra) {
 				return '<div class="srow" data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);' + (extra || '') + '">' + inner + '</div>';
 			};
 			var chev = '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 			var sw = function (on, id, disabled) {
 				return '<div ' + (id ? 'id="' + id + '" ' : '') + 'class="sw' + (disabled ? ' swoff' : '') + '" style="width:34px;height:20px;border-radius:11px;cursor:' + (disabled ? 'default' : 'pointer') + ';padding:2px;box-sizing:border-box;flex-shrink:0;transition:background .2s;background:' + (on ? GREEN : 'rgba(140,140,150,.45)') + ';' + (disabled ? 'opacity:.35;' : '') + '">' +
-					'<div style="width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s;transform:translateX(' + (on ? 15 : 1) + 'px);"></div></div>';
+					'<div style="width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s;transform:translateX(' + (on ? 15 : 1) + 'px)"></div></div>';
 			};
-			var body;
-			if (!isConn) {
+			var badge = function (txt, live) {
+				return live
+					? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">LIVE</span>'
+					: '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(128,128,128,.14);border:1px solid rgba(128,128,128,.25);opacity:.65;">' + (txt || 'SOON') + '</span>';
+			};
+			var nav = function (label, dest, icon) {
+				return '<div class="srow" data-drum-base="" data-nav="' + dest + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 2px;border-bottom:1px solid rgba(128,128,128,.16);cursor:pointer;">' +
+					'<span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;">' + icon + label + '</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span></div>';
+			};
+			var body = '';
+			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections' };
+			if (panel === 'main') {
 				body =
 					row('<span style="font-size:12px;opacity:.85;">Size</span>' +
 						'<span style="display:flex;align-items:center;gap:8px;">' +
@@ -842,47 +880,82 @@
 						'<span id="s-pct" style="font-size:11.5px;opacity:.7;min-width:34px;text-align:center;font-variant-numeric:tabular-nums;">' + Math.round(this._scale * 100) + '%</span>' +
 						'<span id="s-grow" class="sbtn" style="width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(128,128,128,.16);"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 3.5 v9 M3.5 8 h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span></span>') +
 					row('<span style="font-size:12px;opacity:.85;">Theme</span><span id="s-theme" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;text-transform:capitalize;cursor:pointer;">' + this._themeKey + ' ' + chev + '</span>') +
-					// Frame finish: preset dots + a fully draggable hue slider (drag anywhere on the bar;
-					// the ring tint + swatch update LIVE while dragging, persisted as a custom finish).
 					row('<span style="font-size:12px;opacity:.85;">Frame</span><span style="display:flex;align-items:center;gap:6px;">' +
 						FRAME_ORDER.map(function (k2) {
 							var sel = k2 === (localStorage.getItem('chi-orb-frame') || 'steel');
 							return '<span class="fdot" data-frame="' + k2 + '" title="' + FRAMES[k2].name + '" style="width:15px;height:15px;border-radius:50%;cursor:pointer;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)' + (sel ? ', 0 0 0 2px ' + GREEN : '') + ';background:' + FRAMES[k2].swatch + ';"></span>';
 						}).join('') +
 						'<span id="s-swatch" title="Custom" style="width:15px;height:15px;border-radius:50%;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)' + (this._frameKey === 'custom' ? ', 0 0 0 2px ' + GREEN : '') + ';background:' + (this._frameKey === 'custom' ? f.swatch : 'conic-gradient(red,#ff0,#0f0,#0ff,#00f,#f0f,red)') + ';"></span></span>') +
-					// Full color editing: a 2D shade pad (saturation → right, darkness → down) + hue bar.
 					row('<span id="s-pad" style="position:relative;flex:1;height:58px;border-radius:10px;cursor:crosshair;touch-action:none;background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(' + this._frameHue + ',100%,50%));box-shadow:inset 0 1px 4px rgba(0,0,0,.5);">' +
 						'<span id="s-padknob" style="position:absolute;left:' + this._frameSat.toFixed(0) + '%;top:' + Math.min(100, Math.max(0, (1 - (this._frameLum - 6) / 88) * 100)).toFixed(0) + '%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:hsl(' + this._frameHue + ',' + this._frameSat + '%,' + this._frameLum + '%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none;"></span></span>', 'border-bottom:none;padding-bottom:4px;') +
 					row('<span id="s-hue" style="position:relative;flex:1;height:14px;border-radius:7px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg, hsl(0,72%,52%), hsl(60,72%,52%), hsl(120,72%,52%), hsl(180,72%,52%), hsl(240,72%,52%), hsl(300,72%,52%), hsl(360,72%,52%));box-shadow:inset 0 1px 3px rgba(0,0,0,.45);">' +
-						'<span id="s-hueknob" style="position:absolute;top:50%;left:' + (this._frameHue / 360 * 100).toFixed(1) + '%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:hsl(' + this._frameHue + ',72%,52%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);pointer-events:none;"></span></span>', 'border-bottom:1px solid rgba(128,128,128,.16);') +
+						'<span id="s-hueknob" style="position:absolute;top:50%;left:' + (this._frameHue / 360 * 100).toFixed(1) + '%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:hsl(' + this._frameHue + ',72%,52%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);pointer-events:none;"></span></span>') +
 					row('<span style="font-size:12px;opacity:.85;">Focus timer</span><span style="display:flex;gap:6px;">' + [15, 25, 45].map(function (mn) { return '<span class="fmin" data-min="' + mn + '" style="padding:3px 10px;border-radius:10px;cursor:pointer;font-size:10.5px;font-weight:700;background:rgba(59,155,255,.14);border:1px solid rgba(59,155,255,.35);color:#8fc2ff;">' + mn + 'm</span>'; }).join('') + '</span>') +
 					row('<span style="font-size:12px;opacity:.85;">Sounds</span>' + sw(localStorage.getItem('chi-orb-sound') !== '0', 's-sound')) +
 					row('<span style="font-size:12px;opacity:.85;">Route notifications to Chi</span>' + sw(localStorage.getItem('chi-notif-route') === '1', 's-route')) +
-					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span id="s-popout" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
-					row('<span style="font-size:12px;opacity:.85;">Collapse to the ensō</span><span id="s-collapse" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-act="collapse') +
-					row('<span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="4.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 7 L9.6 4.8 M6.4 9 L9.6 11.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Connections</span><span id="s-conn" style="display:inline-flex;opacity:.6;cursor:pointer;">' + chev + '</span>', 'cursor:pointer;" data-open-conn="1');
+					nav('Language models', 'models', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="4" width="12" height="8" rx="2"/><path d="M5.5 8 h.01 M8 8 h.01 M10.5 8 h.01" stroke-linecap="round" stroke-width="2"/></svg>') +
+					nav('Capabilities', 'caps', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1.8 L9.8 5.6 14 6.2 11 9.1 11.7 13.3 8 11.3 4.3 13.3 5 9.1 2 6.2 6.2 5.6 Z" stroke-linejoin="round"/></svg>') +
+					nav('Connections', 'connections', '<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="4.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 7 L9.6 4.8 M6.4 9 L9.6 11.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>') +
+					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
+					row('<span style="font-size:12px;opacity:.85;">Collapse to the ensō</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span>', 'cursor:pointer;" data-act="collapse');
+			} else if (panel === 'models') {
+				var cur = localStorage.getItem('chi-model') || 'anthropic';
+				var cloud = MODELS.filter(function (m) { return !m.local; });
+				var local = MODELS.filter(function (m) { return m.local; });
+				var mrow = function (m) {
+					var key = localStorage.getItem('chi-llm-' + m.slug + '-key') || '';
+					var url = localStorage.getItem('chi-llm-' + m.slug + '-url') || m.url || '';
+					var mdl = localStorage.getItem('chi-llm-' + m.slug + '-model') || '';
+					var configured = m.local ? !!url : !!key;
+					var sel = cur === m.slug;
+					return '<div data-drum-base="" style="border-bottom:1px solid rgba(128,128,128,.13);">' +
+						'<div class="mrow" data-model="' + m.slug + '" style="display:flex;align-items:center;gap:8px;padding:9px 2px;cursor:pointer;">' +
+							'<span class="mradio" data-mradio="' + m.slug + '" style="width:15px;height:15px;border-radius:50%;flex-shrink:0;border:2px solid ' + (sel ? GREEN : 'rgba(128,128,128,.5)') + ';background:' + (sel ? GREEN : 'transparent') + ';box-shadow:' + (sel ? '0 0 8px rgba(48,209,88,.5)' : 'none') + ';"></span>' +
+							'<span style="flex:1;min-width:0;font-size:12px;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + m.name + '</span>' +
+							'<span class="mled" style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + (configured ? GREEN : 'rgba(128,128,128,.4)') + ';box-shadow:' + (configured ? '0 0 6px rgba(48,209,88,.6)' : 'none') + ';"></span>' +
+							'<span style="display:inline-flex;opacity:.5;transform:rotate(90deg);">' + chev + '</span>' +
+						'</div>' +
+						'<div class="med" data-med="' + m.slug + '" style="display:none;padding:2px 2px 10px 25px;">' +
+							(m.local
+								? '<input class="min" data-store="chi-llm-' + m.slug + '-url" placeholder="Base URL — e.g. ' + (m.url || 'http://localhost:11434') + '" value="' + esc(url) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">'
+								: '<input class="min" data-store="chi-llm-' + m.slug + '-key" type="password" placeholder="API key" value="' + esc(key) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">') +
+							'<input class="min" data-store="chi-llm-' + m.slug + '-model" placeholder="Model — e.g. ' + m.hint + '" value="' + esc(mdl) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' +
+						'</div>' +
+					'</div>';
+				};
+				body =
+					'<div data-drum-base="" style="margin:2px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Cloud</div>' + cloud.map(mrow).join('') +
+					'<div data-drum-base="" style="margin:12px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">On this computer — private, $0</div>' + local.map(mrow).join('') +
+					'<div data-drum-base="" style="margin:10px 2px 2px;font-size:11px;line-height:1.5;opacity:.55;">Local models run through Ollama / LM Studio — your messages never leave the machine. ' + badge('SOON') + ' one-click install &amp; hardware-matched model picks.</div>';
+			} else if (panel === 'caps') {
+				body = CAPS.map(function (g) {
+					var head = '<div data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 2px;"><span style="font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">' + g.label + '</span></div>';
+					return head + g.items.map(function (it) {
+						var on = it.live ? localStorage.getItem('chi-cap-' + it.slug) !== '0' : localStorage.getItem('chi-cap-' + it.slug) === '1';
+						return '<div class="srow" data-drum-base="" data-tkey="chi-cap-' + it.slug + '" data-tdef="' + (it.live ? '1' : '0') + '" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
+							'<span style="display:flex;align-items:center;gap:7px;min-width:0;"><span style="font-size:12px;opacity:' + (it.live ? '.92' : '.6') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' + badge('SOON', it.live) + '</span>' + sw(on) + '</div>';
+					}).join('');
+				}).join('');
 			} else {
-				var self = this;
 				body = CONNECTIONS.map(function (g) {
 					var head = '<div data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 2px;">' +
 						'<span style="font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">' + g.label + '</span>' +
 						'<span style="font-size:10px;opacity:.5;">+ ' + g.add + '</span></div>';
 					var rows = g.items.map(function (it) {
-						var badge = it.builtin ? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">BUILT IN</span>'
-							: (it.ready ? '' : '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(128,128,128,.14);border:1px solid rgba(128,128,128,.25);opacity:.65;">SOON</span>');
-						var on = it.builtin || (g.radio ? localStorage.getItem(g.radio) === it.slug || (it.def && !localStorage.getItem(g.radio)) : localStorage.getItem('chi-conn-' + it.slug) === '1');
-						return '<div class="srow" data-drum-base="" data-conn="' + it.slug + '" data-group="' + (g.radio || '') + '" data-locked="' + (it.builtin || !it.ready ? '1' : '') + '" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
-							'<span style="display:flex;align-items:center;gap:7px;min-width:0;"><span style="font-size:12px;opacity:' + (it.ready || it.builtin ? '.9' : '.55') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' + badge + '</span>' +
+						var b = it.builtin ? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">BUILT IN</span>' : (it.ready ? '' : badge('SOON'));
+						var on = it.builtin || localStorage.getItem('chi-conn-' + it.slug) === '1';
+						return '<div class="srow" data-drum-base="" data-conn="' + it.slug + '" data-locked="' + (it.builtin || !it.ready ? '1' : '') + '" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
+							'<span style="display:flex;align-items:center;gap:7px;min-width:0;"><span style="font-size:12px;opacity:' + (it.ready || it.builtin ? '.9' : '.55') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' + b + '</span>' +
 							sw(on, null, it.builtin || !it.ready) + '</div>';
 					}).join('');
 					return head + rows;
 				}).join('');
 			}
-			return '<div id="settings" style="position:absolute;inset:0;z-index:9;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;background:' + t.win + ';animation:chiFadeIn .3s ease both;">' +
+			return '<div id="settings" style="position:absolute;inset:0;z-index:9;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;backdrop-filter:blur(14px);background:' + t.win + ';animation:chiFadeIn .3s ease both;">' +
 				'<div style="position:absolute;inset:0;pointer-events:none;border-radius:50%;box-shadow:inset 0 4px 12px rgba(255,255,255,.06), ' + t.vignette + ';"></div>' +
 				'<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:64px 96px 8px;color:' + t.name + ';">' +
-					(isConn ? '<span id="s-back" style="cursor:pointer;opacity:.8;display:inline-flex;align-items:center;"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M10 3 L5 8 L10 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' : '') +
-					'<span style="font-size:13px;font-weight:800;letter-spacing:.6px;">' + (isConn ? 'Connections' : 'Settings') + '</span>' +
+					(panel !== 'main' ? '<span id="s-back" style="cursor:pointer;opacity:.8;display:inline-flex;align-items:center;"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M10 3 L5 8 L10 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' : '') +
+					'<span style="font-size:13px;font-weight:800;letter-spacing:.6px;">' + titles[panel] + '</span>' +
 					'<span id="s-close" style="margin-left:auto;cursor:pointer;opacity:.75;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
 				'</div>' +
 				'<div id="slist" style="flex:1;overflow-y:auto;padding:16px 78px 70px;color:' + t.name + ';-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);">' + body + '</div>' +
@@ -894,8 +967,6 @@
 			var on = function (id, fn) { var el = r.getElementById(id); if (el) el.addEventListener('click', function (e) { e.stopPropagation(); fn(); }); };
 			on('s-close', function () { self._settingsOpen = false; self._render(); });
 			on('s-back', function () { self._settingsPanel = 'main'; self._render(); });
-			// In-place switch/size helpers — a full re-render on every click rebuilt the whole face
-			// and reset the list scroll (the "glitchy clicking"). Only theme changes still repaint.
 			var setSw = function (el, onv) {
 				if (!el) return;
 				el.style.background = onv ? GREEN : 'rgba(140,140,150,.45)';
@@ -919,8 +990,19 @@
 					self._startFocus(parseInt(fm.getAttribute('data-min'), 10));
 				});
 			});
-			// Frame finish: preset dots snap to a named finish; the hue bar is a full drag-anywhere
-			// color changer — the ring tint updates LIVE during the drag (no re-render), persists on release.
+			on('s-route', function () {
+				var now = localStorage.getItem('chi-notif-route') === '1';
+				localStorage.setItem('chi-notif-route', now ? '0' : '1');
+				self.dispatchEvent(new CustomEvent('chi-notif-route', { detail: { on: !now }, bubbles: true, composed: true }));
+				setSw(r.getElementById('s-route'), !now);
+			});
+			on('s-sound', function () {
+				var wasOn = localStorage.getItem('chi-orb-sound') !== '0';
+				localStorage.setItem('chi-orb-sound', wasOn ? '0' : '1');
+				if (!wasOn) self._tick(1);
+				setSw(r.getElementById('s-sound'), !wasOn);
+			});
+			// color editor (main panel only — elements absent elsewhere, all guards null-safe)
 			var dotRings = function () {
 				var selKey = localStorage.getItem('chi-orb-frame') || 'steel';
 				var base = 'inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)';
@@ -942,21 +1024,18 @@
 					self._tick(1);
 				});
 			});
-			// Full color editor: hue bar + 2D shade pad share one live-apply path. Everything updates
-			// under the finger (ring tint, shade layer, both knobs, swatch, pad hue) with NO re-render;
-			// the state persists + commits (tick + repaint) on release.
-			var applyColor = function (h, s, l, commit) {
+			var applyColor = function (h, s2, l, commit) {
 				localStorage.setItem('chi-orb-frame', 'custom');
 				localStorage.setItem('chi-orb-frame-hue', String(h));
-				localStorage.setItem('chi-orb-frame-sat', String(s));
+				localStorage.setItem('chi-orb-frame-sat', String(s2));
 				localStorage.setItem('chi-orb-frame-lum', String(l));
-				var css = 'hsl(' + h + ', ' + s + '%, ' + l + '%)';
+				var css = 'hsl(' + h + ', ' + s2 + '%, ' + l + '%)';
 				var tint = r.getElementById('tint'); if (tint) tint.style.background = css;
-				var shade = r.getElementById('tintshade'); if (shade) shade.style.background = 'hsl(' + h + ', ' + s + '%, ' + Math.max(8, l - 8) + '%)';
+				var shade = r.getElementById('tintshade'); if (shade) shade.style.background = 'hsl(' + h + ', ' + s2 + '%, ' + Math.max(8, l - 8) + '%)';
 				var hk = r.getElementById('s-hueknob'); if (hk) { hk.style.left = (h / 360 * 100).toFixed(1) + '%'; hk.style.background = 'hsl(' + h + ',72%,52%)'; }
 				var pad2 = r.getElementById('s-pad'); if (pad2) pad2.style.background = 'linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(' + h + ',100%,50%))';
-				var pk = r.getElementById('s-padknob'); if (pk) { pk.style.left = s.toFixed(0) + '%'; pk.style.top = Math.min(100, Math.max(0, (1 - (l - 6) / 88) * 100)).toFixed(0) + '%'; pk.style.background = css; }
-				var swp = r.getElementById('s-swatch'); if (swp) swp.style.background = 'linear-gradient(135deg, hsl(' + h + ', ' + s + '%, ' + Math.min(88, l + 22) + '%) 0%, hsl(' + h + ', ' + s + '%, ' + Math.max(12, l - 16) + '%) 100%)';
+				var pk = r.getElementById('s-padknob'); if (pk) { pk.style.left = s2.toFixed(0) + '%'; pk.style.top = Math.min(100, Math.max(0, (1 - (l - 6) / 88) * 100)).toFixed(0) + '%'; pk.style.background = css; }
+				var swp = r.getElementById('s-swatch'); if (swp) swp.style.background = 'linear-gradient(135deg, hsl(' + h + ', ' + s2 + '%, ' + Math.min(88, l + 22) + '%) 0%, hsl(' + h + ', ' + s2 + '%, ' + Math.max(12, l - 16) + '%) 100%)';
 				if (commit) { self._tick(1); dotRings(); }
 			};
 			var wireDrag = function (elx, fromEvent) {
@@ -966,13 +1045,13 @@
 				elx.addEventListener('pointermove', function (e) { if (dragging) fromEvent(e, false); });
 				var end = function (e) { if (!dragging) return; dragging = false; fromEvent(e, true); };
 				elx.addEventListener('pointerup', end);
-				elx.addEventListener('pointercancel', function () { if (dragging) { dragging = false; self._render(); } });
+				elx.addEventListener('pointercancel', function () { if (dragging) dragging = false; });
 			};
 			var hue = r.getElementById('s-hue');
 			wireDrag(hue, function (e, commit) {
 				var hr = hue.getBoundingClientRect();
-				var p = Math.max(0, Math.min(1, (e.clientX - hr.left) / (hr.width || 1)));
-				applyColor(Math.round(p * 360), self._frameSat, self._frameLum, commit);
+				var p2 = Math.max(0, Math.min(1, (e.clientX - hr.left) / (hr.width || 1)));
+				applyColor(Math.round(p2 * 360), self._frameSat, self._frameLum, commit);
 			});
 			var pad = r.getElementById('s-pad');
 			wireDrag(pad, function (e, commit) {
@@ -981,44 +1060,68 @@
 				var py = Math.max(0, Math.min(1, (e.clientY - pr.top) / (pr.height || 1)));
 				applyColor(self._frameHue, Math.round(px * 100), Math.round((1 - py) * 88) + 6, commit);
 			});
-			on('s-route', function () {
-				var now = localStorage.getItem('chi-notif-route') === '1';
-				localStorage.setItem('chi-notif-route', now ? '0' : '1');
-				self.dispatchEvent(new CustomEvent('chi-notif-route', { detail: { on: !now }, bubbles: true, composed: true }));
-				setSw(r.getElementById('s-route'), !now);
-			});
-			on('s-sound', function () {
-				var wasOn = localStorage.getItem('chi-orb-sound') !== '0';
-				localStorage.setItem('chi-orb-sound', wasOn ? '0' : '1');
-				if (!wasOn) self._tick(1); // audible confirmation the moment sound comes back on
-				setSw(r.getElementById('s-sound'), !wasOn);
-			});
-			var pr = panel.querySelector('[data-act="popout"]');
-			if (pr) pr.addEventListener('click', function () { self._settingsOpen = false; self._render(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
+			var pr2 = panel.querySelector('[data-act="popout"]');
+			if (pr2) pr2.addEventListener('click', function () { self._settingsOpen = false; self._render(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
 			var cl = panel.querySelector('[data-act="collapse"]');
 			if (cl) cl.addEventListener('click', function () { self._settingsOpen = false; self._toggle(); });
-			var connRow = panel.querySelector('[data-open-conn]');
-			if (connRow) connRow.addEventListener('click', function () { self._settingsPanel = 'connections'; self._render(); });
 			var list = r.getElementById('slist');
 			if (list) {
 				list.addEventListener('click', function (e) {
+					var navEl = e.target.closest('[data-nav]');
+					if (navEl) { self._settingsPanel = navEl.getAttribute('data-nav'); self._render(); return; }
+					// capability toggles — FE-local reminders (and live-feature switches)
+					var capEl = e.target.closest('[data-tkey]');
+					if (capEl) {
+						var tk = capEl.getAttribute('data-tkey'), def = capEl.getAttribute('data-tdef') === '1';
+						var cur = def ? localStorage.getItem(tk) !== '0' : localStorage.getItem(tk) === '1';
+						localStorage.setItem(tk, cur ? (def ? '0' : '0') : '1');
+						setSw(capEl.querySelector('.sw'), !cur);
+						self._tick();
+						return;
+					}
+					// model rows: radio picks the default; the row expands its inline editor
+					var mr = e.target.closest('.mrow');
+					if (mr) {
+						var slug = mr.getAttribute('data-model');
+						if (e.target.closest('.mradio')) {
+							localStorage.setItem('chi-model', slug);
+							panel.querySelectorAll('.mradio').forEach(function (rd) {
+								var selr = rd.getAttribute('data-mradio') === slug;
+								rd.style.border = '2px solid ' + (selr ? GREEN : 'rgba(128,128,128,.5)');
+								rd.style.background = selr ? GREEN : 'transparent';
+								rd.style.boxShadow = selr ? '0 0 8px rgba(48,209,88,.5)' : 'none';
+							});
+							self._tick(1);
+						} else {
+							var ed = panel.querySelector('[data-med="' + slug + '"]');
+							if (ed) ed.style.display = ed.style.display === 'none' ? 'block' : 'none';
+						}
+						return;
+					}
 					var rowEl = e.target.closest('[data-conn]');
-					if (!rowEl || rowEl.getAttribute('data-locked') === '1') return;
-					var slug = rowEl.getAttribute('data-conn'), radio = rowEl.getAttribute('data-group');
-					if (radio) {
-						localStorage.setItem(radio, slug);
-						// radio: turn the whole group off in place, then this one on
-						list.querySelectorAll('[data-group="' + radio + '"]').forEach(function (sib) {
-							setSw(sib.querySelector('.sw'), sib === rowEl);
-						});
-					} else {
-						var key = 'chi-conn-' + slug;
+					if (rowEl && rowEl.getAttribute('data-locked') !== '1') {
+						var cslug = rowEl.getAttribute('data-conn');
+						var key = 'chi-conn-' + cslug;
 						var nowOn = localStorage.getItem(key) !== '1';
 						localStorage.setItem(key, nowOn ? '1' : '0');
 						setSw(rowEl.querySelector('.sw'), nowOn);
+						self._tick();
 					}
-					self._tick();
 				});
+				// model editor inputs persist as you type; the status LED follows configuration
+				list.addEventListener('input', function (e) {
+					var inp = e.target.closest('.min');
+					if (!inp) return;
+					localStorage.setItem(inp.getAttribute('data-store'), inp.value.trim());
+					var wrap = inp.closest('[data-med]');
+					if (wrap) {
+						var slug2 = wrap.getAttribute('data-med');
+						var led = panel.querySelector('.mrow[data-model="' + slug2 + '"] .mled');
+						var conf = (localStorage.getItem('chi-llm-' + slug2 + '-key') || localStorage.getItem('chi-llm-' + slug2 + '-url') || '').length > 0;
+						if (led) { led.style.background = conf ? GREEN : 'rgba(128,128,128,.4)'; led.style.boxShadow = conf ? '0 0 6px rgba(48,209,88,.6)' : 'none'; }
+					}
+				});
+				list.addEventListener('keydown', function (e) { e.stopPropagation(); }); // typing a key must not leak to app hotkeys
 				this._drumify(list, 1, true);
 				if (this._slistScrollKeep != null) {
 					var ks = this._slistScrollKeep;
@@ -1027,11 +1130,10 @@
 				}
 			}
 		}
-
 		_render() {
 			var t = this._theme, A = this._base, self = this;
 			var mask = '-webkit-mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;';
-			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{0%{opacity:0;transform:translateY(14px) scale(.955)}70%{opacity:1;transform:translateY(-2px) scale(1.004)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiBreathe{0%,100%{opacity:.45;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.08)}}@keyframes chiSheen{0%,88%{transform:translateX(-130%) rotate(18deg)}100%{transform:translateX(340%) rotate(18deg)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
+			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{0%{opacity:0;transform:translateY(14px) scale(.955)}70%{opacity:1;transform:translateY(-2px) scale(1.004)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiBreathe{0%,100%{opacity:.45;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.08)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
 			var hover = '#grip:hover{background:rgba(31,157,69,.4);color:#fff}.ctl:active,.arcb:active,.sbtn:active,.fdot:active{transform:scale(.92) !important}#sendbtn:active{transform:scale(.93) !important}.chip:hover{box-shadow:0 4px 14px -4px rgba(48,209,88,.35), inset 0 1px 0 rgba(255,255,255,.14)}.srow{border-radius:8px}.fmin{transition:transform .12s ease, background .15s}.fmin:hover{transform:translateY(-1px);background:rgba(59,155,255,.28) !important}.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
 			var head = '<style>' + kf + hover + ':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}button{font-family:inherit}::-webkit-scrollbar{width:0;height:0}</style>';
 
@@ -1180,8 +1282,6 @@
 			var pob = r.getElementById('popoutbtn'); if (pob) pob.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
 			var stb = r.getElementById('settingsbtn'); if (stb) stb.addEventListener('click', function (e) { e.stopPropagation(); self._settingsOpen = !self._settingsOpen; self._settingsPanel = 'main'; self._render(); });
 			this._winDrag(r.getElementById('grip')); // the top grip above the ensō is the ONE drag handle
-			var shell = r.getElementById('shell');
-			if (shell) this._wireFocusDial(shell); // drag along the metal band → wind a focus timer
 			var fchip = r.getElementById('focuschip');
 			if (fchip) fchip.addEventListener('click', function (e) { e.stopPropagation(); self._endFocus(true); });
 			this._focusEnsure(); // restore a running countdown across re-renders
