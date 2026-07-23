@@ -145,7 +145,12 @@
 			this.onvoiceend = null;
 			this.onaction = null;       // host hook: run an action chip (desktop wires this to the live voice turn)
 			this.onreply = null;        // host hook: route a notification reply back to its room (Phase 2)
+			this.ondrop = null;         // host hook: something was dropped on the orb (file / text)
 			this._replyTo = null;       // the notification currently being replied to
+			this._pending = [];         // notifications queued while minimized or in focus mode
+			this._unseen = 0;           // queued count → launcher badge + amber presence glow
+			this._lastNotif = null;     // most recent notification → hover peek on the launcher
+			this._caps = [];            // live voice caption lines (realtime view)
 			this._listening = false;   // chat mic (Web Speech dictation)
 			this._realtime = false;    // realtime voice takeover
 			this.history = [];
@@ -157,7 +162,46 @@
 		}
 		static get observedAttributes() { return ['theme', 'asset-base', 'realtime-available', 'window-controls', 'popout-control']; }
 		attributeChangedCallback() { if (this.shadowRoot && this.shadowRoot.childNodes.length) this._render(); }
-		connectedCallback() { this._render(); }
+		connectedCallback() {
+			this._render();
+			var self = this;
+			// Global summon hotkey (⌘⇧C / Ctrl⇧C): expand + focus the input from anywhere on the page.
+			if (!this._hotkeyFn) {
+				this._hotkeyFn = function (e) {
+					if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyC') { e.preventDefault(); self._summon(); }
+				};
+				window.addEventListener('keydown', this._hotkeyFn, true);
+			}
+			// Drop-anything-on-Chi: drag a file or text onto the orb → blue ingest glow, then hand it
+			// to the host (ondrop) or fold it into a normal Chi turn.
+			if (!this._dropWired) {
+				this._dropWired = 1;
+				this.addEventListener('dragover', function (e) { e.preventDefault(); self._dropGlow(true); });
+				this.addEventListener('dragleave', function () { self._dropGlow(false); });
+				this.addEventListener('drop', function (e) { e.preventDefault(); self._dropGlow(false); self._handleDrop(e); });
+			}
+		}
+		disconnectedCallback() {
+			if (this._hotkeyFn) { window.removeEventListener('keydown', this._hotkeyFn, true); this._hotkeyFn = null; }
+			clearInterval(this._focusInt); clearTimeout(this._bannerT);
+		}
+		_summon() { if (this._min) this._toggle(); var inp = this.shadowRoot.getElementById('in'); if (inp) inp.focus(); }
+		_dropGlow(on) {
+			var h = this.shadowRoot.getElementById('halo');
+			if (h) h.setAttribute('style', h.getAttribute('data-base') + (on ? this._haloCss('realtime') : (this._thinking ? this._haloCss('thinking') : this._haloCss(this._realtime ? 'realtime' : ''))));
+		}
+		_handleDrop(e) {
+			var desc = '';
+			try {
+				var dt = e.dataTransfer;
+				if (dt.files && dt.files.length) desc = Array.prototype.map.call(dt.files, function (f) { return f.name; }).slice(0, 3).join(', ');
+				else desc = String(dt.getData('text') || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+			} catch (_) { /* noop */ }
+			if (!desc) return;
+			if (this.ondrop) { this.ondrop({ text: desc, dataTransfer: e.dataTransfer }); return; }
+			if (this._min) this._toggle();
+			if (!this._realtime) this._send('I just dropped this on you: ' + desc + ' — take a look.');
+		}
 
 		get realtime() { return this._realtime; }
 		set realtime(v) { v = !!v; if (v === this._realtime) return; this._realtime = v; this._render(); }
@@ -460,6 +504,7 @@
 					var p = Math.round(el.clientHeight * 0.36);
 					el.style.paddingTop = p + 'px';
 					el.style.paddingBottom = p + 'px';
+					el._drum.cache = null; // offsets shifted — stale cache caused wild tilts at rest
 					self._drumApply(el);
 				});
 			}
@@ -492,9 +537,9 @@
 				var t = Math.max(-1, Math.min(1, off));
 				var a = Math.abs(t);
 				if (a < nearestDist) { nearestDist = a; nearest = i; }
-				var th = t * (Math.PI / 2) * 0.82;                    // row's angle on the cylinder
+				var th = t * (Math.PI / 2) * 0.58;                    // row's angle on the cylinder (max ~52°)
 				var rot = (-th * 180 / Math.PI) * k;                  // tilt away toward the rim
-				var z = -(1 - Math.cos(th)) * 112 * k;                // true cos-recession into the drum
+				var z = -(1 - Math.cos(th)) * 88 * k;                 // true cos-recession into the drum
 				var ty = -Math.sin(th) * a * 6 * k;                   // gentle wrap pull (small — rows must never collide)
 				var sc = 1 - a * a * 0.06 * k;                        // gentle ease-squared shrink
 				var base = c.getAttribute('data-drum-base') || '';
@@ -603,7 +648,7 @@
 			var t = this._theme, f = this._frame;
 			var isConn = this._settingsPanel === 'connections';
 			var row = function (inner, extra) {
-				return '<div class="srow" data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);scroll-snap-align:center;' + (extra || '') + '">' + inner + '</div>';
+				return '<div class="srow" data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);' + (extra || '') + '">' + inner + '</div>';
 			};
 			var chev = '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 			var sw = function (on, id, disabled) {
@@ -640,14 +685,14 @@
 			} else {
 				var self = this;
 				body = CONNECTIONS.map(function (g) {
-					var head = '<div data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 2px;scroll-snap-align:center;">' +
+					var head = '<div data-drum-base="" style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 2px;">' +
 						'<span style="font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">' + g.label + '</span>' +
 						'<span style="font-size:10px;opacity:.5;">+ ' + g.add + '</span></div>';
 					var rows = g.items.map(function (it) {
 						var badge = it.builtin ? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">BUILT IN</span>'
 							: (it.ready ? '' : '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(128,128,128,.14);border:1px solid rgba(128,128,128,.25);opacity:.65;">SOON</span>');
 						var on = it.builtin || (g.radio ? localStorage.getItem(g.radio) === it.slug || (it.def && !localStorage.getItem(g.radio)) : localStorage.getItem('chi-conn-' + it.slug) === '1');
-						return '<div class="srow" data-drum-base="" data-conn="' + it.slug + '" data-group="' + (g.radio || '') + '" data-locked="' + (it.builtin || !it.ready ? '1' : '') + '" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);scroll-snap-align:center;">' +
+						return '<div class="srow" data-drum-base="" data-conn="' + it.slug + '" data-group="' + (g.radio || '') + '" data-locked="' + (it.builtin || !it.ready ? '1' : '') + '" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
 							'<span style="display:flex;align-items:center;gap:7px;min-width:0;"><span style="font-size:12px;opacity:' + (it.ready || it.builtin ? '.9' : '.55') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' + badge + '</span>' +
 							sw(on, null, it.builtin || !it.ready) + '</div>';
 					}).join('');
@@ -661,7 +706,7 @@
 					'<span style="font-size:13px;font-weight:800;letter-spacing:.6px;">' + (isConn ? 'Connections' : 'Settings') + '</span>' +
 					'<span id="s-close" style="margin-left:auto;cursor:pointer;opacity:.75;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
 				'</div>' +
-				'<div id="slist" style="flex:1;overflow-y:auto;padding:16px 78px 70px;color:' + t.name + ';scroll-snap-type:y proximity;-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);">' + body + '</div>' +
+				'<div id="slist" style="flex:1;overflow-y:auto;padding:16px 78px 70px;color:' + t.name + ';-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);">' + body + '</div>' +
 			'</div>';
 		}
 		_wireSettings() {
