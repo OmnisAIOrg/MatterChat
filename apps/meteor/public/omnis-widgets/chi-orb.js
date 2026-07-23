@@ -303,7 +303,7 @@
 		 * mechanical TICK each time a new row crosses the center line while the user scrolls
 		 * (Sounds toggle in settings; skipped under prefers-reduced-motion). `strength`
 		 * scales the geometry (chat is subtler than settings). */
-		_drumify(el, strength) {
+		_drumify(el, strength, centerPad) {
 			if (!el || el._drum) return;
 			el._drum = { k: strength == null ? 1 : strength, raf: 0, idx: -1, scrolling: 0 };
 			var self = this;
@@ -314,6 +314,17 @@
 				if (el._drum.raf) return;
 				el._drum.raf = requestAnimationFrame(function () { el._drum.raf = 0; self._drumApply(el); });
 			}, { passive: true });
+			if (centerPad) {
+				// Runway at both ends so the FIRST and LAST rows can travel all the way to the drum's
+				// center line — without this the scroll range ends with them pinned at the dim rim
+				// ("can't scroll all the way to the top/bottom stuff").
+				requestAnimationFrame(function () {
+					var p = Math.round(el.clientHeight * 0.36);
+					el.style.paddingTop = p + 'px';
+					el.style.paddingBottom = p + 'px';
+					self._drumApply(el);
+				});
+			}
 			this._drumApply(el);
 		}
 		_drumApply(el) {
@@ -432,6 +443,9 @@
 				// top grip handle (drag) — pointer drag is owned by the host; click-hold to move.
 				'<div id="grip" title="Hold to move" style="position:absolute;top:19px;left:50%;transform:translateX(-50%);z-index:7;width:46px;height:15px;border-radius:8px;cursor:grab;display:flex;align-items:center;justify-content:center;gap:3px;background:linear-gradient(#2b2f34,#0e1013);box-shadow:inset 0 1px 1px rgba(255,255,255,.18), 0 1px 2px rgba(0,0,0,.5);">' +
 					'<i style="width:14px;height:2px;border-radius:2px;background:rgba(255,255,255,.5);display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55);display:block;"></i></div>' +
+				// minimize stays reachable on the OUTSIDE too (founder direction): the classic
+				// collapse-to-ensō chrome button on the ring, top-right, in every mode.
+				'<div id="ringminbtn" class="ctl" title="Collapse to the ensō" style="position:absolute;top:74px;right:74px;z-index:7;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;' + t.ctrl + '"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M8 11.5V8h3.5"/><path d="M6 6 2.75 2.75M8 8l3.25 3.25"/></svg></div>' +
 				'</div>';
 		}
 
@@ -567,7 +581,7 @@
 					else { var key = 'chi-conn-' + slug; localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1'); }
 					self._render();
 				});
-				this._drumify(list, 1);
+				this._drumify(list, 1, true);
 			}
 		}
 
@@ -687,6 +701,7 @@
 			var self = this, r = this.shadowRoot;
 			var tb = r.getElementById('themebtn'); if (tb) tb.addEventListener('click', function (e) { e.stopPropagation(); self._cycleTheme(); });
 			var mb = r.getElementById('minbtn'); if (mb) mb.addEventListener('click', function (e) { e.stopPropagation(); self._toggle(); });
+			var rmb = r.getElementById('ringminbtn'); if (rmb) rmb.addEventListener('click', function (e) { e.stopPropagation(); self._toggle(); });
 			var gb = r.getElementById('growbtn'); if (gb) gb.addEventListener('click', function (e) { e.stopPropagation(); self._resize(0.1); });
 			var sb = r.getElementById('shrinkbtn'); if (sb) sb.addEventListener('click', function (e) { e.stopPropagation(); self._resize(-0.1); });
 			var cb = r.getElementById('closebtn'); if (cb) cb.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-close', { bubbles: true, composed: true })); });
