@@ -1,8 +1,10 @@
 import type { CSSProperties, ReactElement } from 'react';
+import { useUserId } from '@rocket.chat/ui-contexts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { sdk } from '../../../app/utils/client/lib/SDKClient';
+import { installLocalToolsBridge } from '../localTools';
 import { askChi } from './askChi';
 import { insertIntoComposer, sendChiReply } from './chiNotifications';
 import { installDesktopFocusBridge } from './focusBridge';
@@ -173,6 +175,15 @@ export const ChiOrbMount = (): ReactElement => {
 	useEffect(() => {
 		installDesktopFocusBridge();
 	}, []);
+
+	// Desktop only: register the Omnis apps running on this Mac (EvidenceHunt / Omnis CC local MCP
+	// servers) so their tools join Chi's toolbox, and relay Chi's calls to them. No-op on web.
+	const localToolsUid = useUserId();
+	useEffect(() => {
+		if (localToolsUid) {
+			installLocalToolsBridge(localToolsUid);
+		}
+	}, [localToolsUid]);
 
 	// Relays FROM the popped-out desktop Chi window (separate window, shared localStorage):
 	//  · chi-flow-relay — Flow-dictated text destined for the room composer over here.

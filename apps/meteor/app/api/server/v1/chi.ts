@@ -2,6 +2,7 @@ import { Users } from '@rocket.chat/models';
 
 import { API } from '../api';
 import { getUploadFormData } from '../lib/getUploadFormData';
+import { registerLocalServers, resolveLocalCall } from '../../../../server/lib/chi/admin/localtools';
 import { runChiOrbTurn } from '../../../../server/lib/chi/admin/service';
 import type { ChiOrbHistory, ChiOrbContext } from '../../../../server/lib/chi/admin/service';
 import { settings } from '../../../settings/server';
@@ -282,6 +283,40 @@ API.v1.addRoute(
 			}
 			await Users.updateOne({ _id: this.userId }, { $set: { 'settings.chi': prefs } });
 			return API.v1.success({ prefs });
+		},
+	},
+);
+
+/**
+ * Chi local-tools bridge (see server/lib/chi/admin/localtools.ts): the member's desktop session
+ * registers the MCP tool manifests of the Omnis apps running on THEIR Mac (EvidenceHunt,
+ * Omnis CC), re-posting every ~60s as a heartbeat; registration expires after 2 minutes, so
+ * closing the desktop simply removes the tools from Chi's toolbox. Only the member's own
+ * authenticated session can register for them or answer their relayed calls.
+ */
+API.v1.addRoute(
+	'chi.local-tools.register',
+	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 30, intervalTimeInMS: 60000 } },
+	{
+		async post() {
+			const { servers } = (this.bodyParams || {}) as { servers?: unknown };
+			return API.v1.success(registerLocalServers(this.userId, servers));
+		},
+	},
+);
+
+API.v1.addRoute(
+	'chi.local-tools.result',
+	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 120, intervalTimeInMS: 60000 } },
+	{
+		async post() {
+			const body = (this.bodyParams || {}) as { callId?: unknown; ok?: unknown; content?: unknown };
+			const callId = typeof body.callId === 'string' ? body.callId : '';
+			if (!callId) {
+				return API.v1.failure('callId is required');
+			}
+			const accepted = resolveLocalCall(this.userId, callId, body.ok !== false, typeof body.content === 'string' ? body.content : '');
+			return API.v1.success({ accepted });
 		},
 	},
 );
