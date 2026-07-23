@@ -144,6 +144,8 @@
 			this.onvoicestart = null;
 			this.onvoiceend = null;
 			this.onaction = null;       // host hook: run an action chip (desktop wires this to the live voice turn)
+			this.onreply = null;        // host hook: route a notification reply back to its room (Phase 2)
+			this._replyTo = null;       // the notification currently being replied to
 			this._listening = false;   // chat mic (Web Speech dictation)
 			this._realtime = false;    // realtime voice takeover
 			this.history = [];
@@ -166,10 +168,16 @@
 		get _scale() { var s = parseFloat(localStorage.getItem('chi-orb-scale')); return s >= 0.7 && s <= 1.5 ? s : 1; }
 		get _frameKey() { var f = localStorage.getItem('chi-orb-frame'); return f === 'custom' || FRAMES[f] ? f : 'steel'; }
 		get _frameHue() { var h = parseFloat(localStorage.getItem('chi-orb-frame-hue')); return h >= 0 && h <= 360 ? h : 145; }
+		get _frameSat() { var s = parseFloat(localStorage.getItem('chi-orb-frame-sat')); return s >= 0 && s <= 100 ? s : 72; }
+		get _frameLum() { var l = parseFloat(localStorage.getItem('chi-orb-frame-lum')); return l >= 0 && l <= 100 ? l : 52; }
 		get _frame() {
 			if (this._frameKey === 'custom') {
-				var h = this._frameHue;
-				return { tint: 'hsl(' + h + ', 72%, 52%)', swatch: 'linear-gradient(135deg, hsl(' + h + ', 78%, 74%) 0%, hsl(' + h + ', 70%, 38%) 100%)', name: 'Custom' };
+				var h = this._frameHue, s = this._frameSat, l = this._frameLum;
+				return {
+					tint: 'hsl(' + h + ', ' + s + '%, ' + l + '%)',
+					swatch: 'linear-gradient(135deg, hsl(' + h + ', ' + s + '%, ' + Math.min(88, l + 22) + '%) 0%, hsl(' + h + ', ' + s + '%, ' + Math.max(12, l - 16) + '%) 100%)',
+					name: 'Custom',
+				};
 			}
 			return FRAMES[this._frameKey];
 		}
@@ -237,9 +245,24 @@
 			var text = preset != null ? String(preset) : (input ? (input.value || '').trim() : '');
 			if (!text || this._thinking) return;
 			if (input) input.value = '';
+			var self = this;
+			// Reply-to-notification lane: routes back to the SENDER (host onreply → the real room in
+			// Phase 2; demo ack otherwise). Never enters the Chi ask/think path.
+			if (this._replyTo) {
+				var target = this._replyTo;
+				this._replyTo = null;
+				this.history.push({ who: 'me', text: text });
+				this._sync(); this._syncReplyBar();
+				var ack = function () {
+					self.history.push({ kind: 'notif', sender: target.sender, app: 'Reply', color: target.color, avatar: target.avatar, text: 'Got it — thanks! 👍' });
+					self._sync();
+				};
+				if (this.onreply) { Promise.resolve().then(function () { return self.onreply(target, text); }).catch(function () { /* host owns errors */ }); }
+				else { setTimeout(ack, 1400); }
+				return;
+			}
 			this.history.push({ who: 'me', text: text });
 			this._thinking = true; this._sync();
-			var self = this;
 			// The ask hook may resolve to a plain string OR { reply, needsConfirm } — the latter drives the
 			// inline Confirm/Cancel buttons so the member never has to TYPE "confirm".
 			function done(r) {
@@ -258,8 +281,14 @@
 			if (this._realtime) return; // listening version renders whole; nothing to patch
 			var r = this.shadowRoot, list = r.getElementById('msgs'); if (!list) { this._render(); return; }
 			var self = this;
-			list.innerHTML = this.history.map(function (m) { return '<div style="' + self._bubble(m) + '"></div>'; }).join('');
-			Array.prototype.forEach.call(list.children, function (el, i) { el.textContent = self.history[i].text; });
+			list.innerHTML = '';
+			this.history.forEach(function (m) {
+				if (m.kind === 'notif') { list.appendChild(self._notifCard(m)); return; }
+				var d0 = document.createElement('div');
+				d0.setAttribute('style', self._bubble(m));
+				d0.textContent = m.text;
+				list.appendChild(d0);
+			});
 			if (this._thinking) {
 				var d = document.createElement('div');
 				d.setAttribute('style', 'align-self:flex-start;display:flex;gap:5px;padding:11px 14px;border-radius:4px 18px 18px 18px;' + this._theme.chi);
@@ -296,6 +325,115 @@
 			if (mic) { mic.style.background = this._listening ? 'rgba(59,155,255,.22)' : 'transparent'; mic.style.color = this._listening ? ACCENT : this._theme.dim; }
 		}
 
+		/* ---- MatterChat notifications inside Chi -------------------------------------------------
+		 * Host API: orb.notify({ sender, text, app, color, avatar, data }). Behavior follows the
+		 * settings toggle: ROUTED (chi-notif-route=1) → a rich card lands in the conversation with
+		 * a Reply chip; not routed → a transient banner slides across the top of the glass. Both
+		 * chime (Sounds toggle). Reply opens a "Replying to X" bar over the input; sending routes
+		 * through orb.onreply(target, text) when the host provides it (Phase 2 wires this to the
+		 * real room), else a demo ack card answers. */
+		notify(n) {
+			n = n || {};
+			var m = {
+				kind: 'notif',
+				sender: String(n.sender || 'Someone'),
+				text: String(n.text || ''),
+				app: String(n.app || 'MatterChat'),
+				color: String(n.color || '#4a6cf7'),
+				avatar: String(n.avatar || String(n.sender || '?').charAt(0).toUpperCase()),
+				data: n.data,
+			};
+			var routed = localStorage.getItem('chi-notif-route') === '1';
+			if (routed) {
+				this.history.push(m);
+				if (!this._min && !this._realtime) this._sync();
+			} else if (!this._min && !this._realtime) {
+				this._banner(m);
+			}
+			this._chime();
+			return m;
+		}
+		_notifCard(m) {
+			var self = this, t = this._theme;
+			var card = document.createElement('div');
+			card.setAttribute('style', 'align-self:flex-start;max-width:92%;display:flex;gap:9px;padding:9px 11px;border-radius:4px 16px 16px 16px;animation:chiMsgIn .45s cubic-bezier(.2,.75,.25,1) both;' + t.chi);
+			var av = document.createElement('div');
+			av.setAttribute('style', 'width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;box-shadow:0 3px 8px rgba(0,0,0,.3);background:' + m.color + ';');
+			av.textContent = m.avatar;
+			var body = document.createElement('div');
+			body.setAttribute('style', 'flex:1;min-width:0;');
+			var head = document.createElement('div');
+			head.setAttribute('style', 'display:flex;align-items:center;gap:6px;');
+			var sender = document.createElement('div');
+			sender.setAttribute('style', 'font-size:11.5px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;');
+			sender.textContent = m.sender;
+			var app = document.createElement('div');
+			app.setAttribute('style', 'margin-left:auto;font-size:8px;font-weight:800;letter-spacing:.5px;opacity:.5;text-transform:uppercase;');
+			app.textContent = m.app;
+			head.appendChild(sender); head.appendChild(app);
+			var txt = document.createElement('div');
+			txt.setAttribute('style', 'margin-top:2px;font-size:12.5px;line-height:1.4;');
+			txt.textContent = m.text;
+			var reply = document.createElement('div');
+			reply.setAttribute('style', 'margin-top:7px;display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:12px;cursor:pointer;font-size:10.5px;font-weight:700;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.34);color:' + GREEN + ';');
+			reply.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12"><path d="M5 2 L2 5 L5 8 M2.5 5 H8 a2 2 0 0 1 2 2 v2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Reply';
+			reply.addEventListener('click', function () { self._replyTo = m; self._syncReplyBar(); });
+			body.appendChild(head); body.appendChild(txt); body.appendChild(reply);
+			card.appendChild(av); card.appendChild(body);
+			return card;
+		}
+		_syncReplyBar() {
+			var r = this.shadowRoot, bar = r.getElementById('replybar');
+			if (!bar) return;
+			if (this._replyTo) {
+				bar.style.display = 'flex';
+				var nm = r.getElementById('replyname'); if (nm) nm.textContent = 'Replying to ' + this._replyTo.sender;
+				var inp = r.getElementById('in'); if (inp) inp.focus();
+			} else {
+				bar.style.display = 'none';
+			}
+		}
+		_banner(m) {
+			var r = this.shadowRoot, win = r.getElementById('win');
+			if (!win) return;
+			var self = this, t = this._theme;
+			var old = r.getElementById('notifbanner'); if (old) old.remove();
+			var wrap = document.createElement('div');
+			wrap.id = 'notifbanner';
+			wrap.setAttribute('style', 'position:absolute;top:29%;left:50%;transform:translate(-50%,-16px);z-index:8;width:64%;opacity:0;transition:opacity .4s ease, transform .5s cubic-bezier(.2,.85,.3,1);');
+			var card = this._notifCard(m);
+			card.style.animation = 'none';
+			card.style.alignSelf = '';
+			card.style.borderRadius = '15px';
+			card.style.boxShadow = '0 18px 38px -14px rgba(0,0,0,.6)';
+			// banner Reply also opens the reply bar (and dismisses the banner)
+			wrap.appendChild(card);
+			win.appendChild(wrap);
+			requestAnimationFrame(function () { wrap.style.opacity = '1'; wrap.style.transform = 'translate(-50%,0)'; });
+			clearTimeout(this._bannerT);
+			this._bannerT = setTimeout(function () {
+				wrap.style.opacity = '0'; wrap.style.transform = 'translate(-50%,-16px)';
+				setTimeout(function () { wrap.remove(); }, 450);
+			}, 4600);
+		}
+		/* Soft two-note arrival chime (distinct from the drum tick). Sounds toggle gated. */
+		_chime() {
+			if (localStorage.getItem('chi-orb-sound') === '0') return;
+			try {
+				var C = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
+				if (C.state === 'suspended') C.resume();
+				var t0 = C.currentTime;
+				[[660, 0, 0.10], [990, 0.09, 0.14]].forEach(function (nte) {
+					var o = C.createOscillator(); o.type = 'sine'; o.frequency.value = nte[0];
+					var g = C.createGain();
+					g.gain.setValueAtTime(0.0001, t0 + nte[1]);
+					g.gain.exponentialRampToValueAtTime(0.05, t0 + nte[1] + 0.02);
+					g.gain.exponentialRampToValueAtTime(0.0001, t0 + nte[1] + nte[2]);
+					o.connect(g); g.connect(C.destination); o.start(t0 + nte[1]); o.stop(t0 + nte[1] + nte[2] + 0.02);
+				});
+			} catch (e) { /* audio unavailable — stay silent */ }
+		}
+
 		/* ---- Nest 3D drum scrolling ------------------------------------------------------------
 		 * Rows ride a real cylinder: true angular projection (rotateX + cos-recession +
 		 * inward pull), a whisper of motion blur and dimming at the rims, a short linear
@@ -329,17 +467,28 @@
 		}
 		_drumApply(el) {
 			if (!el || !el._drum || REDUCED) return;
-			var k = el._drum.k;
-			var rect = el.getBoundingClientRect();
-			var mid = rect.top + rect.height / 2;
-			var half = rect.height / 2 || 1;
+			var d = el._drum, k = d.k;
+			// Geometry cache — offsetTop/height read ONCE per content change, never per frame.
+			// (getBoundingClientRect per row per frame forced a full layout pass each scroll tick —
+			// that was the lag.) el is position:relative so offsetTop is list-local.
+			if (!d.cache || d.count !== el.children.length) {
+				el.style.position = 'relative';
+				d.count = el.children.length;
+				d.cache = [];
+				for (var j = 0; j < el.children.length; j++) {
+					var ch = el.children[j];
+					if (!ch._drumInit) { ch._drumInit = 1; ch.style.willChange = 'transform, opacity'; }
+					d.cache.push({ el: ch, mid: ch.offsetTop + ch.offsetHeight / 2, f: '' });
+				}
+			}
+			var viewMid = el.scrollTop + el.clientHeight / 2;
+			var half = el.clientHeight / 2 || 1;
 			var nearest = -1, nearestDist = 1e9;
-			for (var i = 0; i < el.children.length; i++) {
-				var c = el.children[i];
-				var cr = c.getBoundingClientRect();
-				var off = (cr.top + cr.height / 2 - mid) / half; // -1 (top rim) … 0 (center) … 1 (bottom rim)
-				if (off < -1.3 || off > 1.3) { c.style.visibility = 'hidden'; continue; }
-				c.style.visibility = '';
+			for (var i = 0; i < d.cache.length; i++) {
+				var e = d.cache[i], c = e.el;
+				var off = (e.mid - viewMid) / half; // -1 (top rim) … 0 (center) … 1 (bottom rim)
+				if (off < -1.3 || off > 1.3) { if (e.hid !== 1) { e.hid = 1; c.style.visibility = 'hidden'; } continue; }
+				if (e.hid !== 0) { e.hid = 0; c.style.visibility = ''; }
 				var t = Math.max(-1, Math.min(1, off));
 				var a = Math.abs(t);
 				if (a < nearestDist) { nearestDist = a; nearest = i; }
@@ -348,23 +497,22 @@
 				var z = -(1 - Math.cos(th)) * 112 * k;                // true cos-recession into the drum
 				var ty = -Math.sin(th) * a * 6 * k;                   // gentle wrap pull (small — rows must never collide)
 				var sc = 1 - a * a * 0.06 * k;                        // gentle ease-squared shrink
-				if (!c._drumInit) {                                    // damped, machined follow — set once
-					c._drumInit = 1;
-					c.style.willChange = 'transform, opacity, filter';
-					c.style.transition = 'transform .09s linear, opacity .14s linear, filter .14s linear';
-				}
 				var base = c.getAttribute('data-drum-base') || '';
+				// direct, frame-locked writes (no CSS transition fighting the scroll) + translateZ keeps
+				// each row on its own GPU layer → silk
 				c.style.transform = base + ' rotateX(' + rot.toFixed(2) + 'deg) translateZ(' + z.toFixed(1) + 'px) translateY(' + ty.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')';
 				// rim rows dissolve BEFORE they can visually stack — steeper opacity curve than the tilt
 				c.style.opacity = String(Math.max(0, 1 - a * a * 0.72 * k).toFixed(3));
-				// rim treatment: a whisper of blur + darkening, center row gets a subtle lift
-				c.style.filter = a > 0.48 ? 'blur(' + ((a - 0.48) * 2.6 * k).toFixed(2) + 'px) brightness(' + (1 - (a - 0.48) * 0.5 * k).toFixed(3) + ')' : (a < 0.18 ? 'brightness(1.06)' : '');
+				// rim dim: brightness only (blur per-row per-frame is a GPU stall), quantized so the
+				// style string only changes when the value meaningfully moves
+				var fil = a > 0.5 ? 'brightness(' + (Math.round((1 - (a - 0.5) * 0.55 * k) * 20) / 20) + ')' : '';
+				if (fil !== e.f) { e.f = fil; c.style.filter = fil; }
 			}
 			// Detent tick: a new row crossed the center while the user was actually scrolling.
-			if (nearest !== -1 && nearest !== el._drum.idx) {
-				var was = el._drum.idx;
-				el._drum.idx = nearest;
-				if (was !== -1 && Date.now() - el._drum.scrolling < 140) this._tick();
+			if (nearest !== -1 && nearest !== d.idx) {
+				var was = d.idx;
+				d.idx = nearest;
+				if (was !== -1 && Date.now() - d.scrolling < 140) this._tick();
 			}
 		}
 		/* Mechanical detent click — synthesized (no asset): a tight filtered snap + a low wooden
@@ -440,9 +588,10 @@
 					arc +
 					innerHTML +
 				'</div>' +
-				// top grip handle (drag) — pointer drag is owned by the host; click-hold to move.
-				'<div id="grip" title="Hold to move" style="position:absolute;top:19px;left:50%;transform:translateX(-50%);z-index:7;width:46px;height:15px;border-radius:8px;cursor:grab;display:flex;align-items:center;justify-content:center;gap:3px;background:linear-gradient(#2b2f34,#0e1013);box-shadow:inset 0 1px 1px rgba(255,255,255,.18), 0 1px 2px rgba(0,0,0,.5);">' +
-					'<i style="width:14px;height:2px;border-radius:2px;background:rgba(255,255,255,.5);display:block;"></i><i style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55);display:block;"></i></div>' +
+				// top grip handle (drag) — the mockup's hanging tab: a frosted 6-dot grip flush with the
+				// top edge, rounded only at the bottom. Pointer drag is owned by the host.
+				'<div id="grip" title="Drag to move" style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);z-index:7;padding:3px 11px 4px;border-radius:0 0 11px 11px;display:flex;align-items:center;gap:3px;cursor:grab;touch-action:none;background:rgba(14,16,20,.7);border:1px solid rgba(255,255,255,.14);border-top:none;box-shadow:0 3px 9px rgba(0,0,0,.45);backdrop-filter:blur(8px);color:rgba(255,255,255,.7);transition:background .18s, color .18s;">' +
+					'<svg width="17" height="8" viewBox="0 0 18 8"><circle cx="4" cy="2.5" r="1.15" fill="currentColor"/><circle cx="9" cy="2.5" r="1.15" fill="currentColor"/><circle cx="14" cy="2.5" r="1.15" fill="currentColor"/><circle cx="4" cy="5.5" r="1.15" fill="currentColor"/><circle cx="9" cy="5.5" r="1.15" fill="currentColor"/><circle cx="14" cy="5.5" r="1.15" fill="currentColor"/></svg></div>' +
 				// minimize stays reachable on the OUTSIDE too (founder direction): the classic
 				// collapse-to-ensō chrome button on the ring, top-right, in every mode.
 				'<div id="ringminbtn" class="ctl" title="Collapse to the ensō" style="position:absolute;top:74px;right:74px;z-index:7;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;' + t.ctrl + '"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M8 11.5V8h3.5"/><path d="M6 6 2.75 2.75M8 8l3.25 3.25"/></svg></div>' +
@@ -478,6 +627,9 @@
 							return '<span class="fdot" data-frame="' + k2 + '" title="' + FRAMES[k2].name + '" style="width:15px;height:15px;border-radius:50%;cursor:pointer;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)' + (sel ? ', 0 0 0 2px ' + GREEN : '') + ';background:' + FRAMES[k2].swatch + ';"></span>';
 						}).join('') +
 						'<span id="s-swatch" title="Custom" style="width:15px;height:15px;border-radius:50%;box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.35)' + (this._frameKey === 'custom' ? ', 0 0 0 2px ' + GREEN : '') + ';background:' + (this._frameKey === 'custom' ? f.swatch : 'conic-gradient(red,#ff0,#0f0,#0ff,#00f,#f0f,red)') + ';"></span></span>') +
+					// Full color editing: a 2D shade pad (saturation → right, darkness → down) + hue bar.
+					row('<span id="s-pad" style="position:relative;flex:1;height:58px;border-radius:10px;cursor:crosshair;touch-action:none;background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(' + this._frameHue + ',100%,50%));box-shadow:inset 0 1px 4px rgba(0,0,0,.5);">' +
+						'<span id="s-padknob" style="position:absolute;left:' + this._frameSat.toFixed(0) + '%;top:' + Math.min(100, Math.max(0, (1 - (this._frameLum - 6) / 88) * 100)).toFixed(0) + '%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:hsl(' + this._frameHue + ',' + this._frameSat + '%,' + this._frameLum + '%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none;"></span></span>', 'border-bottom:none;padding-bottom:4px;') +
 					row('<span id="s-hue" style="position:relative;flex:1;height:14px;border-radius:7px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg, hsl(0,72%,52%), hsl(60,72%,52%), hsl(120,72%,52%), hsl(180,72%,52%), hsl(240,72%,52%), hsl(300,72%,52%), hsl(360,72%,52%));box-shadow:inset 0 1px 3px rgba(0,0,0,.45);">' +
 						'<span id="s-hueknob" style="position:absolute;top:50%;left:' + (this._frameHue / 360 * 100).toFixed(1) + '%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:hsl(' + this._frameHue + ',72%,52%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);pointer-events:none;"></span></span>', 'border-bottom:1px solid rgba(128,128,128,.16);') +
 					row('<span style="font-size:12px;opacity:.85;">Sounds</span>' + sw(localStorage.getItem('chi-orb-sound') !== '0', 's-sound')) +
@@ -531,28 +683,45 @@
 					self._render();
 				});
 			});
-			var hue = r.getElementById('s-hue');
-			if (hue) {
-				var setHue = function (clientX, commit) {
-					var hr = hue.getBoundingClientRect();
-					var p = Math.max(0, Math.min(1, (clientX - hr.left) / (hr.width || 1)));
-					var h = Math.round(p * 360);
-					localStorage.setItem('chi-orb-frame', 'custom');
-					localStorage.setItem('chi-orb-frame-hue', String(h));
-					// live-mutate the ring tint + knob + swatch — a full render mid-drag would drop the pointer
-					var tint = r.getElementById('tint'); if (tint) tint.style.background = 'hsl(' + h + ', 72%, 52%)';
-					var shade = r.getElementById('tintshade'); if (shade) shade.style.background = 'hsl(' + h + ', 72%, 46%)';
-					var knob = r.getElementById('s-hueknob'); if (knob) { knob.style.left = (p * 100).toFixed(1) + '%'; knob.style.background = 'hsl(' + h + ',72%,52%)'; }
-					var swp = r.getElementById('s-swatch'); if (swp) swp.style.background = 'linear-gradient(135deg, hsl(' + h + ', 78%, 74%) 0%, hsl(' + h + ', 70%, 38%) 100%)';
-					if (commit) { self._tick(1); self._render(); }
-				};
+			// Full color editor: hue bar + 2D shade pad share one live-apply path. Everything updates
+			// under the finger (ring tint, shade layer, both knobs, swatch, pad hue) with NO re-render;
+			// the state persists + commits (tick + repaint) on release.
+			var applyColor = function (h, s, l, commit) {
+				localStorage.setItem('chi-orb-frame', 'custom');
+				localStorage.setItem('chi-orb-frame-hue', String(h));
+				localStorage.setItem('chi-orb-frame-sat', String(s));
+				localStorage.setItem('chi-orb-frame-lum', String(l));
+				var css = 'hsl(' + h + ', ' + s + '%, ' + l + '%)';
+				var tint = r.getElementById('tint'); if (tint) tint.style.background = css;
+				var shade = r.getElementById('tintshade'); if (shade) shade.style.background = 'hsl(' + h + ', ' + s + '%, ' + Math.max(8, l - 8) + '%)';
+				var hk = r.getElementById('s-hueknob'); if (hk) { hk.style.left = (h / 360 * 100).toFixed(1) + '%'; hk.style.background = 'hsl(' + h + ',72%,52%)'; }
+				var pad2 = r.getElementById('s-pad'); if (pad2) pad2.style.background = 'linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(' + h + ',100%,50%))';
+				var pk = r.getElementById('s-padknob'); if (pk) { pk.style.left = s.toFixed(0) + '%'; pk.style.top = Math.min(100, Math.max(0, (1 - (l - 6) / 88) * 100)).toFixed(0) + '%'; pk.style.background = css; }
+				var swp = r.getElementById('s-swatch'); if (swp) swp.style.background = 'linear-gradient(135deg, hsl(' + h + ', ' + s + '%, ' + Math.min(88, l + 22) + '%) 0%, hsl(' + h + ', ' + s + '%, ' + Math.max(12, l - 16) + '%) 100%)';
+				if (commit) { self._tick(1); self._render(); }
+			};
+			var wireDrag = function (elx, fromEvent) {
+				if (!elx) return;
 				var dragging = false;
-				hue.addEventListener('pointerdown', function (e) { e.stopPropagation(); dragging = true; try { hue.setPointerCapture(e.pointerId); } catch (_) { /* noop */ } setHue(e.clientX, false); });
-				hue.addEventListener('pointermove', function (e) { if (dragging) setHue(e.clientX, false); });
-				var endHue = function (e) { if (!dragging) return; dragging = false; setHue(e.clientX, true); };
-				hue.addEventListener('pointerup', endHue);
-				hue.addEventListener('pointercancel', function () { if (dragging) { dragging = false; self._render(); } });
-			}
+				elx.addEventListener('pointerdown', function (e) { e.stopPropagation(); dragging = true; try { elx.setPointerCapture(e.pointerId); } catch (_) { /* noop */ } fromEvent(e, false); });
+				elx.addEventListener('pointermove', function (e) { if (dragging) fromEvent(e, false); });
+				var end = function (e) { if (!dragging) return; dragging = false; fromEvent(e, true); };
+				elx.addEventListener('pointerup', end);
+				elx.addEventListener('pointercancel', function () { if (dragging) { dragging = false; self._render(); } });
+			};
+			var hue = r.getElementById('s-hue');
+			wireDrag(hue, function (e, commit) {
+				var hr = hue.getBoundingClientRect();
+				var p = Math.max(0, Math.min(1, (e.clientX - hr.left) / (hr.width || 1)));
+				applyColor(Math.round(p * 360), self._frameSat, self._frameLum, commit);
+			});
+			var pad = r.getElementById('s-pad');
+			wireDrag(pad, function (e, commit) {
+				var pr = pad.getBoundingClientRect();
+				var px = Math.max(0, Math.min(1, (e.clientX - pr.left) / (pr.width || 1)));
+				var py = Math.max(0, Math.min(1, (e.clientY - pr.top) / (pr.height || 1)));
+				applyColor(self._frameHue, Math.round(px * 100), Math.round((1 - py) * 88) + 6, commit);
+			});
 			on('s-route', function () {
 				var now = localStorage.getItem('chi-notif-route') === '1';
 				localStorage.setItem('chi-notif-route', now ? '0' : '1');
@@ -589,7 +758,7 @@
 			var t = this._theme, A = this._base, self = this;
 			var mask = '-webkit-mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;';
 			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
-			var hover = '.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
+			var hover = '#grip:hover{background:rgba(31,157,69,.4);color:#fff}.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
 			var head = '<style>' + kf + hover + ':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}button{font-family:inherit}::-webkit-scrollbar{width:0;height:0}</style>';
 
 			/* ---- minimized launcher: JUST the ensō + looping ripple + realtime button (transparent).
@@ -670,7 +839,12 @@
 				'</div>' +
 				'<div id="msgs" style="flex:1;overflow-y:auto;padding:6px 88px 8px;display:flex;flex-direction:column;gap:8px;min-height:0;-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 10%, #000 88%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 10%, #000 88%, transparent 100%);"></div>' +
 				'<div id="chips" style="flex-shrink:0;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:2px 92px 8px;">' + chips + '</div>' +
-				'<div style="flex-shrink:0;padding:6px 96px 44px;display:flex;justify-content:center;">' +
+				'<div style="flex-shrink:0;padding:6px 96px 44px;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
+					'<div id="replybar" style="display:none;width:100%;margin-bottom:6px;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-radius:13px;animation:chiMsgIn .3s ease both;' + t.chi + '">' +
+						'<svg width="12" height="12" viewBox="0 0 12 12" style="opacity:.7;flex-shrink:0;"><path d="M5 2 L2 5 L5 8 M2.5 5 H8 a2 2 0 0 1 2 2 v2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+						'<span id="replyname" style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>' +
+						'<span id="replycancel" title="Cancel reply" style="margin-left:auto;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.6;"><svg width="9" height="9" viewBox="0 0 12 12"><path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
+					'</div>' +
 					'<div id="inputpill" style="width:100%;height:44px;border-radius:22px;display:flex;align-items:center;gap:6px;padding:0 6px 0 16px;transition:border-color .2s, box-shadow .2s;' + t.input + '">' +
 						'<input id="in" placeholder="Ask Chi anything…" style="flex:1;font-size:13px;color:' + t.inputText + ';font-family:inherit;">' +
 						(this._hasRealtime() ? '<div id="voicebtn" class="ctl" title="Talk to Chi (realtime)" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;color:' + t.dim + ';"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8v0M5.5 5.5v5M8 3v10M10.5 5.5v5M13 8v0"/></svg></div>' : '') +
@@ -683,6 +857,9 @@
 			if (!this.history.length) this.history.push({ who: 'chi', text: "Hi, I'm Chi. Ask me anything — I'll draw a circle around it." });
 			this.shadowRoot.getElementById('sendbtn').addEventListener('click', function () { self._send(); });
 			this.shadowRoot.getElementById('in').addEventListener('keydown', function (e) { if (e.key === 'Enter') self._send(); });
+			var rc = this.shadowRoot.getElementById('replycancel');
+			if (rc) rc.addEventListener('click', function () { self._replyTo = null; self._syncReplyBar(); });
+			this._syncReplyBar(); // restore the bar if a reply was in progress across a re-render
 			var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 			var mic = this.shadowRoot.getElementById('micbtn');
 			if (SR) mic.addEventListener('click', function () { self._mic(); }); else mic.style.display = 'none';
