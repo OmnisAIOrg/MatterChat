@@ -41,7 +41,7 @@
 			chip: 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#e6e9ee;',
 			input: 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12), inset 0 -6px 14px rgba(0,0,0,.25);', inputText: '#e8eaed',
 			ctrl: 'background:rgba(20,23,28,.72);border:1px solid rgba(255,255,255,.16);color:rgba(255,255,255,.85);backdrop-filter:blur(10px);box-shadow:0 2px 8px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.10);',
-			glow: 'rgba(255,255,255,.13)', tick: 'rgba(255,255,255,.5)', tickOp: '.14', vignette: 'inset 0 -60px 110px rgba(0,0,0,.55)',
+			card: 'background:rgba(26,30,37,.97);border:1px solid rgba(255,255,255,.15);color:#e6e9ee;', glow: 'rgba(255,255,255,.13)', tick: 'rgba(255,255,255,.5)', tickOp: '.14', vignette: 'inset 0 -60px 110px rgba(0,0,0,.55)',
 		},
 		light: {
 			win: 'radial-gradient(120% 100% at 50% 0%, rgba(255,255,255,.99) 0%, rgba(238,241,245,.99) 70%)',
@@ -52,7 +52,7 @@
 			input: 'background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.10);box-shadow:inset 0 1px 2px rgba(0,0,0,.06);', inputText: '#23272c',
 			ctrl: 'background:rgba(255,255,255,.8);border:1px solid rgba(0,0,0,.10);color:rgba(0,0,0,.6);backdrop-filter:blur(10px);box-shadow:0 2px 8px rgba(0,0,0,.12);',
 			markFilter: 'brightness(0) saturate(100%) invert(20%) sepia(10%) saturate(400%) hue-rotate(180deg) brightness(0.6)',
-			glow: 'rgba(0,0,0,.07)', tick: 'rgba(0,0,0,.4)', tickOp: '.10', vignette: 'inset 0 -40px 80px rgba(0,0,0,.06)',
+			card: 'background:rgba(252,253,255,.98);border:1px solid rgba(0,0,0,.12);color:#23272c;', glow: 'rgba(0,0,0,.07)', tick: 'rgba(0,0,0,.4)', tickOp: '.10', vignette: 'inset 0 -40px 80px rgba(0,0,0,.06)',
 		},
 		warm: {
 			win: 'radial-gradient(120% 100% at 50% 0%, rgba(253,249,240,.99) 0%, rgba(243,235,219,.99) 70%)',
@@ -63,7 +63,7 @@
 			input: 'background:rgba(90,66,34,.07);border:1px solid rgba(90,66,34,.16);box-shadow:inset 0 1px 2px rgba(90,66,34,.08);', inputText: '#33302a',
 			ctrl: 'background:rgba(253,249,240,.85);border:1px solid rgba(90,66,34,.16);color:rgba(90,66,34,.7);backdrop-filter:blur(10px);box-shadow:0 2px 8px rgba(90,66,34,.14);',
 			markFilter: 'brightness(0) saturate(100%) invert(24%) sepia(30%) saturate(600%) hue-rotate(0deg) brightness(0.7)',
-			glow: 'rgba(90,66,34,.09)', tick: 'rgba(90,66,34,.45)', tickOp: '.10', vignette: 'inset 0 -40px 80px rgba(90,66,34,.07)',
+			card: 'background:rgba(250,245,234,.98);border:1px solid rgba(90,66,34,.20);color:#33302a;', glow: 'rgba(90,66,34,.09)', tick: 'rgba(90,66,34,.45)', tickOp: '.10', vignette: 'inset 0 -40px 80px rgba(90,66,34,.07)',
 		},
 		legal: {
 			win: 'radial-gradient(120% 100% at 50% 0%, rgba(20,32,56,.97) 0%, rgba(10,17,32,.99) 70%)',
@@ -73,7 +73,7 @@
 			chip: 'background:rgba(201,168,106,.10);border:1px solid rgba(201,168,106,.30);color:#efe8d8;',
 			input: 'background:rgba(201,168,106,.08);border:1px solid rgba(201,168,106,.30);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), inset 0 -6px 14px rgba(0,0,0,.3);', inputText: '#efe8d8',
 			ctrl: 'background:rgba(201,168,106,.14);border:1px solid rgba(201,168,106,.35);color:#e8d9b8;backdrop-filter:blur(10px);box-shadow:0 2px 8px rgba(0,0,0,.35);',
-			glow: 'rgba(201,168,106,.15)', tick: 'rgba(201,168,106,.6)', tickOp: '.14', vignette: 'inset 0 -60px 110px rgba(0,0,0,.5)',
+			card: 'background:rgba(19,30,52,.97);border:1px solid rgba(201,168,106,.35);color:#e9ecf2;', glow: 'rgba(201,168,106,.15)', tick: 'rgba(201,168,106,.6)', tickOp: '.14', vignette: 'inset 0 -60px 110px rgba(0,0,0,.5)',
 		},
 	};
 	var THEME_ORDER = ['dark', 'light', 'warm', 'legal'];
@@ -356,7 +356,7 @@
 		_notifCard(m) {
 			var self = this, t = this._theme;
 			var card = document.createElement('div');
-			card.setAttribute('style', 'align-self:flex-start;max-width:92%;display:flex;gap:9px;padding:9px 11px;border-radius:4px 16px 16px 16px;animation:chiMsgIn .45s cubic-bezier(.2,.75,.25,1) both;' + t.chi);
+			card.setAttribute('style', 'align-self:flex-start;max-width:92%;display:flex;gap:9px;padding:9px 11px;border-radius:4px 16px 16px 16px;animation:chiMsgIn .45s cubic-bezier(.2,.75,.25,1) both;box-shadow:0 10px 26px -12px rgba(0,0,0,.55);' + (t.card || t.chi));
 			var av = document.createElement('div');
 			av.setAttribute('style', 'width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;box-shadow:0 3px 8px rgba(0,0,0,.3);background:' + m.color + ';');
 			av.textContent = m.avatar;
