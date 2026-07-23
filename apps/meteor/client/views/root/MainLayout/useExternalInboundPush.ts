@@ -23,6 +23,8 @@ import { useCustomSound, useStream, useUserId } from '@rocket.chat/ui-contexts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
+import { externalSelectionId, useOrgSwitcherSelection } from './OrgSwitcherContext';
+
 /** Per-key refetch throttle: leading edge fires now, one trailing pass catches the burst tail. */
 const THROTTLE_MS = 1500;
 /** Per-conversation notification cooldown — a rapid DM volley gets one sound, not ten. */
@@ -66,6 +68,7 @@ export const useExternalInboundPush = (enabled = true): void => {
 	const notifyUser = useStream('notify-user');
 	const queryClient = useQueryClient();
 	const { notificationSounds } = useCustomSound();
+	const { setSelectedOrgId, setSelectedExternalChannel } = useOrgSwitcherSelection();
 
 	useEffect(() => {
 		if (!uid || !enabled) {
@@ -108,11 +111,27 @@ export const useExternalInboundPush = (enabled = true): void => {
 				// sound is best-effort (autoplay policies) — never block the render path
 			}
 			if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
-				new window.Notification(event.author || 'New message', {
+				const n = new window.Notification(event.author || 'New message', {
 					body: event.preview || 'New direct message from your connected workspace',
 					tag: `external-inbound-${channelKey}`,
 				});
+				// Clicking it opens the exact bridged conversation. Bridged DMs are NOT Rocket.Chat rooms
+				// (no rid/route) — they're browsed in workspace mode via OrgSwitcher context, keyed by
+				// (connectionId, channelExternalId) straight off the event. window.focus() fronts the tab;
+				// in the desktop app it also fronts the Electron window (installDesktopFocusBridge patch).
+				n.onclick = (): void => {
+					n.close();
+					window.focus();
+					setSelectedOrgId(externalSelectionId(event.connectionId));
+					setSelectedExternalChannel({
+						externalId: event.channelExternalId,
+						name: event.author || 'Direct message',
+						teamName: 'Direct messages',
+						isPrivate: true,
+						kind: 'chat',
+					});
+				};
 			}
 		});
-	}, [uid, enabled, notifyUser, queryClient, notificationSounds]);
+	}, [uid, enabled, notifyUser, queryClient, notificationSounds, setSelectedOrgId, setSelectedExternalChannel]);
 };
