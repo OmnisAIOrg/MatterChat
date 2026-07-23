@@ -56,6 +56,21 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Assistant_Base_URL',
 			i18nDescription: 'Chi_Assistant_Base_URL_Description',
 		});
+		await this.add('Chi_MCP_Enabled', false, {
+			type: 'boolean',
+			public: false,
+			i18nLabel: 'Chi_MCP_Enabled',
+			i18nDescription: 'Chi_MCP_Enabled_Description',
+		});
+		await this.add('Chi_MCP_Servers', '', {
+			type: 'code',
+			code: 'application/json',
+			multiline: true,
+			public: false,
+			secret: true,
+			i18nLabel: 'Chi_MCP_Servers',
+			i18nDescription: 'Chi_MCP_Servers_Description',
+		});
 		await this.add('Chi_Assistant_Audit_Channel', 'chi-admin-audit', {
 			type: 'string',
 			public: false,
