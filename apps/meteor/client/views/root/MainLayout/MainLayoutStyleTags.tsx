@@ -657,9 +657,14 @@ const buildPremiumRefreshCss = (t: PremiumRefreshTokens): string => `
 	background-color: var(--mc-premium-bg);
 }
 
-.rcx-content--main .rc-message-box > div {
+/* Clamp the composer to the SAME 860px readable column as .messages-list so the input aligns with the
+   messages at every width. A direct-child selector alone is brittle (some composer variants render
+   different children); also target the real Fuselage classes (the input wrapper + the typing line). */
+.rcx-content--main .rc-message-box > div,
+.rcx-content--main .rc-message-box .rcx-input-box__wrapper,
+.rcx-content--main .rc-message-box .rc-message-box__activity-wrapper {
 	max-width: 860px;
-	margin: 0 auto;
+	margin-inline: auto;
 }
 
 /* Message composer (ui-composer MessageComposer component) */
