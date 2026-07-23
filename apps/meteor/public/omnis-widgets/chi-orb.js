@@ -228,7 +228,7 @@
 		_resize(d) { localStorage.setItem('chi-orb-scale', Math.max(0.7, Math.min(1.5, this._scale + d)).toFixed(2)); this.dispatchEvent(new CustomEvent('chi-resize', { detail: { scale: this._scale }, bubbles: true, composed: true })); this._render(); }
 		_cycleTheme() { var i = THEME_ORDER.indexOf(this._themeKey); localStorage.setItem('chi-orb-theme', THEME_ORDER[(i + 1) % THEME_ORDER.length]); this._render(); }
 		_cycleFrame() { var i = FRAME_ORDER.indexOf(this._frameKey); localStorage.setItem('chi-orb-frame', FRAME_ORDER[(i + 1) % FRAME_ORDER.length]); this._render(); }
-		_toggle() { this._min = !this._min; localStorage.setItem('chi-orb-min', this._min ? '1' : '0'); this.dispatchEvent(new CustomEvent('chi-min', { detail: { min: this._min }, bubbles: true, composed: true })); this._render(); }
+		_toggle() { this._min = !this._min; localStorage.setItem('chi-orb-min', this._min ? '1' : '0'); if (!this._min) this._flushPending(); this.dispatchEvent(new CustomEvent('chi-min', { detail: { min: this._min }, bubbles: true, composed: true })); this._render(); }
 		_hasRealtime() { return this.getAttribute('realtime-available') === '1'; }
 		_hasWinCtrl() { return this.getAttribute('window-controls') === '1'; } // desktop native-window mode: grip drags the window, adds close/frame controls
 		_hasPopout() { return this.getAttribute('popout-control') === '1'; }   // in-app web mode: a pop-out ring control (next to theme), grip drags the in-app container
@@ -328,6 +328,7 @@
 			list.innerHTML = '';
 			this.history.forEach(function (m) {
 				if (m.kind === 'notif') { list.appendChild(self._notifCard(m)); return; }
+				if (m.kind === 'digest') { list.appendChild(self._digestCard(m)); return; }
 				var d0 = document.createElement('div');
 				d0.setAttribute('style', self._bubble(m));
 				d0.textContent = m.text;
@@ -387,15 +388,168 @@
 				avatar: String(n.avatar || String(n.sender || '?').charAt(0).toUpperCase()),
 				data: n.data,
 			};
+			this._lastNotif = m; // hover-peek on the minimized launcher shows the latest
+			// Focus mode or minimized → QUEUE quietly (focus = fully silent; minimized still chimes
+			// once) and light the amber presence glow. The queue flushes on expand / focus end —
+			// as individual cards, or as one digest when a lot piled up.
+			if (this._focusActive() || this._min) {
+				this._pending.push(m);
+				this._unseen++;
+				if (!this._focusActive()) { this._chime(); }
+				if (this._min) this._render(); // repaint launcher: amber glow + unseen badge
+				return m;
+			}
 			var routed = localStorage.getItem('chi-notif-route') === '1';
 			if (routed) {
 				this.history.push(m);
-				if (!this._min && !this._realtime) this._sync();
-			} else if (!this._min && !this._realtime) {
+				if (!this._realtime) this._sync();
+			} else if (!this._realtime) {
 				this._banner(m);
 			}
 			this._chime();
 			return m;
+		}
+		_focusActive() { return (parseFloat(localStorage.getItem('chi-focus-until')) || 0) > Date.now(); }
+		/* Live voice captions — the host streams what's being heard/said during realtime:
+		 * orb.caption('me'|'chi', text). Shows the last two lines under LISTENING…, latest brightest. */
+		caption(who, text) {
+			this._caps.push({ who: who === 'chi' ? 'chi' : 'me', text: String(text || '').slice(0, 160) });
+			this._caps = this._caps.slice(-2);
+			if (!this._realtime || this._min) return;
+			var box = this.shadowRoot.getElementById('caps');
+			if (!box) return;
+			box.innerHTML = '';
+			var self = this;
+			this._caps.forEach(function (c, i) {
+				var d = document.createElement('div');
+				d.setAttribute('style', 'font-size:11.5px;line-height:1.35;text-align:center;animation:chiMsgIn .3s ease both;color:' + (c.who === 'chi' ? GREEN : '#9fc6ff') + ';opacity:' + (i === self._caps.length - 1 ? '.95' : '.5') + ';');
+				d.textContent = c.text;
+				box.appendChild(d);
+			});
+		}
+		/* ---- Focus dial: drag along the METAL RING to wind up a focus timer (like turning a
+		 * Nest). 5-minute detents with ticks; a blue arc shows the wound time, then counts down.
+		 * While focused: notifications queue silently. On the bell: digest + chime. Tap the
+		 * countdown chip to end early. ---- */
+		_startFocus(mins) {
+			var until = Date.now() + mins * 60000;
+			localStorage.setItem('chi-focus-until', String(until));
+			localStorage.setItem('chi-focus-total', String(mins * 60000));
+			this._chime();
+			this._focusEnsure();
+		}
+		_focusEnsure() {
+			var self = this;
+			clearInterval(this._focusInt);
+			if (!this._focusActive()) { this._focusPaint(0, 0); return; }
+			this._focusInt = setInterval(function () { self._focusTickUi(); }, 1000);
+			this._focusTickUi();
+		}
+		_focusTickUi() {
+			var until = parseFloat(localStorage.getItem('chi-focus-until')) || 0;
+			var total = parseFloat(localStorage.getItem('chi-focus-total')) || 1;
+			var rem = until - Date.now();
+			if (rem <= 0) { this._endFocus(false); return; }
+			this._focusPaint(rem / total, rem);
+		}
+		_focusPaint(frac, remMs) {
+			var r = this.shadowRoot;
+			var arc = r.getElementById('focusarc'), chip = r.getElementById('focuschip');
+			if (!arc || !chip) return;
+			if (frac <= 0) { arc.style.opacity = '0'; chip.style.display = 'none'; return; }
+			var deg = Math.max(4, frac * 360);
+			arc.style.opacity = '1';
+			arc.style.background = 'conic-gradient(from -90deg, rgba(59,155,255,.95) 0deg ' + deg + 'deg, transparent ' + deg + 'deg)';
+			var mm = Math.floor(remMs / 60000), ss = Math.floor((remMs % 60000) / 1000);
+			chip.style.display = 'flex';
+			chip.textContent = '🌙 Focus ' + mm + ':' + (ss < 10 ? '0' : '') + ss + ' — tap to end';
+		}
+		_endFocus(early) {
+			clearInterval(this._focusInt);
+			localStorage.removeItem('chi-focus-until');
+			localStorage.removeItem('chi-focus-total');
+			this._focusPaint(0, 0);
+			if (!early) this._chime();
+			if (!this._min) { this._flushPending(); if (!this._realtime) this._sync(); }
+			else if (this._pending.length) this._render(); // launcher badge reflects the queue
+		}
+		_wireFocusDial(shell) {
+			var self = this, st = null;
+			shell.addEventListener('pointerdown', function (e) {
+				if (e.target.closest('#grip') || e.target.closest('#arc') || e.target.closest('#ringminbtn') || e.target.closest('#focuschip') || e.target.closest('#win')) return;
+				var rect = shell.getBoundingClientRect();
+				var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+				var dx = e.clientX - cx, dy = e.clientY - cy;
+				var rr = Math.sqrt(dx * dx + dy * dy) / (rect.width / 2);
+				if (rr < 0.86 || rr > 1.04) return; // only the metal band winds the dial
+				st = { mins: 0 };
+				try { shell.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+				e.preventDefault();
+			});
+			shell.addEventListener('pointermove', function (e) {
+				if (!st) return;
+				var rect = shell.getBoundingClientRect();
+				var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+				var ang = Math.atan2(e.clientX - cx, cy - e.clientY) * 180 / Math.PI; // 0° at 12 o'clock, clockwise
+				if (ang < 0) ang += 360;
+				var mins = Math.max(5, Math.round((ang / 360) * 60 / 5) * 5); // 5-min detents, 5–60
+				if (mins !== st.mins) { st.mins = mins; self._tick(); self._focusPaint(mins / 60, mins * 60000); }
+			});
+			var up = function () {
+				if (!st) return;
+				if (st.mins > 0) self._startFocus(st.mins); else self._focusPaint(0, 0);
+				st = null;
+			};
+			shell.addEventListener('pointerup', up);
+			shell.addEventListener('pointercancel', up);
+		}
+		/* Flush queued notifications into the conversation: ≥4 collapse into a catch-up digest. */
+		_flushPending() {
+			var p = this._pending;
+			this._pending = [];
+			this._unseen = 0;
+			if (!p.length) return;
+			if (p.length >= 4) {
+				var seen = {}, senders = [];
+				p.forEach(function (m) { if (!seen[m.sender]) { seen[m.sender] = 1; senders.push(m.sender); } });
+				this.history.push({ kind: 'digest', count: p.length, senders: senders, items: p });
+			} else {
+				var h = this.history;
+				p.forEach(function (m) { h.push(m); });
+			}
+		}
+		_digestCard(m) {
+			var self = this, t = this._theme;
+			var card = document.createElement('div');
+			card.setAttribute('style', 'align-self:stretch;display:flex;gap:10px;padding:11px 13px;border-radius:16px;animation:chiMsgIn .45s cubic-bezier(.2,.75,.25,1) both;box-shadow:0 10px 26px -12px rgba(0,0,0,.55);' + (t.card || t.chi));
+			var moon = document.createElement('div');
+			moon.setAttribute('style', 'width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(59,155,255,.16);border:1px solid rgba(59,155,255,.35);');
+			moon.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16"><path d="M13.5 9.5 A6 6 0 1 1 6.5 2.5 A4.8 4.8 0 0 0 13.5 9.5 Z" fill="none" stroke="' + ACCENT + '" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+			var body = document.createElement('div');
+			body.setAttribute('style', 'flex:1;min-width:0;');
+			var title = document.createElement('div');
+			title.setAttribute('style', 'font-size:12px;font-weight:800;');
+			title.textContent = 'While you were away';
+			var line = document.createElement('div');
+			line.setAttribute('style', 'margin-top:2px;font-size:12px;line-height:1.4;opacity:.8;');
+			line.textContent = m.count + ' message' + (m.count === 1 ? '' : 's') + ' from ' + m.senders.slice(0, 3).join(', ') + (m.senders.length > 3 ? ' +' + (m.senders.length - 3) + ' more' : '');
+			var btns = document.createElement('div');
+			btns.setAttribute('style', 'margin-top:8px;display:flex;gap:7px;');
+			var run = document.createElement('div');
+			run.setAttribute('style', 'display:inline-flex;align-items:center;padding:4px 13px;border-radius:12px;cursor:pointer;font-size:10.5px;font-weight:700;background:rgba(48,209,88,.9);color:#fff;box-shadow:0 2px 8px rgba(48,209,88,.4);');
+			run.textContent = 'Give me the rundown';
+			run.addEventListener('click', function () { self._send('Catch me up — what did I miss while I was away?'); });
+			var show = document.createElement('div');
+			show.setAttribute('style', 'display:inline-flex;align-items:center;padding:4px 13px;border-radius:12px;cursor:pointer;font-size:10.5px;font-weight:600;' + t.chip);
+			show.textContent = 'Show them';
+			show.addEventListener('click', function () {
+				var i = self.history.indexOf(m);
+				if (i !== -1) { var args = [i, 1].concat(m.items); Array.prototype.splice.apply(self.history, args); self._sync(); }
+			});
+			btns.appendChild(run); btns.appendChild(show);
+			body.appendChild(title); body.appendChild(line); body.appendChild(btns);
+			card.appendChild(moon); card.appendChild(body);
+			return card;
 		}
 		_notifCard(m) {
 			var self = this, t = this._theme;
@@ -611,7 +765,7 @@
 			return '' +
 				// In desktop window mode the window is sized to hug the orb and scaling is centered (50% 50%);
 				// on the web the orb scales up from its base (50% 100%) so it grows without shifting off-anchor.
-				'<div style="position:relative;width:520px;height:520px;transform:scale(' + this._scale + ');transform-origin:' + (winCtrl ? '50% 50%' : '50% 100%') + ';">' +
+				'<div id="shell" style="position:relative;width:520px;height:520px;transform:scale(' + this._scale + ');transform-origin:' + (winCtrl ? '50% 50%' : '50% 100%') + ';">' +
 				'<div id="halo" data-base="' + haloBase + '" style="' + haloBase + this._haloCss(this._realtime ? 'realtime' : '') + '"></div>' +
 				// 1 · stainless band (full bleed to the rim)
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:' + steel + ';box-shadow:0 70px 130px -34px rgba(0,0,0,.82), 0 26px 60px -18px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 6px rgba(0,0,0,.45);"></div>' +
@@ -623,6 +777,8 @@
 				'<div id="tintshade" style="position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:multiply;opacity:.42;background:' + (f.tint === 'transparent' ? 'transparent' : f.tint) + ';"></div>' +
 				// 4 · slow specular sweep — light traveling around the metal
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;overflow:hidden;' + ringMask + '"><div style="position:absolute;inset:-2%;background:conic-gradient(from 0deg, transparent 0 8%, rgba(255,255,255,.5) 11%, transparent 15%, transparent 55%, rgba(255,255,255,.25) 58%, transparent 62%);mix-blend-mode:screen;animation:chiSweep 14s linear infinite;"></div></div>' +
+				// 4.5 · focus-dial arc — the wound/remaining time drawn on the metal band
+				'<div id="focusarc" style="position:absolute;inset:3px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .3s;-webkit-mask:radial-gradient(circle, transparent 89.5%, black 90.5%);mask:radial-gradient(circle, transparent 89.5%, black 90.5%);filter:drop-shadow(0 0 7px rgba(59,155,255,.9));"></div>' +
 				// 5 · inner bevel ring (dark machined step down to the glass)
 				'<div style="position:absolute;inset:15px;border-radius:50%;pointer-events:none;background:conic-gradient(from 20deg, #43474c, #14161a 25%, #3a3e44 50%, #101216 75%, #43474c);box-shadow:inset 0 1px 2px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.6);"></div>' +
 				// 6 · black glass face
@@ -637,6 +793,7 @@
 				// top edge, rounded only at the bottom. Pointer drag is owned by the host.
 				'<div id="grip" title="Drag to move" style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);z-index:7;padding:3px 11px 4px;border-radius:0 0 11px 11px;display:flex;align-items:center;gap:3px;cursor:grab;touch-action:none;background:rgba(14,16,20,.7);border:1px solid rgba(255,255,255,.14);border-top:none;box-shadow:0 3px 9px rgba(0,0,0,.45);backdrop-filter:blur(8px);color:rgba(255,255,255,.7);transition:background .18s, color .18s;">' +
 					'<svg width="17" height="8" viewBox="0 0 18 8"><circle cx="4" cy="2.5" r="1.15" fill="currentColor"/><circle cx="9" cy="2.5" r="1.15" fill="currentColor"/><circle cx="14" cy="2.5" r="1.15" fill="currentColor"/><circle cx="4" cy="5.5" r="1.15" fill="currentColor"/><circle cx="9" cy="5.5" r="1.15" fill="currentColor"/><circle cx="14" cy="5.5" r="1.15" fill="currentColor"/></svg></div>' +
+				'<div id="focuschip" style="position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:8;display:none;align-items:center;padding:4px 13px;border-radius:12px;font-size:10.5px;font-weight:700;cursor:pointer;background:rgba(14,18,24,.92);border:1px solid rgba(59,155,255,.5);color:#8fc2ff;box-shadow:0 4px 14px rgba(0,0,0,.5);white-space:nowrap;"></div>' +
 				// minimize stays reachable on the OUTSIDE too (founder direction): the classic
 				// collapse-to-ensō chrome button on the ring, top-right, in every mode.
 				'<div id="ringminbtn" class="ctl" title="Collapse to the ensō" style="position:absolute;top:74px;right:74px;z-index:7;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;' + t.ctrl + '"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M8 11.5V8h3.5"/><path d="M6 6 2.75 2.75M8 8l3.25 3.25"/></svg></div>' +
@@ -814,7 +971,10 @@
 				var rt = this._realtime;
 				this.shadowRoot.innerHTML = head +
 					'<div id="launch" title="Open Chi (hold to move)" style="position:relative;width:80px;height:80px;cursor:grab;transform:scale(' + this._scale + ');transform-origin:' + (this._hasWinCtrl() ? '50% 50%' : '50% 100%') + ';">' +
-					'<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,.22) 30%, rgba(48,209,88,0) 70%);animation:chiHalo 3s ease-in-out infinite;"></div>' +
+					(this._unseen > 0
+					? '<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(255,159,10,.34) 30%, rgba(255,159,10,0) 70%);animation:chiHalo 1.6s ease-in-out infinite;"></div>'
+					: '<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,.22) 30%, rgba(48,209,88,0) 70%);animation:chiHalo 3s ease-in-out infinite;"></div>') +
+				(this._unseen > 0 ? '<div style="position:absolute;top:-5px;left:-5px;z-index:5;min-width:18px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:#ff9f0a;color:#1a1206;box-shadow:0 2px 7px rgba(0,0,0,.5);">' + (this._unseen > 99 ? '99+' : this._unseen) + '</div>' : '') +
 					(rt ? '<div style="position:absolute;inset:-9px;border-radius:50%;pointer-events:none;box-shadow:0 0 24px 6px rgba(59,155,255,.6);animation:chiHalo 1.5s ease-in-out infinite;"></div>' : '') +
 					'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:80px;height:80px;filter:' + (t.markFilter || 'drop-shadow(0 3px 12px rgba(0,0,0,.55))') + ';">' +
 					'<div style="position:absolute;inset:0;' + mask + '">' + ripples() + '</div>' +
@@ -822,6 +982,19 @@
 					'</div>';
 				var launchEl = this.shadowRoot.getElementById('launch');
 				launchEl.addEventListener('click', function () { if (self._justDragged) { self._justDragged = false; return; } self._toggle(); });
+				// hover peek: the latest notification floats up as a ghost card — read without opening
+				launchEl.addEventListener('mouseenter', function () {
+					if (!self._lastNotif || self.shadowRoot.getElementById('peek')) return;
+					var pk = document.createElement('div');
+					pk.id = 'peek';
+					pk.setAttribute('style', 'position:absolute;bottom:92px;left:50%;transform:translateX(-50%);width:252px;z-index:9;animation:chiMsgIn .25s ease both;pointer-events:none;');
+					var card = self._notifCard(self._lastNotif);
+					card.style.animation = 'none';
+					card.style.borderRadius = '14px';
+					pk.appendChild(card);
+					launchEl.appendChild(pk);
+				});
+				launchEl.addEventListener('mouseleave', function () { var pk = self.shadowRoot.getElementById('peek'); if (pk) pk.remove(); });
 				this._winDrag(launchEl); // hold-and-move repositions the puck (desktop window mode); a plain click expands
 				var md = this.shadowRoot.getElementById('micdot');
 				if (md) {
@@ -851,6 +1024,7 @@
 							'<div style="position:absolute;inset:0;' + mask + '">' + ripples() + '</div>' +
 						'</div>' +
 						'<div style="font-size:13px;font-weight:800;letter-spacing:2.4px;color:' + ACCENT + ';text-shadow:0 0 14px rgba(59,155,255,.6);animation:chiHalo 1.6s ease-in-out infinite;">LISTENING…</div>' +
+						'<div id="caps" style="display:flex;flex-direction:column;align-items:center;gap:3px;min-height:32px;max-width:300px;"></div>' +
 						'<div id="chips" style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:300px;">' + chipsL + '</div>' +
 						'<div style="font-size:11px;letter-spacing:.4px;color:' + t.dim + ';margin-top:2px;">tap anywhere to end</div>' +
 					'</div>';
@@ -888,7 +1062,8 @@
 					'<div id="replybar" style="display:none;width:100%;margin-bottom:6px;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-radius:13px;animation:chiMsgIn .3s ease both;' + t.chi + '">' +
 						'<svg width="12" height="12" viewBox="0 0 12 12" style="opacity:.7;flex-shrink:0;"><path d="M5 2 L2 5 L5 8 M2.5 5 H8 a2 2 0 0 1 2 2 v2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
 						'<span id="replyname" style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>' +
-						'<span id="replycancel" title="Cancel reply" style="margin-left:auto;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.6;"><svg width="9" height="9" viewBox="0 0 12 12"><path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
+						'<span id="replymic" title="Speak your reply" style="margin-left:auto;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.65;"><svg width="11" height="11" viewBox="0 0 16 16"><rect x="6" y="1.5" width="4" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 7.5 c0 2.5 2 4.5 4.5 4.5 s4.5 -2 4.5 -4.5 M8 12 v2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>' +
+					'<span id="replycancel" title="Cancel reply" style="width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.6;"><svg width="9" height="9" viewBox="0 0 12 12"><path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>' +
 					'</div>' +
 					'<div id="inputpill" style="width:100%;height:44px;border-radius:22px;display:flex;align-items:center;gap:6px;padding:0 6px 0 16px;transition:border-color .2s, box-shadow .2s;' + t.input + '">' +
 						'<input id="in" placeholder="Ask Chi anything…" style="flex:1;font-size:13px;color:' + t.inputText + ';font-family:inherit;">' +
@@ -908,6 +1083,8 @@
 			var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 			var mic = this.shadowRoot.getElementById('micbtn');
 			if (SR) mic.addEventListener('click', function () { self._mic(); }); else mic.style.display = 'none';
+			var rm = this.shadowRoot.getElementById('replymic');
+			if (rm) { if (SR) rm.addEventListener('click', function () { self._mic(); }); else rm.style.display = 'none'; }
 			var vb = this.shadowRoot.getElementById('voicebtn');
 			if (vb) vb.addEventListener('click', function () { if (self.onvoicestart) self.onvoicestart(); }); // host flips realtime=true on connect
 			var chipsEl = this.shadowRoot.getElementById('chips'), acts = this._actionsList();
@@ -931,6 +1108,11 @@
 			var pob = r.getElementById('popoutbtn'); if (pob) pob.addEventListener('click', function (e) { e.stopPropagation(); self.dispatchEvent(new CustomEvent('chi-popout', { bubbles: true, composed: true })); });
 			var stb = r.getElementById('settingsbtn'); if (stb) stb.addEventListener('click', function (e) { e.stopPropagation(); self._settingsOpen = !self._settingsOpen; self._settingsPanel = 'main'; self._render(); });
 			this._winDrag(r.getElementById('grip')); // the top grip above the ensō is the ONE drag handle
+			var shell = r.getElementById('shell');
+			if (shell) this._wireFocusDial(shell); // drag along the metal band → wind a focus timer
+			var fchip = r.getElementById('focuschip');
+			if (fchip) fchip.addEventListener('click', function (e) { e.stopPropagation(); self._endFocus(true); });
+			this._focusEnsure(); // restore a running countdown across re-renders
 		}
 
 		// Turn `el` (the grip, or the minimized launcher) into THE drag handle. Tracks the pointer in SCREEN
