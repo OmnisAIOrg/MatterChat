@@ -1,7 +1,9 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
-import { isMcpTool, mcpNeedsConfirm, mcpSlug, parseMcpServers, splitMcpName } from '../../../../../../server/lib/chi/admin/mcp';
+import crypto from 'crypto';
+
+import { isMcpTool, mcpNeedsConfirm, mcpSlug, parseMcpServers, signUserAssertion, splitMcpName } from '../../../../../../server/lib/chi/admin/mcp';
 
 describe('chi MCP connectors — pure parts', () => {
 	describe('parseMcpServers', () => {
@@ -70,5 +72,33 @@ describe('chi MCP connectors — pure parts', () => {
 			expect((summary as string).length).to.be.lessThan(260);
 			expect(summary).to.contain('…');
 		});
+	});
+});
+
+describe('chi MCP signed member assertion', () => {
+	const actor = { _id: 'u123', username: 'chi.nguyen' } as Parameters<typeof signUserAssertion>[0];
+
+	it('emits payload.signature that verifies with the shared secret and carries an OAuth-shaped subject', () => {
+		const token = signUserAssertion(actor, 'https://app.matterchat.com', 's3cret');
+		expect(token).to.be.a('string');
+		const [payload, sig] = (token as string).split('.');
+		const expected = crypto.createHmac('sha256', 's3cret').update(payload).digest('base64url');
+		expect(sig).to.equal(expected);
+		const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+		expect(claims.sub).to.equal('u123');
+		expect(claims.iss).to.equal('https://app.matterchat.com');
+		expect(claims.exp - claims.iat).to.equal(300); // short-lived: 5 minutes
+	});
+
+	it('emits nothing without a configured secret (callers must treat identity as unverified)', () => {
+		expect(signUserAssertion(actor, 'https://x', '')).to.equal(undefined);
+	});
+
+	it('a tampered payload no longer verifies', () => {
+		const token = signUserAssertion(actor, 'https://x', 's3cret') as string;
+		const [payload] = token.split('.');
+		const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(payload, 'base64url').toString()), sub: 'admin' })).toString('base64url');
+		const sig = token.split('.')[1];
+		expect(crypto.createHmac('sha256', 's3cret').update(forged).digest('base64url')).to.not.equal(sig);
 	});
 });

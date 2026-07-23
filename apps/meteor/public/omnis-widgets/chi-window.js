@@ -330,7 +330,10 @@
 				var relay = JSON.parse(ev.newValue);
 				if (relay && relay.card && orb.notify) orb.notify(relay.card);
 			} catch (e) { /* malformed relay — ignore */ }
+			try { localStorage.removeItem('chi-notif-relay'); } catch (e) { /* hygiene only */ }
 		});
+		// Desktop global shortcut (⌘⇧F anywhere in the OS) → toggle Flow dictation here.
+		if (bridge.onFlowToggle) bridge.onFlowToggle(function () { var o = orbEl(); if (o && o.flowToggle) o.flowToggle(); });
 		orb.onreply = function (target, text) {
 			var rid = target && target.data && target.data.rid;
 			if (!rid) return Promise.reject(new Error('missing room'));

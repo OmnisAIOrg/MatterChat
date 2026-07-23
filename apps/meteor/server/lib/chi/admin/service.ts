@@ -51,7 +51,7 @@ export function isChiAdminEnabled(): boolean {
 	return settings.get<boolean>('Chi_Assistant_Enabled') === true;
 }
 
-function llmConfig(): LlmConfig | undefined {
+function llmConfig(userModel?: string): LlmConfig | undefined {
 	const providerId = String(settings.get('Chi_Assistant_Provider') || '');
 	const apiKey = String(settings.get('Chi_Assistant_API_Key') || '').trim();
 	// Local providers (Ollama / LM Studio / llama.cpp on the workspace host) need no key —
@@ -64,10 +64,15 @@ function llmConfig(): LlmConfig | undefined {
 	const { family, baseUrl, model } = resolveProvider(
 		providerId,
 		String(settings.get('Chi_Assistant_Base_URL') || ''),
-		String(settings.get('Chi_Assistant_Model') || ''),
+		// Per-user model override (chi.prefs) wins within the workspace's provider; the KEY is
+		// always the workspace's — members never supply or see credentials.
+		(userModel || '').trim() || String(settings.get('Chi_Assistant_Model') || ''),
 	);
 	return { provider: family, apiKey: apiKey || 'local', model, baseUrl };
 }
+
+type ChiUserPrefs = { model?: string; connectors?: Record<string, boolean> };
+const userChiPrefs = (u: IUser): ChiUserPrefs => ((u as IUser & { settings?: { chi?: ChiUserPrefs } }).settings?.chi ?? {});
 
 /** Route a call to the built-in registry or an MCP connector (namespaced mcp_<server>_<tool>). */
 async function runAnyTool(name: string, input: Record<string, unknown>, actor: IUser): Promise<{ ok: boolean; content: string }> {
@@ -183,7 +188,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 	if (!isChiAdminEnabled()) {
 		return; // feature off — stay silent (the DM may predate enablement)
 	}
-	const config = llmConfig();
+	const config = llmConfig(userChiPrefs(sender).model);
 	if (!config) {
 		await reply(NOT_CONFIGURED_REPLY);
 		return;
@@ -197,7 +202,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 
 	try {
 		const turns: ChiTurn[] = [...(await historyTurns(room._id, message._id)), { kind: 'user', text }];
-		const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs())];
+		const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors))];
 		const system = systemPrompt(sender, isAdmin);
 
 		for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -281,7 +286,7 @@ export async function runChiOrbTurn(
 	if (!isChiAdminEnabled()) {
 		return { reply: 'Chi is not enabled on this workspace yet — ask an admin to turn it on.', actions: [], needsConfirm: false };
 	}
-	const config = llmConfig();
+	const config = llmConfig(userChiPrefs(sender).model);
 	if (!config) {
 		return { reply: NOT_CONFIGURED_REPLY, actions: [], needsConfirm: false };
 	}
@@ -320,7 +325,7 @@ export async function runChiOrbTurn(
 	const contextLine = chiCtx?.roomName
 		? `- The user is CURRENTLY VIEWING ${chiCtx.roomType === 'd' ? '@' : '#'}${chiCtx.roomName}. When they say "this", "here" or omit a channel, act on that conversation.`
 		: undefined;
-	const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs())];
+	const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors))];
 	const system = systemPrompt(sender, isAdmin, contextLine);
 
 	const { result, actions } = await withClientActions<Omit<ChiOrbTurnResult, 'actions'>>(() => withChiContext(chiCtx ?? {}, async () => {

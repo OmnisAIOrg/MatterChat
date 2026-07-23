@@ -188,6 +188,7 @@
 	// Keys reuse the LLM store where the provider is the same company (one key, both uses).
 	var STT_PROVIDERS = [
 		{ slug: 'webspeech', name: 'Built-in · browser speech', builtin: true, wired: true, live: true },
+		{ slug: 'workspace', name: 'Workspace · server-managed key', workspace: true, wired: true },
 		{ slug: 'stt-openai', name: 'OpenAI · Whisper / 4o-transcribe', wired: true, keyStore: 'chi-llm-openai-key', url: 'https://api.openai.com/v1/audio/transcriptions', model: 'gpt-4o-mini-transcribe' },
 		{ slug: 'stt-groq', name: 'Groq · Whisper large-v3-turbo', wired: true, keyStore: 'chi-llm-groq-key', url: 'https://api.groq.com/openai/v1/audio/transcriptions', model: 'whisper-large-v3-turbo' },
 		{ slug: 'stt-local', name: 'Local Whisper server', wired: true, local: true, urlStore: 'chi-stt-local-url', urlHint: 'http://localhost:9000 (OpenAI-compatible)', model: 'whisper-1' },
@@ -258,6 +259,8 @@
 			if (!this._hotkeyFn) {
 				this._hotkeyFn = function (e) {
 					if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyC') { e.preventDefault(); self._summon(); }
+					// Quick command: ⌘⇧F starts dictation instantly; press again to finish + deliver.
+					if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); self.flowToggle(); }
 				};
 				window.addEventListener('keydown', this._hotkeyFn, true);
 			}
@@ -275,6 +278,13 @@
 			clearInterval(this._focusInt); clearTimeout(this._bannerT);
 		}
 		_summon() { if (this._min) this._toggle(); var inp = this.shadowRoot.getElementById('in'); if (inp) inp.focus(); }
+		/** Quick command: one call starts Flow dictation (expanding first if minimized); the next
+		 * finishes + delivers. Wired to ⌘⇧F here and to the desktop app's global shortcut. */
+		flowToggle() {
+			if (this._realtime) return; // never fight a live voice call
+			if (this._min) this._toggle();
+			if (this._flow) this._flowFinish(); else this._flowStart();
+		}
 		_dropGlow(on) {
 			var h = this.shadowRoot.getElementById('halo');
 			if (h) h.setAttribute('style', h.getAttribute('data-base') + (on ? this._haloCss('realtime') : (this._thinking ? this._haloCss('thinking') : this._haloCss(this._realtime ? 'realtime' : ''))));
@@ -391,6 +401,22 @@
 		 * audio/transcriptions — OpenAI, Groq, or a local Whisper server). Returns the text. */
 		_transcribe(blob) {
 			var p2 = this._sttConfig();
+			if (p2.workspace) {
+				// Secure lane: the clip goes to OUR server; the server relays it with the WORKSPACE
+				// key (admin-held). No provider keys exist in this browser.
+				var fdw = new FormData();
+				fdw.append('file', blob, 'flow.webm');
+				var vocw = (localStorage.getItem('chi-vocab') || '').trim();
+				if (vocw) fdw.append('prompt', 'Vocabulary: ' + vocw.slice(0, 600));
+				var hw = {};
+				try {
+					var tk = localStorage.getItem('Meteor.loginToken'), du = localStorage.getItem('Meteor.userId');
+					if (tk) hw['X-Auth-Token'] = tk;
+					if (du) hw['X-User-Id'] = du;
+				} catch (e9) { /* noop */ }
+				return fetch('/api/v1/chi.transcribe', { method: 'POST', headers: hw, body: fdw })
+					.then(function (res) { return res.json().then(function (d) { if (!res.ok || d.success === false) throw new Error((d && d.error) || ('HTTP ' + res.status)); return String(d.text || '').trim(); }); });
+			}
 			var url = p2.local ? ((localStorage.getItem(p2.urlStore) || '').replace(/\/+$/, '') + '/v1/audio/transcriptions') : p2.url;
 			var key = p2.keyStore ? (localStorage.getItem(p2.keyStore) || '') : '';
 			var model = localStorage.getItem('chi-stt-' + p2.slug + '-model') || p2.model || 'whisper-1';
@@ -423,6 +449,7 @@
 					self._flow.recorder = mr; self._flow.stream = stream;
 					mr.ondataavailable = function (ev2) { if (ev2.data && ev2.data.size) self._flow && self._flow.chunks.push(ev2.data); };
 					mr.start(250);
+					self._flow.capT = setTimeout(function () { if (self._flow) self._flowFinish(); }, 5 * 60 * 1000);
 					if (liveEl) liveEl.textContent = '● Recording with ' + stt.name + ' — tap Done to transcribe.';
 				}).catch(function () { if (liveEl) liveEl.textContent = 'Microphone unavailable — check permissions.'; });
 				this._tick(1);
@@ -459,6 +486,7 @@
 			// Clip mode: stop the recorder, ship the audio to the provider, then run the pipeline.
 			if (this._flow.mode === 'clip') {
 				var fl = this._flow; this._flow = null;
+				clearTimeout(fl.capT);
 				try { fl.recorder && fl.recorder.stop(); } catch (e0) { /* noop */ }
 				var finish = function () {
 					try { fl.stream && fl.stream.getTracks().forEach(function (tk) { tk.stop(); }); } catch (e1) { /* noop */ }
@@ -1393,6 +1421,7 @@
 								rd.style.background = selr ? GREEN : 'transparent';
 								rd.style.boxShadow = selr ? '0 0 8px rgba(48,209,88,.5)' : 'none';
 							});
+							self.dispatchEvent(new CustomEvent('chi-pref', { detail: { model: slug }, bubbles: true, composed: true }));
 							self._tick(1);
 						} else {
 							var ed = panel.querySelector('[data-med="' + slug + '"]');
@@ -1459,6 +1488,7 @@
 						var nowOn = localStorage.getItem(key) !== '1';
 						localStorage.setItem(key, nowOn ? '1' : '0');
 						setSw(rowEl.querySelector('.sw'), nowOn);
+						self.dispatchEvent(new CustomEvent('chi-pref', { detail: { connector: { slug: cslug, on: nowOn } }, bubbles: true, composed: true }));
 						self._tick();
 					}
 				});

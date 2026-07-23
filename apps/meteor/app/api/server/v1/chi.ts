@@ -1,6 +1,7 @@
 import { Users } from '@rocket.chat/models';
 
 import { API } from '../api';
+import { getUploadFormData } from '../lib/getUploadFormData';
 import { runChiOrbTurn } from '../../../../server/lib/chi/admin/service';
 import type { ChiOrbHistory, ChiOrbContext } from '../../../../server/lib/chi/admin/service';
 import { settings } from '../../../settings/server';
@@ -179,6 +180,108 @@ API.v1.addRoute(
 			} catch (err) {
 				return API.v1.failure(err instanceof Error ? err.message : 'Realtime voice session failed.');
 			}
+		},
+	},
+);
+
+/**
+ * Server-managed transcription config for the Chi orb's Flow dictation. Members see WHETHER a
+ * workspace speech provider exists — never the key. Keys live only in admin settings.
+ */
+API.v1.addRoute(
+	'chi.transcription-config',
+	{ authRequired: true },
+	{
+		async get() {
+			const provider = String(settings.get('Chi_STT_Provider') || 'none');
+			const hasKey = Boolean(String(settings.get('Chi_STT_API_Key') || '').trim());
+			const hasUrl = Boolean(String(settings.get('Chi_STT_Base_URL') || '').trim());
+			const configured = provider === 'openai' || provider === 'groq' ? hasKey : provider === 'custom' ? hasUrl : false;
+			return API.v1.success({ configured, provider: configured ? provider : 'none' });
+		},
+	},
+);
+
+const STT_PRESETS: Record<string, { url: string; model: string }> = {
+	openai: { url: 'https://api.openai.com/v1/audio/transcriptions', model: 'gpt-4o-mini-transcribe' },
+	groq: { url: 'https://api.groq.com/openai/v1/audio/transcriptions', model: 'whisper-large-v3-turbo' },
+};
+
+/**
+ * Flow's SECURE transcription lane: the browser uploads the clip HERE and the server relays it to
+ * the configured provider with the WORKSPACE key — the key never reaches a client, per-user keys
+ * never need to exist. Rate-limited; 15 MB / ~5 min clip cap; audio is relayed, never stored.
+ */
+API.v1.addRoute(
+	'chi.transcribe',
+	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 20, intervalTimeInMS: 60000 } },
+	{
+		async post() {
+			const provider = String(settings.get('Chi_STT_Provider') || 'none');
+			const key = String(settings.get('Chi_STT_API_Key') || '').trim();
+			const baseUrl = String(settings.get('Chi_STT_Base_URL') || '').trim().replace(/\/+$/, '');
+			const preset = STT_PRESETS[provider];
+			const url = provider === 'custom' ? (baseUrl ? `${baseUrl}/v1/audio/transcriptions` : '') : preset?.url || '';
+			if (!url || (provider !== 'custom' && !key)) {
+				return API.v1.failure('Workspace transcription is not configured (Admin → Settings → Chi Assistant).');
+			}
+			const model = String(settings.get('Chi_STT_Model') || '').trim() || preset?.model || 'whisper-1';
+			const { fileBuffer, filename, fields } = await getUploadFormData({ request: this.request }, { field: 'file', sizeLimit: 15 * 1024 * 1024 });
+			const fd = new FormData();
+			fd.append('file', new Blob([fileBuffer]), filename || 'flow.webm');
+			fd.append('model', model);
+			const vocab = typeof (fields as { prompt?: string })?.prompt === 'string' ? (fields as { prompt: string }).prompt.slice(0, 600) : '';
+			if (vocab) {
+				fd.append('prompt', vocab);
+			}
+			try {
+				const res = await fetch(url, {
+					method: 'POST',
+					headers: key ? { Authorization: `Bearer ${key}` } : {},
+					body: fd,
+					signal: AbortSignal.timeout(60_000),
+				});
+				const data = (await res.json().catch(() => ({}))) as { text?: string; error?: { message?: string } };
+				if (!res.ok) {
+					return API.v1.failure(data?.error?.message || `Transcription provider returned HTTP ${res.status}.`);
+				}
+				return API.v1.success({ text: String(data.text || '').trim() });
+			} catch (err) {
+				return API.v1.failure(err instanceof Error ? err.message : 'Transcription failed.');
+			}
+		},
+	},
+);
+
+type ChiPrefs = { model?: string; connectors?: Record<string, boolean> };
+
+/** Per-user Chi preferences, stored SERVER-side (survive devices, drive server behavior):
+ *  `model` — per-user model override within the workspace provider; `connectors` — per-user
+ *  on/off for registered MCP product connectors. */
+API.v1.addRoute(
+	'chi.prefs',
+	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 30, intervalTimeInMS: 60000 } },
+	{
+		async get() {
+			const user = await Users.findOneById<{ _id: string; settings?: { chi?: ChiPrefs } }>(this.userId, { projection: { 'settings.chi': 1 } });
+			return API.v1.success({ prefs: user?.settings?.chi || {} });
+		},
+		async post() {
+			const body = (this.bodyParams || {}) as ChiPrefs;
+			const prefs: ChiPrefs = {};
+			if (typeof body.model === 'string') {
+				prefs.model = body.model.trim().slice(0, 60);
+			}
+			if (body.connectors && typeof body.connectors === 'object') {
+				prefs.connectors = {};
+				for (const [k, v] of Object.entries(body.connectors).slice(0, 40)) {
+					if (/^[a-z0-9-]{1,32}$/.test(k)) {
+						prefs.connectors[k] = v !== false;
+					}
+				}
+			}
+			await Users.updateOne({ _id: this.userId }, { $set: { 'settings.chi': prefs } });
+			return API.v1.success({ prefs });
 		},
 	},
 );

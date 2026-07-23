@@ -22,6 +22,8 @@
  * Tool lists are cached for 5 minutes per server; a dead server degrades to "no tools", never
  * to a broken turn.
  */
+import crypto from 'crypto';
+
 import type { IUser } from '@rocket.chat/core-typings';
 
 import type { ToolDef } from './llm';
@@ -154,9 +156,24 @@ async function serverTools(server: McpServer): Promise<McpToolInfo[]> {
 	}
 }
 
-/** All connector tools currently available to the loop (flat, namespaced, cached). */
-export async function mcpToolDefs(): Promise<ToolDef[]> {
-	const servers = enabledServers();
+/** HMAC-signed, short-lived member assertion (X-Chi-User-Assertion) — connector servers verify
+ * with the shared Chi_MCP_Signing_Secret instead of trusting a bare user id. Format:
+ * base64url(JSON{sub,u,iss,iat,exp}).base64url(HMAC-SHA256). This is the interim identity layer
+ * until the CentralizedAuth token-mint bridge lands; the payload deliberately mirrors an OAuth
+ * subject claim so servers can swap verification without changing shape. */
+export function signUserAssertion(actor: IUser, siteUrl: string, secret: string): string | undefined {
+	if (!secret) {
+		return undefined;
+	}
+	const now = Math.floor(Date.now() / 1000);
+	const payload = Buffer.from(JSON.stringify({ sub: actor._id, u: actor.username || '', iss: siteUrl, iat: now, exp: now + 300 })).toString('base64url');
+	const sig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+	return `${payload}.${sig}`;
+}
+
+/** All connector tools available to this MEMBER (their per-user connector toggles applied). */
+export async function mcpToolDefs(disabledConnectors?: Record<string, boolean>): Promise<ToolDef[]> {
+	const servers = enabledServers().filter((s) => disabledConnectors?.[s.name] !== false);
 	if (!servers.length) {
 		return [];
 	}
@@ -194,12 +211,16 @@ export async function runMcpTool(name: string, input: Record<string, unknown>, a
 		return { ok: false, content: `Unknown connector tool: ${name}` };
 	}
 	try {
+		const assertion = signUserAssertion(
+			actor,
+			String(settings.get('Site_Url') || ''),
+			String(settings.get('Chi_MCP_Signing_Secret') || '').trim(),
+		);
 		const result = (await rpc(
 			{ ...info.server },
 			'tools/call',
-			// _meta carries the acting member for server-side scoping/audit (template servers read
-			// the X-Mc-* headers too, but params survive proxies more reliably).
-			{ name: info.tool, arguments: input || {}, _meta: { userId: actor._id, username: actor.username } },
+			// _meta carries the acting member; `assertion` is the verifiable form (see signUserAssertion).
+			{ name: info.tool, arguments: input || {}, _meta: { userId: actor._id, username: actor.username, assertion } },
 		)) as { content?: { type?: string; text?: string }[]; isError?: boolean };
 		const text = (result?.content || [])
 			.map((c) => (typeof c?.text === 'string' ? c.text : ''))
