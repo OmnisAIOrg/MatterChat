@@ -293,7 +293,14 @@ export const ChiOrbMount = (): ReactElement => {
 	// Create the web component once its bundle is loaded, and wire the Chi adapter + orb events.
 	useEffect(() => {
 		let cancelled = false;
-		let el: (HTMLElement & { ask?: (text: string, history: unknown) => Promise<{ reply: string; needsConfirm: boolean }> }) | undefined;
+		// NOTE: this declaration must match the createElement cast below EXACTLY — a wider `history`
+		// here fails assignability (param contravariance) and the lost narrowing cascades
+		// "possibly undefined" over every later use of `el`.
+		let el:
+			| (HTMLElement & {
+					ask?: (text: string, history: { who: 'me' | 'chi'; text: string }[]) => Promise<{ reply: string; needsConfirm: boolean }>;
+			  })
+			| undefined;
 		// Start minimized (ensō launcher) the first time, so it's out of the way rather than a big orb
 		// covering the app; the widget persists the user's choice from then on.
 		if (localStorage.getItem('chi-orb-min') === null) {
