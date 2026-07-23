@@ -2,7 +2,9 @@ import type { CSSProperties, ReactElement } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { sdk } from '../../../app/utils/client/lib/SDKClient';
 import { askChi } from './askChi';
+import { insertIntoComposer, sendChiReply } from './chiNotifications';
 import { installDesktopFocusBridge } from './focusBridge';
 import { loadOmnisWidget, omnisWidgetSrc, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
@@ -71,6 +73,8 @@ export const ChiOrbMount = (): ReactElement => {
 	// becomes explicit {x,y} left/top coords. This avoids any first-paint measurement race.
 	const [pos, setPos] = useState<Pos | null>(() => loadPos() ?? null);
 	const orbElRef = useRef<HTMLElement | null>(null);
+	// last-known server prefs — merged before every write so partial toggles never wipe the rest
+	const prefsRef = useRef<{ model?: string; connectors?: Record<string, boolean> }>({});
 	const pipWinRef = useRef<Window | null>(null);
 	// Initialize from shared localStorage so a remount/reload while Chi is already popped out never mounts
 	// a duplicate orb. On desktop we ALSO default to popped-out (unless the user docked it) so the in-app
@@ -170,6 +174,36 @@ export const ChiOrbMount = (): ReactElement => {
 		installDesktopFocusBridge();
 	}, []);
 
+	// Relays FROM the popped-out desktop Chi window (separate window, shared localStorage):
+	//  · chi-flow-relay — Flow-dictated text destined for the room composer over here.
+	//  · chi-reply-relay — a notification reply typed in the popout; post it as the member.
+	useEffect(() => {
+		const onStorage = (e: StorageEvent): void => {
+			if (!e.newValue) {
+				return;
+			}
+			try {
+				if (e.key === 'chi-flow-relay') {
+					const { text } = JSON.parse(e.newValue) as { text?: string };
+					if (text && !insertIntoComposer(text)) {
+						void navigator.clipboard?.writeText(text);
+					}
+					localStorage.removeItem('chi-flow-relay'); // consume-once: no message text lingers
+				} else if (e.key === 'chi-reply-relay') {
+					const { rid, text } = JSON.parse(e.newValue) as { rid?: string; text?: string };
+					if (rid && text) {
+						void sendChiReply({ data: { rid } }, text);
+					}
+					localStorage.removeItem('chi-reply-relay');
+				}
+			} catch {
+				/* malformed relay — ignore */
+			}
+		};
+		window.addEventListener('storage', onStorage);
+		return () => window.removeEventListener('storage', onStorage);
+	}, []);
+
 	// Persist the dragged position.
 	useEffect(() => {
 		if (pos) {
@@ -264,7 +298,14 @@ export const ChiOrbMount = (): ReactElement => {
 	// Create the web component once its bundle is loaded, and wire the Chi adapter + orb events.
 	useEffect(() => {
 		let cancelled = false;
-		let el: (HTMLElement & { ask?: (text: string, history: unknown) => Promise<{ reply: string; needsConfirm: boolean }> }) | undefined;
+		// NOTE: this declaration must match the createElement cast below EXACTLY — a wider `history`
+		// here fails assignability (param contravariance) and the lost narrowing cascades
+		// "possibly undefined" over every later use of `el`.
+		let el:
+			| (HTMLElement & {
+					ask?: (text: string, history: { who: 'me' | 'chi'; text: string }[]) => Promise<{ reply: string; needsConfirm: boolean }>;
+			  })
+			| undefined;
 		// Start minimized (ensō launcher) the first time, so it's out of the way rather than a big orb
 		// covering the app; the widget persists the user's choice from then on.
 		if (localStorage.getItem('chi-orb-min') === null) {
@@ -287,6 +328,44 @@ export const ChiOrbMount = (): ReactElement => {
 			}
 			el.ask = (text: string, history: { who: 'me' | 'chi'; text: string }[]): Promise<{ reply: string; needsConfirm: boolean }> =>
 				askChi(text, history);
+			// Notification-card replies post straight back to the source room, as the member.
+			(el as HTMLElement & { onreply?: (t: { data?: { rid?: string } }, text: string) => Promise<void> }).onreply = (target, text) =>
+				sendChiReply(target, text);
+			// Per-user Chi prefs live SERVER-side (chi.prefs): seed the orb's local mirrors on mount,
+			// write back whenever the member changes model / connector toggles in the orb.
+			void (sdk.rest.get as (e: string) => Promise<{ prefs?: { model?: string; connectors?: Record<string, boolean> } }>)('/v1/chi.prefs')
+				.then(({ prefs }) => {
+					prefsRef.current = prefs || {};
+					if (prefs?.model) {
+						localStorage.setItem('chi-model', prefs.model);
+					}
+					Object.entries(prefs?.connectors || {}).forEach(([slug, on]) => {
+						localStorage.setItem(`chi-conn-${slug}`, on ? '1' : '0');
+					});
+				})
+				.catch(() => undefined);
+			el.addEventListener('chi-pref', ((ev: Event): void => {
+				const detail = (ev as CustomEvent<{ model?: string; connector?: { slug: string; on: boolean } }>).detail;
+				if (!detail) {
+					return;
+				}
+				const next = { ...prefsRef.current };
+				if (detail.model) {
+					next.model = detail.model;
+				}
+				if (detail.connector) {
+					next.connectors = { ...next.connectors, [detail.connector.slug]: detail.connector.on };
+				}
+				prefsRef.current = next;
+				void (sdk.rest.post as (e: string, p: unknown) => Promise<unknown>)('/v1/chi.prefs', next).catch(() => undefined);
+			}) as EventListener);
+			// Flow dictation → the room composer (clipboard is the orb's own fallback).
+			el.addEventListener('chi-flow-insert', ((ev: Event): void => {
+				const text = (ev as CustomEvent<{ text: string }>).detail?.text;
+				if (text && !insertIntoComposer(text)) {
+					void navigator.clipboard?.writeText(text);
+				}
+			}) as EventListener);
 			// Action chips wired to real capabilities (catch-up / mentions / drafting).
 			const orbApi = el as HTMLElement & { actions?: { label: string; command: string }[] };
 			orbApi.actions = [

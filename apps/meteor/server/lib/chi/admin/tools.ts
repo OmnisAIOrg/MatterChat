@@ -519,7 +519,7 @@ const slackConfigure: ChiTool = {
 		if (!changes.length) {
 			return 'Nothing to change — pass enabled and/or credentials.';
 		}
-		const audited = updateAuditedByUser({ _id: actor._id, username: actor.username, ip: '', useragent: 'chi-admin-assistant' });
+		const audited = updateAuditedByUser({ _id: actor._id, username: actor.username || actor._id, ip: '', useragent: 'chi-admin-assistant' });
 		for (const [id, value] of changes) {
 			const result = await audited(Settings.updateValueNotHiddenById, id, value);
 			if (result.modifiedCount || result.matchedCount) {
@@ -619,7 +619,7 @@ const connectorStatus: ChiTool = {
 			throw new Error('provider must be slack, teams or google.');
 		}
 		const out: string[] = [];
-		for (const provider of providers) {
+		for (const provider of providers as import('@rocket.chat/core-typings').ExternalProvider[]) {
 			const prefix = provider.charAt(0).toUpperCase() + provider.slice(1);
 			const rows = await Settings.find(
 				{ _id: { $regex: `^${prefix}_` } },
@@ -682,7 +682,7 @@ const setSetting: ChiTool = {
 			throw new Error(`Setting id looks empty/invalid.`);
 		}
 		const value = typeof input.value === 'boolean' ? input.value : str(input.value);
-		const audited = updateAuditedByUser({ _id: actor._id, username: actor.username, ip: '', useragent: 'chi-admin-assistant' });
+		const audited = updateAuditedByUser({ _id: actor._id, username: actor.username || actor._id, ip: '', useragent: 'chi-admin-assistant' });
 		const result = await audited(Settings.updateValueNotHiddenById, id, value);
 		if (result.modifiedCount || result.matchedCount) {
 			await notifyOnSettingChangedById(id);

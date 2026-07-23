@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
-import { PROVIDER_PRESETS, resolveProvider } from '../../../../../../server/lib/chi/admin/providers';
+import { isLocalProvider, PROVIDER_PRESETS, resolveProvider } from '../../../../../../server/lib/chi/admin/providers';
 
 describe('chi admin provider presets', () => {
 	it('maps each provider to the right family + endpoint', () => {
@@ -37,6 +37,30 @@ describe('chi admin provider presets', () => {
 	it('every preset id is resolvable', () => {
 		for (const id of Object.keys(PROVIDER_PRESETS)) {
 			expect(resolveProvider(id).model, id).to.be.a('string').and.not.empty;
+		}
+	});
+});
+
+describe('chi provider presets — cloud additions + locals', () => {
+	it('maps the new OpenAI-compatible clouds to their endpoints', () => {
+		expect(resolveProvider('xai').baseUrl).to.equal('https://api.x.ai/v1');
+		expect(resolveProvider('deepseek').baseUrl).to.equal('https://api.deepseek.com/v1');
+		expect(resolveProvider('gemini').baseUrl).to.equal('https://generativelanguage.googleapis.com/v1beta/openai');
+	});
+
+	it('local providers resolve to workspace-host endpoints and are flagged local (no API key needed)', () => {
+		expect(resolveProvider('ollama').baseUrl).to.equal('http://localhost:11434/v1');
+		expect(isLocalProvider('ollama')).to.equal(true);
+		expect(isLocalProvider('lmstudio')).to.equal(true);
+		expect(isLocalProvider('llamacpp')).to.equal(true);
+		expect(isLocalProvider('openai')).to.equal(false);
+		expect(isLocalProvider('')).to.equal(false);
+		expect(isLocalProvider(undefined)).to.equal(false);
+	});
+
+	it('every preset id resolves without throwing', () => {
+		for (const id of Object.keys(PROVIDER_PRESETS)) {
+			expect(() => resolveProvider(id)).to.not.throw();
 		}
 	});
 });

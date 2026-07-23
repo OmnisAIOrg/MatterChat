@@ -64,3 +64,11 @@
 - One-on-one conversations
   - Off-the-record messaging (messages are encrypted and transiently saved on the database)
 - Slash commands
+
+
+## Chi Assistant (the Enso orb)
+
+MatterChat's AI assistant — Nest-dial orb, notifications-in-Chi, Flow dictation (⌘⇧F), BYO-LLM
+(cloud + local), product connectors (MCP) with signed identity, server-held transcription keys.
+Complete feature inventory, admin runbook, security model, and the remaining-work roadmap:
+**[docs/CHI-ASSISTANT.md](docs/CHI-ASSISTANT.md)** (mirrored in-product at Chi → Settings → What's new).

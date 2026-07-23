@@ -35,7 +35,8 @@ function runAction(action: ChiAction): void {
 				break;
 			case 'route':
 				// A named app surface (home / boards / directory / admin). SPA navigation, no reload.
-				router.navigate(action.path);
+				// The server only emits paths for known surfaces; the typed-router overloads can't know that.
+				router.navigate(action.path as Parameters<typeof router.navigate>[0]);
 				break;
 			case 'search':
 				// Best-effort: nudge the SPA to the directory (no global search-box setter exists).

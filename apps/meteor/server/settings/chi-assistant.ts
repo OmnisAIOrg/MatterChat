@@ -25,6 +25,12 @@ export const createChiAssistantSettings = () =>
 				{ key: 'cerebras', i18nLabel: 'Chi_Assistant_Provider_Cerebras' },
 				{ key: 'groq', i18nLabel: 'Chi_Assistant_Provider_Groq' },
 				{ key: 'openrouter', i18nLabel: 'Chi_Assistant_Provider_OpenRouter' },
+				{ key: 'xai', i18nLabel: 'Chi_Assistant_Provider_XAI' },
+				{ key: 'deepseek', i18nLabel: 'Chi_Assistant_Provider_DeepSeek' },
+				{ key: 'gemini', i18nLabel: 'Chi_Assistant_Provider_Gemini' },
+				{ key: 'ollama', i18nLabel: 'Chi_Assistant_Provider_Ollama' },
+				{ key: 'lmstudio', i18nLabel: 'Chi_Assistant_Provider_LMStudio' },
+				{ key: 'llamacpp', i18nLabel: 'Chi_Assistant_Provider_LlamaCpp' },
 				{ key: 'custom', i18nLabel: 'Chi_Assistant_Provider_Custom' },
 			],
 			public: false,
@@ -49,6 +55,59 @@ export const createChiAssistantSettings = () =>
 			public: false,
 			i18nLabel: 'Chi_Assistant_Base_URL',
 			i18nDescription: 'Chi_Assistant_Base_URL_Description',
+		});
+		await this.add('Chi_STT_Provider', 'none', {
+			type: 'select',
+			values: [
+				{ key: 'none', i18nLabel: 'Chi_STT_Provider_None' },
+				{ key: 'openai', i18nLabel: 'Chi_Assistant_Provider_OpenAI' },
+				{ key: 'groq', i18nLabel: 'Chi_Assistant_Provider_Groq' },
+				{ key: 'custom', i18nLabel: 'Chi_Assistant_Provider_Custom' },
+			],
+			public: false,
+			i18nLabel: 'Chi_STT_Provider',
+			i18nDescription: 'Chi_STT_Provider_Description',
+		});
+		await this.add('Chi_STT_API_Key', '', {
+			type: 'password',
+			secret: true,
+			public: false,
+			i18nLabel: 'Chi_STT_API_Key',
+			i18nDescription: 'Chi_STT_API_Key_Description',
+		});
+		await this.add('Chi_STT_Model', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Chi_STT_Model',
+			i18nDescription: 'Chi_STT_Model_Description',
+		});
+		await this.add('Chi_STT_Base_URL', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Chi_STT_Base_URL',
+			i18nDescription: 'Chi_STT_Base_URL_Description',
+		});
+		await this.add('Chi_MCP_Signing_Secret', '', {
+			type: 'password',
+			secret: true,
+			public: false,
+			i18nLabel: 'Chi_MCP_Signing_Secret',
+			i18nDescription: 'Chi_MCP_Signing_Secret_Description',
+		});
+		await this.add('Chi_MCP_Enabled', false, {
+			type: 'boolean',
+			public: false,
+			i18nLabel: 'Chi_MCP_Enabled',
+			i18nDescription: 'Chi_MCP_Enabled_Description',
+		});
+		await this.add('Chi_MCP_Servers', '', {
+			type: 'code',
+			code: 'application/json',
+			multiline: true,
+			public: false,
+			secret: true,
+			i18nLabel: 'Chi_MCP_Servers',
+			i18nDescription: 'Chi_MCP_Servers_Description',
 		});
 		await this.add('Chi_Assistant_Audit_Channel', 'chi-admin-audit', {
 			type: 'string',

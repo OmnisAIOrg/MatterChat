@@ -312,7 +312,7 @@ const catchMeUp: ChiTool = {
 		inputSchema: { type: 'object', properties: {} },
 	},
 	access: 'user',
-	async execute(input, actor) {
+	async execute(_input, actor) {
 		const subs = await callerSubs(actor._id);
 		const unread = subs.filter((s) => (s.unread || 0) > 0 || s.alert).sort((a, b) => (b.userMentions || 0) - (a.userMentions || 0));
 		const mentions = unread.filter((s) => (s.userMentions || 0) > 0);
@@ -485,13 +485,13 @@ const createTask: ChiTool = {
 		const { boards } = await listBoardsForUser(actor._id, {}, { offset: 0, count: 25 });
 		if (!boards.length) return 'You don\'t have a board yet — create one under Boards, then I can add tasks to it.';
 		const wanted = str(input.board);
-		const board = (wanted && boards.find((b) => norm(b.name).includes(norm(wanted)))) || boards[0];
+		const board = (wanted && boards.find((b) => norm(b.title).includes(norm(wanted)))) || boards[0];
 		const { lists } = await getListsForBoard(actor._id, board._id);
 		const list = lists.find((l) => !l.archived) || lists[0];
-		if (!list) return `Board "${board.name}" has no lists to add a card to.`;
+		if (!list) return `Board "${board.title}" has no lists to add a card to.`;
 		const card = await createCard(actor._id, { boardId: board._id, listId: list._id, title, cardType: 'task' });
-		emitClientAction({ type: 'route', path: `/boards/${board._id}`, label: `${board.name} board` });
-		return `Added task "${card.title}" to **${board.name}** (${list.name || 'first list'}).`;
+		emitClientAction({ type: 'route', path: `/boards/${board._id}`, label: `${board.title} board` });
+		return `Added task "${card.title}" to **${board.title}** (${list.title || 'first list'}).`;
 	},
 };
 

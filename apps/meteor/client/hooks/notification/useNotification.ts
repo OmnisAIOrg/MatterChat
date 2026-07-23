@@ -8,6 +8,7 @@ import { getUserAvatarURL } from '../../../app/utils/client';
 import { sdk } from '../../../app/utils/client/lib/SDKClient';
 import { stripTags } from '../../../lib/utils/stringUtils';
 import { onClientMessageReceived } from '../../lib/onClientMessageReceived';
+import { isRoutedToChi, routeNotificationToChi } from '../../omnis/widgets/chiNotifications';
 
 export const useNotification = () => {
 	const requireInteraction = useUserPreference('desktopNotificationRequireInteraction');
@@ -15,6 +16,13 @@ export const useNotification = () => {
 	const notificationAllowed = useNotificationAllowed();
 
 	const notify = useStableCallback(async (notification: INotificationDesktop) => {
+		// "Route notifications to Chi" (orb setting): the event becomes a card in the Chi orb
+		// INSTEAD of an OS banner — same scope as desktop notifications, no double-notifying.
+		// Badge counts / sounds elsewhere are untouched; if the orb isn't mounted we fall
+		// through to the normal banner so nothing is ever silently lost.
+		if (isRoutedToChi() && routeNotificationToChi(notification)) {
+			return;
+		}
 		if (!notificationAllowed) {
 			return;
 		}

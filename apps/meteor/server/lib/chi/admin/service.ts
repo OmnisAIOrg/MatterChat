@@ -29,7 +29,8 @@ import { clearPendingAction, hasPendingAction, parkPendingAction, takePendingAct
 import { isCancelText, isConfirmText } from './helpers';
 import type { ChiTurn, LlmConfig, ToolCall } from './llm';
 import { llmStep } from './llm';
-import { resolveProvider } from './providers';
+import { isLocalProvider, resolveProvider } from './providers';
+import { isMcpTool, mcpConfirmSummary, mcpToolDefs, runMcpTool } from './mcp';
 import { describeToolCall, findTool, runTool, toolDefs } from './tools';
 import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
 import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
@@ -50,19 +51,37 @@ export function isChiAdminEnabled(): boolean {
 	return settings.get<boolean>('Chi_Assistant_Enabled') === true;
 }
 
-function llmConfig(): LlmConfig | undefined {
+function llmConfig(userModel?: string): LlmConfig | undefined {
+	const providerId = String(settings.get('Chi_Assistant_Provider') || '');
 	const apiKey = String(settings.get('Chi_Assistant_API_Key') || '').trim();
-	if (!apiKey) {
+	// Local providers (Ollama / LM Studio / llama.cpp on the workspace host) need no key —
+	// a placeholder bearer keeps the OpenAI-compatible adapter's header well-formed.
+	if (!apiKey && !isLocalProvider(providerId)) {
 		return undefined;
 	}
-	// Provider preset (Anthropic / OpenAI / Cerebras / Groq / OpenRouter / custom) resolves to the
-	// wire family + endpoint + default model; Base URL / Model settings override when set.
+	// Provider preset (Anthropic / OpenAI / … / local / custom) resolves to the wire family +
+	// endpoint + default model; Base URL / Model settings override when set.
 	const { family, baseUrl, model } = resolveProvider(
-		String(settings.get('Chi_Assistant_Provider') || ''),
+		providerId,
 		String(settings.get('Chi_Assistant_Base_URL') || ''),
-		String(settings.get('Chi_Assistant_Model') || ''),
+		// Per-user model override (chi.prefs) wins within the workspace's provider; the KEY is
+		// always the workspace's — members never supply or see credentials.
+		(userModel || '').trim() || String(settings.get('Chi_Assistant_Model') || ''),
 	);
-	return { provider: family, apiKey, model, baseUrl };
+	return { provider: family, apiKey: apiKey || 'local', model, baseUrl };
+}
+
+type ChiUserPrefs = { model?: string; connectors?: Record<string, boolean> };
+const userChiPrefs = (u: IUser): ChiUserPrefs => ((u as IUser & { settings?: { chi?: ChiUserPrefs } }).settings?.chi ?? {});
+
+/** Route a call to the built-in registry or an MCP connector (namespaced mcp_<server>_<tool>). */
+async function runAnyTool(name: string, input: Record<string, unknown>, actor: IUser): Promise<{ ok: boolean; content: string }> {
+	return isMcpTool(name) ? runMcpTool(name, input, actor) : runTool(name, input, actor);
+}
+
+/** Confirm summary for any call — built-ins consult their needsConfirm, MCP tools the connector gate. */
+async function anyConfirmSummary(name: string, input: Record<string, unknown>): Promise<string | undefined> {
+	return isMcpTool(name) ? mcpConfirmSummary(name, input) : findTool(name)?.needsConfirm?.(input);
 }
 
 /** Shared description of the WORKSPACE capabilities every caller (member or admin) has. */
@@ -150,7 +169,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 			await reply('Nothing is waiting for confirmation (it may have expired — 5 minute window). Tell me again what you want to do.');
 			return;
 		}
-		const result = await runTool(parked.toolName, parked.input, sender);
+		const result = await runAnyTool(parked.toolName, parked.input, sender);
 		await postAuditEntry(
 			sender,
 			`🛡️ @${sender.username} confirmed **${describeToolCall(parked.toolName, parked.input)}** → ${result.ok ? 'ok' : `error: ${result.content.slice(0, 200)}`}`,
@@ -169,7 +188,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 	if (!isChiAdminEnabled()) {
 		return; // feature off — stay silent (the DM may predate enablement)
 	}
-	const config = llmConfig();
+	const config = llmConfig(userChiPrefs(sender).model);
 	if (!config) {
 		await reply(NOT_CONFIGURED_REPLY);
 		return;
@@ -183,7 +202,7 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 
 	try {
 		const turns: ChiTurn[] = [...(await historyTurns(room._id, message._id)), { kind: 'user', text }];
-		const tools = toolDefs({ isAdmin });
+		const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors))];
 		const system = systemPrompt(sender, isAdmin);
 
 		for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -201,12 +220,12 @@ export async function handleChiAdminDm(message: IMessage, room: IRoom): Promise<
 			const results: { id: string; name: string; content: string; isError?: boolean }[] = [];
 			for (let c = 0; c < step.toolCalls.length; c++) {
 				const call = step.toolCalls[c];
-				const summary = findTool(call.name)?.needsConfirm?.(call.input);
+				const summary = await anyConfirmSummary(call.name, call.input);
 				if (summary) {
 					await finish(parkAndAsk(room._id, sender, call, summary, step.toolCalls.length - c - 1));
 					return;
 				}
-				const result = await runTool(call.name, call.input, sender);
+				const result = await runAnyTool(call.name, call.input, sender);
 				await postAuditEntry(
 					sender,
 					`🛡️ @${sender.username} → **${describeToolCall(call.name, call.input)}** → ${result.ok ? 'ok' : `error: ${result.content.slice(0, 200)}`}`,
@@ -267,7 +286,7 @@ export async function runChiOrbTurn(
 	if (!isChiAdminEnabled()) {
 		return { reply: 'Chi is not enabled on this workspace yet — ask an admin to turn it on.', actions: [], needsConfirm: false };
 	}
-	const config = llmConfig();
+	const config = llmConfig(userChiPrefs(sender).model);
 	if (!config) {
 		return { reply: NOT_CONFIGURED_REPLY, actions: [], needsConfirm: false };
 	}
@@ -279,7 +298,7 @@ export async function runChiOrbTurn(
 		if (!parked) {
 			return { reply: 'Nothing is waiting for confirmation (the 5-minute window may have passed). Tell me again what to do.', actions: [], needsConfirm: false };
 		}
-		const { result, actions } = await withClientActions(() => runTool(parked.toolName, parked.input, sender));
+		const { result, actions } = await withClientActions(() => runAnyTool(parked.toolName, parked.input, sender));
 		await postAuditEntry(
 			sender,
 			`🛡️ @${sender.username} confirmed **${describeToolCall(parked.toolName, parked.input)}** → ${result.ok ? 'ok' : `error: ${result.content.slice(0, 200)}`}`,
@@ -306,7 +325,7 @@ export async function runChiOrbTurn(
 	const contextLine = chiCtx?.roomName
 		? `- The user is CURRENTLY VIEWING ${chiCtx.roomType === 'd' ? '@' : '#'}${chiCtx.roomName}. When they say "this", "here" or omit a channel, act on that conversation.`
 		: undefined;
-	const tools = toolDefs({ isAdmin });
+	const tools = [...toolDefs({ isAdmin }), ...(await mcpToolDefs(userChiPrefs(sender).connectors))];
 	const system = systemPrompt(sender, isAdmin, contextLine);
 
 	const { result, actions } = await withClientActions<Omit<ChiOrbTurnResult, 'actions'>>(() => withChiContext(chiCtx ?? {}, async () => {
@@ -323,11 +342,11 @@ export async function runChiOrbTurn(
 				const results: { id: string; name: string; content: string; isError?: boolean }[] = [];
 				for (let c = 0; c < step.toolCalls.length; c++) {
 					const call = step.toolCalls[c];
-					const summary = findTool(call.name)?.needsConfirm?.(call.input);
+					const summary = await anyConfirmSummary(call.name, call.input);
 					if (summary) {
 						return { reply: parkAndAsk(orbRid, sender, call, summary, step.toolCalls.length - c - 1), needsConfirm: true };
 					}
-					const toolResult = await runTool(call.name, call.input, sender);
+					const toolResult = await runAnyTool(call.name, call.input, sender);
 					await postAuditEntry(
 						sender,
 						`🛡️ @${sender.username} → **${describeToolCall(call.name, call.input)}** → ${toolResult.ok ? 'ok' : `error: ${toolResult.content.slice(0, 200)}`}`,

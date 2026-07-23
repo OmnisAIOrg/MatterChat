@@ -16,6 +16,8 @@ export type ProviderPreset = {
 	baseUrl: string;
 	/** Default model id for this provider (tool-use capable where the provider supports it). */
 	defaultModel: string;
+	/** Runs on the workspace's own machine (Ollama/LM Studio/llama.cpp) — no API key required. */
+	local?: boolean;
 };
 
 /**
@@ -30,9 +32,26 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
 	cerebras: { family: 'openai', baseUrl: 'https://api.cerebras.ai/v1', defaultModel: 'llama-3.3-70b' },
 	groq: { family: 'openai', baseUrl: 'https://api.groq.com/openai/v1', defaultModel: 'llama-3.3-70b-versatile' },
 	openrouter: { family: 'openai', baseUrl: 'https://openrouter.ai/api/v1', defaultModel: 'anthropic/claude-sonnet-5' },
+	// xAI + DeepSeek + Gemini all speak OpenAI-compatible chat/completions too. Endpoints
+	// verified 2026-07: xAI https://api.x.ai/v1, DeepSeek https://api.deepseek.com/v1,
+	// Gemini's OpenAI-compat layer https://generativelanguage.googleapis.com/v1beta/openai.
+	xai: { family: 'openai', baseUrl: 'https://api.x.ai/v1', defaultModel: 'grok-4' },
+	deepseek: { family: 'openai', baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
+	gemini: { family: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', defaultModel: 'gemini-2.5-pro' },
+	// LOCAL, $0, private — an OpenAI-compatible server running on the WORKSPACE HOST (these
+	// localhost URLs resolve on the Meteor server, not the member's browser). No API key needed;
+	// llmConfig substitutes a placeholder bearer. Mirrors the Chi orb's "On this computer" list.
+	ollama: { family: 'openai', baseUrl: 'http://localhost:11434/v1', defaultModel: 'llama3.1:8b', local: true },
+	lmstudio: { family: 'openai', baseUrl: 'http://localhost:1234/v1', defaultModel: '', local: true },
+	llamacpp: { family: 'openai', baseUrl: 'http://localhost:8080/v1', defaultModel: '', local: true },
 	// Any other OpenAI-compatible endpoint — the admin supplies the Base URL and Model.
 	custom: { family: 'openai', baseUrl: '', defaultModel: '' },
 };
+
+/** True when the chosen provider runs locally on the workspace host (no API key required). */
+export function isLocalProvider(providerId: string | undefined): boolean {
+	return Boolean(PROVIDER_PRESETS[(providerId || '').trim()]?.local);
+}
 
 export const PROVIDER_IDS = Object.keys(PROVIDER_PRESETS);
 
