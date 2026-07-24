@@ -299,8 +299,9 @@ API.v1.addRoute(
 	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 30, intervalTimeInMS: 60000 } },
 	{
 		async post() {
-			const { servers } = (this.bodyParams || {}) as { servers?: unknown };
-			return API.v1.success(registerLocalServers(this.userId, servers));
+			// Route not declared in rest-typings, so `this` types as Operations<never> (same as chi.ask).
+			const { userId, bodyParams } = this as unknown as { userId: string; bodyParams: { servers?: unknown } };
+			return API.v1.success(registerLocalServers(userId, bodyParams?.servers));
 		},
 	},
 );
@@ -310,12 +311,16 @@ API.v1.addRoute(
 	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 120, intervalTimeInMS: 60000 } },
 	{
 		async post() {
-			const body = (this.bodyParams || {}) as { callId?: unknown; ok?: unknown; content?: unknown };
-			const callId = typeof body.callId === 'string' ? body.callId : '';
+			// Route not declared in rest-typings, so `this` types as Operations<never> (same as chi.ask).
+			const { userId, bodyParams } = this as unknown as {
+				userId: string;
+				bodyParams: { callId?: unknown; ok?: unknown; content?: unknown };
+			};
+			const callId = typeof bodyParams?.callId === 'string' ? bodyParams.callId : '';
 			if (!callId) {
 				return API.v1.failure('callId is required');
 			}
-			const accepted = resolveLocalCall(this.userId, callId, body.ok !== false, typeof body.content === 'string' ? body.content : '');
+			const accepted = resolveLocalCall(userId, callId, bodyParams?.ok !== false, typeof bodyParams?.content === 'string' ? bodyParams.content : '');
 			return API.v1.success({ accepted });
 		},
 	},
