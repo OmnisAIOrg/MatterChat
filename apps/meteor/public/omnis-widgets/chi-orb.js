@@ -502,7 +502,7 @@
 		 * stream from CDN and cache in the browser. One import for the app's lifetime. */
 		_odLib() {
 			if (!window.__chiTf) {
-				window.__chiTf = import('/omnis-widgets/vendor/transformers.min.js').then(function (m) {
+				window.__chiTf = import((this.getAttribute && this.getAttribute('vendor-base') ? this.getAttribute('vendor-base') : '/omnis-widgets/vendor/') + 'transformers.min.js').then(function (m) {
 					m.env.allowLocalModels = false;
 					try { m.env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.0/dist/'; } catch (e) { /* default paths */ }
 					return m;
