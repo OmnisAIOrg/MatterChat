@@ -38,6 +38,8 @@ import { createSmarshSettings } from './smarsh';
 import { createGoogleSettings } from './google';
 // MATTERCHAT: Chi Admin Assistant (in-app AI ops bot) settings group.
 import { createChiAssistantSettings } from './chi-assistant';
+// MATTERCHAT: new-user onboarding (welcome) email settings.
+import { createMatterChatEmailSettings } from './matterchat-email';
 import { createSlackSettings } from './slack';
 import { createTeamsSettings } from './teams';
 import { createThreadSettings } from './threads';
@@ -86,6 +88,7 @@ await Promise.all([
 	createSmarshSettings(),
 	createGoogleSettings(),
 	createChiAssistantSettings(),
+	createMatterChatEmailSettings(),
 	createSlackSettings(),
 	createTeamsSettings(),
 	createThreadSettings(),

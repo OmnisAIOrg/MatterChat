@@ -82,6 +82,8 @@ import '../app/webdav/server';
 import '../app/wordpress/server';
 import '../app/meteor-accounts-saml/server';
 import '../app/omnisai-oauth/server';
+// MATTERCHAT: new-user onboarding emails (welcome email + account-email de-branding).
+import './omnis/email';
 import '../app/e2e/server';
 import '../app/version-check/server';
 import '../app/search/server';

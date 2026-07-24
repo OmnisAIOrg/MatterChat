@@ -12,6 +12,7 @@ import {
 	useTranslation,
 	useLoginWithToken,
 	useEndpoint,
+	useToastMessageDispatch,
 } from '@rocket.chat/ui-contexts';
 import { useEffect, useId, useRef } from 'react';
 import { useForm } from 'react-hook-form';
@@ -29,6 +30,8 @@ const ResetPasswordPage = () => {
 	const setBasicInfo = useEndpoint('POST', '/v1/users.updateOwnBasicInfo');
 	const resetPassword = useMethod('resetPassword');
 	const token = useRouteParameter('token');
+	// MATTERCHAT: give the user an explicit confirmation that their password was changed.
+	const dispatchToastMessage = useToastMessageDispatch();
 
 	const resetPasswordFormRef = useRef<HTMLElement>(null);
 	const passwordId = useId();
@@ -70,6 +73,9 @@ const ResetPasswordPage = () => {
 		try {
 			if (token) {
 				const result = await resetPassword(token, password);
+				// MATTERCHAT: confirm success before we log the user in and redirect to /home. The toast
+				// persists across the navigation so the user lands on their workspace with clear feedback.
+				dispatchToastMessage({ type: 'success', message: t('Password_changed_successfully') });
 				await loginWithToken(result.token);
 				router.navigate('/home');
 			} else {
@@ -78,6 +84,7 @@ const ResetPasswordPage = () => {
 						newPassword: password,
 					},
 				});
+				dispatchToastMessage({ type: 'success', message: t('Password_changed_successfully') });
 			}
 		} catch ({ error, reason }: any) {
 			const _error = reason ?? error;
