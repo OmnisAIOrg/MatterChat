@@ -71,7 +71,18 @@ Main ▸ Language models ▸ Transcription ▸ Dictionary ▸ Modes ▸ History 
 - Everything runs with the member's own permissions; audit channel logs every tool execution; cross-window relays are consume-once
 
 ### REST surface
-`chi.ask` · `chi.realtime-session` · `chi.transcription-config` · `chi.transcribe` · `chi.prefs` (GET/POST)
+`chi.ask` · `chi.realtime-session` · `chi.transcription-config` · `chi.transcribe` · `chi.prefs` (GET/POST) · `chi.session-exchange` (the standalone-Chi auth bridge, below)
+
+### Standalone Chi provisioning (Chi-Desktop → this workspace)
+The standalone orb app (`OmnisAIOrg/Chi-Desktop`) becomes a **full client of this Chi backend** through the auth bridge:
+
+1. **Sign-in**: Chi-Desktop runs OAuth2 authorization-code + **PKCE** against CentralizedAuth (public client, no secret; self-serve DCR at `/api/auth/mcp/register`; system browser + `chi://` return with a loopback fallback; tokens in the OS keychain via Electron safeStorage).
+2. **Exchange**: it presents the CentralizedAuth token to `POST /v1/chi.session-exchange` (Bearer). Verification is **hard** (deliberately stricter than the fail-soft web `verifyIdToken`, because this token is caller-supplied, not back-channel): asymmetric JWTs verify against the issuer JWKS with required `iss` + `aud`-vs-allowlist checks; HS*/opaque tokens are introspected live at the issuer; `alg:none` and unknown audiences are terminal. Identity maps through the SAME `resolveOmnisaiUser` as the web OIDC login (`services.omnisai.id` == the CentralizedAuth `sub`, email fallback, create+link) and mints a **~30-day revocable** login token (hashed, `users.createToken`-style; revoke via logout / Manage Logged In Devices).
+3. **Client mode**: the desktop orb then drives `POST /v1/chi.ask` (full caller-scoped tool loop; `needsConfirm` → the orb's Confirm/Cancel chips), subscribes to `stream-notify-user <uid>/notification` over DDP for notification cards, and replies via `chat.postMessage`.
+
+Admin setup: Chi Assistant → **Standalone Chi sign-in (session exchange)** ON (`Chi_Session_Exchange_Enabled`, default OFF) + optionally pin the desktop OAuth client id(s) in `Chi_Session_Exchange_Client_Ids`. Every mint lands an audit line in the Chi audit channel; the route is rate-limited (10/min).
+
+**Issuer (the current link, verified live 2026-07-24):** the org's PUBLIC CentralizedAuth issuer is `https://sso-app.omnisai.io` (RFC 8414 discovery + JWKS answer there; it is what DepoLink's and MatterChat-Desktop's OAuth already use). `auth-app.omnisai.io` is the VPC-internal server-side host — unreachable from user machines. The bridge verifies against `Chi_Session_Exchange_Issuer` when set, else the web-SSO `OmnisAI_OIDC_Issuer`, else `sso-app.omnisai.io`; the dedicated override exists because staging MatterChat's web SSO points at the internal staging auth while standalone Chi clients can only reach the public issuer.
 
 ### Tests
 Mocha/chai unit specs: providers (presets incl. locals), MCP (registry parsing, namespacing, confirm gates, assertion sign/verify/tamper), plus the pre-existing chi client/context/service specs. Chi's client+server surface typechecks clean.
@@ -100,7 +111,7 @@ Mocha/chai unit specs: providers (presets incl. locals), MCP (registry parsing, 
 
 ### Security completion
 - [ ] **Connector-side assertion verification** — add the HMAC verify middleware to casepro-mcp-v2 / CaseNotes-MCP / carepro-mcp-v2 / matterchat-mcp-v2 (~20 lines each, contract in `mcp.ts`)
-- [ ] **Full OAuth bridge**: CentralizedAuth subject → minted per-user token replacing the HMAC assertion (claims shape already matches)
+- [x] **Full OAuth bridge — SHIPPED as `POST /v1/chi.session-exchange`** (CentralizedAuth token → hard-verified → per-user ~30-day MatterChat session; see "Standalone Chi provisioning" above). Still open: swap the connector HMAC assertion for a CentralizedAuth-minted token on MCP calls (the bridge now proves the pattern)
 - [ ] Data-egress policy toggles (allow cloud STT / local-only mode) + retention statement for legal clients
 - [ ] Org-held keys for the remaining browser-side STT providers (proxy pattern exists — extend `chi.transcribe`)
 

@@ -109,6 +109,27 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_MCP_Servers',
 			i18nDescription: 'Chi_MCP_Servers_Description',
 		});
+		// ── Standalone-Chi auth bridge (POST /v1/chi.session-exchange) ──────────────────────────
+		// OFF by default: it exposes an UNAUTHENTICATED (hard-verified, rate-limited) route that
+		// trades a CentralizedAuth token for a MatterChat session — an admin opts the workspace in.
+		await this.add('Chi_Session_Exchange_Enabled', false, {
+			type: 'boolean',
+			public: false,
+			i18nLabel: 'Chi_Session_Exchange_Enabled',
+			i18nDescription: 'Chi_Session_Exchange_Enabled_Description',
+		});
+		await this.add('Chi_Session_Exchange_Client_Ids', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Chi_Session_Exchange_Client_Ids',
+			i18nDescription: 'Chi_Session_Exchange_Client_Ids_Description',
+		});
+		await this.add('Chi_Session_Exchange_Issuer', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Chi_Session_Exchange_Issuer',
+			i18nDescription: 'Chi_Session_Exchange_Issuer_Description',
+		});
 		await this.add('Chi_Assistant_Audit_Channel', 'chi-admin-audit', {
 			type: 'string',
 			public: false,

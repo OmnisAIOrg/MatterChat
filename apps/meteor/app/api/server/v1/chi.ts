@@ -1,10 +1,27 @@
 import { Users } from '@rocket.chat/models';
+import { serverFetch } from '@rocket.chat/server-fetch';
+import { Accounts } from 'meteor/accounts-base';
 
 import { API } from '../api';
 import { getUploadFormData } from '../lib/getUploadFormData';
+import { resolveOmnisaiUser } from '../../../omnisai-oauth/server/loginHandler';
+import { SystemLogger } from '../../../../server/lib/logger/system';
+import { postAuditEntry } from '../../../../server/lib/chi/admin/audit';
 import { registerLocalServers, resolveLocalCall } from '../../../../server/lib/chi/admin/localtools';
 import { runChiOrbTurn } from '../../../../server/lib/chi/admin/service';
 import type { ChiOrbHistory, ChiOrbContext } from '../../../../server/lib/chi/admin/service';
+import {
+	EXCHANGE_TOKEN_LIFETIME_MS,
+	identityFromIssuerSession,
+	isLocallyVerifiableAlg,
+	loginTokenWhenForExpiry,
+	parseAllowedClientIds,
+	parseJwt,
+	pickJwk,
+	validateExchangeClaims,
+	verifyJwsSignature,
+} from '../../../../server/lib/chi/sessionExchange';
+import type { Jwk, VerifiedIdentity } from '../../../../server/lib/chi/sessionExchange';
 import { settings } from '../../../settings/server';
 
 // Turn discipline is half the fix — ported from EvidenceHunt's realtime prompt, which learned these the
@@ -294,6 +311,171 @@ API.v1.addRoute(
  * closing the desktop simply removes the tools from Chi's toolbox. Only the member's own
  * authenticated session can register for them or answer their relayed calls.
  */
+// ── CentralizedAuth → MatterChat session exchange (the standalone-Chi auth bridge) ─────────
+// Verification core + the WHY of every check: server/lib/chi/sessionExchange.ts. This route
+// only wires it to settings, the shared omnisai identity mapping, the login-token mint and audit.
+
+const EXCHANGE_JWKS_TTL_MS = 60 * 60 * 1000; // 1h — same cadence verifyIdToken uses
+let exchangeJwksCache: { issuer: string; keys: Jwk[]; fetchedAt: number } | undefined;
+
+async function fetchIssuerJwks(issuer: string, forceRefresh = false): Promise<Jwk[]> {
+	const now = Date.now();
+	if (!forceRefresh && exchangeJwksCache && exchangeJwksCache.issuer === issuer && now - exchangeJwksCache.fetchedAt < EXCHANGE_JWKS_TTL_MS) {
+		return exchangeJwksCache.keys;
+	}
+	// issuer is an admin-configured trusted host (same trust decision as verifyIdToken.ts).
+	// Both JWKS mounts are live on CentralizedAuth (verified 2026-07-24 on sso-app.omnisai.io):
+	// the better-auth JWT-plugin path and the discovery document's jwks_uri. Try both so a
+	// future issuer upgrade that drops one mount doesn't break the bridge.
+	let lastStatus = 0;
+	for (const path of ['/api/auth/jwks', '/api/auth/mcp/jwks']) {
+		const res = await serverFetch(`${issuer}${path}`, { method: 'GET', ignoreSsrfValidation: true });
+		if (res.ok) {
+			const data = (await res.json()) as { keys?: Jwk[] };
+			const keys = data?.keys ?? [];
+			exchangeJwksCache = { issuer, keys, fetchedAt: now };
+			return keys;
+		}
+		lastStatus = res.status;
+	}
+	throw new Error(`exchange_jwks_fetch_${lastStatus}`);
+}
+
+/** JWS lane: signature against the issuer JWKS, then hard claim checks. Every failure throws. */
+async function verifyExchangeJwt(token: string, issuer: string): Promise<VerifiedIdentity | undefined> {
+	const parsed = parseJwt(token);
+	if (!parsed) {
+		return undefined; // not JWT-shaped → introspection lane
+	}
+	if (!isLocallyVerifiableAlg(parsed.header.alg)) {
+		return undefined; // HS*-signed (issuer-secret HMAC we must not hold) → introspection lane
+	}
+	let keys = await fetchIssuerJwks(issuer);
+	let jwk = pickJwk(keys, parsed.header.kid);
+	if (!jwk) {
+		keys = await fetchIssuerJwks(issuer, true); // one refresh on kid miss (rotation)
+		jwk = pickJwk(keys, parsed.header.kid);
+	}
+	if (!jwk) {
+		throw new Error('exchange_token_kid_not_found');
+	}
+	if (!verifyJwsSignature(jwk, String(parsed.header.alg), parsed.signingInput, parsed.signature)) {
+		throw new Error('exchange_token_bad_signature');
+	}
+	return validateExchangeClaims(parsed.claims, {
+		issuer,
+		allowedClientIds: parseAllowedClientIds(String(settings.get('Chi_Session_Exchange_Client_Ids') || '')),
+		nowSeconds: Math.floor(Date.now() / 1000),
+	});
+}
+
+/** Introspection lane: the issuer itself vouches for the live token over back-channel TLS.
+ * get-session is the endpoint CentralizedAuth actually serves (verified live 2026-07-24:
+ * an INVALID bearer gets `200 null`, which identityFromIssuerSession maps to a rejection —
+ * fail-closed); the discovery document's userinfo_endpoint 404s on the current deployment
+ * but is kept as the fallback for future issuer versions. */
+async function introspectExchangeToken(token: string, issuer: string): Promise<VerifiedIdentity> {
+	let lastStatus = 0;
+	for (const path of ['/api/auth/mcp/get-session', '/api/auth/mcp/userinfo']) {
+		const res = await serverFetch(`${issuer}${path}`, {
+			method: 'GET',
+			headers: { Authorization: `Bearer ${token}` },
+			ignoreSsrfValidation: true,
+		});
+		if (res.ok) {
+			const identity = identityFromIssuerSession(await res.json().catch(() => undefined));
+			if (!identity) {
+				throw new Error('exchange_introspection_no_user');
+			}
+			return identity;
+		}
+		lastStatus = res.status;
+		if (res.status !== 404 && res.status !== 405) {
+			break; // a real rejection (401/403/5xx) — don't shop for a friendlier endpoint
+		}
+	}
+	throw new Error(`exchange_introspection_rejected_${lastStatus}`);
+}
+
+/**
+ * POST /v1/chi.session-exchange — trade a verified CentralizedAuth token for a MatterChat
+ * login token (~30 days, revocable like any session via logout / Manage Logged In Devices).
+ * Unauthenticated by nature (the caller has no RC session yet), so: default-OFF setting
+ * gate, tight rate limit, hard fail-closed verification, and an audit line on every mint.
+ */
+API.v1.addRoute(
+	'chi.session-exchange',
+	{ authRequired: false, rateLimiterOptions: { numRequestsAllowed: 10, intervalTimeInMS: 60000 } },
+	{
+		async post() {
+			if (settings.get('Chi_Session_Exchange_Enabled') !== true) {
+				return API.v1.failure('Chi session exchange is not enabled on this workspace (Admin → Settings → Chi Assistant).');
+			}
+			// Issuer precedence: the DEDICATED bridge setting → the web-SSO issuer → env → the org's
+			// public production issuer. The dedicated setting exists because the two can legitimately
+			// differ: staging MatterChat's web SSO points at the VPC-INTERNAL staging auth, while a
+			// standalone Chi on someone's laptop can only ever reach the PUBLIC issuer
+			// (sso-app.omnisai.io — the host the whole org's OAuth uses; auth-app.* is in-VPC only).
+			const issuer = String(
+				settings.get('Chi_Session_Exchange_Issuer') ||
+					settings.get('OmnisAI_OIDC_Issuer') ||
+					process.env.OMNISAI_OIDC_ISSUER ||
+					'https://sso-app.omnisai.io',
+			)
+				.trim()
+				.replace(/\/+$/, '');
+			if (!issuer) {
+				return API.v1.failure('OmnisAI OIDC issuer is not configured.');
+			}
+			// Route not declared in rest-typings, so `this` types as Operations<never> (same as chi.ask).
+			const { request } = this as unknown as { request: { headers: { get(name: string): string | null } } };
+			const authHeader = request.headers.get('authorization') || '';
+			const bearer = /^Bearer\s+(.+)$/i.exec(authHeader)?.[1]?.trim();
+			if (!bearer) {
+				return API.v1.unauthorized();
+			}
+
+			let identity: VerifiedIdentity;
+			try {
+				identity = (await verifyExchangeJwt(bearer, issuer)) ?? (await introspectExchangeToken(bearer, issuer));
+			} catch (err) {
+				// Reason codes are deliberately log-only — the caller learns pass/fail, never which check tripped.
+				SystemLogger.warn({ msg: 'chi.session-exchange: token rejected', reason: err instanceof Error ? err.message : String(err) });
+				return API.v1.unauthorized();
+			}
+
+			try {
+				const userId = await resolveOmnisaiUser(identity);
+				const user = await Users.findOneById(userId);
+				if (!user || user.active === false) {
+					return API.v1.unauthorized();
+				}
+
+				// Mint a REAL hashed resume token (the users.createToken internals — REST auth only
+				// matches hashedToken), backdated so the standard expiry sweep retires it in ~30 days.
+				const stamped = Accounts._generateStampedLoginToken();
+				const lifetimeMs = (Accounts as unknown as { _getTokenLifetimeMs?: () => number })._getTokenLifetimeMs?.() ?? 90 * 24 * 60 * 60 * 1000;
+				stamped.when = loginTokenWhenForExpiry(Date.now(), lifetimeMs);
+				await Accounts._insertLoginToken(userId, stamped);
+
+				await postAuditEntry(
+					user,
+					`🔑 Session exchange: minted a standalone-Chi login (~30d) for @${user.username} via CentralizedAuth (${new URL(issuer).host}).`,
+				);
+				SystemLogger.info({ msg: 'chi.session-exchange: session minted', userId, sub: identity.sub });
+				return API.v1.success({
+					userId,
+					authToken: stamped.token,
+					expiresInMs: Math.min(EXCHANGE_TOKEN_LIFETIME_MS, lifetimeMs),
+				});
+			} catch (err) {
+				SystemLogger.error({ msg: 'chi.session-exchange: mint failed', err });
+				return API.v1.failure('Session exchange failed.');
+			}
+		},
+	},
+);
+
 API.v1.addRoute(
 	'chi.local-tools.register',
 	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 30, intervalTimeInMS: 60000 } },
