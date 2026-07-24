@@ -209,7 +209,7 @@
 				"font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;-webkit-user-select:none;user-select:none;");
 
 			// ── faint chat context behind the sheet (C keeps you oriented) ───────────────────────
-			var ctx = make('div', 'position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 14px) 16px 0;opacity:.4;font-size:12.5px;line-height:2.3;transition:opacity .4s;', root);
+			var ctx = make('div', 'position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 14px) 16px 0;opacity:.4;font-size:12.5px;line-height:2.3;transition:opacity .4s;pointer-events:none;', root);
 			ctx.innerHTML = '<div style="font-weight:800;letter-spacing:.5px;opacity:.8;margin-bottom:4px">Chats</div>';
 			els.ctx = ctx;
 
