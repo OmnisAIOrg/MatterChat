@@ -324,14 +324,21 @@ async function fetchIssuerJwks(issuer: string, forceRefresh = false): Promise<Jw
 		return exchangeJwksCache.keys;
 	}
 	// issuer is an admin-configured trusted host (same trust decision as verifyIdToken.ts).
-	const res = await serverFetch(`${issuer}/api/auth/jwks`, { method: 'GET', ignoreSsrfValidation: true });
-	if (!res.ok) {
-		throw new Error(`exchange_jwks_fetch_${res.status}`);
+	// Both JWKS mounts are live on CentralizedAuth (verified 2026-07-24 on sso-app.omnisai.io):
+	// the better-auth JWT-plugin path and the discovery document's jwks_uri. Try both so a
+	// future issuer upgrade that drops one mount doesn't break the bridge.
+	let lastStatus = 0;
+	for (const path of ['/api/auth/jwks', '/api/auth/mcp/jwks']) {
+		const res = await serverFetch(`${issuer}${path}`, { method: 'GET', ignoreSsrfValidation: true });
+		if (res.ok) {
+			const data = (await res.json()) as { keys?: Jwk[] };
+			const keys = data?.keys ?? [];
+			exchangeJwksCache = { issuer, keys, fetchedAt: now };
+			return keys;
+		}
+		lastStatus = res.status;
 	}
-	const data = (await res.json()) as { keys?: Jwk[] };
-	const keys = data?.keys ?? [];
-	exchangeJwksCache = { issuer, keys, fetchedAt: now };
-	return keys;
+	throw new Error(`exchange_jwks_fetch_${lastStatus}`);
 }
 
 /** JWS lane: signature against the issuer JWKS, then hard claim checks. Every failure throws. */
@@ -362,21 +369,32 @@ async function verifyExchangeJwt(token: string, issuer: string): Promise<Verifie
 	});
 }
 
-/** Introspection lane: the issuer itself vouches for the live token over back-channel TLS. */
+/** Introspection lane: the issuer itself vouches for the live token over back-channel TLS.
+ * get-session is the endpoint CentralizedAuth actually serves (verified live 2026-07-24:
+ * an INVALID bearer gets `200 null`, which identityFromIssuerSession maps to a rejection —
+ * fail-closed); the discovery document's userinfo_endpoint 404s on the current deployment
+ * but is kept as the fallback for future issuer versions. */
 async function introspectExchangeToken(token: string, issuer: string): Promise<VerifiedIdentity> {
-	const res = await serverFetch(`${issuer}/api/auth/mcp/get-session`, {
-		method: 'GET',
-		headers: { Authorization: `Bearer ${token}` },
-		ignoreSsrfValidation: true,
-	});
-	if (!res.ok) {
-		throw new Error(`exchange_introspection_rejected_${res.status}`);
+	let lastStatus = 0;
+	for (const path of ['/api/auth/mcp/get-session', '/api/auth/mcp/userinfo']) {
+		const res = await serverFetch(`${issuer}${path}`, {
+			method: 'GET',
+			headers: { Authorization: `Bearer ${token}` },
+			ignoreSsrfValidation: true,
+		});
+		if (res.ok) {
+			const identity = identityFromIssuerSession(await res.json().catch(() => undefined));
+			if (!identity) {
+				throw new Error('exchange_introspection_no_user');
+			}
+			return identity;
+		}
+		lastStatus = res.status;
+		if (res.status !== 404 && res.status !== 405) {
+			break; // a real rejection (401/403/5xx) — don't shop for a friendlier endpoint
+		}
 	}
-	const identity = identityFromIssuerSession(await res.json().catch(() => undefined));
-	if (!identity) {
-		throw new Error('exchange_introspection_no_user');
-	}
-	return identity;
+	throw new Error(`exchange_introspection_rejected_${lastStatus}`);
 }
 
 /**
@@ -393,7 +411,17 @@ API.v1.addRoute(
 			if (settings.get('Chi_Session_Exchange_Enabled') !== true) {
 				return API.v1.failure('Chi session exchange is not enabled on this workspace (Admin → Settings → Chi Assistant).');
 			}
-			const issuer = String(settings.get('OmnisAI_OIDC_Issuer') || process.env.OMNISAI_OIDC_ISSUER || '')
+			// Issuer precedence: the DEDICATED bridge setting → the web-SSO issuer → env → the org's
+			// public production issuer. The dedicated setting exists because the two can legitimately
+			// differ: staging MatterChat's web SSO points at the VPC-INTERNAL staging auth, while a
+			// standalone Chi on someone's laptop can only ever reach the PUBLIC issuer
+			// (sso-app.omnisai.io — the host the whole org's OAuth uses; auth-app.* is in-VPC only).
+			const issuer = String(
+				settings.get('Chi_Session_Exchange_Issuer') ||
+					settings.get('OmnisAI_OIDC_Issuer') ||
+					process.env.OMNISAI_OIDC_ISSUER ||
+					'https://sso-app.omnisai.io',
+			)
 				.trim()
 				.replace(/\/+$/, '');
 			if (!issuer) {

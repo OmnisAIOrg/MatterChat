@@ -82,6 +82,8 @@ The standalone orb app (`OmnisAIOrg/Chi-Desktop`) becomes a **full client of thi
 
 Admin setup: Chi Assistant → **Standalone Chi sign-in (session exchange)** ON (`Chi_Session_Exchange_Enabled`, default OFF) + optionally pin the desktop OAuth client id(s) in `Chi_Session_Exchange_Client_Ids`. Every mint lands an audit line in the Chi audit channel; the route is rate-limited (10/min).
 
+**Issuer (the current link, verified live 2026-07-24):** the org's PUBLIC CentralizedAuth issuer is `https://sso-app.omnisai.io` (RFC 8414 discovery + JWKS answer there; it is what DepoLink's and MatterChat-Desktop's OAuth already use). `auth-app.omnisai.io` is the VPC-internal server-side host — unreachable from user machines. The bridge verifies against `Chi_Session_Exchange_Issuer` when set, else the web-SSO `OmnisAI_OIDC_Issuer`, else `sso-app.omnisai.io`; the dedicated override exists because staging MatterChat's web SSO points at the internal staging auth while standalone Chi clients can only reach the public issuer.
+
 ### Tests
 Mocha/chai unit specs: providers (presets incl. locals), MCP (registry parsing, namespacing, confirm gates, assertion sign/verify/tamper), plus the pre-existing chi client/context/service specs. Chi's client+server surface typechecks clean.
 

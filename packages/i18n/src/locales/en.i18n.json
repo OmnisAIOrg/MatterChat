@@ -1739,6 +1739,8 @@
   "Chi_Session_Exchange_Enabled_Description": "Let a standalone Chi app (Chi Desktop) trade a verified OmnisAI (CentralizedAuth) sign-in for a MatterChat session via POST /v1/chi.session-exchange. The token is hard-verified against the issuer (signature/expiry/issuer, or live introspection) and the minted session lasts ~30 days and is revocable like any other device session.",
   "Chi_Session_Exchange_Client_Ids": "Standalone Chi allowed client IDs",
   "Chi_Session_Exchange_Client_Ids_Description": "Comma-separated OAuth client IDs allowed to exchange tokens here (e.g. the Chi Desktop client registered on CentralizedAuth). A token that carries an audience not on this list is rejected; leave empty only if issuer tokens carry no audience.",
+  "Chi_Session_Exchange_Issuer": "Standalone Chi issuer override",
+  "Chi_Session_Exchange_Issuer_Description": "CentralizedAuth issuer the session exchange verifies against. Empty = use the OmnisAI SSO issuer setting, else the org's public issuer https://sso-app.omnisai.io. Set this when the web-SSO issuer is a VPC-internal host (e.g. staging) but standalone Chi clients sign in against the public issuer.",
   "Chi_Assistant_Provider_Anthropic": "Anthropic",
   "Chi_Assistant_Provider_XAI": "Grok (xAI)",
   "Chi_Assistant_Provider_DeepSeek": "DeepSeek",

@@ -124,6 +124,12 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Session_Exchange_Client_Ids',
 			i18nDescription: 'Chi_Session_Exchange_Client_Ids_Description',
 		});
+		await this.add('Chi_Session_Exchange_Issuer', '', {
+			type: 'string',
+			public: false,
+			i18nLabel: 'Chi_Session_Exchange_Issuer',
+			i18nDescription: 'Chi_Session_Exchange_Issuer_Description',
+		});
 		await this.add('Chi_Assistant_Audit_Channel', 'chi-admin-audit', {
 			type: 'string',
 			public: false,
