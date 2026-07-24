@@ -48,6 +48,9 @@ Chi spans three repos:
 - Pipeline: transcript → **Dictionary** word replacements → optional **AI polish** (same Chi brain, vocabulary preserved) → Composer / Ask Chi / Clipboard
 - **Dictionary** (replacements + vocabulary), **Modes** (default Dictation editor), **History** (searchable, words-dictated counter, tap to reuse), **Audio** (mic picker, record chirps)
 - 5-minute clip cap; recording start/stop chirps
+- **Configurable quick command** (click-to-record any combo; synced to the desktop's system-wide shortcut) + **activation modes** (press-to-toggle / push-and-hold)
+- **Live REC feedback**: crimson pulsing halo, RECORDING status, elapsed timer, real AnalyserNode level meter
+- **On-device Whisper (REAL)**: vendored transformers.js (WASM) — Download buttons stream ONNX weights (Tiny/Base/Base-multi/Small) with live %, cached by the browser; transcription then runs fully offline on the user's machine. Desktop popout renders with true transparency (no shadow haze)
 
 ### Settings system (in the orb)
 Main ▸ Language models ▸ Transcription ▸ Dictionary ▸ Modes ▸ History ▸ Audio ▸ Capabilities ▸ Connections ▸ **What's new** — all interactions update in place (no re-render flicker).
@@ -102,7 +105,7 @@ Mocha/chai unit specs: providers (presets incl. locals), MCP (registry parsing, 
 - [ ] Org-held keys for the remaining browser-side STT providers (proxy pattern exists — extend `chi.transcribe`)
 
 ### Feature build-out (the SOON roster in Settings)
-- [ ] **On-device STT downloads** — whisper/Parakeet runtime in MatterChat-Desktop + IPC (the Model Catalog's Download buttons)
+- [x] **On-device STT downloads — SHIPPED via in-browser WASM Whisper** (works web + desktop). Still open: native desktop runtime for the big models (Parakeet/Nemotron/Large-v3-Turbo) where WASM is too slow
 - [ ] Non-OpenAI-compatible STT adapters: Deepgram, ElevenLabs, Soniox, Speechmatics, AssemblyAI, Mistral, xAI, Cartesia
 - [ ] Product MCP servers that don't exist yet: DepoLink, OmnisProof, MedChron, AutoDoc, LitDraft, LitBox (clone the matterchat-mcp-v2 template)
 - [ ] Admin UI for the MCP registry (replace the JSON textarea); "+ Add" flows in Connections

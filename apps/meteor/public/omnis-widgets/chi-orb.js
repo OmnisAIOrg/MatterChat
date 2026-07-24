@@ -204,19 +204,28 @@
 	];
 	// Downloadable on-device catalog (sizes/speed/accuracy from the VoiceInk-class model zoo).
 	// Downloads need the desktop host — rows render with meters now, Download lands with the BE.
+	// REAL downloadable on-device models — Whisper via the vendored transformers.js (WASM). The
+	// Download button fetches the ONNX weights (browser-cached; huggingface.co CDN) and from then
+	// on transcription runs ENTIRELY on this machine: private, offline, $0. Works web + desktop.
+	var OD_MODELS = [
+		{ slug: 'tiny-en', name: 'Whisper Tiny (English)', hf: 'onnx-community/whisper-tiny.en', dl: '~50 MB', speed: 9.5, acc: 6.5, note: 'Fastest — quick notes' },
+		{ slug: 'base-en', name: 'Whisper Base (English)', hf: 'onnx-community/whisper-base.en', dl: '~80 MB', speed: 8.5, acc: 7.5, note: 'Best speed/accuracy balance' },
+		{ slug: 'base', name: 'Whisper Base (Multilingual)', hf: 'onnx-community/whisper-base', dl: '~80 MB', speed: 8.5, acc: 7.2, note: '25+ languages' },
+		{ slug: 'small-en', name: 'Whisper Small (English)', hf: 'onnx-community/whisper-small.en', dl: '~250 MB', speed: 7.0, acc: 8.8, note: 'High-accuracy dictation' },
+	];
 	var STT_LOCAL_MODELS = [
 		{ name: 'Apple Speech', size: 'built-in', speed: 9, acc: 8.5, note: 'Native on-device (macOS 26+)' },
 		{ name: 'Parakeet V3', size: '494 MB', speed: 9.9, acc: 9.4, note: 'Lightning fast · 25 languages' },
-		{ name: 'Parakeet Unified', size: '1.2 GB', speed: 9.9, acc: 9.5, note: 'Native realtime · English' },
 		{ name: 'Nemotron Multilingual', size: '672 MB', speed: 9.9, acc: 9.0, note: 'NVIDIA streaming model' },
-		{ name: 'Whisper Tiny', size: '75 MB', speed: 9.5, acc: 6.0, note: 'Fastest, least accurate' },
-		{ name: 'Whisper Base', size: '142 MB', speed: 8.5, acc: 7.2, note: 'Good speed/accuracy balance' },
-		{ name: 'Whisper Large v3 Turbo', size: '1.5 GB', speed: 7.5, acc: 9.4, note: 'Near-max accuracy, fast' },
-		{ name: 'Large v3 Turbo (Quantized)', size: '547 MB', speed: 7.5, acc: 9.4, note: 'Smaller, same accuracy' },
+		{ name: 'Whisper Large v3 Turbo', size: '1.5 GB', speed: 7.5, acc: 9.4, note: 'Near-max accuracy (needs the desktop runtime)' },
 	];
 	// The in-product feature ledger (Settings → What's new). Mirrors docs/CHI-ASSISTANT.md.
 	var WHATSNEW = [
 		{ label: 'This build — live', items: [
+			'On-device Whisper — download once, transcribe offline',
+			'Configurable dictation shortcut + push-and-hold mode',
+			'Live REC feedback — level meter, timer, red halo',
+			'Desktop popout: true transparency',
 			'Nest dial redesign · full color editor · 4 themes',
 			'3D drum scrolling with detent ticks + sounds',
 			'Notifications in Chi — cards, reply, banner mode',
@@ -288,10 +297,21 @@
 			if (!this._hotkeyFn) {
 				this._hotkeyFn = function (e) {
 					if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyC') { e.preventDefault(); self._summon(); }
-					// Quick command: ⌘⇧F starts dictation instantly; press again to finish + deliver.
-					if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); self.flowToggle(); }
+					// Flow quick command (user-configurable). Toggle mode: press = start, press again =
+					// deliver. Hold mode: keydown starts, RELEASING the combo's key delivers.
+					var hk = self._flowHotkey();
+					if (self._hotkeyMatches(e, hk)) {
+						e.preventDefault();
+						if (e.repeat) return;
+						if (self._flowActivation() === 'hold') { if (!self._flow) { self._holdKey = hk.code; self.flowToggle(); } }
+						else self.flowToggle();
+					}
 				};
 				window.addEventListener('keydown', this._hotkeyFn, true);
+				this._hotkeyUpFn = function (e) {
+					if (self._holdKey && e.code === self._holdKey && self._flow) { e.preventDefault(); self._holdKey = null; self._flowFinish(); }
+				};
+				window.addEventListener('keyup', this._hotkeyUpFn, true);
 			}
 			// Drop-anything-on-Chi: drag a file or text onto the orb → blue ingest glow, then hand it
 			// to the host (ondrop) or fold it into a normal Chi turn.
@@ -304,9 +324,53 @@
 		}
 		disconnectedCallback() {
 			if (this._hotkeyFn) { window.removeEventListener('keydown', this._hotkeyFn, true); this._hotkeyFn = null; }
+			if (this._hotkeyUpFn) { window.removeEventListener('keyup', this._hotkeyUpFn, true); this._hotkeyUpFn = null; }
 			clearInterval(this._focusInt); clearTimeout(this._bannerT);
 		}
 		_summon() { if (this._min) this._toggle(); var inp = this.shadowRoot.getElementById('in'); if (inp) inp.focus(); }
+		/* The Flow hotkey is USER-CONFIGURABLE (Settings → Modes → click the shortcut chip and press
+		 * any combo). Stored as {ctrl,meta,alt,shift,code,label}; default ⌘⇧F / Ctrl⇧F. */
+		_flowHotkey() {
+			try {
+				var h = JSON.parse(localStorage.getItem('chi-flow-hotkey') || 'null');
+				if (h && h.code) return h;
+			} catch (e) { /* fall through */ }
+			return { ctrl: true, meta: true, alt: false, shift: true, code: 'KeyF', label: null };
+		}
+		_hotkeyLabel(h) {
+			if (h.label) return h.label;
+			var mac = /Mac|iP/.test(navigator.platform || '');
+			var parts = [];
+			if (h.ctrl && h.meta) parts.push(mac ? '⌘' : 'Ctrl');
+			else { if (h.ctrl) parts.push(mac ? '⌃' : 'Ctrl'); if (h.meta) parts.push('⌘'); }
+			if (h.alt) parts.push(mac ? '⌥' : 'Alt');
+			if (h.shift) parts.push(mac ? '⇧' : 'Shift');
+			parts.push(String(h.code).replace(/^Key|^Digit/, '').replace('Space', '␣'));
+			return parts.join(mac ? '' : '+');
+		}
+		_hotkeyMatches(e, h) {
+			if (e.code !== h.code) return false;
+			var wantPrimary = h.ctrl || h.meta;
+			var hasPrimary = e.ctrlKey || e.metaKey;
+			if (h.ctrl && h.meta) { if (!hasPrimary) return false; }
+			else { if (Boolean(e.ctrlKey) !== Boolean(h.ctrl) || Boolean(e.metaKey) !== Boolean(h.meta)) return false; }
+			if (!wantPrimary && hasPrimary) return false;
+			return Boolean(e.shiftKey) === Boolean(h.shift) && Boolean(e.altKey) === Boolean(h.alt);
+		}
+		/* Convert the stored combo to an Electron accelerator for the SYSTEM-WIDE shortcut. */
+		_hotkeyAccel(h) {
+			var parts = [];
+			if (h.ctrl || h.meta) parts.push('CommandOrControl');
+			if (h.alt) parts.push('Alt');
+			if (h.shift) parts.push('Shift');
+			var k = String(h.code).replace(/^Key/, '').replace(/^Digit/, '');
+			if (/^F\d{1,2}$/.test(h.code)) k = h.code;
+			if (h.code === 'Space') k = 'Space';
+			if (!/^[A-Za-z0-9]{1,5}$|^F\d{1,2}$|^Space$/.test(k)) return null;
+			parts.push(k.toUpperCase());
+			return parts.join('+');
+		}
+		_flowActivation() { return localStorage.getItem('chi-flow-activation') === 'hold' ? 'hold' : 'toggle'; }
 		/** Quick command: one call starts Flow dictation (expanding first if minimized); the next
 		 * finishes + delivers. Wired to ⌘⇧F here and to the desktop app's global shortcut. */
 		flowToggle() {
@@ -356,7 +420,7 @@
 		_resize(d) { localStorage.setItem('chi-orb-scale', Math.max(0.7, Math.min(1.5, this._scale + d)).toFixed(2)); this.dispatchEvent(new CustomEvent('chi-resize', { detail: { scale: this._scale }, bubbles: true, composed: true })); this._render(); }
 		_cycleTheme() { var i = THEME_ORDER.indexOf(this._themeKey); localStorage.setItem('chi-orb-theme', THEME_ORDER[(i + 1) % THEME_ORDER.length]); this._render(); }
 		_cycleFrame() { var i = FRAME_ORDER.indexOf(this._frameKey); localStorage.setItem('chi-orb-frame', FRAME_ORDER[(i + 1) % FRAME_ORDER.length]); this._render(); }
-		_toggle() { this._min = !this._min; localStorage.setItem('chi-orb-min', this._min ? '1' : '0'); if (!this._min) this._flushPending(); this.dispatchEvent(new CustomEvent('chi-min', { detail: { min: this._min }, bubbles: true, composed: true })); this._render(); }
+		_toggle() { if (this._flow) this._flowCancel(); this._min = !this._min; localStorage.setItem('chi-orb-min', this._min ? '1' : '0'); if (!this._min) this._flushPending(); this.dispatchEvent(new CustomEvent('chi-min', { detail: { min: this._min }, bubbles: true, composed: true })); this._render(); }
 		_hasRealtime() { return this.getAttribute('realtime-available') === '1'; }
 		_hasWinCtrl() { return this.getAttribute('window-controls') === '1'; } // desktop native-window mode: grip drags the window, adds close/frame controls
 		_hasPopout() { return this.getAttribute('popout-control') === '1'; }   // in-app web mode: a pop-out ring control (next to theme), grip drags the in-app container
@@ -423,13 +487,68 @@
 		}
 		_sttConfig() {
 			var slug = localStorage.getItem('chi-stt-model') || 'webspeech';
+			if (slug.indexOf('ondevice:') === 0) {
+				var od = slug.slice(9);
+				for (var j = 0; j < OD_MODELS.length; j++) {
+					if (OD_MODELS[j].slug === od && localStorage.getItem('chi-ondevice-' + od) === '1') {
+						return { slug: slug, name: OD_MODELS[j].name + ' · on-device', ondevice: OD_MODELS[j] };
+					}
+				}
+			}
 			for (var i = 0; i < STT_PROVIDERS.length; i++) if (STT_PROVIDERS[i].slug === slug) return STT_PROVIDERS[i];
 			return STT_PROVIDERS[0];
+		}
+		/* transformers.js loader — vendored SAME-ORIGIN (script-src safe); ONNX wasm + model weights
+		 * stream from CDN and cache in the browser. One import for the app's lifetime. */
+		_odLib() {
+			if (!window.__chiTf) {
+				window.__chiTf = import('/omnis-widgets/vendor/transformers.min.js').then(function (m) {
+					m.env.allowLocalModels = false;
+					try { m.env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.0/dist/'; } catch (e) { /* default paths */ }
+					return m;
+				});
+			}
+			return window.__chiTf;
+		}
+		_odPipe(model, onProgress) {
+			window.__chiOdPipes = window.__chiOdPipes || {};
+			if (!window.__chiOdPipes[model.slug]) {
+				window.__chiOdPipes[model.slug] = this._odLib().then(function (m) {
+					return m.pipeline('automatic-speech-recognition', model.hf, { dtype: 'q8', progress_callback: onProgress || undefined });
+				});
+				window.__chiOdPipes[model.slug].catch(function () { delete window.__chiOdPipes[model.slug]; });
+			}
+			return window.__chiOdPipes[model.slug];
+		}
+		_odDecode(blob) { // webm/opus clip → 16 kHz mono Float32 (what Whisper wants)
+			return blob.arrayBuffer().then(function (ab) {
+				var AC = window.AudioContext || window.webkitAudioContext;
+				var ac = new AC({ sampleRate: 16000 });
+				return ac.decodeAudioData(ab).then(function (buf) {
+					var ch = buf.getChannelData(0);
+					var out = new Float32Array(ch.length);
+					out.set(ch);
+					try { ac.close(); } catch (e) { /* noop */ }
+					return out;
+				});
+			});
 		}
 		/* Transcribe a recorded clip through the chosen provider (OpenAI-compatible
 		 * audio/transcriptions — OpenAI, Groq, or a local Whisper server). Returns the text. */
 		_transcribe(blob) {
 			var p2 = this._sttConfig();
+			var self = this;
+			if (p2.ondevice) {
+				var liveEl = this.shadowRoot.getElementById('flowlive');
+				return this._odPipe(p2.ondevice, function (ev2) {
+					if (ev2 && ev2.status === 'progress' && liveEl) liveEl.textContent = 'Loading ' + p2.ondevice.name + '… ' + Math.round(ev2.progress || 0) + '%';
+				}).then(function (asr) {
+					if (liveEl) liveEl.textContent = 'Transcribing on this device…';
+					return self._odDecode(blob).then(function (audio) { return asr(audio); }).then(function (out2) {
+						return String((out2 && out2.text) || '').trim();
+					});
+				});
+			}
 			if (p2.workspace) {
 				// Secure lane: the clip goes to OUR server; the server relays it with the WORKSPACE
 				// key (admin-held). No provider keys exist in this browser.
@@ -479,7 +598,8 @@
 					mr.ondataavailable = function (ev2) { if (ev2.data && ev2.data.size) self._flow && self._flow.chunks.push(ev2.data); };
 					mr.start(250);
 					self._flow.capT = setTimeout(function () { if (self._flow) self._flowFinish(); }, 5 * 60 * 1000);
-					if (liveEl) liveEl.textContent = '● Recording with ' + stt.name + ' — tap Done to transcribe.';
+					self._flowUiStart(stream);
+					if (liveEl) liveEl.textContent = '● Recording with ' + stt.name + ' — ' + (self._flowActivation() === 'hold' ? 'release the key to transcribe.' : 'tap Done to transcribe.');
 				}).catch(function () { if (liveEl) liveEl.textContent = 'Microphone unavailable — check permissions.'; });
 				this._tick(1);
 				return;
@@ -494,16 +614,76 @@
 					var interim = '';
 					for (var i = e.resultIndex; i < e.results.length; i++) { var r0 = e.results[i]; if (r0.isFinal) self._flow.final += r0[0].transcript; else interim += r0[0].transcript; }
 					if (liveEl) { liveEl.textContent = (self._flow.final + interim).trim() || 'Listening…'; liveEl.scrollTop = liveEl.scrollHeight; }
+					self._flowUiBump();
 				};
 				rec.onerror = function (ev) { if (self._flow && (self._flow.stop || !ev || (ev.error !== 'no-speech' && ev.error !== 'aborted'))) self._flow.stop = true; };
 				rec.onend = function () { if (self._flow && !self._flow.stop) { try { rec.start(); return; } catch (e2) { /* noop */ } } };
 				try { rec.start(); } catch (e3) { /* mic denied — leave panel showing the hint */ }
 			};
 			begin();
+			this._flowUiStart(null);
 			this._tick(1);
 		}
+		/* Recording feedback: crimson pulsing halo + RECORDING status + elapsed timer + a LIVE level
+		 * meter (AnalyserNode on the actual mic stream in clip mode; speech-activity pulses in
+		 * built-in mode). Everything restores cleanly on cancel/finish. */
+		_flowUiStart(stream) {
+			var r = this.shadowRoot, self = this;
+			var halo = r.getElementById('halo');
+			if (halo) halo.setAttribute('style', halo.getAttribute('data-base') + 'opacity:1;background:radial-gradient(circle, rgba(255,69,58,0) 50%, rgba(255,69,58,.5) 66%, rgba(255,69,58,.92) 74%, rgba(255,69,58,.5) 82%, rgba(255,69,58,0) 94%);box-shadow:0 0 55px 10px rgba(255,69,58,.5);animation:chiHalo 1.1s ease-in-out infinite;');
+			var st = r.getElementById('status');
+			if (st) { st.textContent = 'RECORDING'; st.style.color = '#ff453a'; st.style.textShadow = '0 0 12px rgba(255,69,58,.7)'; }
+			var t0 = Date.now();
+			this._flowUi = { t0: t0, int: 0, raf: 0, ac: null };
+			this._flowUi.int = setInterval(function () {
+				var el = r.getElementById('flowtime'); if (!el) return;
+				var sec = Math.floor((Date.now() - t0) / 1000);
+				el.textContent = Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+			}, 500);
+			var meter = r.getElementById('flowmeter');
+			if (meter && stream) {
+				try {
+					var AC = window.AudioContext || window.webkitAudioContext;
+					var ac = new AC(); this._flowUi.ac = ac;
+					var an = ac.createAnalyser(); an.fftSize = 64;
+					ac.createMediaStreamSource(stream).connect(an);
+					var data = new Uint8Array(an.frequencyBinCount);
+					var bars = meter.children;
+					var draw = function () {
+						if (!self._flowUi) return;
+						an.getByteFrequencyData(data);
+						for (var i = 0; i < bars.length; i++) {
+							var v = data[Math.floor((i / bars.length) * data.length)] / 255;
+							bars[i].style.height = Math.max(3, Math.round(v * 22)) + 'px';
+							bars[i].style.opacity = String(0.35 + v * 0.65);
+						}
+						self._flowUi.raf = requestAnimationFrame(draw);
+					};
+					draw();
+				} catch (e) { /* no meter — recording still works */ }
+			}
+		}
+		_flowUiBump() { // built-in speech has no stream: pulse the meter on each recognized chunk
+			var meter = this.shadowRoot.getElementById('flowmeter'); if (!meter) return;
+			Array.prototype.forEach.call(meter.children, function (b) {
+				b.style.height = Math.max(4, Math.round(Math.random() * 20)) + 'px';
+				b.style.opacity = '0.9';
+			});
+		}
+		_flowUiStop() {
+			if (this._flowUi) {
+				clearInterval(this._flowUi.int);
+				cancelAnimationFrame(this._flowUi.raf);
+				if (this._flowUi.ac) { try { this._flowUi.ac.close(); } catch (e) { /* noop */ } }
+				this._flowUi = null;
+			}
+			var halo = this.shadowRoot.getElementById('halo');
+			if (halo) halo.setAttribute('style', halo.getAttribute('data-base') + this._haloCss(this._thinking ? 'thinking' : (this._realtime ? 'realtime' : '')));
+			if (!this._realtime && !this._min) this._sync();
+		}
 		_flowCancel() {
-			if (this._flow) { this._flow.stop = true; try { this._flow.rec.stop(); } catch (e) { /* noop */ } this._flow = null; }
+			this._flowUiStop();
+			if (this._flow) { this._flow.stop = true; try { this._flow.rec && this._flow.rec.stop(); } catch (e) { /* noop */ } try { if (this._flow.recorder && this._flow.recorder.state !== 'inactive') this._flow.recorder.stop(); } catch (e2) { /* noop */ } try { if (this._flow.stream) this._flow.stream.getTracks().forEach(function (t2) { t2.stop(); }); } catch (e3) { /* noop */ } this._flow = null; }
 			var panel = this.shadowRoot.getElementById('flowpanel'); if (panel) panel.style.display = 'none';
 			var liveEl = this.shadowRoot.getElementById('flowlive'); if (liveEl) liveEl.textContent = 'Listening…';
 		}
@@ -511,6 +691,7 @@
 			var self = this;
 			if (!this._flow) return;
 			this._recSound(false);
+			this._flowUiStop();
 			var liveEl = this.shadowRoot.getElementById('flowlive');
 			// Clip mode: stop the recorder, ship the audio to the provider, then run the pipeline.
 			if (this._flow.mode === 'clip') {
@@ -1073,7 +1254,7 @@
 				'<div id="shell" style="position:relative;width:520px;height:520px;transform:scale(' + this._scale + ');transform-origin:' + (winCtrl ? '50% 50%' : '50% 100%') + ';">' +
 				'<div id="halo" data-base="' + haloBase + '" style="' + haloBase + this._haloCss(this._realtime ? 'realtime' : '') + '"></div>' +
 				// 1 · stainless band (full bleed to the rim)
-				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:' + steel + ';box-shadow:0 70px 130px -34px rgba(0,0,0,.82), 0 26px 60px -18px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 6px rgba(0,0,0,.45);"></div>' +
+				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:' + steel + ';box-shadow:' + (winCtrl ? '' : '0 70px 130px -34px rgba(0,0,0,.82), 0 26px 60px -18px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.5), ') + 'inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 6px rgba(0,0,0,.45);"></div>' +
 				// 1.5 · radial brush texture (fine spokes, like spun metal)
 				'<div style="position:absolute;inset:0;border-radius:50%;pointer-events:none;background:repeating-conic-gradient(rgba(255,255,255,.10) 0deg .18deg, transparent .18deg 1.9deg);opacity:.5;-webkit-mask:radial-gradient(circle, transparent 87%, black 88%);mask:radial-gradient(circle, transparent 87%, black 88%);"></div>' +
 				// 2 · machined knurl texture on the band
@@ -1089,7 +1270,7 @@
 				// 4.5 · focus-dial arc — the wound/remaining time drawn on the metal band
 				'<div id="focusarc" style="position:absolute;inset:3px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .3s;-webkit-mask:radial-gradient(circle, transparent 89.5%, black 90.5%);mask:radial-gradient(circle, transparent 89.5%, black 90.5%);filter:drop-shadow(0 0 7px rgba(59,155,255,.9));"></div>' +
 				// 5 · inner bevel ring (dark machined step down to the glass)
-				'<div style="position:absolute;inset:15px;border-radius:50%;pointer-events:none;background:conic-gradient(from 20deg, #43474c, #14161a 25%, #3a3e44 50%, #101216 75%, #43474c);box-shadow:inset 0 1px 2px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.6);"></div>' +
+				'<div style="position:absolute;inset:15px;border-radius:50%;pointer-events:none;background:conic-gradient(from 20deg, #43474c, #14161a 25%, #3a3e44 50%, #101216 75%, #43474c);box-shadow:inset 0 1px 2px rgba(255,255,255,.35)' + (winCtrl ? '' : ', 0 2px 6px rgba(0,0,0,.6)') + ';"></div>' +
 				// 6 · black glass face
 				'<div id="win" style="position:absolute;inset:26px;border-radius:50%;overflow:hidden;display:flex;flex-direction:column;background:' + t.win + ';border:1px solid ' + t.winBorder + ';box-shadow:inset 0 3px 10px rgba(255,255,255,.07), inset 0 -6px 14px rgba(0,0,0,.35), ' + t.vignette + ';">' +
 					'<div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 34% at 32% 12%, ' + t.glow + ', transparent 65%);"></div>' +
@@ -1232,10 +1413,25 @@
 						'</div>') +
 					'</div>';
 				};
+				var odrow = function (m3) {
+					var ready = localStorage.getItem('chi-ondevice-' + m3.slug) === '1';
+					var selOd = curStt === 'ondevice:' + m3.slug;
+					return '<div class="strow" data-drum-base="" ' + (ready ? 'data-stt="ondevice:' + m3.slug + '"' : '') + ' style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid rgba(128,128,128,.13);' + (ready ? 'cursor:pointer;' : '') + '">' +
+						(ready ? '<span class="stradio" data-stradio="ondevice:' + m3.slug + '" style="width:15px;height:15px;border-radius:50%;flex-shrink:0;border:2px solid ' + (selOd ? GREEN : 'rgba(128,128,128,.5)') + ';background:' + (selOd ? GREEN : 'transparent') + ';"></span>' : '<span style="width:15px;flex-shrink:0;"></span>') +
+						'<span style="flex:1;min-width:0;"><span style="font-size:12px;opacity:.9;">' + m3.name + '</span><span style="margin-left:7px;font-size:10px;opacity:.5;">' + m3.dl + '</span><br><span style="font-size:9.5px;opacity:.55;">' + m3.note + '</span></span>' +
+						'<span style="font-size:9px;opacity:.6;text-align:right;">speed<br>' + meter(m3.speed) + '</span>' +
+						'<span style="font-size:9px;opacity:.6;text-align:right;">accuracy<br>' + meter(m3.acc, true) + '</span>' +
+						(ready
+							? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">READY</span>'
+							: '<span class="odl" data-od="' + m3.slug + '" style="padding:4px 12px;border-radius:10px;cursor:pointer;font-size:10px;font-weight:800;background:rgba(59,155,255,.9);color:#fff;box-shadow:0 2px 8px rgba(59,155,255,.4);min-width:64px;text-align:center;">Download</span>') +
+					'</div>';
+				};
 				body =
 					'<div data-drum-base="" style="margin:2px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">Speech-to-text — Flow uses the selected model</div>' +
 					STT_PROVIDERS.map(strow).join('') +
-					'<div data-drum-base="" style="margin:14px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">On-device model catalog ' + badge('SOON') + '</div>' +
+					'<div data-drum-base="" style="margin:14px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">On this device — download once, then private &amp; offline</div>' +
+					OD_MODELS.map(odrow).join('') +
+					'<div data-drum-base="" style="margin:14px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">More on-device engines ' + badge('SOON') + '</div>' +
 					STT_LOCAL_MODELS.map(function (m2) {
 						return '<div data-drum-base="" style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
 							'<span style="flex:1;min-width:0;"><span style="font-size:12px;opacity:.85;">' + m2.name + '</span><span style="margin-left:7px;font-size:10px;opacity:.5;">' + m2.size + '</span><br><span style="font-size:9.5px;opacity:.55;">' + m2.note + '</span></span>' +
@@ -1266,7 +1462,9 @@
 				var sttNow = this._sttConfig();
 				body =
 					'<div data-drum-base="" style="display:flex;align-items:center;gap:8px;padding:9px 2px;"><span style="font-size:12.5px;font-weight:800;">Dictation</span>' + badge('', true) + '<span style="margin-left:auto;font-size:10px;opacity:.5;">default mode</span></div>' +
-					row('<span style="font-size:12px;opacity:.85;">Keyboard shortcut</span><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:7px;background:rgba(128,128,128,.16);">⌘⇧C</span>') +
+					row('<span style="font-size:12px;opacity:.85;">Keyboard shortcut</span><span id="hkchip" title="Click, then press any key combo" style="font-size:11px;font-weight:700;padding:3px 11px;border-radius:8px;cursor:pointer;background:rgba(128,128,128,.16);border:1px solid rgba(128,128,128,.25);">' + this._hotkeyLabel(this._flowHotkey()) + '</span>') +
+					row('<span style="font-size:12px;opacity:.85;">Activation</span><span id="modes-activation" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;cursor:pointer;">' + (this._flowActivation() === 'hold' ? 'Push && hold' : 'Press to toggle') + ' ' + chev + '</span>') +
+					'<div data-drum-base="" style="padding:2px 2px 8px;font-size:9.5px;line-height:1.5;opacity:.45;">Hold: press starts, release delivers. The system-wide desktop shortcut always toggles.</div>' +
 					row('<span style="font-size:12px;opacity:.85;">Model</span><span data-nav="stt" style="display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.75;cursor:pointer;">' + sttNow.name + ' ' + chev + '</span>') +
 					row('<span style="font-size:12px;opacity:.85;">Real-time transcript</span><span style="font-size:10.5px;opacity:.55;">' + (sttNow.slug === 'webspeech' ? 'On (built-in)' : 'Clip mode — transcribes on Done') + '</span>') +
 					'<div class="srow" data-drum-base="" data-tkey="chi-flow-polish" data-tdef="1" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);"><span style="font-size:12px;opacity:.85;">AI enhancement (polish)</span>' + sw(localStorage.getItem('chi-flow-polish') !== '0') + '</div>' +
@@ -1470,6 +1668,33 @@
 						}
 						return;
 					}
+					// on-device model download — REAL: streams the ONNX weights with live % into the button
+					var odl = e.target.closest('.odl');
+					if (odl) {
+						var odSlug = odl.getAttribute('data-od');
+						var model = null;
+						for (var oi = 0; oi < OD_MODELS.length; oi++) if (OD_MODELS[oi].slug === odSlug) model = OD_MODELS[oi];
+						if (!model || odl.getAttribute('data-busy')) return;
+						odl.setAttribute('data-busy', '1');
+						odl.textContent = '0%';
+						var lastPct = -1;
+						self._odPipe(model, function (pev) {
+							if (pev && pev.status === 'progress') {
+								var pct = Math.round(pev.progress || 0);
+								if (pct !== lastPct) { lastPct = pct; odl.textContent = pct + '%'; }
+							}
+						}).then(function () {
+							localStorage.setItem('chi-ondevice-' + odSlug, '1');
+							self._tick(1);
+							var sl3 = r.getElementById('slist'); if (sl3) self._slistScrollKeep = sl3.scrollTop;
+							self._render(); // row becomes a selectable READY radio
+						}).catch(function (err2) {
+							odl.removeAttribute('data-busy');
+							odl.textContent = 'Retry';
+							odl.title = 'Download failed: ' + (err2 && err2.message ? err2.message : 'network/CSP') + ' — model files come from huggingface.co';
+						});
+						return;
+					}
 					// speech-model rows: radio = default STT; row tap = expand inline editor
 					var strow = e.target.closest('.strow');
 					if (strow) {
@@ -1561,6 +1786,50 @@
 				});
 				var vocabEl = r.getElementById('dict-vocab');
 				if (vocabEl) vocabEl.addEventListener('input', function () { localStorage.setItem('chi-vocab', vocabEl.value); });
+				// modes: click-to-record keyboard shortcut — press ANY combo; Esc cancels
+				var hkchip = r.getElementById('hkchip');
+				if (hkchip) hkchip.addEventListener('click', function (e9) {
+					e9.stopPropagation();
+					if (self._hkRec) return;
+					var prev = hkchip.textContent;
+					hkchip.textContent = 'Press keys…';
+					hkchip.style.borderColor = 'rgba(48,209,88,.6)';
+					var done = function () { self._hkRec = null; window.removeEventListener('keydown', cap, true); hkchip.style.borderColor = 'rgba(128,128,128,.25)'; };
+					var cap = function (ke) {
+						ke.preventDefault(); ke.stopPropagation();
+						if (ke.code === 'Escape') { hkchip.textContent = prev; done(); return; }
+						if (/^(Control|Meta|Shift|Alt)/.test(ke.code)) return; // wait for the real key
+						if (!ke.ctrlKey && !ke.metaKey && !ke.altKey && !/^F\d{1,2}$/.test(ke.code)) {
+							hkchip.textContent = 'Add ⌘/Ctrl/⌥…';
+							setTimeout(function () { if (self._hkRec) hkchip.textContent = 'Press keys…'; }, 900);
+							return;
+						}
+						var h2 = { ctrl: ke.ctrlKey, meta: ke.metaKey, alt: ke.altKey, shift: ke.shiftKey, code: ke.code, label: null };
+						localStorage.setItem('chi-flow-hotkey', JSON.stringify(h2));
+						hkchip.textContent = self._hotkeyLabel(h2);
+						self._tick(1);
+						done();
+						// desktop: swap the SYSTEM-WIDE shortcut too (best effort — false = combo taken)
+						var br = window.matterchatDesktop;
+						var accel = self._hotkeyAccel(h2);
+						if (br && br.setFlowShortcut && accel) {
+							Promise.resolve(br.setFlowShortcut(accel)).then(function (ok2) {
+								if (!ok2) hkchip.title = 'In-app shortcut set. System-wide combo unavailable (taken by another app?) — the previous one still works globally.';
+							});
+						}
+					};
+					self._hkRec = cap;
+					window.addEventListener('keydown', cap, true);
+				});
+				// modes: activation cycler (toggle ↔ push-and-hold)
+				var mact = r.getElementById('modes-activation');
+				if (mact) mact.addEventListener('click', function (e10) {
+					e10.stopPropagation();
+					var nowHold = self._flowActivation() !== 'hold';
+					localStorage.setItem('chi-flow-activation', nowHold ? 'hold' : 'toggle');
+					mact.innerHTML = (nowHold ? 'Push &amp; hold' : 'Press to toggle') + ' <svg width="12" height="12" viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+					self._tick();
+				});
 				// modes: output target cycler
 				var mt = r.getElementById('modes-target');
 				if (mt) mt.addEventListener('click', function (e8) {
@@ -1705,7 +1974,9 @@
 				'<div id="chips" style="flex-shrink:0;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:2px 92px 8px;">' + chips + '</div>' +
 				'<div style="flex-shrink:0;padding:6px 96px 44px;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
 					'<div id="flowpanel" style="display:none;width:100%;margin-bottom:6px;flex-direction:column;gap:7px;padding:9px 11px;border-radius:14px;animation:chiMsgIn .3s ease both;' + (t.card || t.chi) + '">' +
-						'<div style="display:flex;align-items:center;gap:7px;"><span style="width:7px;height:7px;border-radius:50%;background:#ff453a;animation:chiHalo 1.2s ease-in-out infinite;"></span><span style="font-size:10px;font-weight:800;letter-spacing:1.4px;">FLOW</span><span style="font-size:10px;opacity:.55;">dictate — it lands where you pick</span></div>' +
+						'<div style="display:flex;align-items:center;gap:7px;"><span style="width:7px;height:7px;border-radius:50%;background:#ff453a;animation:chiHalo 1.2s ease-in-out infinite;"></span><span style="font-size:10px;font-weight:800;letter-spacing:1.4px;color:#ff453a;">REC</span><span id="flowtime" style="font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;opacity:.85;">0:00</span>' +
+						'<span id="flowmeter" style="display:flex;align-items:flex-end;gap:2px;height:22px;margin-left:2px;">' + Array.from({ length: 14 }).map(function () { return '<span style="width:3px;height:3px;border-radius:2px;background:#ff6b60;transition:height .1s linear, opacity .15s;opacity:.4;"></span>'; }).join('') + '</span>' +
+						'<span style="margin-left:auto;font-size:10px;opacity:.55;">it lands where you pick</span></div>' +
 						'<div id="flowlive" style="max-height:64px;overflow-y:auto;font-size:12.5px;line-height:1.45;opacity:.92;">Listening…</div>' +
 						'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
 							['composer|Composer', 'chi|Ask Chi', 'copy|Copy'].map(function (o) {
@@ -1746,7 +2017,13 @@
 			var rm = this.shadowRoot.getElementById('replymic');
 			if (rm) { if (SR) rm.addEventListener('click', function () { self._mic(); }); else rm.style.display = 'none'; }
 			var fb = this.shadowRoot.getElementById('flowbtn');
-			if (fb) { if (SR) fb.addEventListener('click', function () { if (self._flow) self._flowFinish(); else self._flowStart(); }); else fb.style.display = 'none'; }
+			if (fb) {
+				fb.addEventListener('click', function () { if (self._flowActivation() === 'hold') return; if (self._flow) self._flowFinish(); else self._flowStart(); });
+				fb.addEventListener('pointerdown', function () { if (self._flowActivation() !== 'hold' || self._flow) return; self._flowStart(); });
+				var fbUp = function () { if (self._flowActivation() === 'hold' && self._flow) self._flowFinish(); };
+				fb.addEventListener('pointerup', fbUp);
+				fb.addEventListener('pointercancel', fbUp);
+			}
 			var fgo = this.shadowRoot.getElementById('flowgo'); if (fgo) fgo.addEventListener('click', function () { self._flowFinish(); });
 			var fca = this.shadowRoot.getElementById('flowcancel'); if (fca) fca.addEventListener('click', function () { self._flowCancel(); });
 			var fpanel = this.shadowRoot.getElementById('flowpanel');
