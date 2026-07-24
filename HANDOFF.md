@@ -1,3 +1,13 @@
+# HANDOFF — 2026-07-24 (Standalone-Chi auth bridge: chi.session-exchange + Chi-Desktop OmnisAI OAuth client mode)
+
+**Branch `feat/chi-session-exchange` (PR #162 → staging):** the CentralizedAuth→MatterChat auth bridge + the Chi-Desktop side (Chi-Desktop@main, shipped).
+
+1. **BE bridge** — `POST /v1/chi.session-exchange` (in `app/api/server/v1/chi.ts`; verification core `server/lib/chi/sessionExchange.ts`, Meteor-free + 25 mocha specs). HARD verification (JWS lane: EdDSA/RS256/ES256 vs issuer JWKS, iss REQUIRED, aud vs `Chi_Session_Exchange_Client_Ids` allowlist; opaque/HS* lane: live introspection at `${issuer}/api/auth/mcp/get-session`; `alg:none` terminal). Identity via the now-EXPORTED `resolveOmnisaiUser` (loginHandler refactor — same mapping web login uses). Mint = `users.createToken` internals with `when` backdated → ~30-day effective expiry, revocable. Gated `Chi_Session_Exchange_Enabled` (default OFF) + rate-limited 10/min + `postAuditEntry` line per mint.
+2. **Chi-Desktop client mode** (Chi-Desktop repo, main) — `omnisAuth.js` (PKCE, self-serve DCR, system browser, `chi://` + loopback `127.0.0.1:44145` fallback, safeStorage vault, refresh ROTATION) + `matterchat.js` (exchange → `{userId,authToken}`; chi.ask routing w/ needsConfirm passthrough + actions→browser/deep-link; DDP `stream-notify-user <uid>/notification` → orb cards; reply via chat.postMessage; Sign out revokes both). Orb Connections row = live account row (LED / Connect OmnisAI account / Sign out) via the new `orb.omnis` host hook — chi-orb.js synced BOTH repos, OMNIS_WIDGET_VERSION 14, chi-window ?v=19.
+3. **To finish QA (founder):** (a) flip `Chi_Session_Exchange_Enabled` ON on staging (Admin → Chi Assistant); (b) run Chi-Desktop from a network that reaches `auth-app.omnisai.io` — it timed out from the dev Mac (auth.omnisai.io login page too), so the OAuth leg is code-complete but not live-run; (c) if DCR is closed on prod auth, the app logs the exact registration JSON (`omnisAuth.js manualRegistrationHelp`). CI: my one new TS error fixed; remaining failures = the known fork-wide debt (boards types, license spec, E2E /api/apps flake).
+
+---
+
 # HANDOFF — 2026-07-21 PM (Teams/GChat inbound parity + Chi caller-scoping + user-pref tools + per-provider bridge sections)
 
 **Branch `feat/external-unread-dots` (continuing past merged PR #136), four workstreams in one package:**
