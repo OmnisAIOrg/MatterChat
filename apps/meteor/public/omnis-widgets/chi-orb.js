@@ -1530,6 +1530,101 @@
 				'<div id="slist" style="flex:1;overflow-y:auto;padding:16px 78px 70px;color:' + t.name + ';-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 82%, transparent 100%);">' + body + '</div>' +
 			'</div>';
 		}
+		/* Desktop only: ask the app what AI is ALREADY on this computer and render it into the
+		 * Transcription / Language-model panels — running Ollama/LM Studio (with every model you've
+		 * pulled), any local Whisper server, and speech-model files found on disk. One tap wires
+		 * the configuration. Also renders NATIVE model downloads (real files, to disk). */
+		_injectLocalAi(panel, list) {
+			var br = window.matterchatDesktop;
+			if (!br || !br.detectLocalAI || !list) return;
+			var self = this;
+			var host = document.createElement('div');
+			host.setAttribute('data-drum-base', '');
+			list.appendChild(host);
+			Promise.resolve(br.detectLocalAI()).then(function (d) {
+				if (!d || !host.isConnected) return;
+				var head = function (t2) { return '<div style="margin:12px 2px 4px;font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">' + t2 + '</div>'; };
+				var html = '';
+				if (panel === 'models') {
+					if (d.ollama.running || d.lmstudio.running) {
+						html += head('Detected on this computer — tap to use');
+						d.ollama.models.forEach(function (m4) {
+							html += '<div class="lai" data-kind="ollama" data-name="' + esc(m4.name) + '" style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);cursor:pointer;"><span style="width:7px;height:7px;border-radius:50%;background:' + GREEN + ';box-shadow:0 0 6px rgba(48,209,88,.6);flex-shrink:0;"></span><span style="flex:1;font-size:12px;opacity:.9;">' + esc(m4.name) + '</span><span style="font-size:10px;opacity:.5;">Ollama · ' + (m4.sizeGb || '?') + ' GB</span></div>';
+						});
+						d.lmstudio.models.forEach(function (m5) {
+							html += '<div class="lai" data-kind="lmstudio" data-name="' + esc(m5.name) + '" style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);cursor:pointer;"><span style="width:7px;height:7px;border-radius:50%;background:' + GREEN + ';flex-shrink:0;"></span><span style="flex:1;font-size:12px;opacity:.9;">' + esc(m5.name) + '</span><span style="font-size:10px;opacity:.5;">LM Studio</span></div>';
+						});
+						if (!d.ollama.models.length && d.ollama.running) html += '<div style="padding:6px 2px;font-size:11px;opacity:.5;">Ollama is running but has no models — `ollama pull llama3.1:8b`.</div>';
+					} else {
+						html += head('On this computer') + '<div style="padding:4px 2px;font-size:11px;opacity:.5;">No Ollama / LM Studio detected right now. Start one and reopen this panel.</div>';
+					}
+				}
+				if (panel === 'stt') {
+					html += head('Native models — download to disk (fastest, for the native runtime)');
+					var have = {};
+					(d.sttFiles || []).forEach(function (f2) { have[f2.name.replace(/\.bin$/i, '')] = f2; });
+					[['ggml-tiny.en', 'Whisper Tiny (English) · 78 MB'], ['ggml-base.en', 'Whisper Base (English) · 148 MB'], ['ggml-small.en', 'Whisper Small (English) · 488 MB'], ['ggml-large-v3-turbo-q5_0', 'Whisper Large v3 Turbo (quantized) · 574 MB']].forEach(function (pair) {
+						var got = have[pair[0]];
+						html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);"><span style="flex:1;font-size:12px;opacity:.85;">' + pair[1] + '</span>' +
+							(got ? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">ON DISK</span>'
+								: '<span class="natdl" data-nat="' + pair[0] + '" style="padding:4px 12px;border-radius:10px;cursor:pointer;font-size:10px;font-weight:800;background:rgba(59,155,255,.9);color:#fff;min-width:64px;text-align:center;">Download</span>') + '</div>';
+					});
+					if ((d.sttFiles || []).length) {
+						html += head('Speech models found on this computer');
+						d.sttFiles.forEach(function (f3) {
+							html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid rgba(128,128,128,.10);"><span style="flex:1;font-size:11.5px;opacity:.8;">' + esc(f3.name) + '</span><span style="font-size:10px;opacity:.5;">' + f3.sizeMb + ' MB</span></div>';
+						});
+					}
+					if (d.whisperServer && d.whisperServer.running) {
+						html += '<div class="lai" data-kind="whisper" data-url="' + esc(d.whisperServer.url) + '" style="display:flex;align-items:center;gap:8px;padding:8px 2px;cursor:pointer;"><span style="width:7px;height:7px;border-radius:50%;background:' + GREEN + ';"></span><span style="flex:1;font-size:12px;opacity:.9;">Local Whisper server detected at ' + esc(d.whisperServer.url) + '</span><span style="font-size:10.5px;font-weight:700;color:' + GREEN + ';">Use it →</span></div>';
+					}
+					html += '<div style="margin:6px 2px;font-size:9.5px;line-height:1.5;opacity:.45;">Native on-disk models run through the bundled runtime (next desktop release) or any local Whisper server; the in-browser models above work everywhere today.</div>';
+				}
+				host.innerHTML = html;
+				self._drumApply(list);
+				host.addEventListener('click', function (e11) {
+					var nat = e11.target.closest('.natdl');
+					if (nat && br.downloadSttModel) {
+						var nm = nat.getAttribute('data-nat');
+						if (nat.getAttribute('data-busy')) return;
+						nat.setAttribute('data-busy', '1');
+						nat.textContent = '0%';
+						if (!self._natProg && br.onSttModelProgress) {
+							self._natProg = br.onSttModelProgress(function (pr2) {
+								var b2 = host.querySelector('.natdl[data-nat="' + pr2.name + '"]');
+								if (b2) b2.textContent = pr2.pct + '%';
+							});
+						}
+						Promise.resolve(br.downloadSttModel(nm)).then(function () {
+							nat.outerHTML = '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">ON DISK</span>';
+							self._tick(1);
+						}).catch(function (e12) { nat.removeAttribute('data-busy'); nat.textContent = 'Retry'; nat.title = String((e12 && e12.message) || e12); });
+						return;
+					}
+					var lai = e11.target.closest('.lai');
+					if (!lai) return;
+					var kind = lai.getAttribute('data-kind');
+					if (kind === 'ollama') {
+						localStorage.setItem('chi-llm-ollama-url', localStorage.getItem('chi-llm-ollama-url') || 'http://localhost:11434');
+						localStorage.setItem('chi-llm-ollama-model', lai.getAttribute('data-name'));
+						localStorage.setItem('chi-model', 'ollama');
+						self.dispatchEvent(new CustomEvent('chi-pref', { detail: { model: 'ollama' }, bubbles: true, composed: true }));
+					} else if (kind === 'lmstudio') {
+						localStorage.setItem('chi-llm-lmstudio-url', localStorage.getItem('chi-llm-lmstudio-url') || 'http://localhost:1234/v1');
+						localStorage.setItem('chi-llm-lmstudio-model', lai.getAttribute('data-name'));
+						localStorage.setItem('chi-model', 'lmstudio');
+						self.dispatchEvent(new CustomEvent('chi-pref', { detail: { model: 'lmstudio' }, bubbles: true, composed: true }));
+					} else if (kind === 'whisper') {
+						localStorage.setItem('chi-stt-local-url', lai.getAttribute('data-url'));
+						localStorage.setItem('chi-stt-model', 'stt-local');
+					}
+					self._tick(1);
+					var sl4 = self.shadowRoot.getElementById('slist');
+					if (sl4) self._slistScrollKeep = sl4.scrollTop;
+					self._render();
+				});
+			}).catch(function () { /* detection is best-effort */ });
+		}
 		_wireSettings() {
 			var self = this, r = this.shadowRoot, panel = r.getElementById('settings');
 			if (!panel) return;
@@ -1862,6 +1957,7 @@
 						}).join('') : 'No microphones found.';
 					}).catch(function () { micList.textContent = 'Microphone list unavailable.'; });
 				}
+				if (this._settingsPanel === 'stt' || this._settingsPanel === 'models') this._injectLocalAi(this._settingsPanel, list);
 				this._drumify(list, 1, true);
 				if (this._slistScrollKeep != null) {
 					var ks = this._slistScrollKeep;
