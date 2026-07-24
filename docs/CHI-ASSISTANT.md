@@ -52,6 +52,13 @@ Chi spans three repos:
 - **Live REC feedback**: crimson pulsing halo, RECORDING status, elapsed timer, real AnalyserNode level meter
 - **On-device Whisper (REAL)**: vendored transformers.js (WASM) — Download buttons stream ONNX weights (Tiny/Base/Base-multi/Small) with live %, cached by the browser; transcription then runs fully offline on the user's machine. Desktop popout renders with true transparency (no shadow haze)
 
+### Mobile (phone-native surface — "C into B")
+- Server-hosted page `public/omnis-widgets/chi-mobile.html` (+ `chi-mobile.js`), loaded by the mobile app's `ChiOrbView` WebView. Live-updatable with no App Store release.
+- **State C** — a half-sheet over the chat list: grab handle, ensō, Chi's last reply, action chips, and an "Ask Chi anything…" input + mic.
+- **State B** — full-screen voice-first (Siri/ChatGPT style): breathing ensō + blue halo, LISTENING/THINKING status, live captions, chips, one big mic. Swipe up from C (or tap the mic) to expand; swipe down / the chevron collapses back.
+- Realtime voice is a **faithful copy of the desktop `chi-window.js` session core** — the proven WebRTC path is untouched; only the UI hooks (captions/chips/listening) and the navigate/close relay (→ React Native host) differ.
+- Entry point: a floating ensō button on the chats list (`ChiFab`); route registered in the app's `ChatsStack`. Reaches Chi in-app once a TestFlight build ships (needs Apple creds).
+
 ### Settings system (in the orb)
 Main ▸ Language models ▸ Transcription ▸ Dictionary ▸ Modes ▸ History ▸ Audio ▸ Capabilities ▸ Connections ▸ **What's new** — all interactions update in place (no re-render flicker).
 
