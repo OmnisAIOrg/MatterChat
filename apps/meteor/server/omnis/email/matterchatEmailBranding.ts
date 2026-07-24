@@ -2,44 +2,69 @@ import { Settings } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import { SystemLogger } from '../../lib/logger/system';
+import {
+	EMAIL_HEADER,
+	EMAIL_FOOTER,
+	EMAIL_STYLE,
+	THEME_VERSION,
+	THEMED_BODIES,
+	REPLACEABLE_SIGNATURES,
+	shouldApplyTheme,
+} from './theme';
 
 /**
- * MATTERCHAT: De-brand the stock account emails.
+ * MATTERCHAT: apply the high-end MatterChat email theme (see ./theme.ts).
  *
- * Stock Rocket.Chat's enrollment, admin-welcome and invitation email bodies all hardcode the
- * variable {Visit_Site_Url_and_try_the_best_open_source_chat_solution_available_today}, which renders
- * as "...try the best open source chat solution available today!" — Rocket.Chat marketing copy that
- * has no place in a MatterChat onboarding email.
+ * Stock Rocket.Chat account emails render in a plain, blue, Rocket.Chat-branded shell. We replace the
+ * email chrome (Email_Header / Email_Footer / email_style) and the per-template bodies (verification,
+ * forgot-password, enrollment, admin-welcome, invitation, plus our welcome email) with the branded
+ * versions, so every onboarding email looks like the MatterChat product.
  *
- * Rather than edit the stock i18n defaults or the core email settings (both merge-hostile), we
- * override the stored setting VALUE at startup, only when it still contains the Rocket.Chat marker.
- * This is:
- *   - idempotent — after the swap the marker is gone, so a re-run is a no-op;
- *   - admin-safe — if an admin has already customised the body (marker removed), we don't touch it;
- *   - live — Settings.updateValueById propagates through the settings change stream, so the mailer
- *     re-caches the branded template without a restart.
+ * Applied at startup via Settings.updateValueById, which propagates through the settings change
+ * stream so the mailer re-caches the templates without a restart. It is:
+ *   - idempotent   — each themed value carries the THEME_VERSION sentinel; a re-run is a no-op;
+ *   - upgradeable  — an older mc-email-theme-* value is replaced with the current one;
+ *   - admin-safe   — a value an admin has customised (no stock signature, no theme marker) is left
+ *                    untouched, and a message is logged instead.
  */
-const RC_MARKER = '{Visit_Site_Url_and_try_the_best_open_source_chat_solution_available_today}';
+async function maybeApply(settingId: string, value: string, signatures: string[]): Promise<void> {
+	const setting = await Settings.findOneById(settingId, { projection: { value: 1 } });
+	const current = typeof setting?.value === 'string' ? setting.value : undefined;
 
-const BRANDED_COPY =
-	"Your account is ready — MatterChat is your team's secure hub for messaging, boards, and Chi, your built-in AI assistant.";
+	if (!shouldApplyTheme(current, signatures)) {
+		if (current && !current.includes(THEME_VERSION)) {
+			SystemLogger.info({ msg: 'MatterChat email theme: skipping admin-customised setting', setting: settingId });
+		}
+		return;
+	}
 
-const TEMPLATE_SETTINGS = ['Accounts_Enrollment_Email', 'Accounts_UserAddedEmail_Email', 'Invitation_Email'];
+	await Settings.updateValueById(settingId, value);
+	SystemLogger.info({ msg: 'MatterChat email theme: applied', setting: settingId });
+}
 
-export function applyMatterChatEmailBranding(): void {
+export function applyMatterChatEmailTheme(): void {
 	Meteor.startup(async () => {
-		for (const settingId of TEMPLATE_SETTINGS) {
-			try {
-				const setting = await Settings.findOneById(settingId, { projection: { value: 1 } });
-				const value = setting?.value;
-
-				if (typeof value === 'string' && value.includes(RC_MARKER)) {
-					await Settings.updateValueById(settingId, value.split(RC_MARKER).join(BRANDED_COPY));
-					SystemLogger.info({ msg: 'MatterChat: rebranded account email template', setting: settingId });
-				}
-			} catch (err) {
-				SystemLogger.error({ msg: 'MatterChat: failed to rebrand account email template', setting: settingId, err });
+		try {
+			// The shell (header/footer/style) is applied as ONE gated unit, keyed on the Email_Header
+			// value: apply all three only if the header is still stock (or an older theme) — never over
+			// an admin-customised header — and skip entirely once the current theme is in place.
+			const header = await Settings.findOneById('Email_Header', { projection: { value: 1 } });
+			const headerValue = typeof header?.value === 'string' ? header.value : undefined;
+			if (shouldApplyTheme(headerValue, ['If you delete this tag'])) {
+				await Settings.updateValueById('Email_Header', EMAIL_HEADER);
+				await Settings.updateValueById('Email_Footer', EMAIL_FOOTER);
+				await Settings.updateValueById('email_style', EMAIL_STYLE);
+				SystemLogger.info({ msg: 'MatterChat email theme: applied shell (header/footer/style)' });
+			} else if (headerValue && !headerValue.includes(THEME_VERSION)) {
+				SystemLogger.info({ msg: 'MatterChat email theme: skipping admin-customised email shell' });
 			}
+
+			// Per-template bodies.
+			for (const [settingId, body] of Object.entries(THEMED_BODIES)) {
+				await maybeApply(settingId, body, REPLACEABLE_SIGNATURES[settingId] ?? []);
+			}
+		} catch (err) {
+			SystemLogger.error({ msg: 'MatterChat email theme: failed to apply', err });
 		}
 	});
 }

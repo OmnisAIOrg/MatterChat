@@ -5,8 +5,8 @@
  * during server boot. Runs the one-time email de-branding at startup and exposes the welcome-email
  * sender used by server/methods/registerUser.ts.
  */
-import { applyMatterChatEmailBranding } from './matterchatEmailBranding';
+import { applyMatterChatEmailTheme } from './matterchatEmailBranding';
 
 export { sendMatterChatWelcomeEmail } from './matterchatWelcomeEmail';
 
-applyMatterChatEmailBranding();
+applyMatterChatEmailTheme();

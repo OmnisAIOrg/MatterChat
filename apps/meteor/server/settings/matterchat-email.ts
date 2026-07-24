@@ -1,4 +1,5 @@
 import { settingsRegistry } from '../../app/settings/server';
+import { WELCOME_BODY } from '../omnis/email/theme';
 
 /**
  * MATTERCHAT: New-user onboarding email settings.
@@ -33,22 +34,12 @@ export const createMatterChatEmailSettings = () =>
 				i18nLabel: 'Subject',
 			});
 
-			await this.add(
-				'MatterChat_Welcome_Email',
-				[
-					'<h2>Welcome to MatterChat</h2>',
-					'<p>Hi [name], your MatterChat account is ready to go.</p>',
-					"<p>MatterChat is your team's secure home for messaging, boards, and Chi — your built-in AI assistant. Sign in any time to pick up right where your team left off.</p>",
-					'<a class="btn" target="_blank" href="[Site_URL]">Open MatterChat</a>',
-					"<p class=\"advice\">If you didn't create this account, you can safely ignore this email.</p>",
-				].join(''),
-				{
-					type: 'code',
-					code: 'text/html',
-					multiline: true,
-					public: false,
-					i18nLabel: 'Body',
-				},
-			);
+			await this.add('MatterChat_Welcome_Email', WELCOME_BODY, {
+				type: 'code',
+				code: 'text/html',
+				multiline: true,
+				public: false,
+				i18nLabel: 'Body',
+			});
 		});
 	});
