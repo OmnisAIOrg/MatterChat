@@ -399,7 +399,9 @@ API.v1.addRoute(
 			if (!issuer) {
 				return API.v1.failure('OmnisAI OIDC issuer is not configured.');
 			}
-			const authHeader = this.request.headers.get('authorization') || '';
+			// Route not declared in rest-typings, so `this` types as Operations<never> (same as chi.ask).
+			const { request } = this as unknown as { request: { headers: { get(name: string): string | null } } };
+			const authHeader = request.headers.get('authorization') || '';
 			const bearer = /^Bearer\s+(.+)$/i.exec(authHeader)?.[1]?.trim();
 			if (!bearer) {
 				return API.v1.unauthorized();

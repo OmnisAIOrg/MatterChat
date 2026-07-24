@@ -222,6 +222,9 @@
 	// The in-product feature ledger (Settings → What's new). Mirrors docs/CHI-ASSISTANT.md.
 	var WHATSNEW = [
 		{ label: 'This build — live', items: [
+			'Connect OmnisAI account — one-click OAuth sign-in (standalone Chi)',
+			'MatterChat workspace brain — chi.ask tools + Confirm/Cancel from anywhere',
+			'MatterChat notifications land in the standalone orb — reply right from a card',
 			'On-device Whisper — download once, transcribe offline',
 			'Configurable dictation shortcut + push-and-hold mode',
 			'Live REC feedback — level meter, timer, red halo',
@@ -245,7 +248,7 @@
 			'On-device speech models (Parakeet, Whisper) — downloads',
 			'More speech providers (Deepgram, ElevenLabs, …)',
 			'Connectors: DepoLink, OmnisProof, MedChron, AutoDoc, LitDraft',
-			'Omnis OAuth — one identity across every product',
+			'Omnis OAuth across every product (MatterChat is live)',
 			'Email: Outlook + Gmail',
 			'Computer control · files & documents · automations',
 			'Memory, daily briefing, wake word “Hey Chi”',
@@ -273,6 +276,7 @@
 			this.onvoiceend = null;
 			this.onaction = null;       // host hook: run an action chip (desktop wires this to the live voice turn)
 			this.onreply = null;        // host hook: route a notification reply back to its room (Phase 2)
+			this.omnis = null;          // host hook (standalone): { get():{connected,userId}, connect():Promise, disconnect():Promise } — drives the MatterChat row in Connections
 			this.ondrop = null;         // host hook: something was dropped on the orb (file / text)
 			this._replyTo = null;       // the notification currently being replied to
 			this._pending = [];         // notifications queued while minimized or in focus mode
@@ -1511,6 +1515,20 @@
 						'<span style="font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.5;">' + g.label + '</span>' +
 						'<span style="font-size:10px;opacity:.5;">+ ' + g.add + '</span></div>';
 					var rows = g.items.map(function (it) {
+						// Standalone host: the MatterChat row becomes the live account row — status LED +
+						// one-click "Connect OmnisAI account" (OAuth in the system browser) or Sign out.
+						// Hosted-in-MatterChat (no orb.omnis) renders the classic BUILT IN row untouched.
+						if (it.slug === 'matterchat' && self.omnis) {
+							var os = (function () { try { return self.omnis.get() || {}; } catch (e2) { return {}; } })();
+							var led2 = '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + (os.connected ? GREEN : 'rgba(128,128,128,.4)') + ';box-shadow:' + (os.connected ? '0 0 6px rgba(48,209,88,.6)' : 'none') + ';"></span>';
+							var right = os.connected
+								? '<span style="display:flex;align-items:center;gap:8px;"><span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">CONNECTED</span>' +
+									'<span id="conn-omnis-act" data-act="out" style="font-size:10.5px;opacity:.65;cursor:pointer;text-decoration:underline;white-space:nowrap;">Sign out</span></span>'
+								: '<span id="conn-omnis-act" data-act="in" style="font-size:10.5px;font-weight:700;padding:5px 11px;border-radius:11px;cursor:pointer;white-space:nowrap;color:#fff;background:rgba(48,209,88,.85);box-shadow:0 2px 8px rgba(48,209,88,.35);">Connect OmnisAI account</span>';
+							return '<div class="srow" data-drum-base="" data-conn="matterchat" data-locked="1" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
+								'<span style="display:flex;align-items:center;gap:7px;min-width:0;">' + led2 + '<span style="font-size:12px;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span></span>' +
+								right + '</div>';
+						}
 						var b = it.builtin ? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:8px;background:rgba(48,209,88,.16);border:1px solid rgba(48,209,88,.35);color:' + GREEN + ';">BUILT IN</span>' : (it.ready ? '' : badge('SOON'));
 						var on = it.builtin || localStorage.getItem('chi-conn-' + it.slug) === '1';
 						return '<div class="srow" data-drum-base="" data-conn="' + it.slug + '" data-locked="' + (it.builtin || !it.ready ? '1' : '') + '" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(128,128,128,.13);">' +
@@ -1733,6 +1751,22 @@
 				list.addEventListener('click', function (e) {
 					var navEl = e.target.closest('[data-nav]');
 					if (navEl) { self._settingsPanel = navEl.getAttribute('data-nav'); self._render(); return; }
+					// Standalone MatterChat row: Connect OmnisAI account (OAuth in the system browser) / Sign out.
+					var omnisAct = e.target.closest('#conn-omnis-act');
+					if (omnisAct && self.omnis) {
+						var signingOut = omnisAct.getAttribute('data-act') === 'out';
+						omnisAct.style.opacity = '.5';
+						omnisAct.textContent = signingOut ? 'Signing out…' : 'Waiting for the browser…';
+						Promise.resolve(signingOut ? self.omnis.disconnect() : self.omnis.connect()).then(function () {
+							self._settingsPanel = 'connections'; self._render(); self._tick(1);
+						}).catch(function (err3) {
+							omnisAct.style.opacity = '1';
+							omnisAct.textContent = signingOut ? 'Sign out' : 'Connect OmnisAI account';
+							omnisAct.title = (err3 && err3.message) || 'Sign-in failed — try again.';
+							self.history.push({ kind: 'notif', sender: 'Chi', app: 'OmnisAI sign-in', color: '#e0483d', avatar: '!', text: String((err3 && err3.message) || 'Sign-in failed — try again.').slice(0, 300) });
+						});
+						return;
+					}
 					// capability toggles — FE-local reminders (and live-feature switches)
 					var capEl = e.target.closest('[data-tkey]');
 					if (capEl) {
