@@ -6,9 +6,12 @@ import { GenericCard, GenericCardButton } from '../../../components/GenericCard'
 import { useExternalLink } from '../../../hooks/useExternalLink';
 import { links } from '../../../lib/links';
 
-const WINDOWS_APP_URL = links.go.desktopAppWindows;
-const LINUX_APP_URL = links.go.desktopAppLinux;
-const MAC_APP_URL = links.go.desktopAppMac;
+// MatterChat's OWN desktop app — always the newest release (never a pinned version; the
+// releases repo marks exactly one release Latest and the CI publishes non-draft by rule).
+const DESKTOP_LATEST = 'https://github.com/OmnisAIOrg/MatterChat-Desktop-releases/releases/latest';
+const WINDOWS_APP_URL = DESKTOP_LATEST;
+const LINUX_APP_URL = DESKTOP_LATEST;
+const MAC_APP_URL = DESKTOP_LATEST;
 
 const DesktopAppsCard = (props: Omit<ComponentProps<typeof Card>, 'type'>) => {
 	const { t } = useTranslation();
