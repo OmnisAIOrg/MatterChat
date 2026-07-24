@@ -21,7 +21,7 @@ const makeError = (message: string): Record<string, any> => ({
 	error: new Meteor.Error(Accounts.LoginCancelledError.numericError, message),
 });
 
-type OmnisAIProfile = {
+export type OmnisAIProfile = {
 	sub: string;
 	email?: string;
 	name?: string;
@@ -49,7 +49,16 @@ async function uniqueUsername(base: string): Promise<string> {
 	return `${cleaned}-${Date.now()}`;
 }
 
-async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: string; token: string }> {
+/**
+ * The ONE identity mapping for OmnisAI/CentralizedAuth subjects — find-or-create the
+ * MatterChat user for a verified profile and refresh the persisted link. Shared by this
+ * login handler AND the Chi session-exchange bridge (/v1/chi.session-exchange), so a
+ * member lands on the SAME MatterChat account whether they arrive through the web OIDC
+ * flow or a standalone Chi client: match `services.omnisai.id` (the CentralizedAuth
+ * UUID == CasePro users.id) first, fall back to verified email, create otherwise.
+ * Returns the MatterChat userId; token minting stays with each caller.
+ */
+export async function resolveOmnisaiUser(profile: OmnisAIProfile): Promise<string> {
 	let user = await Users.findOne({ 'services.omnisai.id': profile.sub });
 	if (!user && profile.email) {
 		user = await Users.findOneByEmailAddress(profile.email);
@@ -108,14 +117,20 @@ async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: str
 		SystemLogger.info({ msg: 'OmnisAI login: promoted first user to admin (workspace had no admin)', userId: user._id });
 	}
 
+	return user._id;
+}
+
+async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: string; token: string }> {
+	const userId = await resolveOmnisaiUser(profile);
+
 	// Mint a stamped login token so Meteor establishes the session for this user.
 	const stampedToken = Accounts._generateStampedLoginToken();
 	await Users.addPersonalAccessTokenToUser({
-		userId: user._id,
+		userId,
 		loginTokenObject: stampedToken as unknown as IPersonalAccessToken,
 	});
 
-	return { userId: user._id, token: stampedToken.token };
+	return { userId, token: stampedToken.token };
 }
 
 /**
