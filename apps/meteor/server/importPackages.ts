@@ -84,6 +84,8 @@ import '../app/meteor-accounts-saml/server';
 import '../app/omnisai-oauth/server';
 // MATTERCHAT: new-user onboarding emails (welcome email + account-email de-branding).
 import './omnis/email';
+// MATTERCHAT: startup config fixes (OIDC signups, ToS/Privacy, 2FA method, CasePro URL).
+import './omnis/config';
 import '../app/e2e/server';
 import '../app/version-check/server';
 import '../app/search/server';
