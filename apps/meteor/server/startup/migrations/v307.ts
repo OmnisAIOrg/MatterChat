@@ -13,8 +13,10 @@ addMigration({
 			return;
 		}
 
+		// MATTERCHAT: no Apps-Engine orchestrator on a pure-MIT workspace — no apps to migrate.
+		// Return instead of throwing so fresh databases don't crash at boot.
 		if (!Apps.self) {
-			throw new Error('Apps Orchestrator not registered.');
+			return;
 		}
 
 		Apps.initialize();

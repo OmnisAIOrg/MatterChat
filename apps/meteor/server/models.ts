@@ -105,6 +105,8 @@ import type { Collection } from 'mongodb';
 
 import { trashCollection } from './database/trash';
 import { db } from './database/utils';
+// MATTERCHAT: MIT read-receipts archive model (was registered only from the EE tree upstream).
+import { ReadReceiptsArchiveRaw } from './models/raw/ReadReceiptsArchive';
 
 registerModel('IAnalyticsModel', new AnalyticsRaw(db));
 registerModel('IAppLogsModel', new AppsLogsModel(db));
@@ -192,6 +194,10 @@ registerModel('IOEmbedCacheModel', new OEmbedCacheRaw(db));
 registerModel('IPermissionsModel', new PermissionsRaw(db, trashCollection));
 registerModel('IPushTokenModel', new PushTokenRaw(db));
 registerModel('IReadReceiptsModel', new ReadReceiptsRaw(db));
+// MATTERCHAT: registered alongside IReadReceiptsModel so the `ReadReceiptsArchive` proxy
+// (deleteMessage/cleanRoomHistory/deleteUser/livechat rooms+guests/moderation) never throws
+// `Model IReadReceiptsArchiveModel not found` once the EE model startup stops loading.
+registerModel('IReadReceiptsArchiveModel', new ReadReceiptsArchiveRaw(db));
 registerModel('IReportsModel', new ReportsRaw(db));
 registerModel('IRolesModel', new RolesRaw(db, trashCollection));
 registerModel('IRoomsModel', new RoomsRaw(db, trashCollection));

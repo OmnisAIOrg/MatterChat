@@ -3,7 +3,7 @@ import { UploadBridge } from '@rocket.chat/apps/dist/server/bridges/UploadBridge
 import type { IUpload } from '@rocket.chat/apps-engine/definition/uploads';
 import type { IUploadDetails } from '@rocket.chat/apps-engine/definition/uploads/IUploadDetails';
 
-import { determineFileType } from '../../../../ee/lib/misc/determineFileType';
+import { determineFileType } from '../../../../lib/misc/determineFileType';
 import { FileUpload } from '../../../file-upload/server';
 import { sendFileMessage } from '../../../file-upload/server/methods/sendFileMessage';
 import { sendFileLivechatMessage } from '../../../livechat/server/methods/sendFileLivechatMessage';

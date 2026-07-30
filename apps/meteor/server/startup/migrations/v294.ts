@@ -6,8 +6,11 @@ import { addMigration } from '../../lib/migrations';
 addMigration({
 	version: 294,
 	async up() {
+		// MATTERCHAT: the Apps-Engine orchestrator (EE) is removed — on a workspace without it
+		// there are no installed apps to migrate, so this is a clean no-op instead of a boot crash
+		// (a fresh database runs every migration; throwing here would brick new instances).
 		if (!Apps.self) {
-			throw new Error('Apps Orchestrator not registered.');
+			return;
 		}
 
 		Apps.initialize();

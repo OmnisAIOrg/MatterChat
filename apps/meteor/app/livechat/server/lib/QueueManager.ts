@@ -26,7 +26,10 @@ import { checkOnlineForDepartment } from './departmentsLib';
 import { afterInquiryQueued, afterRoomQueued, beforeDelegateAgent, beforeRouteChat, onNewRoom } from './hooks';
 import { checkOnlineAgents, getOnlineAgents } from './service-status';
 import { getInquirySortMechanismSetting } from './settings';
-import { dispatchInquiryPosition } from '../../../../ee/app/livechat-enterprise/server/lib/Helper';
+// MATTERCHAT: the EE waiting-queue (livechat-enterprise) is removed with the Enterprise tree,
+// and MatterChat does not use Omnichannel. Position dispatch becomes a no-op; the surrounding
+// gate (`Livechat_waiting_queue`) is an EE-only feature that is never enabled here.
+const dispatchInquiryPosition = async (_inquiry: unknown): Promise<void> => undefined;
 import { client, shouldRetryTransaction } from '../../../../server/database/utils';
 import { sendNotification } from '../../../lib/server';
 import { notifyOnLivechatInquiryChangedById, notifyOnLivechatInquiryChanged } from '../../../lib/server/lib/notifyListener';

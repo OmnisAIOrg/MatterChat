@@ -6,6 +6,8 @@ import './initialData';
 import './serverRunning';
 import './coreApps';
 import { generateFederationKeys } from './generateKeys';
+// MATTERCHAT: MIT presence Meteor wiring (EE removal plan step 3b) — marks users online/offline
+import './presence';
 import './presenceTroubleshoot';
 import '../hooks';
 import '../lib/rooms/roomTypes';

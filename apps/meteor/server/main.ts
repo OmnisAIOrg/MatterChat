@@ -12,7 +12,7 @@ import { registerServices } from './services/startup';
 import { startup } from './startup';
 import { startRestAPI } from '../app/api/server/api';
 import { settings } from '../app/settings/server';
-import { startupApp } from '../ee/server';
+// MATTERCHAT: the EE tree is removed (pure-MIT fork) — no '../ee/server' startupApp anymore.
 import { startRocketChat } from '../startRocketChat';
 
 import './routes';
@@ -27,5 +27,5 @@ import './features/EmailInbox/index';
 await Promise.all([configureServer(settings), registerServices(), startup()]);
 
 await startRocketChat();
-await startupApp();
+// MATTERCHAT: startupApp() (EE) removed with the EE tree.
 await startRestAPI();
