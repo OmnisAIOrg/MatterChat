@@ -62,7 +62,17 @@ export function applyMatterChatConfigFixes(): void {
 				SystemLogger.warn('MatterChat config fix: 2FA framework was on with no usable method — enabled TOTP.');
 			}
 
-			// 4. Real ToS/Privacy while the stock placeholder is still being served.
+			// 4. Air-gap countdown tombstone: the EE code that updated this setting is gone, so the
+			// last-written value is frozen in Mongo (9-10 days at removal time). The client banner
+			// treats any NEGATIVE value as fully unrestricted (useAirGappedRestriction.ts), so pin -1
+			// once and the banner class of issue is permanently closed.
+			const remaining = await Settings.findOneById('Cloud_Workspace_AirGapped_Restrictions_Remaining_Days', { projection: { value: 1 } });
+			if (typeof remaining?.value === 'number' && remaining.value >= 0) {
+				await Settings.updateValueById('Cloud_Workspace_AirGapped_Restrictions_Remaining_Days', -1);
+				SystemLogger.warn('MatterChat config fix: pinned the orphaned air-gap countdown setting to -1 (unrestricted).');
+			}
+
+			// 5. Real ToS/Privacy while the stock placeholder is still being served.
 			const STOCK_PLACEHOLDER = 'APP SETTINGS';
 			const tos = await getString('Layout_Terms_of_Service');
 			if (tos?.includes(STOCK_PLACEHOLDER)) {
