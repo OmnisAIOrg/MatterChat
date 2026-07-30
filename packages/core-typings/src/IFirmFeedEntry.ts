@@ -31,6 +31,13 @@ export interface IFirmFeedEntry extends IRocketChatRecord {
 	/** Pinned entries sort to the top of their section. */
 	pinned?: boolean;
 	/**
+	 * MATTERCHAT: owning firm (`customFields.firmId` of the author) when self-serve firms
+	 * are enabled. The feed is otherwise workspace-global, which would show one firm's
+	 * birthdays and announcements to every other firm. Absent = workspace-wide: legacy
+	 * entries and entries authored by a workspace admin stay visible to everyone.
+	 */
+	firmId?: string;
+	/**
 	 * Soft-delete / visibility flag. `false` hides the entry from `firm-feed.list`
 	 * without removing it. Absent is treated as active.
 	 */

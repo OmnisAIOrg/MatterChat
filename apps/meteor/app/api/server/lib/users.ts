@@ -6,6 +6,8 @@ import type { Filter, FindOptions, RootFilterOperators } from 'mongodb';
 
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { settings } from '../../../settings/server';
+// MATTERCHAT: self-serve firms — cohort scoping for user enumeration.
+import { getFirmScopeExtraQuery } from '../../../../server/lib/firms/firmsService';
 
 type UserAutoComplete = Required<Pick<IUser, '_id' | 'name' | 'username' | 'nickname' | 'status' | 'avatarETag'>>;
 
@@ -20,7 +22,14 @@ export async function findUsersToAutocomplete({
 }> {
 	const searchFields = settings.get<string>('Accounts_SearchFields').trim().split(',');
 	const exceptions = selector.exceptions || [];
-	const conditions = selector.conditions || {};
+	// MATTERCHAT: self-serve firms — restrict autocomplete to the caller's firm cohort.
+	// This endpoint powers the DM picker, add-member pickers and mention autocomplete, and
+	// the `view-outside-room` branch below enumerates ALL active users — so without this it
+	// leaks every other firm's member list. Merging into `conditions` covers both the
+	// subscription-based and the workspace-wide branch. Returns null (no-op) when the
+	// feature/scoping settings are off or the caller is an admin.
+	const firmScope = await getFirmScopeExtraQuery(uid);
+	const conditions = { ...(selector.conditions || {}), ...(firmScope || {}) };
 	const options: FindOptions<IUser> & { limit: number } = {
 		projection: {
 			name: 1,

@@ -10,6 +10,8 @@ import { createRoom } from '../../app/lib/server/functions/createRoom';
 import { RateLimiterClass as RateLimiter } from '../../app/lib/server/lib/RateLimiter';
 import { settings } from '../../app/settings/server';
 import { callbacks } from '../lib/callbacks';
+// MATTERCHAT: self-serve firms — cohort check so firms can't DM across the boundary.
+import { getFirmScopeExtraQuery, userMatchesFirmScope } from '../lib/firms/firmsService';
 
 export async function createDirectMessage(
 	usernames: IUser['username'][],
@@ -72,6 +74,27 @@ export async function createDirectMessage(
 
 	if (excludeSelf && (await hasPermissionAsync(userId, 'view-room-administration'))) {
 		options.subscriptionExtra = { open: true };
+	}
+
+	// MATTERCHAT: self-serve firms — block DMs across the firm boundary. Directory scoping
+	// only hides people from search; without this gate a member who learns any username
+	// (from a shared public channel, a leaked link, or guesswork) can still open a DM with
+	// another firm, which defeats the scoping entirely. Null scope (feature/scoping off, or
+	// the caller is an admin) leaves stock behaviour untouched.
+	const firmScope = await getFirmScopeExtraQuery(userId);
+	if (firmScope) {
+		const targetUsernames = usernames.filter((username) => username !== me.username);
+		if (targetUsernames.length) {
+			const targets = await Users.find(
+				{ username: { $in: targetUsernames } },
+				{ projection: { username: 1, customFields: 1 } },
+			).toArray();
+			if (targets.some((target) => !userMatchesFirmScope(target, firmScope))) {
+				throw new Meteor.Error('error-not-allowed', 'Not allowed', {
+					method: 'createDirectMessage',
+				});
+			}
+		}
 	}
 
 	const extraData = {};
