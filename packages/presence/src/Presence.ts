@@ -66,12 +66,12 @@ export class Presence extends ServiceClass implements IPresence {
 		async (user) => this.restoreExpiredStatus(user),
 	);
 
-	async started(): Promise<void> {
+	override async started(): Promise<void> {
 		// the first run also collects connections left behind by a previous boot of this node
 		this.reaper.start();
 	}
 
-	async stopped(): Promise<void> {
+	override async stopped(): Promise<void> {
 		this.reaper.stop();
 	}
 
