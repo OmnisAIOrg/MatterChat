@@ -29,6 +29,8 @@ import { createMobileSettings } from './mobile';
 import { createOauthSettings } from './oauth';
 import { createOmniSettings } from './omnichannel';
 import { createOmnisAIOAuthSettings } from './omnisai';
+// MATTERCHAT: MIT re-declaration of the EE-only Calendar_BusyStatus_Enabled setting (EE removal).
+import { createOutlookCalendarSettings } from './outlook-calendar';
 import { createPushSettings } from './push';
 import { createRateLimitSettings } from './rate';
 import { createRetentionSettings } from './retention-policy';
@@ -80,6 +82,7 @@ await Promise.all([
 	createMobileSettings(),
 	createOauthSettings(),
 	createOmniSettings(),
+	createOutlookCalendarSettings(), // MATTERCHAT: EE-removal — re-declares Calendar_BusyStatus_Enabled in MIT.
 	createPushSettings(),
 	createRateLimitSettings(),
 	createRetentionSettings(),

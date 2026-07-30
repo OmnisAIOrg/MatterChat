@@ -1,7 +1,7 @@
 import { api } from '@rocket.chat/core-services';
-import { Logger } from '@rocket.chat/logger';
-import { OmnichannelTranscript, QueueWorker } from '@rocket.chat/omnichannel-services';
-import { MongoInternals } from 'meteor/mongo';
+// MATTERCHAT: @rocket.chat/omnichannel-services (EE: PDF transcripts + queue worker) removed
+// with the Enterprise tree — MatterChat does not use Omnichannel. MongoInternals/i18n imports
+// went with it (they only fed the removed QueueWorker/OmnichannelTranscript constructors).
 
 import { AuthorizationLivechat } from '../../app/livechat/server/roomAccessValidator.internalService';
 import { isRunningMs } from '../lib/isRunningMs';
@@ -31,11 +31,8 @@ import { UiKitCoreAppService } from './uikit-core-app/service';
 import { UploadService } from './upload/service';
 import { UserService } from './user/service';
 import { VideoConfService } from './video-conference/service';
-import { i18n } from '../lib/i18n';
 
 export const registerServices = async (): Promise<void> => {
-	const { db } = MongoInternals.defaultRemoteCollectionDriver().mongo;
-
 	api.registerService(new AppsEngineService());
 	api.registerService(new AnalyticsService());
 	api.registerService(new AuthorizationLivechat());
@@ -74,11 +71,6 @@ export const registerServices = async (): Promise<void> => {
 
 		api.registerService(new Presence());
 		api.registerService(new Authorization());
-
-		// Run EE services defined outside of the main repo
-		// Otherwise, monolith would ignore them :(
-		// Always register the service and manage licensing inside the service (tbd)
-		api.registerService(new QueueWorker(db, Logger));
-		api.registerService(new OmnichannelTranscript(Logger, i18n));
+		// MATTERCHAT: EE QueueWorker/OmnichannelTranscript registrations removed (pure-MIT fork).
 	}
 };

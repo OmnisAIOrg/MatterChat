@@ -1,7 +1,9 @@
 import { api, FederationMatrix, isMeteorError } from '@rocket.chat/core-services';
 import type { IUser, SlashCommandCallbackParams } from '@rocket.chat/core-typings';
 import { isBannedSubscription } from '@rocket.chat/core-typings';
-import { validateFederatedUsername } from '@rocket.chat/federation-matrix';
+// MATTERCHAT: Matrix federation (EE) is removed — no username is ever treated as federated,
+// which also keeps the FederationMatrix service call below unreachable.
+const validateFederatedUsername = (_username: string): boolean => false;
 import { Subscriptions, Users, Rooms } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 

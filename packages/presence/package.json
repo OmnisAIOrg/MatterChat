@@ -1,0 +1,32 @@
+{
+	"name": "@rocket.chat/presence",
+	"version": "0.2.57",
+	"private": true,
+	"main": "./dist/Presence.js",
+	"typings": "./dist/Presence.d.ts",
+	"files": [
+		"/dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+		"lint": "eslint .",
+		"lint:fix": "eslint --fix .",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@rocket.chat/core-services": "workspace:^",
+		"@rocket.chat/core-typings": "workspace:^",
+		"@rocket.chat/models": "workspace:^",
+		"mongodb": "6.16.0"
+	},
+	"devDependencies": {
+		"@rocket.chat/tsconfig": "workspace:*",
+		"@types/node": "~22.19.17",
+		"eslint": "~9.39.4",
+		"typescript": "~5.9.3"
+	},
+	"volta": {
+		"extends": "../../package.json"
+	}
+}

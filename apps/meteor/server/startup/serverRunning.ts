@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { License } from '@rocket.chat/license';
+// MATTERCHAT: License import removed with the hashed-URL banner line (pure-MIT fork).
 // import { Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 import semver from 'semver';
@@ -50,7 +50,6 @@ Meteor.startup(async () => {
 			`           Platform: ${process.platform}`,
 			`       Process Port: ${process.env.PORT}`,
 			`           Site URL: ${settings.get<string>('Site_Url')}`,
-			`    Hashed Site URL: ${License.getHashedWorkspaceUrl()}`,
 		];
 
 		if (Info.commit?.hash) {

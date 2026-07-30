@@ -45,7 +45,8 @@ import { authenticationMiddlewareForHono } from './middlewares/authenticationHon
 import { permissionsMiddleware } from './middlewares/permissions';
 import type { APIActionContext } from './router';
 import { RocketChatAPIRouter } from './router';
-import { license } from '../../../ee/app/api-enterprise/server/middlewares/license';
+// MATTERCHAT: MIT port — the EE tree is removed; the middleware lives beside the other MIT ones.
+import { license } from './middlewares/license';
 import { isObject } from '../../../lib/utils/isObject';
 import { getNestedProp } from '../../../server/lib/getNestedProp';
 import { shouldBreakInVersion } from '../../../server/lib/shouldBreakInVersion';

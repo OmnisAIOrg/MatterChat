@@ -8,6 +8,8 @@ import { boardsDigestCron } from './boardsDigestCron';
 import { boardsCalendarSyncCron } from './boardsCalendarSyncCron';
 import { boardsMattersCron } from './boardsMattersCron';
 import { caseproClientSyncCron } from './caseproClientSyncCron';
+// MATTERCHAT: MIT port of the read-receipts archive job (was EE-only upstream).
+import { readReceiptsArchiveCron } from './readReceiptsArchive';
 
 export const startCron = async () => {
 	const started = await cronJobs.start((MongoInternals.defaultRemoteCollectionDriver().mongo as any).client.db());
@@ -33,5 +35,9 @@ export const startCron = async () => {
 	// Boards two-way calendar sync (Phase 3): every 15 min, push due-dated cards to connected
 	// Google/Outlook calendars and poll for calendar-side changes — gated by Boards_Calendar_Sync_Enabled.
 	await boardsCalendarSyncCron();
+	// MATTERCHAT: read-receipts archival — moves ReadReceipts docs older than
+	// Message_Read_Receipt_Archive_Retention_Days into `read_receipts_archive`, gated by
+	// Message_Read_Receipt_Archive_Enabled, schedule from Message_Read_Receipt_Archive_Cron.
+	await readReceiptsArchiveCron();
 	return started;
 };

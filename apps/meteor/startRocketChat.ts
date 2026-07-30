@@ -1,19 +1,7 @@
-import { startLicense } from './ee/app/license/server/startup';
-import { registerEEBroker } from './ee/server';
-import { startFederationService as startFederationMatrixService } from './ee/server/startup/federation';
-
-const loadBeforeLicense = async () => {
-	await registerEEBroker();
-};
-
-const loadAfterLicense = async () => {
-	await startFederationMatrixService();
-};
-
+// MATTERCHAT: pure-MIT boot path. This file used to start the Enterprise stack (EE broker,
+// license service, Matrix federation service); MatterChat removed the EE tree entirely
+// (docs/design/MATTERCHAT-EE-REMOVAL-PLAN.md), so — like upstream's FOSS build — there is
+// nothing licensed to start here.
 export const startRocketChat = async () => {
-	await loadBeforeLicense();
-
-	await startLicense();
-
-	await loadAfterLicense();
+	// Nothing to do here
 };
