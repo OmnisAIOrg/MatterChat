@@ -39,7 +39,7 @@ import { generatePersonalAccessTokenOfUser } from '../../../../imports/personal-
 import { regeneratePersonalAccessTokenOfUser } from '../../../../imports/personal-access-tokens/server/api/methods/regenerateToken';
 import { removePersonalAccessTokenOfUser } from '../../../../imports/personal-access-tokens/server/api/methods/removeToken';
 import { UserChangedAuditStore } from '../../../../server/lib/auditServerEvents/userChanged';
-import { getFirmScopeExtraQuery } from '../../../../server/lib/firms/firmsService';
+import { getFirmScopeExtraQuery, userMatchesFirmScope } from '../../../../server/lib/firms/firmsService';
 import { i18n } from '../../../../server/lib/i18n';
 import { SystemLogger } from '../../../../server/lib/logger/system';
 import { resetUserE2EEncriptionKey } from '../../../../server/lib/resetUserE2EKey';
@@ -607,6 +607,17 @@ API.v1.get(
 		}
 
 		const myself = user._id === this.userId;
+
+		// MATTERCHAT: self-serve firms — don't resolve a user in another firm's cohort.
+		// Without this, any member can look up any other firm's user by id/username/email.
+		// Returns the same "not found" as a genuinely missing user so the endpoint can't be
+		// used to probe for existence. Self is always allowed; admins are exempt via the scope.
+		if (!myself) {
+			const firmScope = await getFirmScopeExtraQuery(this.userId);
+			if (!userMatchesFirmScope(user, firmScope)) {
+				return API.v1.failure('User not found.');
+			}
+		}
 
 		if (this.queryParams.includeUserRooms === 'true' && (myself || (await hasPermissionAsync(this.userId, 'view-other-user-channels')))) {
 			return API.v1.success({
@@ -1537,6 +1548,13 @@ API.v1.get(
 
 		const { from, ids } = this.queryParams;
 
+		// MATTERCHAT: self-serve firms — presence must not enumerate other firms' members.
+		// With no params this endpoint returns EVERY online user workspace-wide. The model
+		// helpers below take a fixed query, so we scope the results instead: pull firmId into
+		// the projection only while scoping is active, filter by cohort, then strip it back
+		// out so firmId never reaches the client. Null scope (feature off / admin) = no-op.
+		const firmScope = await getFirmScopeExtraQuery(this.userId);
+
 		const options = {
 			projection: {
 				username: 1,
@@ -1547,12 +1565,20 @@ API.v1.get(
 				statusSource: 1,
 				statusExpiresAt: 1,
 				avatarETag: 1,
+				...(firmScope ? { 'customFields.firmId': 1 } : {}),
 			},
+		};
+
+		const scopeUsers = (users: Record<string, any>[]): Record<string, any>[] => {
+			if (!firmScope) {
+				return users;
+			}
+			return users.filter((user) => userMatchesFirmScope(user, firmScope)).map(({ customFields, ...rest }) => rest);
 		};
 
 		if (ids) {
 			return API.v1.success({
-				users: await Users.findNotOfflineByIds(Array.isArray(ids) ? ids : ids.split(','), options).toArray(),
+				users: scopeUsers(await Users.findNotOfflineByIds(Array.isArray(ids) ? ids : ids.split(','), options).toArray()),
 				full: false,
 			});
 		}
@@ -1563,14 +1589,14 @@ API.v1.get(
 
 			if (diff < 10) {
 				return API.v1.success({
-					users: await Users.findNotIdUpdatedFrom(this.userId, ts, options).toArray(),
+					users: scopeUsers(await Users.findNotIdUpdatedFrom(this.userId, ts, options).toArray()),
 					full: false,
 				});
 			}
 		}
 
 		return API.v1.success({
-			users: await Users.findUsersNotOffline(options).toArray(),
+			users: scopeUsers(await Users.findUsersNotOffline(options).toArray()),
 			full: true,
 		});
 	},

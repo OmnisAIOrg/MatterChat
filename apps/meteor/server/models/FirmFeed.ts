@@ -48,6 +48,8 @@ export type FirmFeedCreateInput = {
 	eventDate?: Date;
 	pinned?: boolean;
 	createdBy: IFirmFeedEntry['createdBy'];
+	/** MATTERCHAT: owning firm; omitted for workspace-wide entries. */
+	firmId?: string;
 };
 
 export type FirmFeedUpdatePatch = {
@@ -62,6 +64,21 @@ export const FirmFeed = {
 	/** All active entries (soft-deleted excluded), pinned first then newest. */
 	findActive(): FindCursor<IFirmFeedEntry> {
 		return collection.find({ active: { $ne: false } }, { sort: { pinned: -1, createdAt: -1 } });
+	},
+
+	/**
+	 * MATTERCHAT: active entries visible to one firm — the firm's own entries plus
+	 * workspace-wide ones (no `firmId`: legacy entries and admin-authored announcements).
+	 * `firmId: null` means "unstamped cohort", which sees only workspace-wide entries.
+	 */
+	findActiveForFirm(firmId: string | null): FindCursor<IFirmFeedEntry> {
+		return collection.find(
+			{
+				active: { $ne: false },
+				...(firmId ? { $or: [{ firmId }, { firmId: { $exists: false } }] } : { firmId: { $exists: false } }),
+			},
+			{ sort: { pinned: -1, createdAt: -1 } },
+		);
 	},
 
 	findOneById(id: string): Promise<IFirmFeedEntry | null> {
@@ -79,6 +96,7 @@ export const FirmFeed = {
 			pinned: Boolean(input.pinned),
 			active: true,
 			createdBy: input.createdBy,
+			...(input.firmId ? { firmId: input.firmId } : {}),
 			createdAt: now,
 			updatedAt: now,
 			_updatedAt: now,

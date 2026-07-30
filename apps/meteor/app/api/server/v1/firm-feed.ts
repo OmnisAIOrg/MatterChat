@@ -11,6 +11,8 @@ import {
 import { Meteor } from 'meteor/meteor';
 
 import { FirmFeed } from '../../../../server/models/FirmFeed';
+// MATTERCHAT: self-serve firms — scope the bulletin to the caller's firm.
+import { getFirmScopeExtraQuery } from '../../../../server/lib/firms/firmsService';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 
@@ -30,6 +32,22 @@ import { API } from '../api';
  */
 
 const MANAGE_PERMISSION = 'firm-feed-manage';
+
+/**
+ * MATTERCHAT: the caller's firm cohort for feed scoping.
+ *  - `undefined` → no scoping at all (self-serve firms off, scoping off, or caller is an
+ *                  admin): the full workspace feed, i.e. stock behaviour.
+ *  - `string`    → that firm's entries plus workspace-wide ones.
+ *  - `null`      → unstamped cohort: workspace-wide entries only.
+ */
+const getCallerFirmId = async (userId: string | null): Promise<string | null | undefined> => {
+	const scope = await getFirmScopeExtraQuery(userId);
+	if (!scope) {
+		return undefined;
+	}
+	const cond = (scope as Record<string, unknown>)['customFields.firmId'];
+	return typeof cond === 'string' ? cond : null;
+};
 
 const PERMISSIVE_SUCCESS = ajv.compile<{ success: true }>({
 	type: 'object',
@@ -86,7 +104,12 @@ API.v1.get(
 	},
 	async function action() {
 		// Any authenticated user may read the feed — no manage permission required.
-		const entries = await FirmFeed.findActive().toArray();
+		// MATTERCHAT: self-serve firms — the feed is workspace-global by default, which would
+		// show one firm's birthdays, shout-outs and announcements to every other firm. Scope
+		// it to the caller's own firm plus workspace-wide (unstamped) entries. Admins and the
+		// feature-off case fall through to the unscoped listing.
+		const firmId = await getCallerFirmId(this.userId);
+		const entries = await (firmId === undefined ? FirmFeed.findActive() : FirmFeed.findActiveForFirm(firmId)).toArray();
 		return API.v1.success({ entries: orderEntries(entries) });
 	},
 );
@@ -109,6 +132,9 @@ API.v1.post(
 		}
 
 		const { kind, title, body, eventDate, pinned } = this.bodyParams;
+		// MATTERCHAT: stamp the author's firm so the entry stays inside it. A workspace admin
+		// (no firm cohort → undefined) posts workspace-wide, which is the intended behaviour.
+		const authorFirmId = await getCallerFirmId(uid);
 		const entry = await FirmFeed.create({
 			kind,
 			title: title.trim(),
@@ -116,6 +142,7 @@ API.v1.post(
 			...(parseEventDate(eventDate) ? { eventDate: parseEventDate(eventDate) } : {}),
 			...(pinned !== undefined ? { pinned } : {}),
 			createdBy: { _id: uid, username: this.user.username, name: this.user.name },
+			...(authorFirmId ? { firmId: authorFirmId } : {}),
 		});
 
 		return API.v1.success({ entry });
