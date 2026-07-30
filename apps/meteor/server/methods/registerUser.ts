@@ -10,6 +10,9 @@ import { validateInviteToken } from '../../app/invites/server/functions/validate
 import { validateEmailDomain, passwordPolicy, RateLimiter } from '../../app/lib/server';
 import { settings } from '../../app/settings/server';
 import { trim } from '../../lib/utils/stringUtils';
+// MATTERCHAT: onboarding emails + visible logging for account-email failures.
+import { SystemLogger } from '../lib/logger/system';
+import { sendMatterChatWelcomeEmail } from '../omnis/email';
 
 declare module '@rocket.chat/ddp-client' {
 	// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -122,11 +125,19 @@ export const registerUser = async (
 		await Users.setReason(userId, reason);
 	}
 
+	// MATTERCHAT: verification-email failures used to be swallowed silently (empty catch). Log them so
+	// SMTP problems are visible in the server logs — but keep it non-fatal: a failed email must never
+	// roll back a successful registration or lock the new user out (verification is not enforced).
 	try {
 		Accounts.sendVerificationEmail(userId, userData.email);
 	} catch (error) {
-		// throw new Meteor.Error 'error-email-send-failed', 'Error trying to send email: ' + error.message, { method: 'registerUser', message: error.message }
+		SystemLogger.error({ msg: 'Failed to send verification email on registration', to: userData.email, err: error });
 	}
+
+	// MATTERCHAT: also send the branded "Welcome to MatterChat" email to self-registered users, in
+	// addition to the verification email. Fire-and-forget and non-fatal (has its own try/catch and an
+	// enabled toggle) so it never blocks registration.
+	void sendMatterChatWelcomeEmail({ email: userData.email, name: userData.name });
 
 	return userId;
 };
