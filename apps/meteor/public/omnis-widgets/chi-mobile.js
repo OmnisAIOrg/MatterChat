@@ -25,7 +25,7 @@
 	'use strict';
 	var API = '/api/v1/chi.ask';
 	var RT_API = '/api/v1/chi.realtime-session';
-	var ENSO = '/omnis-widgets/enso-assets/omnis-enso-bristle.svg';
+	var ENSO = '/omnis-widgets/enso-assets/enso-particle-alpha.png';
 	var RN = window.ReactNativeWebView || null; // present when hosted in the mobile app's WebView
 	var DEFAULT_ACTIONS = [
 		{ label: 'Summarize my day', command: 'Catch me up — what needs my attention?' },
@@ -205,11 +205,11 @@
 
 		function build() {
 			var root = document.body;
-			css(root, "margin:0;height:100vh;overflow:hidden;background:#0d1014;color:#eef2f7;" +
+			css(root, "margin:0;height:100vh;overflow:hidden;background:#0B0F0C;color:#EDF2EE;" +
 				"font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;-webkit-user-select:none;user-select:none;");
 
 			// ── faint chat context behind the sheet (C keeps you oriented) ───────────────────────
-			var ctx = make('div', 'position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 14px) 16px 0;opacity:.4;font-size:12.5px;line-height:2.3;transition:opacity .4s;pointer-events:none;', root);
+			var ctx = make('div', 'position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 14px) 16px 0;opacity:.4;font-size:12.5px;line-height:2.3;transition:opacity .4s,transform .5s cubic-bezier(.34,1.15,.4,1);transform-origin:top center;pointer-events:none;', root);
 			ctx.innerHTML = '<div style="font-weight:800;letter-spacing:.5px;opacity:.8;margin-bottom:4px">Chats</div>';
 			els.ctx = ctx;
 
@@ -220,8 +220,8 @@
 
 			// ── the morphing surface: sheet (C) ⇄ voice (B) ──────────────────────────────────────
 			var surf = make('div', 'position:fixed;left:0;right:0;bottom:0;top:38%;border-radius:26px 26px 0 0;' +
-				'background:radial-gradient(140% 100% at 50% 0%,#171c23,#0a0c10 72%);border-top:1px solid rgba(255,255,255,.12);' +
-				'box-shadow:0 -18px 60px rgba(0,0,0,.55);transition:top .42s cubic-bezier(.4,0,.2,1),border-radius .42s,background .5s;' +
+				'background:radial-gradient(140% 100% at 50% 0%,#17201A,#0A0E0B 72%);border-top:1px solid rgba(255,255,255,.12);' +
+				'box-shadow:0 -18px 60px rgba(0,0,0,.55);transition:top .5s cubic-bezier(.34,1.15,.4,1),border-radius .5s,background .5s;' +
 				'display:flex;flex-direction:column;align-items:center;overflow:hidden;touch-action:none;', root);
 			els.surf = surf;
 
@@ -232,13 +232,14 @@
 
 			// ── ensō + halo (grows in voice mode) ────────────────────────────────────────────────
 			var stage = make('div', 'position:relative;flex:none;display:flex;align-items:center;justify-content:center;transition:height .42s,margin .42s;height:96px;margin-top:6px;', surf);
-			var halo = make('div', 'position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(90,160,255,.30),transparent 66%);opacity:0;transition:opacity .5s,width .42s,height .42s;width:150px;height:150px;', stage);
+			var halo = make('div', 'position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(47,164,74,.32),transparent 66%);opacity:0;transition:opacity .5s,width .42s,height .42s;width:150px;height:150px;', stage);
 			var enso = make('img', 'position:relative;width:58px;height:50px;object-fit:contain;transition:width .42s,height .42s;', stage);
 			enso.src = ENSO; enso.alt = 'Chi';
+			enso.classList.add('chi-breathe'); // design: the ensō always breathes (3.2s idle / 2.6s voice)
 			els.stage = stage; els.halo = halo; els.enso = enso;
 
 			// label / status
-			var label = make('div', 'flex:none;font-size:10px;font-weight:800;letter-spacing:2.4px;color:#8fb6e6;margin-top:4px;height:14px;', surf);
+			var label = make('div', 'flex:none;font-size:10px;font-weight:800;letter-spacing:2.4px;color:#8fc9a0;margin-top:4px;height:14px;', surf);
 			label.textContent = 'CHI';
 			els.label = label;
 
@@ -261,15 +262,15 @@
 			var input = make('input', 'flex:1;background:transparent;border:0;outline:none;color:#eef2f7;font-size:15px;', field);
 			input.placeholder = 'Ask Chi anything…'; input.type = 'text';
 			input.setAttribute('enterkeyhint', 'send'); input.autocapitalize = 'sentences';
-			var micSm = make('button', 'flex:none;width:44px;height:44px;border-radius:50%;border:0;background:rgba(48,209,88,.92);' +
+			var micSm = make('button', 'flex:none;width:44px;height:44px;border-radius:50%;border:0;background:#2FA44A;' +
 				'color:#fff;font-size:19px;display:flex;align-items:center;justify-content:center;', inputRow);
 			micSm.innerHTML = micSvg('#fff');
 			els.inputRow = inputRow; els.input = input; els.micSm = micSm;
 
 			// ── big mic (B) — the one voice control ─────────────────────────────────────────────────
 			var micBig = make('button', 'position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translateX(-50%) scale(.6);' +
-				'width:70px;height:70px;border-radius:50%;border:0;background:rgba(48,209,88,.94);color:#fff;' +
-				'box-shadow:0 10px 30px rgba(48,209,88,.4);display:flex;align-items:center;justify-content:center;' +
+				'width:70px;height:70px;border-radius:50%;border:0;background:#2FA44A;color:#fff;' +
+				'box-shadow:0 10px 30px rgba(47,164,74,.4);display:flex;align-items:center;justify-content:center;' +
 				'opacity:0;pointer-events:none;transition:opacity .35s,transform .42s,background .3s;z-index:4;', surf);
 			micBig.innerHTML = micSvg('#fff', 26);
 			els.micBig = micBig;
@@ -304,8 +305,9 @@
 			var voice = mode === 'voice';
 			els.surf.style.top = voice ? '0' : '38%';
 			els.surf.style.borderRadius = voice ? '0' : '26px 26px 0 0';
-			els.surf.style.background = voice ? 'radial-gradient(90% 60% at 50% 26%,#10151c,#05070a)' : 'radial-gradient(140% 100% at 50% 0%,#171c23,#0a0c10 72%)';
+			els.surf.style.background = voice ? 'radial-gradient(90% 60% at 50% 26%,#101914,#050705)' : 'radial-gradient(140% 100% at 50% 0%,#17201A,#0A0E0B 72%)';
 			els.ctx.style.opacity = voice ? '0' : '.4';
+			els.ctx.style.transform = voice ? 'scale(.94)' : 'scale(1)';
 			els.stage.style.height = voice ? '170px' : '96px';
 			els.stage.style.marginTop = voice ? 'calc(env(safe-area-inset-top) + 70px)' : '6px';
 			els.enso.style.width = voice ? '128px' : '58px';
@@ -382,26 +384,38 @@
 		}
 		function setChips(actions) {
 			els.chips.innerHTML = '';
+			// Confirm-gate card (design §2a): when Chi parks a write action, the Confirm/Cancel
+			// pair renders inside a bordered card with the mandatory permissions/audit footer.
+			// Purely presentational — the chips' handlers (runConfirm) are untouched.
+			var isGate = Array.isArray(actions) && actions.some(function (a) { return a && a.command === 'confirm'; });
+			els.chips.style.background = isGate ? 'rgba(47,164,74,.10)' : 'transparent';
+			els.chips.style.border = isGate ? '1px solid rgba(47,164,74,.30)' : '0';
+			els.chips.style.borderRadius = isGate ? '16px' : '0';
+			els.chips.style.margin = isGate ? '0 18px' : '0';
 			(actions || []).slice(0, 4).forEach(function (a) {
 				if (!a || !a.label) return;
 				var chip = make('button', 'padding:8px 14px;border-radius:15px;font-size:12.5px;font-weight:600;border:1px solid rgba(255,255,255,.16);' +
-					'background:' + (a.command === 'confirm' ? 'rgba(48,209,88,.9)' : 'rgba(255,255,255,.08)') + ';color:#eef2f7;', els.chips);
+					'background:' + (a.command === 'confirm' ? '#2FA44A' : 'rgba(47,164,74,.14)') + ';border-color:' + (a.command === 'confirm' ? '#2FA44A' : 'rgba(47,164,74,.35)') + ';color:#EDF2EE;', els.chips);
 				chip.textContent = a.label;
 				chip.addEventListener('click', function () { onChip(a.command || a.label); });
 			});
+			if (isGate) {
+				var gateNote = make('div', 'flex-basis:100%;text-align:center;font-size:10.5px;color:#8fc9a0;opacity:.9;padding:2px 8px 6px;', els.chips);
+				gateNote.textContent = 'Runs with your permissions · logged to #chi-audit';
+			}
 		}
 		function setListening(on) {
 			listening = on;
-			els.micBig.style.background = on ? 'rgba(255,69,58,.94)' : 'rgba(48,209,88,.94)';
-			els.micBig.style.boxShadow = on ? '0 0 0 0 rgba(255,69,58,.5)' : '0 10px 30px rgba(48,209,88,.4)';
+			els.micBig.style.background = on ? '#E1053C' : 'rgba(48,209,88,.94)';
+			els.micBig.style.boxShadow = on ? '0 0 0 0 rgba(225,5,60,.5)' : '0 10px 30px rgba(47,164,74,.4)';
 			els.micBig.classList.toggle('chi-live', on);
-			els.enso.classList.toggle('chi-breathe', on);
+			els.enso.classList.toggle('chi-breathe-fast', on);
 			setStatus(on ? 'listening' : (mode === 'voice' ? 'idle' : 'chi'));
 		}
 		function setStatus(kind) {
 			var map = { chi: 'CHI', idle: 'TAP TO SPEAK', connecting: 'CONNECTING…', listening: 'LISTENING…', thinking: 'THINKING…' };
 			els.label.textContent = map[kind] || 'CHI';
-			els.label.style.color = kind === 'listening' ? '#3b9bff' : (kind === 'thinking' ? '#8fb6e6' : '#8fb6e6');
+			els.label.style.color = kind === 'listening' ? '#48C46A' : '#8fc9a0';
 			els.label.classList.toggle('chi-pulse', kind === 'listening' || kind === 'connecting');
 		}
 		function toast(msg) { els.toast.textContent = msg; els.toast.style.opacity = '1'; clearTimeout(toast._t); toast._t = setTimeout(function () { els.toast.style.opacity = '0'; }, 4200); }
@@ -413,10 +427,11 @@
 	var style = document.createElement('style');
 	style.textContent =
 		'@keyframes chiBreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}' +
-		'.chi-breathe{animation:chiBreathe 2.4s ease-in-out infinite}' +
+		'.chi-breathe{animation:chiBreathe 3.2s ease-in-out infinite}' +
+		'.chi-breathe-fast{animation:chiBreathe 2.6s ease-in-out infinite}' +
 		'@keyframes chiPulse{0%,100%{opacity:1}50%{opacity:.45}}' +
 		'.chi-pulse{animation:chiPulse 1.6s ease-in-out infinite}' +
-		'@keyframes chiLive{0%{box-shadow:0 0 0 0 rgba(255,69,58,.5)}70%{box-shadow:0 0 0 18px rgba(255,69,58,0)}100%{box-shadow:0 0 0 0 rgba(255,69,58,0)}}' +
+		'@keyframes chiLive{0%{box-shadow:0 0 0 0 rgba(225,5,60,.5)}70%{box-shadow:0 0 0 18px rgba(225,5,60,0)}100%{box-shadow:0 0 0 0 rgba(225,5,60,0)}}' +
 		'.chi-live{animation:chiLive 1.8s ease-out infinite}' +
 		'*{-webkit-tap-highlight-color:transparent}';
 	document.head.appendChild(style);
