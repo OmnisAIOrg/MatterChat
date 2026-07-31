@@ -1,16 +1,18 @@
 import { Team } from '@rocket.chat/core-services';
-import type { IUser, ITeam } from '@rocket.chat/core-typings';
+import type { IRoom, IUser, ITeam } from '@rocket.chat/core-typings';
 import { TeamType } from '@rocket.chat/core-typings';
 import { Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
 import { FIRM_NAME_MAX, FIRM_NAME_MIN, MAX_INVITES_PER_CALL, normalizeFirmName, partitionEmails, slugifyFirmName } from './firmsHelpers';
+import { firmCohortFromScope, firmRoomScopeQuery, withPreservedRoomFirmId } from './firmsRoomScope';
 import { findOrCreateInvite } from '../../../app/invites/server/functions/findOrCreateInvite';
 import * as Mailer from '../../../app/mailer/server/api';
 import { settings } from '../../../app/settings/server';
 
 export { normalizeFirmName, slugifyFirmName, partitionEmails, userMatchesFirmScope } from './firmsHelpers';
+export { firmCohortFromScope, firmRoomScopeQuery, roomMatchesFirmScope, withPreservedRoomFirmId } from './firmsRoomScope';
 
 /**
  * MATTERCHAT: Self-serve firms.
@@ -102,7 +104,14 @@ export const createFirm = async (userId: string, rawName: unknown): Promise<Firm
 
 	// Mark the team main room as a firm room so invite redemption can adopt
 	// joiners into the firm (see useInviteToken), and stamp the creator.
-	await Rooms.updateOne({ _id: team.roomId }, { $set: { 'customFields.firmTeam': true, 'customFields.firmName': name } });
+	// The firmId stamp must happen HERE (not in the beforeCreateRoom callback):
+	// Team.create runs BEFORE the owner's customFields.firmId is written below,
+	// so the callback sees an unstamped owner and would leave the firm's own
+	// home room globally enumerable.
+	await Rooms.updateOne(
+		{ _id: team.roomId },
+		{ $set: { 'customFields.firmTeam': true, 'customFields.firmName': name, 'customFields.firmId': team._id } },
+	);
 	await Users.updateOne(
 		{ _id: userId },
 		{ $set: { 'customFields.firmId': team._id, 'customFields.firmName': name, 'customFields.firmRole': 'owner' } },
@@ -207,4 +216,50 @@ export const getFirmScopeExtraQuery = async (userId: string | null | undefined):
 		return { 'customFields.firmId': firmId } as Filter<IUser>;
 	}
 	return { 'customFields.firmId': { $exists: false } } as Filter<IUser>;
+};
+
+/**
+ * The caller's firm cohort, collapsed from getFirmScopeExtraQuery:
+ * `undefined` = no scoping (feature off / scoping off / admin), `string` = the
+ * caller's firmId, `null` = unstamped caller. Shared by the Firm Feed and the
+ * room-enumeration scope so there is exactly ONE cohort definition.
+ */
+export const getCallerFirmCohort = async (userId: string | null | undefined): Promise<string | null | undefined> =>
+	firmCohortFromScope(await getFirmScopeExtraQuery(userId));
+
+/**
+ * Room-enumeration scoping (spotlight, directory, channels.list, teams
+ * autocomplete…). Returns a Mongo filter fragment to compose INSIDE a `$and`
+ * of room searches, or null when no scoping applies. NOTE the room cohort
+ * semantics differ from the user directory: rooms with NO firmId are
+ * legacy/workspace-wide and stay visible to every cohort. Pass the caller's
+ * subscribed room ids as `memberRoomIds` on surfaces that list rooms the
+ * caller is already in — membership always wins over the firm stamp.
+ */
+export const getFirmRoomScopeExtraQuery = async (
+	userId: string | null | undefined,
+	memberRoomIds?: string[],
+): Promise<Filter<IRoom> | null> => firmRoomScopeQuery(await getCallerFirmCohort(userId), memberRoomIds);
+
+/**
+ * Guard for `saveRoomSettings roomCustomFields` (wholesale replace of
+ * room.customFields, gated only by edit-room): non-admins always keep the
+ * room's existing firmId — they can neither strip it (making a firm room
+ * globally enumerable) nor forge another firm's. Admins pass through
+ * untouched, so an admin can deliberately un-stamp a room to make it
+ * workspace-wide.
+ */
+export const sanitizeRoomCustomFieldsForActor = async (
+	actorId: string,
+	room: Pick<IRoom, 'customFields'>,
+	incoming: Record<string, any>,
+): Promise<Record<string, any>> => {
+	if (!isSelfServeFirmsEnabled()) {
+		return incoming;
+	}
+	const actor = await Users.findOneById(actorId, { projection: { roles: 1 } });
+	if (actor?.roles?.includes('admin')) {
+		return incoming;
+	}
+	return withPreservedRoomFirmId(room.customFields as Record<string, unknown> | undefined, incoming);
 };
