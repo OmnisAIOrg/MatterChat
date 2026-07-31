@@ -36,6 +36,7 @@ import { SystemLogger } from '../../../server/lib/logger/system';
 import { settings } from '../../settings/server';
 
 import './loginHandler';
+import './orgBackfill';
 import './litboxProxy';
 import './crossFirmProxy';
 import './setupWizard';

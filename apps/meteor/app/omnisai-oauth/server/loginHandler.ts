@@ -14,7 +14,15 @@ import { Meteor } from 'meteor/meteor';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
 import { encryptToken } from './litboxCrypto';
-import { provisionOrgFromRoster } from './orgProvision';
+import {
+	claimOrgProvision,
+	getOrgProvision,
+	markOrgProvisionDone,
+	markOrgProvisionFailed,
+	provisionOrgFromRoster,
+	stampFirmIdFromOrg,
+} from './orgProvision';
+import { parseOrgAdminRoles, qualifiesToProvisionOrg, shouldSkipProvisionTrigger } from './orgProvisionHelpers';
 
 const makeError = (message: string): Record<string, any> => ({
 	type: 'omnisai',
@@ -105,6 +113,15 @@ export async function resolveOmnisaiUser(profile: OmnisAIProfile): Promise<strin
 		},
 	);
 
+	// Firm scoping (PR #166) reads `customFields.firmId` — stamp it from the org claim on
+	// EVERY login (create AND revisit; both the web OIDC lane and the Chi session-exchange
+	// lane funnel through here). Guarded + never-throw inside: an existing different firmId
+	// (e.g. a self-serve firm's Team _id) is kept and warn-logged, never overwritten. With
+	// the firms feature off this is harmless metadata (scoping stays a no-op).
+	if (profile.orgId) {
+		await stampFirmIdFromOrg(user._id, profile.orgId, 'login');
+	}
+
 	// Bootstrap admin: stock Rocket.Chat makes the very first user an admin, but that runs in the
 	// setup-wizard / password-registration path — NOT on this OmnisAI OIDC login path, which creates
 	// users with globalRoles ['user']. Without this, the first person to sign in via OmnisAI lands as
@@ -134,13 +151,19 @@ async function upsertOmnisaiUser(profile: OmnisAIProfile): Promise<{ userId: str
 }
 
 /**
- * On a firm ADMIN's first OmnisAI login that carries an orgId, mirror the firm's
- * CasePro team into MatterChat (see orgProvision.ts — fetches the org roster and
- * pre-creates each teammate's linked account). Gated + idempotent:
- *  - only an admin triggers it (the bulk import is an org-wide action);
- *  - a per-admin marker (services.omnisai.provisionedOrgId) is set only AFTER a
- *    successful run, so a transient auth-side failure retries on the next login;
- *  - the import dedups by sub/email, so a concurrent double-trigger is harmless.
+ * On the first OmnisAI login of one of an org's admins, mirror the org's CasePro
+ * team into MatterChat (see orgProvision.ts — fetches the org roster and
+ * pre-creates each teammate's linked, firm-stamped account). Gated + idempotent:
+ *  - trigger = a WORKSPACE admin (original org-#1 behavior) OR an ORG admin per
+ *    the `casepro:role` claim (env MATTERCHAT_ORG_ADMIN_ROLES, default
+ *    'admin,owner') — org #2+'s admins never get MatterChat workspace-admin, so
+ *    the old workspace-admin-only gate structurally dead-ended them;
+ *  - done-ness lives in the per-ORG marker collection `matterchat_org_provisions`
+ *    (NOT per-admin — the legacy services.omnisai.provisionedOrgId field is no
+ *    longer written; orgBackfill.ts seeds markers from it once). The claim upsert
+ *    is the concurrency lock; 'failed' (or stale-'pending') re-arms on the next
+ *    qualifying login. To force a re-run, ops deletes the org's marker doc.
+ *  - the import dedups by sub/email, so even a racing double-run is harmless.
  * Runs in the background — the login round-trip never waits on it — and never
  * throws: a provisioning hiccup must not break sign-in.
  */
@@ -149,31 +172,42 @@ async function maybeAutoProvisionOrg(userId: string, profile: OmnisAIProfile): P
 		if (!profile.orgId) {
 			return;
 		}
-		const user = await Users.findOne(
-			{ _id: userId },
-			{ projection: { roles: 1, 'services.omnisai.provisionedOrgId': 1 } },
-		);
+		const user = await Users.findOne({ _id: userId }, { projection: { roles: 1 } });
 		if (!user) {
 			return;
 		}
-		const isAdmin = Array.isArray((user as any).roles) && (user as any).roles.includes('admin');
-		if (!isAdmin) {
-			return; // only an org admin bulk-provisions the team
-		}
-		if ((user as any)?.services?.omnisai?.provisionedOrgId === profile.orgId) {
-			return; // this admin already provisioned this org
+		const qualifies = qualifiesToProvisionOrg({
+			workspaceRoles: (user as any).roles,
+			orgRole: profile.role,
+			orgAdminRoles: parseOrgAdminRoles(process.env.MATTERCHAT_ORG_ADMIN_ROLES),
+		});
+		if (!qualifies) {
+			return; // only an admin bulk-provisions the team
 		}
 
 		const orgId = profile.orgId;
+		// Cheap pre-check (the common path on every later admin login): 'done', or a
+		// fresh run already in flight → nothing to do without contending for the claim.
+		if (shouldSkipProvisionTrigger(await getOrgProvision(orgId), new Date())) {
+			return;
+		}
+		if (!(await claimOrgProvision(orgId, userId))) {
+			return; // another login won the race (or the org just finished)
+		}
+
 		// Background: never block the login round-trip on the roster fetch + N inserts.
 		setImmediate(() => {
 			provisionOrgFromRoster(orgId)
-				.then((ok) => {
-					if (ok) {
-						return Users.updateOne({ _id: userId }, { $set: { 'services.omnisai.provisionedOrgId': orgId } });
+				.then((result) => {
+					if (result.ok) {
+						return markOrgProvisionDone(orgId, result.counts);
 					}
+					return markOrgProvisionFailed(orgId, result.reason);
 				})
-				.catch((err) => SystemLogger.error({ msg: 'OmnisAI auto-provision (deferred) failed', err }));
+				.catch(async (err) => {
+					SystemLogger.error({ msg: 'OmnisAI auto-provision (deferred) failed', err });
+					await markOrgProvisionFailed(orgId, err instanceof Error ? err.message : 'unknown').catch(() => undefined);
+				});
 		});
 	} catch (err) {
 		// Best-effort: a failure here must never break the login.
