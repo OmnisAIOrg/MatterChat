@@ -45,7 +45,8 @@ export class InvitesRaw extends BaseRaw<IInvite> implements IInvitesModel {
 	 * Returns the updated invite, or null when the cap was already reached.
 	 */
 	async consumeUseById(_id: string): Promise<IInvite | null> {
-		return this.col.findOneAndUpdate(
+		// BaseRaw wrapper (not this.col) so `_updatedAt` is maintained, matching increaseUsageById
+		return this.findOneAndUpdate(
 			{
 				_id,
 				$or: [{ maxUses: { $lte: 0 } }, { maxUses: { $exists: false } }, { $expr: { $lt: ['$uses', '$maxUses'] } }],
