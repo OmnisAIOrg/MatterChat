@@ -10,6 +10,35 @@ export const FIRM_NAME_MIN = 2;
 export const FIRM_NAME_MAX = 60;
 export const MAX_INVITES_PER_CALL = 25;
 
+/**
+ * Firm invite-link hardening: the values the Firms_Invite_* select settings
+ * offer. Days MUST stay a subset of findOrCreateInvite's possibleDays and
+ * maxUses a subset of its possibleUses; 0 (unlimited) is deliberately absent
+ * from both — every firm invite link is finite.
+ */
+export const FIRM_INVITE_ALLOWED_DAYS = [1, 3, 7, 15, 30];
+export const FIRM_INVITE_ALLOWED_MAX_USES = [5, 10, 25, 50, 100];
+export const FIRM_INVITE_DEFAULT_DAYS = 3;
+export const FIRM_INVITE_DEFAULT_MAX_USES = 25;
+
+const parseInviteLimit = (raw: unknown, allowed: number[], fallback: number): number => {
+	const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw.trim()) : NaN;
+	return Number.isInteger(value) && allowed.includes(value) ? value : fallback;
+};
+
+/**
+ * Resolves the firm invite-link limits from raw setting values. Select
+ * settings store the chosen option's STRING key, and OVERWRITE_SETTING_* env
+ * seeding can inject arbitrary values, so both inputs are parsed and checked
+ * against the allowed lists; anything unrecognized falls back to the hardened
+ * defaults (3 days / 25 uses) — never to unlimited, and never to a value
+ * findOrCreateInvite would reject with invalid-number-of-days/-uses.
+ */
+export const resolveInviteLimits = (rawDays: unknown, rawMaxUses: unknown): { days: number; maxUses: number } => ({
+	days: parseInviteLimit(rawDays, FIRM_INVITE_ALLOWED_DAYS, FIRM_INVITE_DEFAULT_DAYS),
+	maxUses: parseInviteLimit(rawMaxUses, FIRM_INVITE_ALLOWED_MAX_USES, FIRM_INVITE_DEFAULT_MAX_USES),
+});
+
 /** Strips control chars, collapses whitespace. Returns null if unusable. */
 export const normalizeFirmName = (raw: unknown): string | null => {
 	if (typeof raw !== 'string') {

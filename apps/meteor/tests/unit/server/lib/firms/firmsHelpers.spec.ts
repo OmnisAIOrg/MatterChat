@@ -3,8 +3,13 @@ import { expect } from 'chai';
 import {
 	normalizeFirmName,
 	partitionEmails,
+	resolveInviteLimits,
 	slugifyFirmName,
 	userMatchesFirmScope,
+	FIRM_INVITE_ALLOWED_DAYS,
+	FIRM_INVITE_ALLOWED_MAX_USES,
+	FIRM_INVITE_DEFAULT_DAYS,
+	FIRM_INVITE_DEFAULT_MAX_USES,
 	FIRM_NAME_MAX,
 } from '../../../../../server/lib/firms/firmsHelpers';
 
@@ -51,6 +56,43 @@ describe('firms helpers', () => {
 			const { valid, invalid } = partitionEmails([42, null, 'a@b.co'], isValidEmail);
 			expect(valid).to.deep.equal(['a@b.co']);
 			expect(invalid).to.deep.equal([]);
+		});
+	});
+
+	describe('resolveInviteLimits', () => {
+		it('parses the string keys select settings store', () => {
+			expect(resolveInviteLimits('7', '50')).to.deep.equal({ days: 7, maxUses: 50 });
+			expect(resolveInviteLimits('1', '5')).to.deep.equal({ days: 1, maxUses: 5 });
+		});
+		it('accepts plain numbers', () => {
+			expect(resolveInviteLimits(30, 100)).to.deep.equal({ days: 30, maxUses: 100 });
+		});
+		it('falls back to the hardened defaults for undefined/null', () => {
+			expect(resolveInviteLimits(undefined, undefined)).to.deep.equal({
+				days: FIRM_INVITE_DEFAULT_DAYS,
+				maxUses: FIRM_INVITE_DEFAULT_MAX_USES,
+			});
+			expect(resolveInviteLimits(null, null)).to.deep.equal({ days: 3, maxUses: 25 });
+		});
+		it('falls back for out-of-list values (OVERWRITE_SETTING_* junk)', () => {
+			expect(resolveInviteLimits('5', '7')).to.deep.equal({ days: 3, maxUses: 25 });
+			expect(resolveInviteLimits('9999', '-1')).to.deep.equal({ days: 3, maxUses: 25 });
+			expect(resolveInviteLimits('abc', '2.5')).to.deep.equal({ days: 3, maxUses: 25 });
+			expect(resolveInviteLimits('', '')).to.deep.equal({ days: 3, maxUses: 25 });
+			expect(resolveInviteLimits(true, {})).to.deep.equal({ days: 3, maxUses: 25 });
+		});
+		it('never resolves to unlimited — 0 is out-of-list for both limits', () => {
+			expect(resolveInviteLimits('0', '0')).to.deep.equal({ days: 3, maxUses: 25 });
+			expect(resolveInviteLimits(0, 0)).to.deep.equal({ days: 3, maxUses: 25 });
+		});
+		it('tolerates padded string keys', () => {
+			expect(resolveInviteLimits(' 15 ', ' 10 ')).to.deep.equal({ days: 15, maxUses: 10 });
+		});
+		it('keeps the allowed lists finite and 0-free (guards the settings contract)', () => {
+			expect(FIRM_INVITE_ALLOWED_DAYS).to.not.include(0);
+			expect(FIRM_INVITE_ALLOWED_MAX_USES).to.not.include(0);
+			expect(FIRM_INVITE_ALLOWED_DAYS).to.include(FIRM_INVITE_DEFAULT_DAYS);
+			expect(FIRM_INVITE_ALLOWED_MAX_USES).to.include(FIRM_INVITE_DEFAULT_MAX_USES);
 		});
 	});
 
