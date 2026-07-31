@@ -51,10 +51,7 @@ addMigration({
 		// Pass 2: creator-stamp for team MAIN rooms and standalone (non-team, non-discussion)
 		// rooms. Iterating users WITH a firmId keeps this bounded by firm membership, not by
 		// room count; everyone else's rooms stay unstamped (workspace-wide).
-		const firmUsers = Users.find(
-			{ 'customFields.firmId': { $type: 'string' } },
-			{ projection: { _id: 1, customFields: 1 } },
-		);
+		const firmUsers = Users.find({ 'customFields.firmId': { $type: 'string' } }, { projection: { _id: 1, customFields: 1 } });
 		for await (const user of firmUsers) {
 			const firmId = getFirmId(user);
 			if (!firmId) {
@@ -82,10 +79,9 @@ addMigration({
 			if (!firmId || !main.teamId) {
 				continue;
 			}
-			await Rooms.updateMany(
-				{ ...BASE, 'teamId': main.teamId, 'teamMain': { $ne: true }, 'prid': { $exists: false } } as Filter<IRoom>,
-				{ $set: { 'customFields.firmId': firmId } },
-			);
+			await Rooms.updateMany({ ...BASE, teamId: main.teamId, teamMain: { $ne: true }, prid: { $exists: false } } as Filter<IRoom>, {
+				$set: { 'customFields.firmId': firmId },
+			});
 		}
 
 		// Pass 4: discussions inherit their PARENT room's firmId. Looped so discussions of

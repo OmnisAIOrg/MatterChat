@@ -1,3 +1,22 @@
+# HANDOFF — 2026-07-30 PM (INTEGRATION: `feat/firm-readiness` — 3 firm branches merged, gates run)
+
+## Integration pass (branch `feat/firm-readiness`, 18 commits over `48936e4fa5`)
+
+Merged and gated the three firm-readiness branches: `feat/org-provisioning-fix` (b6477879c1), `feat/firm-invite-hardening` (8d4cf985de), `feat/room-firm-scoping` (92beeb53aa). Merge resolutions verified sane — the two overlap points both took the union: `server/lib/firms/firmsService.ts` carries BOTH `resolveFirmInviteLimits`-driven `inviteToFirm` and the room-scope wrappers, and all three DECISIONS entries plus all 4 new i18n keys survived.
+
+**Gate results**
+- **Typecheck: 0 new errors.** `tsc --noEmit --skipLibCheck` in `apps/meteor` reports 748 errors — but a detached worktree at `48936e4fa5` produces a **byte-identical** 748-line error set, so this branch adds none. Zero errors in any of the 25 files it touches. ⚠️ The 748 are a PRE-EXISTING staging defect (wrong-depth relative imports in `app/api/server/v1/boards-*.ts` / `sms.ts` pointing at `../../../lib/boards/*` = `app/lib/...`; missing `@rocket.chat/fuselage` exports; `TypedThis` regressions). Worth its own cleanup branch — do not let it mask a real regression again.
+- **Tests:** the 3 new specs pass (64 assertions). Connectors canary 137 passing. Jest 1917 passed / 6 failed — all 6 in `client/views/root/MainLayout/*`, pre-existing (this branch is server-only, zero client files).
+- **Mocha `.testunit:server` cannot complete on this repo state** — three independent PRE-EXISTING load-time crashes: `litboxProxy.expiry.spec.ts` and `app/push/push.spec.ts` (proxyquire stub gaps) and `app/settings/server/index.ts` (top-level await under tsx's cjs transform). All in untouched files. Ran the relevant specs directly instead.
+- **Lint:** the builders never ran eslint and left 14 errors (import/order + prettier). All fixed by hand — NOT by blanket `--fix`, because these files import `meteor/*` and that is the exact autofix hazard in CLAUDE.md. Import counts per file are unchanged (pure reordering; nothing merged or dropped). Now 0 errors, warnings only.
+- **Runtime: boots clean.** `build-and-run-prod.sh` → `MET-BUILD-OK`, `SERVER RUNNING`, `/api/info` 200 on :3100.
+
+**Ordering rule for this repo's `import/order`** (cost time to derive): within the relative group, siblings `./x` come FIRST, then parents ordered by ascending depth (`../../../` before `../../`), then alphabetically at equal depth.
+
+⚠️ **`yarn install` and `yarn build` are BROKEN on staging itself** — `yarn.lock` (byte-identical to `origin/staging`) still resolves `@rocket.chat/license` to `ee/packages/license`, a path PR #168 deleted. Every `yarn` invocation that resolves dies with "This package doesn't seem to be present in your lockfile". `node_modules` is fine, so drive `./node_modules/.bin/turbo` and `.../tsc` directly until someone regenerates the lockfile. `build-and-run-prod.sh` step [2/5] fails for this reason and is saved only by its `|| true`.
+
+---
+
 # HANDOFF — 2026-07-30 PM (Firm-scoped ROOM enumeration — branch `feat/room-firm-scoping`, awaiting build gate + draft PR)
 
 **What this branch does:** closes the cross-firm ROOM enumeration leak class (the widest one left after PR #166's user-surface closures). Rooms now carry `customFields.firmId`; every public-room listing surface returns only the caller's firm's rooms PLUS unstamped legacy/workspace-wide rooms. Membership always wins (a user in a room keeps seeing it), admins see everything, and the whole thing is a no-op when `Firms_SelfServe_Enabled` or `Firms_Scoped_Directory` is off. No new settings, no i18n keys, server-only.

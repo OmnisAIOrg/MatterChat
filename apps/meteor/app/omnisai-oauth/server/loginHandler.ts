@@ -12,7 +12,6 @@ import { CredentialTokens, Users } from '@rocket.chat/models';
 import { Accounts } from 'meteor/accounts-base';
 import { Meteor } from 'meteor/meteor';
 
-import { SystemLogger } from '../../../server/lib/logger/system';
 import { encryptToken } from './litboxCrypto';
 import {
 	claimOrgProvision,
@@ -23,6 +22,7 @@ import {
 	stampFirmIdFromOrg,
 } from './orgProvision';
 import { parseOrgAdminRoles, qualifiesToProvisionOrg, shouldSkipProvisionTrigger } from './orgProvisionHelpers';
+import { SystemLogger } from '../../../server/lib/logger/system';
 
 const makeError = (message: string): Record<string, any> => ({
 	type: 'omnisai',
@@ -185,7 +185,7 @@ async function maybeAutoProvisionOrg(userId: string, profile: OmnisAIProfile): P
 			return; // only an admin bulk-provisions the team
 		}
 
-		const orgId = profile.orgId;
+		const { orgId } = profile;
 		// Cheap pre-check (the common path on every later admin login): 'done', or a
 		// fresh run already in flight → nothing to do without contending for the claim.
 		if (shouldSkipProvisionTrigger(await getOrgProvision(orgId), new Date())) {

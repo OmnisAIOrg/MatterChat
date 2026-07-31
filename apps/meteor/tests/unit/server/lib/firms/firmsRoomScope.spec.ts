@@ -38,11 +38,7 @@ describe('firms room scope helpers', () => {
 		});
 		it('adds a membership arm so rooms the caller is already in stay visible', () => {
 			expect(firmRoomScopeQuery('team1', ['roomA', 'roomB'])).to.deep.equal({
-				$or: [
-					{ 'customFields.firmId': { $exists: false } },
-					{ 'customFields.firmId': 'team1' },
-					{ _id: { $in: ['roomA', 'roomB'] } },
-				],
+				$or: [{ 'customFields.firmId': { $exists: false } }, { 'customFields.firmId': 'team1' }, { _id: { $in: ['roomA', 'roomB'] } }],
 			});
 		});
 		it('omits the membership arm for an empty membership list', () => {

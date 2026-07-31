@@ -10,9 +10,9 @@ import {
 } from '@rocket.chat/rest-typings';
 import { Meteor } from 'meteor/meteor';
 
-import { FirmFeed } from '../../../../server/models/FirmFeed';
 // MATTERCHAT: self-serve firms — scope the bulletin to the caller's firm.
 import { getCallerFirmCohort } from '../../../../server/lib/firms/firmsService';
+import { FirmFeed } from '../../../../server/models/FirmFeed';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { API } from '../api';
 

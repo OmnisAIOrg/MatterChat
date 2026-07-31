@@ -28,10 +28,10 @@ import { Users } from '@rocket.chat/models';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 import { Accounts } from 'meteor/accounts-base';
 
-import { db } from '../../../server/database/utils';
-import { SystemLogger } from '../../../server/lib/logger/system';
 import type { OrgProvisionCounts, OrgProvisionMarker } from './orgProvisionHelpers';
 import { buildOrgProvisionClaimFilter, decideFirmIdStamp, isDuplicateKeyError } from './orgProvisionHelpers';
+import { db } from '../../../server/database/utils';
+import { SystemLogger } from '../../../server/lib/logger/system';
 
 type RosterMember = {
 	userId: string;
@@ -194,7 +194,7 @@ async function importMember(member: RosterMember, orgId: string): Promise<'creat
 	}
 
 	// Match the same way upsertOmnisaiUser does, so a later real login adopts this doc.
-	let existing = await Users.findOne({ 'services.omnisai.id': member.userId }, { projection: { _id: 1, 'services.omnisai.id': 1 } });
+	let existing = await Users.findOne({ 'services.omnisai.id': member.userId }, { projection: { '_id': 1, 'services.omnisai.id': 1 } });
 	if (!existing) {
 		existing = await Users.findOneByEmailAddress(member.email);
 	}
