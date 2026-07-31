@@ -26,7 +26,8 @@ function getInviteUrl(invite: Omit<IInvite, '_updatedAt'>) {
 	);
 }
 
-const possibleDays = [0, 1, 7, 15, 30];
+// MATTERCHAT: 3 added — the firm invite-link default expiry (Firms_Invite_Expiry_Days).
+const possibleDays = [0, 1, 3, 7, 15, 30];
 const possibleUses = [0, 1, 5, 10, 25, 50, 100];
 
 export const findOrCreateInvite = async (userId: string, invite: Pick<IInvite, 'rid' | 'days' | 'maxUses'>) => {
@@ -79,7 +80,8 @@ export const findOrCreateInvite = async (userId: string, invite: Pick<IInvite, '
 	const { days = 1, maxUses = 0 } = invite;
 
 	if (!possibleDays.includes(days)) {
-		throw new Meteor.Error('invalid-number-of-days', 'Invite should expire in 1, 7, 15 or 30 days, or send 0 to never expire.');
+		// MATTERCHAT: message mentions 3 — added to possibleDays above.
+		throw new Meteor.Error('invalid-number-of-days', 'Invite should expire in 1, 3, 7, 15 or 30 days, or send 0 to never expire.');
 	}
 
 	if (!possibleUses.includes(maxUses)) {
