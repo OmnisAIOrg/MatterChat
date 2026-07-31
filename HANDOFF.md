@@ -1,3 +1,51 @@
+# HANDOFF — 2026-07-30 (PACKAGE SHIPPED TO DRAFT PR: `feat/firm-readiness` → `staging`)
+
+**One DRAFT PR, 26 commits over `origin/staging` @ `48936e4fa5`, 46 files, ~+2.7k/-130.** Title: *Firm readiness: org-provision firmId + per-org marker, invite hardening, cross-firm room scoping*. It is DRAFT on purpose — the founder tests before any merge. Everything below is the state at hand-off; the two sections beneath this one are the working notes for the smoke-fix pass and the integration pass and stay authoritative on detail.
+
+## The three workstreams
+
+1. **Org provisioning (`orgProvision.ts` / `orgProvisionHelpers.ts` / `orgBackfill.ts` / `loginHandler.ts`).** Kills the "org #2's roster can never mirror" dead-end from the 2026-07-30 audit. The per-ADMIN provisioned marker becomes a **per-ORG** marker in a new raw collection `matterchat_org_provisions` whose `_id` is the CentralizedAuth orgId — the built-in `_id` unique index IS the concurrency lock (a lost claim surfaces as E11000 → "claim lost"; `failed` and stale-`pending` markers re-arm on the next qualifying login; a re-claim `$unset`s the prior run's outcome fields). The trigger widens from workspace-admin-only to `qualifiesToProvisionOrg()` = workspace admin **or** a `casepro:role` claim in `MATTERCHAT_ORG_ADMIN_ROLES` (default `admin,owner`). OIDC logins can now stamp `customFields.firmId` from the org id, closing the "two org models are unlinked" gap — but **only when `MATTERCHAT_ORG_FIRM_COHORTS` is set** (default OFF, see review findings below). Optional `MATTERCHAT_PROVISION_ORG_ALLOWLIST` narrows which orgs may provision at all.
+2. **Firm invite hardening (`firmsService.ts`, `findOrCreateInvite.ts`, `useInviteToken.ts`, `tightenFirmInvites.ts`, `Invites` model).** Firm invite links were 15-day / unlimited-use. They are now finite and settings-driven: `Firms_Invite_MaxUses` (default 25) and `Firms_Invite_Expiry_Days` (default 7), enforced at mint AND at the stock `/v1/findOrCreateInvite` chokepoint (non-admins on firm rooms get clamped — that endpoint was the bypass), with `consumeUseById` moved onto the BaseRaw wrapper so `_updatedAt` moves and the burn-down is atomic. A boot sweep (`tightenFirmInvites`) caps pre-existing unlimited/never-expiring links on firm-stamped rooms.
+3. **Cross-firm room scoping (`firmsRoomScope.ts`, `stampRoomFirmId.ts`, `firmsRoomAccess.ts`, spotlight/browseChannels/channelsList/team service, migration `v340`).** Closes the widest leak class left after PR #166: rooms carry `customFields.firmId`, stamped at creation (caller-supplied firmId is deleted — `channels.create` was a forgery vector), and every public-room enumeration surface returns only the caller's firm's rooms plus unstamped ones. `v340` backfills pre-existing rooms in four idempotent `$exists`-guarded passes.
+
+### PRODUCT CONVENTION adopted here — **needs founder sign-off**
+Room scoping follows the PR #166 user-scoping convention, extended to rooms:
+- **Discovery-scoped, not access-scoped.** Listing surfaces (spotlight, directory, `channels.list`, team autocomplete) are filtered; membership always wins.
+- **Legacy rooms with NO `firmId` stay workspace-wide** for every cohort. This is deliberate and it differs from the USER cohort rule.
+- **Admins are exempt** — they see everything.
+- **Total no-op when the feature is off.** Both `Firms_SelfServe_Enabled` (master, default false) and `Firms_Scoped_Directory` (default true) must be true for any scoping to apply.
+- The later commit `fix(firms): enforce room cohorts at canAccessRoom` adds the phase-2 backstop so exact-name/id probing of a cross-firm public room is also refused, not just hidden.
+
+## What was verified
+- **Typecheck: 0 new errors.** `tsc --noEmit --skipLibCheck` in `apps/meteor` = 748 errors; a detached worktree at `48936e4fa5` produces a **byte-identical** 748-line set. Zero errors in any of the 46 touched files. (The 748 are pre-existing staging debt — wrong-depth relative imports in `app/api/server/v1/boards-*.ts` / `sms.ts`, missing `@rocket.chat/fuselage` exports, `TypedThis` regressions. Own cleanup branch, please.)
+- **Unit:** 54 firms assertions green (`firmsHelpers.spec.ts`, `firmsRoomScope.spec.ts`, `orgProvisionHelpers.spec.ts`), connectors canary 137 green, Jest 1917 passed / 6 failed — all 6 in `client/views/root/MainLayout/*`, pre-existing, and this package is server-only apart from one firm onboarding page.
+- **Lint:** 0 errors on every touched file (fixed BY HAND, not blanket `--fix` — these files import `meteor/*`, the exact autofix hazard in CLAUDE.md).
+- **Runtime smoke on the :3100 prod bundle, two firm users + an unstamped user + an admin, gate ON:** room stamped with the creator's firmId at creation ✅; firm B could not see firm A's channel via `channels.list`, `/v1/directory`, or `/v1/spotlight` ✅; firm A saw its own channel ✅; the pre-gate legacy channel stayed visible to A, B and admin ✅; admin saw everything ✅. All four settings were restored to baseline at the end of the run.
+- **Invite burn-down re-verified at HEAD:** redemption burns 1 → exhausted, the second redemption fails `error-invite-expired`, adoption stays bounded to the successful redeemer, `_updatedAt` moves.
+- **The smoke run itself found two real defects, both fixed on this branch:** `firms.invite` claimed delivery it could not know about (stock mailer is fire-and-forget → response contract is now `{queued, invalid, undelivered, emailDelivery, inviteUrl}`, `sent` deleted), and there was no supported way to write `customFields.firmId` (new admin-only `POST /v1/firms.setUserFirm`; `saveCustomFields` now THROWS on firm-owned keys instead of silently dropping them).
+- **Adversarial review findings applied before the PR:** cross-firm account-hijack via the widened provisioning trigger (link writes are now additive and `$exists:false`-guarded; conflicting subject/firmId is skipped and logged); unconditional firmId backfill silently activating PR #166 cohorts on the live workspace (now opt-in behind `MATTERCHAT_ORG_FIRM_COHORTS`, bots/apps exempt); invite caps bypassable via the stock endpoint (clamped at `findOrCreateInvite`).
+
+## What was NOT verified (read this before merging)
+- **OIDC login stamping and the org-admin trigger have NEVER run against real CentralizedAuth.** The `casepro:role` claim path, the per-org marker claim/lose race, and the org roster mirror are all unit-tested and code-reviewed only. There is no mock OIDC path that exercises a SECOND org.
+- **Migration `v340` has not been run against a real database with legacy firm rooms** — only reasoned through. Run it against a restored copy of prod before the promote.
+- **No email was actually delivered.** The local workspace has no SMTP; `emailDelivery: 'unavailable'` is what the fix reports there, and prod's M365 tenant block is unresolved.
+- **`tightenFirmInvites` boot sweep was not observed against pre-existing unlimited links** on a real dataset.
+- **`yarn install` / `yarn build` are BROKEN on staging itself** (`yarn.lock` still resolves `@rocket.chat/license` to the `ee/packages/license` path PR #168 deleted). Everything was driven via `./node_modules/.bin/tsc` / `.../turbo` directly. Someone must regenerate the lockfile; it is not this branch's job but it will bite the next builder.
+- **Mocha `.testunit:server` cannot complete on this repo state** — three pre-existing load-time crashes in untouched files. Specs were run directly instead.
+
+## What the founder should test (staging, after the deploy)
+1. Leave the flags OFF first and confirm **nothing changes** — directory, spotlight, channel list all behave exactly as today. That is the no-op claim.
+2. Admin → turn `Firms_SelfServe_Enabled` ON (staging currently has it OFF; prod has it ON). Create two firms with two owners.
+3. Firm A creates a public channel. As firm B: search it in the directory, in spotlight, and in the channel list — it must be absent from all three. Then try to open it by exact name — with the `canAccessRoom` backstop it must be refused, not just hidden.
+4. Confirm a channel created BEFORE the flag went on is still visible to everyone. That is the legacy rule, and it is the convention that needs your sign-off.
+5. As admin, confirm you still see everything.
+6. Invite a teammate to a firm. The response should say **queued**, not "sent", and should hand back the invite link. Check the link expires in 7 days and dies after 25 uses.
+7. The org-provisioning half needs a real second CentralizedAuth org and `MATTERCHAT_ORG_FIRM_COHORTS` deliberately turned on. Do that one last and on staging only.
+
+**Do not promote to prod off this branch.** Merge to `staging`, deploy, exercise the above, then a separate promote.
+
+---
+
 # HANDOFF — 2026-07-30 LATE (smoke fixes on `feat/firm-readiness`: invite delivery honesty + admin firm assignment)
 
 A smoke run of the branch on the :3100 prod bundle found two real defects and one process gap. All three are closed on this branch (commit `fix(firms): honest invite delivery reporting + an admin path for firm membership`), rebuilt at HEAD, and re-verified by REST + Mongo the same way the smoke run found them.
