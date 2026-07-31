@@ -5,7 +5,15 @@ import { Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
-import { FIRM_NAME_MAX, FIRM_NAME_MIN, MAX_INVITES_PER_CALL, normalizeFirmName, partitionEmails, slugifyFirmName } from './firmsHelpers';
+import {
+	FIRM_NAME_MAX,
+	FIRM_NAME_MIN,
+	MAX_INVITES_PER_CALL,
+	normalizeFirmName,
+	partitionEmails,
+	resolveInviteLimits,
+	slugifyFirmName,
+} from './firmsHelpers';
 import { findOrCreateInvite } from '../../../app/invites/server/functions/findOrCreateInvite';
 import * as Mailer from '../../../app/mailer/server/api';
 import { settings } from '../../../app/settings/server';
@@ -151,10 +159,14 @@ export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ s
 		throw new Meteor.Error('error-too-many-invites', `At most ${MAX_INVITES_PER_CALL} invites per request`, { method: 'firms.invite' });
 	}
 
-	// A 15-day, unlimited-use invite link into the firm team's main channel.
-	// Redeeming it registers the account, joins the team room, and (because the
-	// room is customFields.firmTeam) adopts the user into the firm.
-	const invite = await findOrCreateInvite(userId, { rid: firm.roomId, days: 15, maxUses: 0 });
+	// A finite invite link into the firm team's main channel (limits come from
+	// the Firms_Invite_* settings, hardened defaults 3 days / 25 uses — see
+	// resolveInviteLimits). Redeeming it registers the account, joins the team
+	// room, and (because the room is customFields.firmTeam) adopts the user
+	// into the firm. Stock validateInviteToken enforces BOTH limits on
+	// redemption (error-invite-expired for expired AND exhausted links).
+	const { days, maxUses } = resolveInviteLimits(settings.get('Firms_Invite_Expiry_Days'), settings.get('Firms_Invite_Max_Uses'));
+	const invite = await findOrCreateInvite(userId, { rid: firm.roomId, days, maxUses });
 	if (!invite) {
 		throw new Meteor.Error('error-invite-failed', 'Could not create the firm invite link', { method: 'firms.invite' });
 	}
@@ -169,7 +181,7 @@ export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ s
 		`<p>${inviterName} invited you to join <strong>${firm.name}</strong> on ${siteName} — secure messaging built for law firms.</p>` +
 		`<p><a href="${inviteUrl}">Accept the invitation</a> to create your account and join the team.</p>` +
 		`<p>If the button doesn't work, paste this link into your browser:<br/>${inviteUrl}</p>` +
-		`<p>This invitation link expires in 15 days.</p>`;
+		`<p>This invitation link expires in ${days} ${days === 1 ? 'day' : 'days'} and stops working after ${maxUses} people have used it.</p>`;
 
 	const sent: string[] = [];
 	for (const email of valid) {
