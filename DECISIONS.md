@@ -3,6 +3,17 @@
 
 ---
 
+### 2026-07-30 (smoke-fix pass) — `firms.invite` reports HAND-OFF, not delivery; firm membership gets one loud write path
+**Chose:** (a) split the `firms.invite` response into `queued` / `invalid` / `undelivered` + an explicit `emailDelivery: 'queued' | 'unavailable'`, with an `isSMTPConfigured()` pre-flight, and drop `sent` entirely; (b) add admin-only `POST /v1/firms.setUserFirm` as the single supported way to stamp, move or clear `customFields.firmId`, and make the generic custom-fields path REFUSE firm-owned keys instead of dropping them.
+
+**Why (a):** the stock mailer is fire-and-forget — `sendNoWrap` ends in `setImmediate(() => Email.sendAsync(...).catch(console.error))` — so a resolved `Mailer.send` means QUEUED and nothing more. The old `sent` array therefore could not mean what its name promised, and its `catch` arm was unreachable for delivery failures: on this local workspace `firms.invite` returned `sent: [addr]` in the same instant the server logged "You have not provided a mail URL". This is not theoretical — prod's SMTP is behind a known M365 tenant block, so the exact failure mode is "firm owner is told the team was invited, no invite ever arrives, the firm silently never populates". The word `sent` is the bug; keeping it as an alias would have preserved the lie in every client that reads it.
+
+**Why (b):** membership was writable only by `firms.create`, invite redemption, the OIDC org stamp, or a direct DB write. `POST users.update {data:{customFields:{firmId}}}` as an admin returned `success: true` and changed nothing, because `saveCustomFields` validates against the admin-authored `Accounts_CustomFields` schema (empty on every workspace we run) and returns early. So an operator could neither correct a mis-stamped account nor move someone between firms, and the API actively misreported that they had. The same code path is the reason the guard is a REFUSAL rather than a pass-through: if an admin ever declares a `firmId` custom field, `users.updateOwnBasicInfo` / `saveUserProfile` would let ANY user self-assign into any other firm — the exact boundary PR #166's scoping rests on.
+
+**Rejected:** (i) fixing this in `app/mailer/server/api.ts` by awaiting `Email.sendAsync` — it is stock Rocket.Chat on the hot path for every account email, and making it synchronous changes timeout behaviour workspace-wide for a firms-only reporting problem; the honest thing is for the CALLER to stop over-claiming. (ii) Keeping `sent` as a deprecated alias of `queued` — see above. (iii) Requiring `firmId` to resolve to an existing team in `setUserFirm` — OmnisAI org cohorts stamp a CentralizedAuth orgId with no team behind it, so the call reports `firmTeamFound: false` instead of failing, which keeps the endpoint usable for exactly the population that most needs correcting. (iv) Having `setUserFirm` also join/leave the firm team room — stamping is the cohort, joining is a room operation; silently moving someone's room membership from a membership-correction endpoint is a bigger surprise than making the operator do both. (v) Gating `setUserFirm` on `Firms_SelfServe_Enabled` — cohorts have to be fixable BEFORE the flag is switched on for a workspace.
+
+---
+
 ### 2026-07-30 (fixer pass) — Org→firm cohorts are OPT-IN; firm scoping becomes access control, not just discovery
 **Chose:** four reversals of earlier decisions on this same branch, from the reviewer pass over `feat/firm-readiness`.
 
