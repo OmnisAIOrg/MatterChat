@@ -52,6 +52,32 @@ export const resolveFirmInviteLimits = (rawDays: unknown, rawMaxUses: unknown): 
 	maxUses: snapToAllowed(rawMaxUses, FIRM_INVITE_ALLOWED_USES, FIRM_INVITE_DEFAULT_MAX_USES),
 });
 
+/**
+ * Clamp a CALLER-supplied `days`/`maxUses` pair (stock findOrCreateInvite's
+ * REST/DDP surface, where 0 means "never expires" / "unlimited") down to the
+ * firm caps. Enforced at the findOrCreateInvite chokepoint, not just inside
+ * inviteToFirm — a firm owner is the `owner` of their firm team room and
+ * `create-invite-links` is granted to owner/moderator, so the stock endpoint
+ * would otherwise mint permanent unlimited links into a firm room.
+ *
+ * Rules: 0/negative/garbage → the cap; anything else → min(requested, cap), so
+ * a caller can always ask for something STRICTER than the cap but never looser.
+ */
+export const clampFirmInviteLimits = (
+	rawDays: unknown,
+	rawMaxUses: unknown,
+	caps: { days: number; maxUses: number },
+): { days: number; maxUses: number } => {
+	const clamp = (raw: unknown, cap: number): number => {
+		const value = toFiniteNumber(raw);
+		if (value === null || value <= 0 || value > cap) {
+			return cap;
+		}
+		return value;
+	};
+	return { days: clamp(rawDays, caps.days), maxUses: clamp(rawMaxUses, caps.maxUses) };
+};
+
 /** Strips control chars, collapses whitespace. Returns null if unusable. */
 export const normalizeFirmName = (raw: unknown): string | null => {
 	if (typeof raw !== 'string') {
@@ -104,9 +130,26 @@ export const partitionEmails = (emails: unknown, isValidEmail: (email: string) =
 	return { valid, invalid };
 };
 
+/**
+ * Bot / app / service accounts (rocket.cat, the Chi admin assistant, connector
+ * bridges, Apps-Engine users) are workspace INFRASTRUCTURE, not firm members —
+ * they carry no firmId and must never be scoped away from a firm's users. Left
+ * unexempted, `createDirectMessage` hard-blocks every firm member from opening
+ * a DM with them (error-not-allowed).
+ */
+export const isFirmScopeExemptUser = (user: { type?: unknown; roles?: unknown } | null | undefined): boolean => {
+	if (!user) {
+		return false;
+	}
+	if (user.type === 'bot' || user.type === 'app') {
+		return true;
+	}
+	return Array.isArray(user.roles) && user.roles.some((role) => role === 'bot' || role === 'app');
+};
+
 /** True when `user` falls inside the cohort described by a getFirmScopeExtraQuery fragment. */
 export const userMatchesFirmScope = (
-	user: { customFields?: Record<string, unknown> } | null | undefined,
+	user: { customFields?: Record<string, unknown>; type?: unknown; roles?: unknown } | null | undefined,
 	scope: Filter<IUser> | null | undefined,
 ): boolean => {
 	if (!scope) {
@@ -114,6 +157,9 @@ export const userMatchesFirmScope = (
 	}
 	if (!user) {
 		return false;
+	}
+	if (isFirmScopeExemptUser(user)) {
+		return true;
 	}
 	const cond = (scope as Record<string, unknown>)['customFields.firmId'];
 	const userFirmId = user.customFields?.firmId;

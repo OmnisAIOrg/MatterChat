@@ -49,7 +49,18 @@ export const useInviteToken = async (userId: string, token: string) => {
 	await Users.updateInviteToken(user._id, token);
 
 	if (!subscription) {
-		await Invites.increaseUsageById(inviteData._id, 1);
+		// MATTERCHAT: validateInviteToken's `uses < maxUses` read and this increment used to
+		// be two separate operations, so N parallel redemptions of the same link all passed
+		// the check before any $inc committed. Firm invites now rely on maxUses as their only
+		// finite guarantee (and each redemption runs adoptUserIntoFirm below), so consume the
+		// use atomically and treat "nothing consumed" as expired.
+		const consumed = await Invites.consumeUseById(inviteData._id);
+		if (!consumed) {
+			throw new Meteor.Error('error-invite-expired', 'The invite token has expired.', {
+				method: 'useInviteToken',
+				field: 'maxUses',
+			});
+		}
 	}
 
 	// If the user already has an username, then join the invite room,

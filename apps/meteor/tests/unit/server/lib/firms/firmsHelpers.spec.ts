@@ -1,6 +1,8 @@
 import { expect } from 'chai';
 
 import {
+	clampFirmInviteLimits,
+	isFirmScopeExemptUser,
 	normalizeFirmName,
 	partitionEmails,
 	resolveFirmInviteLimits,
@@ -123,6 +125,46 @@ describe('firms helpers', () => {
 			expect(userMatchesFirmScope({ customFields: {} }, scope)).to.be.true;
 			expect(userMatchesFirmScope({}, scope)).to.be.true;
 			expect(userMatchesFirmScope({ customFields: { firmId: 'team1' } }, scope)).to.be.false;
+		});
+		it('exempts bot/app accounts so firm members can still DM rocket.cat and the assistants', () => {
+			const scope = { 'customFields.firmId': 'team1' } as never;
+			expect(userMatchesFirmScope({ type: 'bot' }, scope)).to.be.true;
+			expect(userMatchesFirmScope({ type: 'app' }, scope)).to.be.true;
+			expect(userMatchesFirmScope({ roles: ['bot'] }, scope)).to.be.true;
+			expect(userMatchesFirmScope({ roles: ['app', 'user'] }, scope)).to.be.true;
+			// a plain user with no firmId is still outside the cohort
+			expect(userMatchesFirmScope({ type: 'user', roles: ['user'] }, scope)).to.be.false;
+		});
+	});
+
+	describe('isFirmScopeExemptUser', () => {
+		it('spots bot/app accounts by type or role', () => {
+			expect(isFirmScopeExemptUser({ type: 'bot' })).to.be.true;
+			expect(isFirmScopeExemptUser({ type: 'app' })).to.be.true;
+			expect(isFirmScopeExemptUser({ roles: ['bot'] })).to.be.true;
+			expect(isFirmScopeExemptUser({ roles: ['app'] })).to.be.true;
+		});
+		it('does not exempt regular users', () => {
+			expect(isFirmScopeExemptUser({ type: 'user', roles: ['user', 'admin'] })).to.be.false;
+			expect(isFirmScopeExemptUser({})).to.be.false;
+			expect(isFirmScopeExemptUser(null)).to.be.false;
+		});
+	});
+
+	describe('clampFirmInviteLimits', () => {
+		const caps = { days: 7, maxUses: 25 };
+		it('turns the stock "unlimited / never expires" 0 into the cap', () => {
+			expect(clampFirmInviteLimits(0, 0, caps)).to.deep.equal({ days: 7, maxUses: 25 });
+		});
+		it('caps anything looser than the configured limit', () => {
+			expect(clampFirmInviteLimits(30, 100, caps)).to.deep.equal({ days: 7, maxUses: 25 });
+		});
+		it('lets a caller ask for something stricter', () => {
+			expect(clampFirmInviteLimits(1, 5, caps)).to.deep.equal({ days: 1, maxUses: 5 });
+		});
+		it('falls back to the cap for garbage and negatives', () => {
+			expect(clampFirmInviteLimits(-1, 'nope', caps)).to.deep.equal({ days: 7, maxUses: 25 });
+			expect(clampFirmInviteLimits(undefined, null, caps)).to.deep.equal({ days: 7, maxUses: 25 });
 		});
 	});
 });

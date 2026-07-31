@@ -85,9 +85,12 @@ export async function createDirectMessage(
 	if (firmScope) {
 		const targetUsernames = usernames.filter((username) => username !== me.username);
 		if (targetUsernames.length) {
+			// `type`/`roles` are projected so isFirmScopeExemptUser can spot bot/app/service
+			// accounts (rocket.cat, the Chi assistant, connector bridges) — they carry no
+			// firmId and must stay DM-able from inside every firm.
 			const targets = await Users.find(
 				{ username: { $in: targetUsernames } },
-				{ projection: { username: 1, customFields: 1 } },
+				{ projection: { username: 1, customFields: 1, type: 1, roles: 1 } },
 			).toArray();
 			if (targets.some((target) => !userMatchesFirmScope(target, firmScope))) {
 				throw new Meteor.Error('error-not-allowed', 'Not allowed', {
