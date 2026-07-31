@@ -100,4 +100,37 @@ export const createOmnisAIOAuthSettings = () =>
 			i18nLabel: 'Firms_Scoped_Directory',
 			i18nDescription: 'Firms_Scoped_Directory_Description',
 		});
+
+		// Firm invite-link hardening: every firm invite link is finite — there is
+		// deliberately NO "unlimited" option in either select. Selects (not int)
+		// so an admin can only pick values the stock invite factory accepts; an
+		// out-of-list value (e.g. seeded via OVERWRITE_SETTING_*) falls back to
+		// the 3-day / 25-use defaults in resolveInviteLimits (firmsHelpers.ts).
+		await this.add('Firms_Invite_Expiry_Days', '3', {
+			type: 'select',
+			values: [
+				{ key: '1', i18nLabel: '1' },
+				{ key: '3', i18nLabel: '3' },
+				{ key: '7', i18nLabel: '7' },
+				{ key: '15', i18nLabel: '15' },
+				{ key: '30', i18nLabel: '30' },
+			],
+			public: false,
+			i18nLabel: 'Firms_Invite_Expiry_Days',
+			i18nDescription: 'Firms_Invite_Expiry_Days_Description',
+		});
+
+		await this.add('Firms_Invite_Max_Uses', '25', {
+			type: 'select',
+			values: [
+				{ key: '5', i18nLabel: '5' },
+				{ key: '10', i18nLabel: '10' },
+				{ key: '25', i18nLabel: '25' },
+				{ key: '50', i18nLabel: '50' },
+				{ key: '100', i18nLabel: '100' },
+			],
+			public: false,
+			i18nLabel: 'Firms_Invite_Max_Uses',
+			i18nDescription: 'Firms_Invite_Max_Uses_Description',
+		});
 	});
