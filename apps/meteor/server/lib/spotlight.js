@@ -207,7 +207,9 @@ export class Spotlight {
 			teams = teams.filter((team) => memberRoomIds.has(team.roomId) || roomMatchesFirmScope(roomById.get(team.roomId), cohort));
 		}
 		// roomId was only needed for the firm filter — keep the wire shape unchanged
-		teams = teams.map(({ roomId, ...team }) => team);
+		for (const team of teams) {
+			delete team.roomId;
+		}
 		users.push(...this.mapTeams(teams));
 
 		return users;

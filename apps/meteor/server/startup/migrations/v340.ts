@@ -92,7 +92,9 @@ addMigration({
 		// discussions resolve too; each iteration only fills still-missing stamps, so this
 		// terminates as soon as a round changes nothing (bounded for safety).
 		for (let round = 0; round < 5; round++) {
-			const parentIds = await Rooms.col.distinct('prid', { ...BASE, prid: { $exists: true } } as Filter<IRoom>);
+			const parentIds = (await Rooms.col.distinct('prid', { ...BASE, prid: { $exists: true } } as Filter<IRoom>)).filter(
+				(id): id is string => typeof id === 'string',
+			);
 			if (!parentIds.length) {
 				break;
 			}

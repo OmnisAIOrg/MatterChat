@@ -1,8 +1,8 @@
 import type { IRoom, ITeam, IUser } from '@rocket.chat/core-typings';
 import { Rooms, Team, Users } from '@rocket.chat/models';
 
-import { isSelfServeFirmsEnabled } from './firmsService';
 import { beforeCreateRoomCallback } from '../callbacks/beforeCreateRoomCallback';
+import { isSelfServeFirmsEnabled } from './firmsService';
 
 /**
  * MATTERCHAT: self-serve firms — stamp `customFields.firmId` on rooms at
