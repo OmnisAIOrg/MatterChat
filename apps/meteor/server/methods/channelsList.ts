@@ -1,9 +1,10 @@
 import type { IRoom } from '@rocket.chat/core-typings';
 import type { ServerMethods } from '@rocket.chat/ddp-client';
 import { Rooms, Subscriptions, Users } from '@rocket.chat/models';
+import { escapeRegExp } from '@rocket.chat/string-helpers';
 import { Match, check } from 'meteor/check';
 import { Meteor } from 'meteor/meteor';
-import type { FindOptions } from 'mongodb';
+import type { Filter, FindOptions } from 'mongodb';
 import _ from 'underscore';
 
 import { hasPermissionAsync } from '../../app/authorization/server/functions/hasPermission';
@@ -11,6 +12,7 @@ import { methodDeprecationLogger } from '../../app/lib/server/lib/deprecationWar
 import { settings } from '../../app/settings/server';
 import { getUserPreference } from '../../app/utils/server/lib/getUserPreference';
 import { trim } from '../../lib/utils/stringUtils';
+import { getFirmRoomScopeExtraQuery } from '../lib/firms/firmsService';
 
 declare module '@rocket.chat/ddp-client' {
 	// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -67,7 +69,23 @@ Meteor.methods<ServerMethods>({
 
 		if (channelType !== 'private') {
 			if (await hasPermissionAsync(userId, 'view-c-room')) {
-				if (filter) {
+				// MATTERCHAT: self-serve firms — this deprecated DDP method enumerates EVERY
+				// public channel; keep it inside the caller's firm cohort like /v1/channels.list
+				// (legacy unstamped rooms + own memberships stay visible; admins/feature-off
+				// fall through to the stock queries).
+				const memberRoomIds = (await Subscriptions.findByTypeAndUserId('c', userId, { projection: { rid: 1 } }).toArray()).map(
+					(s) => s.rid,
+				);
+				const firmScope = await getFirmRoomScopeExtraQuery(userId, memberRoomIds);
+				if (firmScope) {
+					// same shape as Rooms.findByType(AndNameContaining), plus the scope in $and
+					const query: Filter<IRoom> = {
+						t: 'c',
+						...(filter ? { name: new RegExp(escapeRegExp(filter).trim(), 'i') } : {}),
+						$and: [firmScope],
+					};
+					channels = channels.concat(await Rooms.find(query, options).toArray());
+				} else if (filter) {
 					channels = channels.concat(await Rooms.findByTypeAndNameContaining('c', filter, options).toArray());
 				} else {
 					channels = channels.concat(await Rooms.findByType('c', options).toArray());

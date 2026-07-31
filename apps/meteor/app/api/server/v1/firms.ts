@@ -1,6 +1,8 @@
 import { Users } from '@rocket.chat/models';
 
 import { createFirm, getFirmForUser, inviteToFirm, isSelfServeFirmsEnabled } from '../../../../server/lib/firms/firmsService';
+// MATTERCHAT: side-effect import — registers the beforeCreateRoom firmId stamp at boot
+import '../../../../server/lib/firms/stampRoomFirmId';
 import { API } from '../api';
 
 /**

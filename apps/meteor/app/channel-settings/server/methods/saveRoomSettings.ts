@@ -7,6 +7,8 @@ import { Match } from 'meteor/check';
 import { Meteor } from 'meteor/meteor';
 
 import { RoomSettingsEnum } from '../../../../definition/IRoomTypeConfig';
+// MATTERCHAT: self-serve firms — non-admins must not strip/forge the room firmId stamp
+import { sanitizeRoomCustomFieldsForActor } from '../../../../server/lib/firms/firmsService';
 import { roomCoordinator } from '../../../../server/lib/rooms/roomCoordinator';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
 import { isABACManagedRoom } from '../../../authorization/server/lib/isABACManagedRoom';
@@ -304,9 +306,11 @@ const settingSavers: RoomSettingsSavers = {
 			await saveRoomAnnouncement(rid, value, user);
 		}
 	},
-	async roomCustomFields({ value, room, rid }) {
+	async roomCustomFields({ value, room, rid, userId }) {
 		if (value !== room.customFields) {
-			await saveRoomCustomFields(rid, value);
+			// MATTERCHAT: this replaces room.customFields WHOLESALE — keep the firm
+			// stamp intact for non-admins (see sanitizeRoomCustomFieldsForActor)
+			await saveRoomCustomFields(rid, await sanitizeRoomCustomFieldsForActor(userId, room, value));
 		}
 	},
 	async roomDescription({ value, room, rid, user }) {
