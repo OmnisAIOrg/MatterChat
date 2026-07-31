@@ -68,6 +68,11 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 				key: { prid: 1 },
 				sparse: true,
 			},
+			// MATTERCHAT: self-serve firms — firm-scoped room enumeration
+			{
+				key: { 'customFields.firmId': 1 },
+				sparse: true,
+			},
 			{
 				key: { fname: 1 },
 				sparse: true,
@@ -802,6 +807,8 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 		teamIds: Array<ITeam['_id']>,
 		roomIds: Array<IRoom['_id']>,
 		options: FindOptions<IRoom> = {},
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries: Filter<IRoom>[] = [],
 	): FindPaginated<FindCursor<IRoom>> {
 		const query: Filter<IRoom> = {
 			$and: [
@@ -842,6 +849,7 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 							},
 						]
 					: []),
+				...extraQueries,
 			],
 		};
 
@@ -852,6 +860,8 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 		searchTerm: RegExp | null,
 		rids: Array<IRoom['_id']>,
 		options: FindOptions<IRoom> = {},
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries: Filter<IRoom>[] = [],
 	): FindPaginated<FindCursor<IRoom>> {
 		const query: Filter<IRoom> = {
 			teamMain: true,
@@ -883,6 +893,11 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 					},
 				],
 			});
+		}
+
+		// MATTERCHAT: composed inside $and so the t:'c' arm above cannot bypass it
+		if (extraQueries.length && query.$and) {
+			query.$and.push(...extraQueries);
 		}
 
 		return this.findPaginated(query, options);
@@ -1255,6 +1270,8 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 		type: IRoom['t'],
 		options: FindOptions<IRoom> = {},
 		includeFederatedRooms = false,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries: Filter<IRoom>[] = [],
 	): Promise<IRoom | null> {
 		const query: Filter<IRoom> = {
 			t: type,
@@ -1264,6 +1281,8 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 			...(includeFederatedRooms
 				? { $or: [{ $and: [{ $or: [{ federated: { $exists: false } }, { federated: false }], name }] }, { federated: true, fname: name }] }
 				: { $or: [{ federated: { $exists: false } }, { federated: false }], name }),
+			// MATTERCHAT: $and keeps the scope independent of the $or above
+			...(extraQueries.length ? { $and: extraQueries } : {}),
 		};
 
 		return this.findOne(query, options);
@@ -1418,6 +1437,8 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 		ids: Array<IRoom['_id']>,
 		options: FindOptions<IRoom> = {},
 		includeFederatedRooms = false,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries: Filter<IRoom>[] = [],
 	): FindCursor<IRoom> {
 		const nameCondition: Filter<IRoom> = {
 			$or: [{ name }, { fname: name }],
@@ -1461,6 +1482,7 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 							],
 						}
 					: { $and: [{ $or: [{ federated: { $exists: false } }, { federated: false }] }, nameCondition] },
+				...extraQueries,
 			],
 		};
 
