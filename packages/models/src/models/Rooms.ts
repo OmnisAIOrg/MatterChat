@@ -68,10 +68,12 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 				key: { prid: 1 },
 				sparse: true,
 			},
-			// MATTERCHAT: self-serve firms — firm-scoped room enumeration
+			// MATTERCHAT: self-serve firms — firm-scoped room enumeration.
+			// NOT sparse: every scoped query leads with `{'customFields.firmId': {$exists: false}}`,
+			// and a sparse index by definition omits exactly those documents, so Mongo cannot use
+			// it to satisfy that arm — and an $or is only index-eligible when EVERY branch is.
 			{
 				key: { 'customFields.firmId': 1 },
-				sparse: true,
 			},
 			{
 				key: { fname: 1 },
@@ -1399,6 +1401,8 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 		type: IRoom['t'],
 		options: FindOptions<IRoom> = {},
 		includeFederatedRooms = false,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries: Filter<IRoom>[] = [],
 	): FindCursor<IRoom> {
 		const query: Filter<IRoom> = {
 			t: type,
@@ -1423,6 +1427,7 @@ export class RoomsRaw extends BaseRaw<IRoom> implements IRoomsModel {
 							$or: [{ $and: [{ $or: [{ federated: { $exists: false } }, { federated: false }], name }] }, { federated: true, fname: name }],
 						}
 					: { $or: [{ federated: { $exists: false } }, { federated: false }], name },
+				...extraQueries,
 			],
 		};
 

@@ -261,19 +261,25 @@ export const getFirmRoomScopeExtraQuery = async (
 /**
  * Guard for `saveRoomSettings roomCustomFields` (wholesale replace of
  * room.customFields, gated only by edit-room): non-admins always keep the
- * room's existing firmId — they can neither strip it (making a firm room
- * globally enumerable) nor forge another firm's. Admins pass through
+ * room's existing firm-owned keys (firmId / firmTeam / firmName) — they can
+ * neither strip them (making a firm room globally enumerable, disabling firm
+ * adoption on invite redemption, and exempting the room from the
+ * tightenFirmInvites sweep) nor forge another firm's. Admins pass through
  * untouched, so an admin can deliberately un-stamp a room to make it
  * workspace-wide.
+ *
+ * Runs REGARDLESS of Firms_SelfServe_Enabled (2026-07-30 fixer). The feature
+ * flag gates the FEATURE, not the forgery guard: while it is off (staging today)
+ * any owner could plant a `customFields.firmId` that migration v340 then keeps
+ * (it only fills absent stamps) and that this very function later PRESERVES
+ * once the flag is turned on. Matches stampRoomFirmId.ts, which strips an
+ * inbound firmId at creation before its own feature-flag early-return.
  */
 export const sanitizeRoomCustomFieldsForActor = async (
 	actorId: string,
 	room: Pick<IRoom, 'customFields'>,
 	incoming: Record<string, any>,
 ): Promise<Record<string, any>> => {
-	if (!isSelfServeFirmsEnabled()) {
-		return incoming;
-	}
 	const actor = await Users.findOneById(actorId, { projection: { roles: 1 } });
 	if (actor?.roles?.includes('admin')) {
 		return incoming;

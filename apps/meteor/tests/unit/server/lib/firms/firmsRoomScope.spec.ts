@@ -92,5 +92,27 @@ describe('firms room scope helpers', () => {
 			expect(existing).to.deep.equal({ firmId: 'team1' });
 			expect(incoming).to.deep.equal({ firmId: 'team2', other: 1 });
 		});
+		it('strips a FORGED firmTeam/firmName on a room that carries neither', () => {
+			// forging firmTeam makes invite redemption adopt every redeemer into a cohort
+			// of the forger's choosing (useInviteToken -> adoptUserIntoFirm)
+			expect(withPreservedRoomFirmId({ firmId: 'team1' }, { firmTeam: true, firmName: 'Anything', topic: 'x' })).to.deep.equal({
+				topic: 'x',
+				firmId: 'team1',
+			});
+		});
+		it('restores firmTeam/firmName when the caller tries to STRIP them', () => {
+			// stripping firmTeam disables firm adoption AND exempts the room from the
+			// tightenFirmInvites sweep, which selects on customFields.firmTeam
+			expect(withPreservedRoomFirmId({ firmId: 'team1', firmTeam: true, firmName: 'Acme Law' }, {})).to.deep.equal({
+				firmId: 'team1',
+				firmTeam: true,
+				firmName: 'Acme Law',
+			});
+		});
+		it('restores firmTeam/firmName over forged replacements', () => {
+			expect(
+				withPreservedRoomFirmId({ firmId: 'team1', firmTeam: true, firmName: 'Acme Law' }, { firmTeam: false, firmName: 'Evil Corp' }),
+			).to.deep.equal({ firmId: 'team1', firmTeam: true, firmName: 'Acme Law' });
+		});
 	});
 });

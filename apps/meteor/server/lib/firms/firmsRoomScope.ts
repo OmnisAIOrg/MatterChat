@@ -75,21 +75,37 @@ export const roomMatchesFirmScope = (
 };
 
 /**
+ * Room customFields keys that are firm-owned SECURITY metadata, never
+ * caller-writable:
+ *  - `firmId`    — the enumeration cohort (firmsRoomScope queries key on it);
+ *  - `firmTeam`  — marks a room as a firm's HOME team room. Forging it makes
+ *    invite redemption adopt every redeemer into a cohort of the forger's
+ *    choosing (useInviteToken); stripping it silently disables firm adoption
+ *    AND exempts the room's invites from the tightenFirmInvites sweep;
+ *  - `firmName`  — the display name adoptUserIntoFirm brands the redeemer with.
+ */
+export const FIRM_OWNED_ROOM_CUSTOM_FIELDS = ['firmId', 'firmTeam', 'firmName'] as const;
+
+/**
  * `saveRoomSettings roomCustomFields` replaces room.customFields WHOLESALE, so
- * anyone with edit-room could strip or forge the firmId stamp. This forces the
- * incoming object to keep the room's existing firmId (or none). Never mutates
- * its inputs.
+ * anyone with edit-room could strip or forge the firm stamp. This forces the
+ * incoming object to keep the room's existing firm-owned keys (or none of
+ * them). Never mutates its inputs.
  */
 export const withPreservedRoomFirmId = (
 	existing: Record<string, unknown> | undefined,
 	incoming: Record<string, unknown>,
 ): Record<string, unknown> => {
 	const result: Record<string, unknown> = { ...incoming };
-	const existingFirmId = existing?.firmId;
-	if (typeof existingFirmId === 'string' && existingFirmId) {
-		result.firmId = existingFirmId;
-	} else {
-		delete result.firmId;
+	for (const key of FIRM_OWNED_ROOM_CUSTOM_FIELDS) {
+		const existingValue = existing?.[key];
+		// `undefined` and `null` both mean "the room does not carry this key" —
+		// anything the caller sent for it is a forgery attempt and is dropped.
+		if (existingValue === undefined || existingValue === null) {
+			delete result[key];
+		} else {
+			result[key] = existingValue;
+		}
 	}
 	return result;
 };

@@ -258,6 +258,8 @@ export interface IRoomsModel extends IBaseModel<IRoom> {
 		type: IRoom['t'],
 		options?: FindOptions<IRoom>,
 		includeFederatedRooms?: boolean,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries?: Filter<IRoom>[],
 	): FindCursor<IRoom>;
 	findByNameOrFNameAndTypesNotInIds(
 		name: IRoom['name'] | RegExp,
