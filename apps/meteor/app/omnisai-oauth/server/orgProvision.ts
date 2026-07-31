@@ -85,7 +85,11 @@ export async function claimOrgProvision(orgId: string, byUserId: string): Promis
 	try {
 		const res = await orgProvisions().updateOne(
 			buildOrgProvisionClaimFilter(orgId, now),
-			{ $set: { status: 'pending', startedAt: now, byUserId } },
+			{
+				$set: { status: 'pending', startedAt: now, byUserId },
+				// a re-claimed marker must not carry the PREVIOUS run's outcome while 'pending'
+				$unset: { completedAt: 1, counts: 1, lastError: 1 },
+			},
 			{ upsert: true },
 		);
 		return res.upsertedCount > 0 || res.matchedCount > 0;
