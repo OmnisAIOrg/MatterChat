@@ -2,9 +2,11 @@ import { expect } from 'chai';
 
 import {
 	clampFirmInviteLimits,
+	findFirmOwnedCustomFieldKeys,
 	isFirmScopeExemptUser,
 	normalizeFirmName,
 	partitionEmails,
+	planInviteDelivery,
 	resolveFirmInviteLimits,
 	slugifyFirmName,
 	userMatchesFirmScope,
@@ -165,6 +167,52 @@ describe('firms helpers', () => {
 		it('falls back to the cap for garbage and negatives', () => {
 			expect(clampFirmInviteLimits(-1, 'nope', caps)).to.deep.equal({ days: 7, maxUses: 25 });
 			expect(clampFirmInviteLimits(undefined, null, caps)).to.deep.equal({ days: 7, maxUses: 25 });
+		});
+	});
+
+	describe('planInviteDelivery', () => {
+		it('queues every valid address when a mail transport exists', () => {
+			expect(planInviteDelivery(['a@x.com', 'b@x.com'], true)).to.deep.equal({
+				toSend: ['a@x.com', 'b@x.com'],
+				undelivered: [],
+				emailDelivery: 'queued',
+			});
+		});
+		it('attempts nothing and reports undelivered when there is no mail transport', () => {
+			expect(planInviteDelivery(['a@x.com'], false)).to.deep.equal({
+				toSend: [],
+				undelivered: ['a@x.com'],
+				emailDelivery: 'unavailable',
+			});
+		});
+		it('copies the input so the caller can push failures onto undelivered', () => {
+			const valid = ['a@x.com'];
+			const plan = planInviteDelivery(valid, true);
+			plan.toSend.push('mutated@x.com');
+			expect(valid).to.deep.equal(['a@x.com']);
+		});
+	});
+
+	describe('findFirmOwnedCustomFieldKeys', () => {
+		it('spots every firm-owned key', () => {
+			expect(findFirmOwnedCustomFieldKeys({ firmId: 'a', firmName: 'b', firmRole: 'owner', firmIdSource: 'admin' })).to.deep.equal([
+				'firmId',
+				'firmName',
+				'firmRole',
+				'firmIdSource',
+			]);
+		});
+		it('ignores unrelated custom fields', () => {
+			expect(findFirmOwnedCustomFieldKeys({ barNumber: '123', team: 'litigation' })).to.deep.equal([]);
+		});
+		it('is exact-match only (Mongo keys are case sensitive)', () => {
+			expect(findFirmOwnedCustomFieldKeys({ FirmId: 'a' })).to.deep.equal([]);
+		});
+		it('tolerates non-objects', () => {
+			expect(findFirmOwnedCustomFieldKeys(undefined)).to.deep.equal([]);
+			expect(findFirmOwnedCustomFieldKeys(null)).to.deep.equal([]);
+			expect(findFirmOwnedCustomFieldKeys('firmId')).to.deep.equal([]);
+			expect(findFirmOwnedCustomFieldKeys(['firmId'])).to.deep.equal([]);
 		});
 	});
 });

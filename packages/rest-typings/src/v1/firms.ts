@@ -14,6 +14,30 @@ export type FirmInfoDTO = {
 	isOwner: boolean;
 };
 
+/**
+ * `queued` means handed to the mail transport, NOT delivered — the mailer is
+ * fire-and-forget, so delivery can never be confirmed synchronously.
+ * `emailDelivery: 'unavailable'` means the workspace has no mail transport at
+ * all and nothing was even attempted; `inviteUrl` is the fallback in both cases.
+ */
+export type FirmInviteResultDTO = {
+	queued: string[];
+	invalid: string[];
+	undelivered: string[];
+	emailDelivery: 'queued' | 'unavailable';
+	inviteUrl: string;
+};
+
+export type FirmUserAssignmentDTO = {
+	userId: string;
+	username?: string;
+	firmId: string | null;
+	firmName: string | null;
+	firmRole: string | null;
+	/** false when the firmId has no team behind it (e.g. an OmnisAI org cohort). */
+	firmTeamFound: boolean;
+};
+
 export type FirmsEndpoints = {
 	'/v1/firms.create': {
 		POST: (params: { name: string }) => { firm: FirmInfoDTO };
@@ -22,6 +46,15 @@ export type FirmsEndpoints = {
 		GET: () => { enabled: boolean; firm: FirmInfoDTO | null };
 	};
 	'/v1/firms.invite': {
-		POST: (params: { emails: string[] }) => { sent: string[]; invalid: string[]; inviteUrl: string };
+		POST: (params: { emails: string[] }) => FirmInviteResultDTO;
+	};
+	'/v1/firms.setUserFirm': {
+		POST: (params: {
+			userId?: string;
+			username?: string;
+			firmId: string | null;
+			firmName?: string;
+			firmRole?: 'member' | 'owner';
+		}) => FirmUserAssignmentDTO;
 	};
 };

@@ -5,12 +5,14 @@ import { Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
+import type { FirmInviteDeliveryStatus } from './firmsHelpers';
 import {
 	FIRM_NAME_MAX,
 	FIRM_NAME_MIN,
 	MAX_INVITES_PER_CALL,
 	normalizeFirmName,
 	partitionEmails,
+	planInviteDelivery,
 	resolveFirmInviteLimits,
 	slugifyFirmName,
 } from './firmsHelpers';
@@ -18,6 +20,7 @@ import { firmCohortFromScope, firmRoomScopeQuery, withPreservedRoomFirmId } from
 import { findOrCreateInvite } from '../../../app/invites/server/functions/findOrCreateInvite';
 import * as Mailer from '../../../app/mailer/server/api';
 import { settings } from '../../../app/settings/server';
+import { isSMTPConfigured } from '../../../app/utils/server/functions/isSMTPConfigured';
 
 export { normalizeFirmName, slugifyFirmName, partitionEmails, userMatchesFirmScope } from './firmsHelpers';
 export { firmCohortFromScope, firmRoomScopeQuery, roomMatchesFirmScope, withPreservedRoomFirmId } from './firmsRoomScope';
@@ -147,7 +150,19 @@ export const adoptUserIntoFirm = async (userId: string, teamId: string, firmName
 	}
 };
 
-export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ sent: string[]; invalid: string[]; inviteUrl: string }> => {
+export type FirmInviteResult = {
+	/** Handed to the mail transport. NOT a delivery receipt — see planInviteDelivery. */
+	queued: string[];
+	/** Malformed addresses, rejected before any send was attempted. */
+	invalid: string[];
+	/** Valid addresses that could not even be handed off (no mail transport, or the mailer threw). */
+	undelivered: string[];
+	emailDelivery: FirmInviteDeliveryStatus;
+	/** Always usable — the fallback whenever emailDelivery !== 'queued'. */
+	inviteUrl: string;
+};
+
+export const inviteToFirm = async (userId: string, emails: unknown): Promise<FirmInviteResult> => {
 	if (!isSelfServeFirmsEnabled()) {
 		throw new Meteor.Error('error-not-allowed', 'Self-serve firms are disabled', { method: 'firms.invite' });
 	}
@@ -197,18 +212,139 @@ export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ s
 		`<p>If the button doesn't work, paste this link into your browser:<br/>${inviteUrl}</p>` +
 		`<p>This invitation link expires in ${days} ${days === 1 ? 'day' : 'days'} and can be used up to ${maxUses} ${maxUses === 1 ? 'time' : 'times'}.</p>`;
 
-	const sent: string[] = [];
-	for (const email of valid) {
+	// Delivery honesty (2026-07-30 smoke defect): `Mailer.send` resolves once the
+	// message is QUEUED (`sendNoWrap` ends in `setImmediate(() => Email.sendAsync…)`),
+	// so awaiting it can never observe an SMTP failure — the old `sent` array was
+	// structurally incapable of meaning "delivered" and its catch arm was dead code
+	// for delivery errors. Prod has a live example of this (the M365 tenant block),
+	// where a firm owner saw "invites sent" and no teammate ever received anything.
+	// So: pre-flight the transport, report `queued` (handed off) vs `undelivered`
+	// (never even attempted), and always hand back inviteUrl for manual distribution.
+	const { toSend, undelivered, emailDelivery } = planInviteDelivery(valid, isSMTPConfigured());
+	if (emailDelivery === 'unavailable') {
+		console.warn(
+			`[firms] no mail transport configured (SMTP_Host/MAIL_URL unset) — ${undelivered.length} firm invite email(s) NOT sent; share ${inviteUrl} manually`,
+		);
+	}
+
+	const queued: string[] = [];
+	for (const email of toSend) {
 		try {
 			await Mailer.send({ to: email, from: fromEmail, subject, html });
-			sent.push(email);
+			queued.push(email);
 		} catch (e) {
-			console.warn(`[firms] invite email to ${email} failed`, e);
-			invalid.push(email);
+			console.warn(`[firms] invite email to ${email} could not be queued`, e);
+			undelivered.push(email);
 		}
 	}
 
-	return { sent, invalid, inviteUrl };
+	return { queued, invalid, undelivered, emailDelivery, inviteUrl };
+};
+
+/**
+ * ADMIN-ONLY firm (re)assignment — the supported way to correct a mis-stamped
+ * account, move someone between firms, or un-stamp one entirely.
+ *
+ * It exists because there was NO such path (2026-07-30 smoke observation):
+ * membership was writable only by firms.create, invite redemption, the OIDC org
+ * stamp, or a direct DB write, and `users.update` with a customFields payload
+ * silently no-opped while answering `success: true`. That silent door is now
+ * closed (assertNoFirmOwnedCustomFields) and this is the loud one.
+ *
+ * Deliberately NOT gated on `Firms_SelfServe_Enabled`: an operator has to be able
+ * to fix cohorts BEFORE the feature is switched on for a workspace.
+ *
+ * `firmId` accepts any non-empty id, not just a firm team's — OmnisAI org
+ * cohorts stamp a CentralizedAuth orgId that has no team behind it. When no team
+ * matches, the write still happens and `firmTeamFound: false` says so rather
+ * than the call failing or pretending.
+ *
+ * Membership of the firm's team room is NOT changed here (stamping is the
+ * cohort, joining is a room operation) — add or remove the user from the firm
+ * team separately when they should also see its channel.
+ */
+export const setUserFirm = async (
+	actorId: string,
+	params: { userId?: unknown; username?: unknown; firmId?: unknown; firmName?: unknown; firmRole?: unknown },
+): Promise<{
+	userId: string;
+	username?: string;
+	firmId: string | null;
+	firmName: string | null;
+	firmRole: string | null;
+	firmTeamFound: boolean;
+}> => {
+	const actor = await getUserOrThrow(actorId);
+	if (!actor.roles?.includes('admin')) {
+		throw new Meteor.Error('error-not-allowed', 'Only an admin can change firm membership', { method: 'firms.setUserFirm' });
+	}
+
+	const { userId, username, firmId, firmName, firmRole } = params;
+	if (typeof userId !== 'string' && typeof username !== 'string') {
+		throw new Meteor.Error('error-invalid-params', 'Provide userId or username', { method: 'firms.setUserFirm' });
+	}
+	const target =
+		typeof userId === 'string' ? await Users.findOneById(userId) : await Users.findOneByUsernameIgnoringCase(username as string);
+	if (!target) {
+		throw new Meteor.Error('error-invalid-user', 'User not found', { method: 'firms.setUserFirm' });
+	}
+
+	// null / '' clears the stamp; the whole firm-owned key set goes with it so no
+	// orphan firmName/firmRole/firmIdSource survives to confuse a later read.
+	if (firmId === null || firmId === '') {
+		await Users.updateOne(
+			{ _id: target._id },
+			{
+				$unset: {
+					'customFields.firmId': 1,
+					'customFields.firmName': 1,
+					'customFields.firmRole': 1,
+					'customFields.firmIdSource': 1,
+				},
+			},
+		);
+		return { userId: target._id, username: target.username, firmId: null, firmName: null, firmRole: null, firmTeamFound: false };
+	}
+
+	if (typeof firmId !== 'string' || !firmId.trim()) {
+		throw new Meteor.Error('error-invalid-firm', 'firmId must be a non-empty string, or null to clear', {
+			method: 'firms.setUserFirm',
+		});
+	}
+	const resolvedFirmId = firmId.trim();
+
+	const role = firmRole === undefined ? 'member' : firmRole;
+	if (role !== 'member' && role !== 'owner') {
+		throw new Meteor.Error('error-invalid-firm-role', "firmRole must be 'member' or 'owner'", { method: 'firms.setUserFirm' });
+	}
+
+	const team = await Team.getOneById<ITeam>(resolvedFirmId);
+	const teamRoom = team ? await Rooms.findOneById(team.roomId, { projection: { customFields: 1, name: 1 } }) : null;
+	const teamFirmName = (teamRoom?.customFields as Record<string, unknown> | undefined)?.firmName;
+	const explicitName = normalizeFirmName(firmName);
+	const resolvedName = explicitName ?? (typeof teamFirmName === 'string' && teamFirmName ? teamFirmName : (team?.name ?? null));
+
+	await Users.updateOne(
+		{ _id: target._id },
+		{
+			$set: {
+				'customFields.firmId': resolvedFirmId,
+				'customFields.firmRole': role,
+				'customFields.firmIdSource': 'admin',
+				...(resolvedName ? { 'customFields.firmName': resolvedName } : {}),
+			},
+			...(resolvedName ? {} : { $unset: { 'customFields.firmName': 1 } }),
+		},
+	);
+
+	return {
+		userId: target._id,
+		username: target.username,
+		firmId: resolvedFirmId,
+		firmName: resolvedName,
+		firmRole: role,
+		firmTeamFound: Boolean(team),
+	};
 };
 
 /**

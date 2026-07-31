@@ -131,6 +131,46 @@ export const partitionEmails = (emails: unknown, isValidEmail: (email: string) =
 };
 
 /**
+ * The user-doc `customFields` keys the firms module OWNS. They are written only
+ * by the firms service (createFirm / adoptUserIntoFirm / setUserFirm) and the
+ * OmnisAI org stamp — never through the generic custom-fields surface, which
+ * validates against the admin-authored `Accounts_CustomFields` schema and drops
+ * anything not in it SILENTLY (see assertNoFirmOwnedCustomFields).
+ */
+export const FIRM_OWNED_CUSTOM_FIELD_KEYS = ['firmId', 'firmName', 'firmRole', 'firmIdSource'] as const;
+
+/** Which firm-owned keys a caller-supplied customFields payload is trying to set. */
+export const findFirmOwnedCustomFieldKeys = (formData: unknown): string[] => {
+	if (!formData || typeof formData !== 'object' || Array.isArray(formData)) {
+		return [];
+	}
+	const keys = Object.keys(formData as Record<string, unknown>);
+	return (FIRM_OWNED_CUSTOM_FIELD_KEYS as readonly string[]).filter((key) => keys.includes(key));
+};
+
+export type FirmInviteDeliveryStatus = 'queued' | 'unavailable';
+
+/**
+ * Decide what actually happens to a batch of syntactically-valid invite
+ * addresses, given whether the workspace has any mail transport at all.
+ *
+ * The distinction matters because `Mailer.send` is fire-and-forget: it awaits
+ * only up to the point where `Email.sendAsync` is handed to `setImmediate`, so
+ * a resolved promise means QUEUED, never DELIVERED (delivery errors surface
+ * only in the server log). With no SMTP_Host and no MAIL_URL the queue drops
+ * every message — reporting those addresses as "sent" is a lie the firm owner
+ * acts on, so they come back as `undelivered` with `emailDelivery:'unavailable'`
+ * and the caller is expected to hand out `inviteUrl` instead.
+ */
+export const planInviteDelivery = (
+	valid: string[],
+	emailConfigured: boolean,
+): { toSend: string[]; undelivered: string[]; emailDelivery: FirmInviteDeliveryStatus } =>
+	emailConfigured
+		? { toSend: [...valid], undelivered: [], emailDelivery: 'queued' }
+		: { toSend: [], undelivered: [...valid], emailDelivery: 'unavailable' };
+
+/**
  * Bot / app / service accounts (rocket.cat, the Chi admin assistant, connector
  * bridges, Apps-Engine users) are workspace INFRASTRUCTURE, not firm members —
  * they carry no firmId and must never be scoped away from a firm's users. Left
