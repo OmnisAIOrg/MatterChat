@@ -3,8 +3,13 @@ import { expect } from 'chai';
 import {
 	normalizeFirmName,
 	partitionEmails,
+	resolveFirmInviteLimits,
 	slugifyFirmName,
 	userMatchesFirmScope,
+	FIRM_INVITE_ALLOWED_DAYS,
+	FIRM_INVITE_ALLOWED_USES,
+	FIRM_INVITE_DEFAULT_DAYS,
+	FIRM_INVITE_DEFAULT_MAX_USES,
 	FIRM_NAME_MAX,
 } from '../../../../../server/lib/firms/firmsHelpers';
 
@@ -51,6 +56,53 @@ describe('firms helpers', () => {
 			const { valid, invalid } = partitionEmails([42, null, 'a@b.co'], isValidEmail);
 			expect(valid).to.deep.equal(['a@b.co']);
 			expect(invalid).to.deep.equal([]);
+		});
+	});
+
+	describe('resolveFirmInviteLimits', () => {
+		it('never lists 0 (unlimited / never-expires) as an allowed value', () => {
+			expect(FIRM_INVITE_ALLOWED_DAYS).to.not.include(0);
+			expect(FIRM_INVITE_ALLOWED_USES).to.not.include(0);
+		});
+		it('passes exact allowed values through unchanged', () => {
+			for (const days of FIRM_INVITE_ALLOWED_DAYS) {
+				expect(resolveFirmInviteLimits(days, 25).days).to.equal(days);
+			}
+			for (const maxUses of FIRM_INVITE_ALLOWED_USES) {
+				expect(resolveFirmInviteLimits(7, maxUses).maxUses).to.equal(maxUses);
+			}
+		});
+		it('falls back to the defaults on garbage input', () => {
+			const expected = { days: FIRM_INVITE_DEFAULT_DAYS, maxUses: FIRM_INVITE_DEFAULT_MAX_USES };
+			expect(resolveFirmInviteLimits(undefined, undefined)).to.deep.equal(expected);
+			expect(resolveFirmInviteLimits(null, null)).to.deep.equal(expected);
+			expect(resolveFirmInviteLimits('abc', {})).to.deep.equal(expected);
+			expect(resolveFirmInviteLimits(NaN, Infinity)).to.deep.equal(expected);
+			expect(resolveFirmInviteLimits('', '  ')).to.deep.equal(expected);
+			expect(resolveFirmInviteLimits(true, [])).to.deep.equal(expected);
+		});
+		it('snaps 0 and negatives UP to the smallest allowed value — unlimited can never come back', () => {
+			expect(resolveFirmInviteLimits(0, 0)).to.deep.equal({ days: 1, maxUses: 1 });
+			expect(resolveFirmInviteLimits(-5, -1)).to.deep.equal({ days: 1, maxUses: 1 });
+		});
+		it('snaps arbitrary values to the nearest allowed value', () => {
+			expect(resolveFirmInviteLimits(3, 2).days).to.equal(1);
+			expect(resolveFirmInviteLimits(5, 25).days).to.equal(7);
+			expect(resolveFirmInviteLimits(20, 25).days).to.equal(15);
+			expect(resolveFirmInviteLimits(7, 8).maxUses).to.equal(10);
+			expect(resolveFirmInviteLimits(7, 30).maxUses).to.equal(25);
+			expect(resolveFirmInviteLimits(7, 60).maxUses).to.equal(50);
+		});
+		it('caps huge values at the largest allowed value', () => {
+			expect(resolveFirmInviteLimits(1000, 1e9)).to.deep.equal({ days: 30, maxUses: 100 });
+		});
+		it('breaks ties toward the stricter (smaller) value', () => {
+			expect(resolveFirmInviteLimits(4, 3)).to.deep.equal({ days: 1, maxUses: 1 });
+			expect(resolveFirmInviteLimits(7, 75).maxUses).to.equal(50);
+		});
+		it('accepts numeric strings (raw settings values)', () => {
+			expect(resolveFirmInviteLimits('30', '100')).to.deep.equal({ days: 30, maxUses: 100 });
+			expect(resolveFirmInviteLimits(' 15 ', ' 50 ')).to.deep.equal({ days: 15, maxUses: 50 });
 		});
 	});
 

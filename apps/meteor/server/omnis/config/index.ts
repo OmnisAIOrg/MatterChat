@@ -9,5 +9,7 @@
  * 2FA method) and settings-by-env requires an ops-repo deploy while these ship with the app.
  */
 import { applyMatterChatConfigFixes } from './matterchatConfigFixes';
+import { tightenFirmInvites } from './tightenFirmInvites';
 
 applyMatterChatConfigFixes();
+tightenFirmInvites();

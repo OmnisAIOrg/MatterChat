@@ -10,6 +10,48 @@ export const FIRM_NAME_MIN = 2;
 export const FIRM_NAME_MAX = 60;
 export const MAX_INVITES_PER_CALL = 25;
 
+/**
+ * Firm invite links must always be FINITE (the 2026-07-30 audit found 15-day
+ * unlimited-use links circulating). Stock findOrCreateInvite only accepts fixed
+ * value sets (days ∈ [0,1,7,15,30], maxUses ∈ [0,1,5,10,25,50,100]; 0 means
+ * unlimited/never-expires) — these lists mirror them but deliberately EXCLUDE 0
+ * so no configuration can ever reopen unlimited firm invites.
+ */
+export const FIRM_INVITE_ALLOWED_DAYS = [1, 7, 15, 30] as const;
+export const FIRM_INVITE_ALLOWED_USES = [1, 5, 10, 25, 50, 100] as const;
+export const FIRM_INVITE_DEFAULT_DAYS = 7;
+export const FIRM_INVITE_DEFAULT_MAX_USES = 25;
+
+const toFiniteNumber = (raw: unknown): number | null => {
+	if (typeof raw === 'number' && Number.isFinite(raw)) {
+		return raw;
+	}
+	if (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw))) {
+		return Number(raw);
+	}
+	return null;
+};
+
+/** Snap to the nearest allowed value; ties snap DOWN (the stricter choice). */
+const snapToAllowed = (raw: unknown, allowed: readonly number[], fallback: number): number => {
+	const value = toFiniteNumber(raw);
+	if (value === null) {
+		return fallback;
+	}
+	return allowed.reduce((best, candidate) => (Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best));
+};
+
+/**
+ * Resolve the admin-configurable firm-invite limits (Firms_Invite_Expiry_Days /
+ * Firms_Invite_MaxUses) to values stock findOrCreateInvite accepts. Garbage
+ * falls back to the defaults; 0 and negatives (Rocket.Chat's "unlimited" /
+ * "never expires") snap UP to the smallest allowed value, never back to 0.
+ */
+export const resolveFirmInviteLimits = (rawDays: unknown, rawMaxUses: unknown): { days: number; maxUses: number } => ({
+	days: snapToAllowed(rawDays, FIRM_INVITE_ALLOWED_DAYS, FIRM_INVITE_DEFAULT_DAYS),
+	maxUses: snapToAllowed(rawMaxUses, FIRM_INVITE_ALLOWED_USES, FIRM_INVITE_DEFAULT_MAX_USES),
+});
+
 /** Strips control chars, collapses whitespace. Returns null if unusable. */
 export const normalizeFirmName = (raw: unknown): string | null => {
 	if (typeof raw !== 'string') {
