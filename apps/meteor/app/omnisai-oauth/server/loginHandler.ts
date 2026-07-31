@@ -21,7 +21,13 @@ import {
 	provisionOrgFromRoster,
 	stampFirmIdFromOrg,
 } from './orgProvision';
-import { parseOrgAdminRoles, qualifiesToProvisionOrg, shouldSkipProvisionTrigger } from './orgProvisionHelpers';
+import {
+	orgIsProvisionable,
+	parseOrgAdminRoles,
+	parseProvisionOrgAllowlist,
+	qualifiesToProvisionOrg,
+	shouldSkipProvisionTrigger,
+} from './orgProvisionHelpers';
 import { SystemLogger } from '../../../server/lib/logger/system';
 
 const makeError = (message: string): Record<string, any> => ({
@@ -47,7 +53,6 @@ async function uniqueUsername(base: string): Promise<string> {
 	const cleaned = (base || '').replace(/[^a-zA-Z0-9._-]/g, '') || 'omnisai-user';
 	let candidate = cleaned;
 	for (let n = 1; n <= 50; n++) {
-		// eslint-disable-next-line no-await-in-loop
 		const existing = await Users.findOneByUsernameIgnoringCase(candidate, { projection: { _id: 1 } });
 		if (!existing) {
 			return candidate;
@@ -186,6 +191,13 @@ async function maybeAutoProvisionOrg(userId: string, profile: OmnisAIProfile): P
 		}
 
 		const { orgId } = profile;
+		// Optional ops containment for the widened (org-admin) trigger: when
+		// MATTERCHAT_PROVISION_ORG_ALLOWLIST is set, only the listed CentralizedAuth
+		// orgs may fire a roster import. Unset (the default) allows every org.
+		if (!orgIsProvisionable(orgId, parseProvisionOrgAllowlist(process.env.MATTERCHAT_PROVISION_ORG_ALLOWLIST))) {
+			SystemLogger.debug({ msg: 'OmnisAI auto-provision skipped: org not in MATTERCHAT_PROVISION_ORG_ALLOWLIST', orgId });
+			return;
+		}
 		// Cheap pre-check (the common path on every later admin login): 'done', or a
 		// fresh run already in flight → nothing to do without contending for the claim.
 		if (shouldSkipProvisionTrigger(await getOrgProvision(orgId), new Date())) {
@@ -225,7 +237,7 @@ Accounts.registerLoginHandler('omnisai', async (loginRequest) => {
 	await CredentialTokens.removeById(request.credentialToken);
 
 	const profile = doc?.userInfo?.profile as OmnisAIProfile | undefined;
-	if (!profile || !profile.sub) {
+	if (!profile?.sub) {
 		return makeError('No matching OmnisAI login attempt found');
 	}
 

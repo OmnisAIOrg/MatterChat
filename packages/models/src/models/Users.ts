@@ -66,6 +66,8 @@ export class UsersRaw extends BaseRaw<IUser, DefaultFields<IUser>> implements IU
 			{ key: { federation: 1 }, sparse: true },
 			{ key: { isRemote: 1 }, sparse: true },
 			{ key: { 'services.saml.inResponseTo': 1 } },
+			// MATTERCHAT: org auto-provision / firmId backfill scan this field at boot
+			{ key: { 'services.omnisai.orgId': 1 }, sparse: true },
 			{ key: { openBusinessHours: 1 }, sparse: true },
 			{ key: { statusLivechat: 1 }, sparse: true },
 			{ key: { freeSwitchExtension: 1 }, sparse: true, unique: true },

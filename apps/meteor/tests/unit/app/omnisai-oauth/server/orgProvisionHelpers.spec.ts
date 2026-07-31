@@ -2,12 +2,17 @@ import { expect } from 'chai';
 
 import {
 	DEFAULT_ORG_ADMIN_ROLES,
+	FAILED_RETRY_BACKOFF_MS,
 	STALE_PENDING_CLAIM_MS,
 	buildOrgProvisionClaimFilter,
 	decideFirmIdStamp,
 	isDuplicateKeyError,
+	isImportableRosterStatus,
 	isOrgAdminRole,
+	orgFirmCohortsEnabled,
+	orgIsProvisionable,
 	parseOrgAdminRoles,
+	parseProvisionOrgAllowlist,
 	qualifiesToProvisionOrg,
 	shouldSkipProvisionTrigger,
 } from '../../../../../app/omnisai-oauth/server/orgProvisionHelpers';
@@ -114,18 +119,21 @@ describe('orgProvisionHelpers (org auto-provision pure logic)', () => {
 	describe('buildOrgProvisionClaimFilter (the claim lock filter)', () => {
 		const now = new Date('2026-07-30T12:00:00.000Z');
 
-		it('keys on _id = orgId and re-claims failed or stale-pending markers', () => {
+		it('keys on _id = orgId and re-claims backed-off-failed or stale-pending markers', () => {
 			const filter = buildOrgProvisionClaimFilter('org-1', now) as any;
 			expect(filter._id).to.equal('org-1');
-			expect(filter.$or).to.have.lengthOf(2);
-			expect(filter.$or[0]).to.deep.equal({ status: 'failed' });
-			expect(filter.$or[1].status).to.equal('pending');
-			expect(filter.$or[1].startedAt.$lt.getTime()).to.equal(now.getTime() - STALE_PENDING_CLAIM_MS);
+			expect(filter.$or).to.have.lengthOf(3);
+			expect(filter.$or[0].status).to.equal('failed');
+			expect(filter.$or[0].completedAt.$lt.getTime()).to.equal(now.getTime() - FAILED_RETRY_BACKOFF_MS);
+			expect(filter.$or[1]).to.deep.equal({ status: 'failed', completedAt: { $exists: false } });
+			expect(filter.$or[2].status).to.equal('pending');
+			expect(filter.$or[2].startedAt.$lt.getTime()).to.equal(now.getTime() - STALE_PENDING_CLAIM_MS);
 		});
 
-		it('honours a custom staleness window', () => {
-			const filter = buildOrgProvisionClaimFilter('org-1', now, 1000) as any;
-			expect(filter.$or[1].startedAt.$lt.getTime()).to.equal(now.getTime() - 1000);
+		it('honours custom staleness / backoff windows', () => {
+			const filter = buildOrgProvisionClaimFilter('org-1', now, 1000, 5000) as any;
+			expect(filter.$or[2].startedAt.$lt.getTime()).to.equal(now.getTime() - 1000);
+			expect(filter.$or[0].completedAt.$lt.getTime()).to.equal(now.getTime() - 5000);
 		});
 	});
 
@@ -148,12 +156,74 @@ describe('orgProvisionHelpers (org auto-provision pure logic)', () => {
 			expect(shouldSkipProvisionTrigger({ status: 'pending', startedAt: stale }, now)).to.be.false;
 		});
 
-		it('does not skip a failed org (retry on next qualifying login)', () => {
+		it('SKIPS a recently-failed org (backoff — one outbound roster call per login otherwise)', () => {
+			const justFailed = new Date(now.getTime() - 60 * 1000);
+			expect(shouldSkipProvisionTrigger({ status: 'failed', startedAt: justFailed, completedAt: justFailed }, now)).to.be.true;
+		});
+
+		it('re-arms a failed org once the backoff has elapsed', () => {
+			const longAgo = new Date(now.getTime() - FAILED_RETRY_BACKOFF_MS - 1000);
+			expect(shouldSkipProvisionTrigger({ status: 'failed', startedAt: longAgo, completedAt: longAgo }, now)).to.be.false;
+		});
+
+		it('re-arms immediately when a failed marker carries no completedAt (legacy/hand-edited doc)', () => {
 			expect(shouldSkipProvisionTrigger({ status: 'failed', startedAt: new Date(now.getTime() - 1) }, now)).to.be.false;
 		});
 
 		it('treats a pending marker with an unreadable startedAt as stale (never wedge the org)', () => {
 			expect(shouldSkipProvisionTrigger({ status: 'pending', startedAt: 'not-a-date' as unknown as Date }, now)).to.be.false;
+		});
+	});
+
+	describe('isImportableRosterStatus', () => {
+		it('imports active/enabled members and status-less legacy payloads', () => {
+			expect(isImportableRosterStatus('active')).to.be.true;
+			expect(isImportableRosterStatus('ACTIVE')).to.be.true;
+			expect(isImportableRosterStatus('enabled')).to.be.true;
+			expect(isImportableRosterStatus(undefined)).to.be.true;
+			expect(isImportableRosterStatus(null)).to.be.true;
+			expect(isImportableRosterStatus('')).to.be.true;
+		});
+		it('skips invited/pending/suspended/deactivated members', () => {
+			expect(isImportableRosterStatus('invited')).to.be.false;
+			expect(isImportableRosterStatus('pending')).to.be.false;
+			expect(isImportableRosterStatus('suspended')).to.be.false;
+			expect(isImportableRosterStatus('deactivated')).to.be.false;
+			expect(isImportableRosterStatus(42)).to.be.false;
+		});
+	});
+
+	describe('parseProvisionOrgAllowlist / orgIsProvisionable', () => {
+		it('an empty allow-list permits every org (default behaviour)', () => {
+			expect(parseProvisionOrgAllowlist(undefined)).to.deep.equal([]);
+			expect(parseProvisionOrgAllowlist('  ')).to.deep.equal([]);
+			expect(orgIsProvisionable('org-b', [])).to.be.true;
+		});
+		it('restricts to the listed orgs when set', () => {
+			const allowlist = parseProvisionOrgAllowlist(' org-a , org-c ');
+			expect(allowlist).to.deep.equal(['org-a', 'org-c']);
+			expect(orgIsProvisionable('org-a', allowlist)).to.be.true;
+			expect(orgIsProvisionable('org-b', allowlist)).to.be.false;
+		});
+		it('never provisions a blank orgId', () => {
+			expect(orgIsProvisionable('', [])).to.be.false;
+			expect(orgIsProvisionable(undefined, [])).to.be.false;
+		});
+	});
+
+	describe('orgFirmCohortsEnabled (MATTERCHAT_ORG_FIRM_COHORTS)', () => {
+		it('is OFF by default — the org stamp must not arm PR #166 cohorts on an existing workspace', () => {
+			expect(orgFirmCohortsEnabled(undefined)).to.be.false;
+			expect(orgFirmCohortsEnabled(null)).to.be.false;
+			expect(orgFirmCohortsEnabled('')).to.be.false;
+			expect(orgFirmCohortsEnabled('false')).to.be.false;
+			expect(orgFirmCohortsEnabled('0')).to.be.false;
+		});
+		it('accepts the usual truthy spellings', () => {
+			expect(orgFirmCohortsEnabled('1')).to.be.true;
+			expect(orgFirmCohortsEnabled('true')).to.be.true;
+			expect(orgFirmCohortsEnabled(' YES ')).to.be.true;
+			expect(orgFirmCohortsEnabled('on')).to.be.true;
 		});
 	});
 

@@ -24,6 +24,15 @@ export const DEFAULT_ORG_ADMIN_ROLES = ['admin', 'owner'] as const;
  */
 export const STALE_PENDING_CLAIM_MS = 10 * 60 * 1000;
 
+/**
+ * A 'failed' claim re-arms the trigger, so a PERMANENTLY unavailable roster
+ * endpoint (CentralizedAuth's /organizations/:id/members is still unmerged —
+ * see docs/features/org-auto-provision.md) would otherwise produce one outbound
+ * HTTP call per qualifying login, forever. Wait this long after the failure
+ * before retrying.
+ */
+export const FAILED_RETRY_BACKOFF_MS = 60 * 60 * 1000;
+
 export type OrgProvisionStatus = 'pending' | 'done' | 'failed';
 
 export type OrgProvisionCounts = { total: number; created: number; existing: number; skipped: number };
@@ -76,6 +85,78 @@ export const qualifiesToProvisionOrg = (opts: {
 	return isWorkspaceAdmin || isOrgAdminRole(opts.orgRole, opts.orgAdminRoles);
 };
 
+/**
+ * Optional ops allow-list of CentralizedAuth org ids permitted to trigger a
+ * roster import (env MATTERCHAT_PROVISION_ORG_ALLOWLIST, comma-separated).
+ * EMPTY = no restriction (current behaviour). Set it on deployments where the
+ * widened org-admin trigger should not let a brand-new self-served org fire a
+ * roster import against the workspace's shared provision key.
+ */
+export const parseProvisionOrgAllowlist = (raw: string | undefined | null): string[] => {
+	if (typeof raw !== 'string' || !raw.trim()) {
+		return [];
+	}
+	return raw
+		.split(',')
+		.map((id) => id.trim())
+		.filter(Boolean);
+};
+
+/** True when `orgId` may be provisioned (an empty allow-list permits every org). */
+export const orgIsProvisionable = (orgId: string | undefined | null, allowlist: string[]): boolean => {
+	if (!orgId) {
+		return false;
+	}
+	if (allowlist.length === 0) {
+		return true;
+	}
+	return allowlist.includes(orgId);
+};
+
+/**
+ * Roster statuses that may be imported. CentralizedAuth rosters also carry
+ * invited/pending/suspended/deactivated members; importing those mints live,
+ * pre-verified MatterChat accounts for people the org never actually activated.
+ * A member with NO status at all is treated as active (older roster payloads
+ * omit the field entirely).
+ */
+export const IMPORTABLE_ROSTER_STATUSES = ['active', 'enabled'] as const;
+
+export const isImportableRosterStatus = (status: unknown): boolean => {
+	if (status === undefined || status === null || status === '') {
+		return true;
+	}
+	if (typeof status !== 'string') {
+		return false;
+	}
+	return (IMPORTABLE_ROSTER_STATUSES as readonly string[]).includes(status.trim().toLowerCase());
+};
+
+/**
+ * MATTERCHAT (2026-07-30 fixer): the org→firm cohort stamp is OPT-IN.
+ *
+ * `Firms_Scoped_Directory` defaults to true and prod already runs
+ * `Firms_SelfServe_Enabled=true`, so PR #166's user scoping is ARMED on the live
+ * workspace today — inert only because NOBODY carries customFields.firmId.
+ * Stamping every OIDC user with their CentralizedAuth org id would split the
+ * workspace into two mutually invisible cohorts on the deploy itself (stamped
+ * OIDC users vs. rocket.cat, every bot/app/service account, every
+ * password/invite-registered account and every not-yet-logged-in roster import),
+ * hard-blocking DMs across the split.
+ *
+ * So the stamp only happens when ops explicitly turns it on:
+ *   MATTERCHAT_ORG_FIRM_COHORTS=1|true|yes|on
+ * Off (the default) → no firmId is ever written from an org claim, no cohort
+ * split, and rooms stay unstamped (the room stamp derives from the creator's
+ * firmId), i.e. the deploy is a behavioural no-op for the existing workspace.
+ */
+export const orgFirmCohortsEnabled = (raw: string | undefined | null): boolean => {
+	if (typeof raw !== 'string') {
+		return false;
+	}
+	return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
+};
+
 export type FirmStampDecision = 'stamp' | 'already-stamped' | 'conflict' | 'invalid';
 
 /**
@@ -105,9 +186,17 @@ export const buildOrgProvisionClaimFilter = (
 	orgId: string,
 	now: Date,
 	staleMs: number = STALE_PENDING_CLAIM_MS,
+	failedBackoffMs: number = FAILED_RETRY_BACKOFF_MS,
 ): Filter<OrgProvisionMarker> => ({
 	_id: orgId,
-	$or: [{ status: 'failed' }, { status: 'pending', startedAt: { $lt: new Date(now.getTime() - staleMs) } }],
+	$or: [
+		// a 'failed' marker only re-arms once the backoff has elapsed. `completedAt` is
+		// always written by markOrgProvisionFailed; a marker missing it (hand-edited, or
+		// written by an older build) re-arms immediately, matching the previous behaviour.
+		{ status: 'failed', completedAt: { $lt: new Date(now.getTime() - failedBackoffMs) } },
+		{ status: 'failed', completedAt: { $exists: false } },
+		{ status: 'pending', startedAt: { $lt: new Date(now.getTime() - staleMs) } },
+	],
 });
 
 /**
@@ -116,9 +205,10 @@ export const buildOrgProvisionClaimFilter = (
  * buildOrgProvisionClaimFilter (keeps the common every-later-login path to one find).
  */
 export const shouldSkipProvisionTrigger = (
-	marker: Pick<OrgProvisionMarker, 'status' | 'startedAt'> | null | undefined,
+	marker: Pick<OrgProvisionMarker, 'status' | 'startedAt' | 'completedAt'> | null | undefined,
 	now: Date,
 	staleMs: number = STALE_PENDING_CLAIM_MS,
+	failedBackoffMs: number = FAILED_RETRY_BACKOFF_MS,
 ): boolean => {
 	if (!marker) {
 		return false;
@@ -130,6 +220,13 @@ export const shouldSkipProvisionTrigger = (
 		const startedAt = marker.startedAt instanceof Date ? marker.startedAt.getTime() : NaN;
 		// an unreadable startedAt counts as stale — don't let a malformed doc wedge the org forever
 		return Number.isFinite(startedAt) && startedAt > now.getTime() - staleMs;
+	}
+	if (marker.status === 'failed') {
+		// Back off before retrying: without this, a roster endpoint that is down (or not
+		// deployed at all) means one outbound HTTP call on EVERY qualifying login. Must
+		// stay in lockstep with buildOrgProvisionClaimFilter's 'failed' arm.
+		const completedAt = marker.completedAt instanceof Date ? marker.completedAt.getTime() : NaN;
+		return Number.isFinite(completedAt) && completedAt > now.getTime() - failedBackoffMs;
 	}
 	return false;
 };
