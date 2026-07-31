@@ -13,7 +13,7 @@ import { hasPermissionAsync } from '../../app/authorization/server/functions/has
 import { methodDeprecationLogger } from '../../app/lib/server/lib/deprecationWarningLogger';
 import { settings } from '../../app/settings/server';
 import { trim } from '../../lib/utils/stringUtils';
-import { getFirmScopeExtraQuery } from '../lib/firms/firmsService';
+import { getFirmRoomScopeExtraQuery, getFirmScopeExtraQuery } from '../lib/firms/firmsService';
 
 const sortChannels = (field: string, direction: 'asc' | 'desc'): Record<string, 1 | -1> => {
 	switch (field) {
@@ -66,6 +66,12 @@ const getChannelsAndGroups = async (
 	const userTeamsIds = (await Team.listTeamsBySubscriberUserId(user._id, { projection: { teamId: 1 } }))?.map(({ teamId }) => teamId) || [];
 	const userRooms = user.__rooms ?? [];
 
+	// MATTERCHAT: self-serve firms — the channels directory stays inside the caller's
+	// firm cohort. Legacy rooms without a firmId stay visible to everyone, rooms the
+	// caller is already in stay visible regardless of stamp (userRooms membership arm),
+	// and admins / the feature-off case get no scope (null).
+	const firmScope = await getFirmRoomScopeExtraQuery(user._id, userRooms);
+
 	const { cursor, totalCount } = Rooms.findPaginatedByNameOrFNameAndRoomIdsIncludingTeamRooms(
 		searchTerm ? new RegExp(searchTerm, 'i') : null,
 		[...userTeamsIds, ...publicTeamIds],
@@ -93,6 +99,7 @@ const getChannelsAndGroups = async (
 				federated: 1,
 			},
 		},
+		firmScope ? [firmScope] : undefined,
 	);
 
 	const [result, total] = await Promise.all([cursor.toArray(), totalCount]);
@@ -135,6 +142,12 @@ const getTeams = async (
 
 	const userSubs = await Subscriptions.findByUserId(user._id).toArray();
 	const ids = userSubs.map((sub) => sub.rid);
+
+	// MATTERCHAT: self-serve firms — the teams directory tab must not enumerate other
+	// firms' public teams (the query's t:'c' arm returns ALL of them). Same cohort
+	// convention as the channels tab; own memberships (ids) always stay visible.
+	const firmScope = await getFirmRoomScopeExtraQuery(user._id, ids);
+
 	const { cursor, totalCount } = Rooms.findPaginatedContainingNameOrFNameInIdsAsTeamMain(
 		searchTerm ? new RegExp(searchTerm, 'i') : null,
 		ids,
@@ -161,6 +174,7 @@ const getTeams = async (
 				teamMain: 1,
 			},
 		},
+		firmScope ? [firmScope] : undefined,
 	);
 	const results = await Promise.all(
 		(await cursor.toArray()).map(async (room) => ({

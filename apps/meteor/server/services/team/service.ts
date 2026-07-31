@@ -35,6 +35,8 @@ import { getSubscribedRoomsForUserWithDetails } from '../../../app/lib/server/fu
 import { removeUserFromRoom } from '../../../app/lib/server/functions/removeUserFromRoom';
 import { notifyOnSubscriptionChangedByRoomIdAndUserId, notifyOnRoomChangedById } from '../../../app/lib/server/lib/notifyListener';
 import { settings } from '../../../app/settings/server';
+// MATTERCHAT: self-serve firms — firm-scoped public-team enumeration
+import { getFirmRoomScopeExtraQuery } from '../../lib/firms/firmsService';
 
 export class TeamService extends ServiceClassInternal implements ITeamService {
 	protected name = 'team';
@@ -1026,6 +1028,11 @@ export class TeamService extends ServiceClassInternal implements ITeamService {
 		const subscriptions = await Subscriptions.find<Pick<ISubscription, 'rid'>>({ 'u._id': uid }, { projection: { rid: 1 } }).toArray();
 		const subscriptionIds = subscriptions.map(({ rid }) => rid);
 
+		// MATTERCHAT: self-serve firms — the t:'c' arm below matches EVERY public team;
+		// keep autocomplete inside the caller's firm cohort. Own memberships
+		// (subscriptionIds) always stay visible; admins/feature-off get no scope (null).
+		const firmScope = await getFirmRoomScopeExtraQuery(uid, subscriptionIds);
+
 		const rooms = await Rooms.find<ITeamAutocompleteResult>(
 			{
 				teamMain: true,
@@ -1050,6 +1057,7 @@ export class TeamService extends ServiceClassInternal implements ITeamService {
 							},
 						],
 					},
+					...(firmScope ? [firmScope] : []),
 				],
 			},
 			{

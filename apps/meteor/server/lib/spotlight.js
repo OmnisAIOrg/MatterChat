@@ -7,7 +7,13 @@ import { hasPermissionAsync, hasAllPermissionAsync } from '../../app/authorizati
 import { settings } from '../../app/settings/server';
 import { trim } from '../../lib/utils/stringUtils';
 import { readSecondaryPreferred } from '../database/readSecondaryPreferred';
-import { getFirmScopeExtraQuery, userMatchesFirmScope } from './firms/firmsService';
+import {
+	getCallerFirmCohort,
+	getFirmRoomScopeExtraQuery,
+	getFirmScopeExtraQuery,
+	roomMatchesFirmScope,
+	userMatchesFirmScope,
+} from './firms/firmsService';
 import { roomCoordinator } from './rooms/roomCoordinator';
 
 export class Spotlight {
@@ -54,6 +60,13 @@ export class Spotlight {
 			return [];
 		}
 
+		// MATTERCHAT: self-serve firms — room search stays inside the caller's firm cohort.
+		// Legacy rooms without a firmId stay visible to everyone; admins and the
+		// feature-off case get no scope (null). Rooms the caller is already in are
+		// excluded from these queries anyway (the $nin below), so membership is unaffected.
+		const roomScope = await getFirmRoomScopeExtraQuery(userId);
+		const extraQueries = roomScope ? [roomScope] : [];
+
 		const searchableRoomTypeIds = roomCoordinator.searchableRoomTypes();
 
 		const roomIds = (
@@ -61,14 +74,21 @@ export class Spotlight {
 				projection: { rid: 1 },
 			}).toArray()
 		).map((s) => s.rid);
-		const exactRoom = await Rooms.findOneByNameAndType(text, searchableRoomTypeIds, roomOptions, includeFederatedRooms);
+		const exactRoom = await Rooms.findOneByNameAndType(text, searchableRoomTypeIds, roomOptions, includeFederatedRooms, extraQueries);
 		if (exactRoom) {
 			roomIds.push(exactRoom.rid);
 		}
 
 		return this.fetchRooms(
 			userId,
-			await Rooms.findByNameOrFNameAndTypesNotInIds(regex, searchableRoomTypeIds, roomIds, roomOptions, includeFederatedRooms).toArray(),
+			await Rooms.findByNameOrFNameAndTypesNotInIds(
+				regex,
+				searchableRoomTypeIds,
+				roomIds,
+				roomOptions,
+				includeFederatedRooms,
+				extraQueries,
+			).toArray(),
 		);
 	}
 
@@ -168,8 +188,26 @@ export class Spotlight {
 			return users;
 		}
 
-		const teamOptions = { ...options, projection: { name: 1, type: 1 } };
-		const teams = await Team.search(userId, text, teamOptions);
+		const teamOptions = { ...options, projection: { name: 1, type: 1, roomId: 1 } };
+		let teams = await Team.search(userId, text, teamOptions);
+
+		// MATTERCHAT: self-serve firms — Team.search returns every PUBLIC team, which
+		// would let one firm enumerate another's teams via @mention autocomplete. Teams
+		// carry no firm stamp themselves, so post-filter by their main room's firmId.
+		// Teams the caller is a member of always stay (membership beats the stamp), and
+		// unstamped/legacy teams stay visible to everyone.
+		const cohort = await getCallerFirmCohort(userId);
+		if (cohort !== undefined && teams.length) {
+			const mainRoomIds = teams.map((team) => team.roomId).filter(Boolean);
+			const memberRoomIds = new Set(
+				(await SubscriptionsRaw.findByUserIdAndRoomIds(userId, mainRoomIds, { projection: { rid: 1 } }).toArray()).map((s) => s.rid),
+			);
+			const mainRooms = await Rooms.findByIds(mainRoomIds, { projection: { customFields: 1 } }).toArray();
+			const roomById = new Map(mainRooms.map((room) => [room._id, room]));
+			teams = teams.filter((team) => memberRoomIds.has(team.roomId) || roomMatchesFirmScope(roomById.get(team.roomId), cohort));
+		}
+		// roomId was only needed for the firm filter — keep the wire shape unchanged
+		teams = teams.map(({ roomId, ...team }) => team);
 		users.push(...this.mapTeams(teams));
 
 		return users;

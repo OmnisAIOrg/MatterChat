@@ -27,6 +27,8 @@ import { Meteor } from 'meteor/meteor';
 
 import { eraseRoom } from '../../../../server/lib/eraseRoom';
 import { findUsersOfRoom } from '../../../../server/lib/findUsersOfRoom';
+// MATTERCHAT: self-serve firms — firm-scoped public-channel enumeration
+import { getFirmRoomScopeExtraQuery } from '../../../../server/lib/firms/firmsService';
 import { openRoom } from '../../../../server/lib/openRoom';
 import { addAllUserToRoomFn } from '../../../../server/methods/addAllUserToRoom';
 import { addRoomLeader } from '../../../../server/methods/addRoomLeader';
@@ -1012,6 +1014,16 @@ API.v1.addRoute(
 					},
 				},
 			];
+
+			// MATTERCHAT: self-serve firms — public-channel listing stays inside the
+			// caller's firm cohort (legacy unstamped rooms + own memberships remain
+			// visible; admins / feature-off get no scope). Composed inside $and so
+			// neither the teams $or above nor a caller-supplied `query` (parseJsonQuery
+			// merges arbitrary user filters into ourQuery) can bypass it.
+			const firmScope = await getFirmRoomScopeExtraQuery(this.userId, ids);
+			if (firmScope) {
+				ourQuery.$and = [...(Array.isArray(ourQuery.$and) ? ourQuery.$and : []), firmScope];
+			}
 
 			const { cursor, totalCount } = Rooms.findPaginated(ourQuery, {
 				sort: sort || { name: 1 },
