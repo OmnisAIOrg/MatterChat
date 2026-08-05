@@ -202,6 +202,9 @@ const GEO = {
 	 */
 	frameGutter: 9,
 	titleBarHeight: 48,
+	/** Desktop-only protruding tab: 78px wide, living in an 86px transparent gutter (spec §3). */
+	tabWidth: 78,
+	tabGutter: 86,
 	railWorkspace: 62,
 	railMenu: 88,
 	railRooms: 236,
@@ -558,6 +561,105 @@ ${f} .mc-card--segmented > * + * {
 ${f} .rcx-tile,
 ${f} .rcx-options {
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
+}
+
+/* ---------------------------------------------------------------------------
+   DESKTOP ONLY — THE PROTRUDING WORKSPACE TAB (frame spec §3, "the only platform difference").
+   Gated on body.mc-desktop-frameless, which MainLayoutStyleTags sets only when the wrapper reports
+   the frameless capability. Inert in the browser, the PWA, and on older desktop builds — and the
+   spec is explicit that the tab must NEVER ship on web, because a browser tab has no window to
+   protrude from and it just reads as a stray panel.
+
+   HOW IT ESCAPES THE FRAME: the strip cannot simply be pulled left, because #react-root is the
+   chrome frame and clips its children (overflow: hidden). So the strip is lifted OUT of the flex
+   row with position: fixed and parked in a transparent gutter that we open up on the left by
+   widening the body's margin. The window itself is frameless + transparent, so that gutter is
+   genuinely see-through desktop rather than dark chrome.
+   --------------------------------------------------------------------------- */
+${f}.mc-desktop-frameless {
+	/* Open a ${GEO.tabGutter}px transparent gutter on the left for the tab to live in. The bezel
+	   starts after it, so the tab reads as tucked BEHIND the bezel's rounded edge. */
+	margin-inline-start: ${GEO.tabGutter}px !important;
+	width: calc(100vw - ${GEO.tabGutter + 8}px) !important;
+}
+
+/* ESCAPE THE CONTAINING-BLOCK TRAP (cost a debugging round — don't remove).
+   A position: fixed element is positioned against the VIEWPORT only if no ancestor establishes a
+   containing block. The workspace rail sits inside a Rocket.Chat wrapper carrying
+   will-change: transform (for the mobile drawer slide), and will-change alone is enough to make
+   that wrapper the containing block. The tab was landing at x=103 instead of x=8 and collapsing to
+   22px tall because it was being positioned against — and clipped by — that wrapper.
+
+   Scoped with :has() to ONLY the wrapper that actually contains the workspace rail, so the room
+   list's own slide animation is untouched, and only on the frameless desktop shell. */
+${f}.mc-desktop-frameless .rcx-sidebar:has(.mc-rail-workspace) {
+	transform: none !important;
+	will-change: auto !important;
+}
+
+${f}.mc-desktop-frameless .mc-rail-workspace {
+	position: fixed;
+	/* 8px from the window edge, and dropped below the title bar's rounded corner. */
+	inset-inline-start: 8px;
+	top: 34px;
+	bottom: 22px;
+	width: ${GEO.tabWidth}px;
+	min-width: ${GEO.tabWidth}px;
+	height: auto;
+	box-sizing: border-box;
+	/* Extra inline-end padding covers the strip of tab that is tucked behind the bezel. */
+	padding: 11px 16px 11px 11px;
+	/* Rounded on the OUTER edge only; square where it meets the bezel, so the two read as one
+	   object rather than a floating pill parked next to the window. */
+	border-radius: ${GEO.radiusBezel}px 0 0 ${GEO.radiusBezel}px;
+	/* !important because the rail is in the go-transparent list above (so the chrome gradient can
+	   read through it when it is INSIDE the frame). As a protruding tab it is no longer sitting on
+	   the chrome — it IS chrome — so it has to paint the gradient itself and out-rank that rule. */
+	background: linear-gradient(180deg, var(--mc-chrome-top) 0%, var(--mc-chrome-bottom) 100%) !important;
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.14),
+		inset 1px 0 0 rgba(255, 255, 255, 0.08),
+		inset 0 -1px 0 rgba(0, 0, 0, 0.60),
+		/* The shadow falls LEFT and DOWN — away from the frame — which is what sells "this sits
+		   behind the window" instead of "this floats on top of it". */
+		-3px 3px 8px rgba(9, 44, 21, 0.40),
+		-16px 14px 34px rgba(9, 44, 21, 0.60);
+	/* Under the bezel (which the frame gives z-index 1), so the bezel overlaps the tab's inner edge. */
+	z-index: 0;
+}
+
+/* The tab is chrome, so it is part of the window's drag surface — but its tiles must not be. */
+${f}.mc-desktop-frameless .mc-rail-workspace {
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+${f}.mc-desktop-frameless .mc-rail-workspace button,
+${f}.mc-desktop-frameless .mc-rail-workspace a,
+${f}.mc-desktop-frameless .mc-rail-workspace [role='button'] {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}
+
+/* With the strip lifted out of the flex row, the menu rail becomes the first column, so the frame's
+   left gutter now has to come from the row itself. */
+${f}.mc-desktop-frameless #rocket-chat {
+	padding-inline-start: ${GEO.frameGutter}px;
+}
+
+/* The client-drawn window lights must be excluded from the window's drag region, or clicking Close
+   drags the window instead — on a window that has no other way to close. WindowLights also sets this
+   inline; this rule is the belt-and-braces copy that survives a style-prop refactor. */
+${f} .mc-window-lights,
+${f} .mc-window-lights button {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}
+
+/* The frameless shell has no native title bar, so the client's own lights need the room the native
+   traffic lights used to be given. Same 78px, different owner. */
+${f}.mc-desktop-frameless .rcx-navbar {
+	padding-inline-start: 78px !important;
 }
 
 /* ---------------------------------------------------------------------------

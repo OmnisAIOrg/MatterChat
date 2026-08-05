@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { buildDepthCss, DEPTH_FLAG_CLASS } from './depthSkin';
 
 /**
@@ -18,6 +21,34 @@ import { buildDepthCss, DEPTH_FLAG_CLASS } from './depthSkin';
  * text parsed as selectors.
  */
 const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * SOURCE-TEXT GUARD — reads the file as text rather than importing it.
+ *
+ * The CSS is assembled in one big template literal, so a backtick anywhere inside it terminates the
+ * string. This has bitten three separate times while building this pass, because the natural way to
+ * quote a CSS property or a class name in a comment is with code backticks. It fails one of two
+ * ways, and BOTH are expensive:
+ *   - a single stray backtick pair still parses, and Babel silently truncates the CSS at that point
+ *     (green build, half the skin missing at runtime);
+ *   - an odd number is a hard parse error that takes the whole module — and every test that imports
+ *     it — down with it.
+ *
+ * The assertions below can't rely on importing the module, since a parse error would break the
+ * import too. Reading the raw text works either way.
+ */
+describe('depthSkin source', () => {
+	const source = readFileSync(join(__dirname, 'depthSkin.ts'), 'utf8');
+
+	it('has no backticks inside the CSS template literal', () => {
+		const open = source.indexOf('return `') + 'return `'.length;
+		const close = source.lastIndexOf('`;');
+		const cssBody = source.slice(open, close);
+
+		// Use plain quotes or no quotes when naming CSS in these comments — never code backticks.
+		expect(cssBody).not.toContain('`');
+	});
+});
 
 describe('depthSkin', () => {
 	const themes = ['light', 'dark'] as const;

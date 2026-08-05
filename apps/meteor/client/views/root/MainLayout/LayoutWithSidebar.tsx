@@ -16,6 +16,7 @@ import MobileTabBar from './MobileTabBar';
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import OrgSwitcherProvider from './OrgSwitcherProvider';
 import OrgSwitcherRail from './OrgSwitcherRail';
+import WindowLights from './WindowLights';
 import NavBar from '../../../navbar';
 import Sidebar from '../../../sidebar';
 import NavigationRegion from '../../navigation';
@@ -233,6 +234,10 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 	return (
 		<>
 			<AccessibilityShortcut />
+			{/* MATTERCHAT: the frameless desktop shell draws no native window controls, so the client
+			    owes it a set. Renders null on web/PWA and on pre-frameless desktop builds. Mounted
+			    OUTSIDE #rocket-chat and position:fixed, so it adds no layout anywhere. */}
+			{!embeddedLayout && <WindowLights />}
 			{!embeddedLayout && <NavBar />}
 			<Box
 				bg='surface-light'
