@@ -202,12 +202,45 @@ const GEO = {
 	 */
 	frameGutter: 9,
 	titleBarHeight: 48,
-	/** Desktop-only protruding tab: 78px wide, living in an 86px transparent gutter (spec §3). */
-	tabWidth: 78,
-	tabGutter: 86,
+	/**
+	 * Desktop-only protruding tab. The spec drew it at 78px; founder called it narrower
+	 * (2026-08-04), so it ships at 64 — still comfortably clearing the 36px workspace tiles once the
+	 * tucked-edge padding is accounted for (64 − 10 − 14 = 40px of usable width).
+	 */
+	tabWidth: 64,
+	/** <body>'s margin from the window edge, set in MATTERCHAT_FRAME_CSS. */
+	bodyMargin: 8,
 	railWorkspace: 62,
 	railMenu: 88,
 	railRooms: 236,
+} as const;
+
+/**
+ * DERIVED geometry — computed from GEO so the pieces can never drift apart.
+ *
+ * `tabGutter` is the transparent strip the protruding tab lives in: the tab's own width plus the
+ * body margin it sits inside. `framelessLightsLeft` is where the title bar begins once that gutter
+ * pushes the whole frame right.
+ *
+ * These were hardcoded on the first frameless build, and narrowing the tab silently left the window
+ * lights sitting on the tab instead of the title bar — outside the green frame. Deriving them makes
+ * that class of mistake impossible.
+ */
+const DERIVED = {
+	tabGutter: GEO.tabWidth + GEO.bodyMargin,
+	get framelessFrameLeft(): number {
+		return this.tabGutter + GEO.bezel;
+	},
+} as const;
+
+/**
+ * Where the client-drawn window lights belong on a frameless shell, in WINDOW coordinates.
+ * Consumed by WindowLights — see the note there on why this is exported rather than hardcoded.
+ * 10px in from the frame's left edge, vertically centred in the title bar.
+ */
+export const FRAMELESS_LIGHTS_POSITION = {
+	left: DERIVED.framelessFrameLeft + 10,
+	top: GEO.bodyMargin + GEO.bezel + (GEO.titleBarHeight - 12) / 2,
 } as const;
 
 /**
@@ -576,11 +609,23 @@ ${f} .rcx-options {
    widening the body's margin. The window itself is frameless + transparent, so that gutter is
    genuinely see-through desktop rather than dark chrome.
    --------------------------------------------------------------------------- */
+/* MAKE THE WINDOW ACTUALLY TRANSPARENT.
+   MATTERCHAT_FRAME_CSS paints html a solid #0C0F14 so the browser/PWA has a backdrop behind the
+   floating bezel. On a frameless Electron window that fills the ENTIRE window rect with opaque
+   dark, which cancels transparent: true outright — the tab then reads as a panel welded to a
+   black slab instead of a tab floating beside the app. Dropping it is what lets the desktop show
+   through the gutter, the 8px margins, and around the bezel's rounded corners.
+
+   Scoped with :has() because the class lives on <body> and the fill is on <html>. */
+html:has(body.${DEPTH_FLAG_CLASS}.mc-desktop-frameless) {
+	background: transparent !important;
+}
+
 ${f}.mc-desktop-frameless {
-	/* Open a ${GEO.tabGutter}px transparent gutter on the left for the tab to live in. The bezel
+	/* Open a ${DERIVED.tabGutter}px transparent gutter on the left for the tab to live in. The bezel
 	   starts after it, so the tab reads as tucked BEHIND the bezel's rounded edge. */
-	margin-inline-start: ${GEO.tabGutter}px !important;
-	width: calc(100vw - ${GEO.tabGutter + 8}px) !important;
+	margin-inline-start: ${DERIVED.tabGutter}px !important;
+	width: calc(100vw - ${DERIVED.tabGutter + GEO.bodyMargin}px) !important;
 }
 
 /* ESCAPE THE CONTAINING-BLOCK TRAP (cost a debugging round — don't remove).
@@ -608,7 +653,9 @@ ${f}.mc-desktop-frameless .mc-rail-workspace {
 	height: auto;
 	box-sizing: border-box;
 	/* Extra inline-end padding covers the strip of tab that is tucked behind the bezel. */
-	padding: 11px 16px 11px 11px;
+	/* Tightened with the narrower tab. The larger inline-end value still covers the strip that is
+	   tucked behind the bezel; 64 − 10 − 14 leaves 40px of usable width for the 36px tiles. */
+	padding: 10px 14px 10px 10px;
 	/* Rounded on the OUTER edge only; square where it meets the bezel, so the two read as one
 	   object rather than a floating pill parked next to the window. */
 	border-radius: ${GEO.radiusBezel}px 0 0 ${GEO.radiusBezel}px;

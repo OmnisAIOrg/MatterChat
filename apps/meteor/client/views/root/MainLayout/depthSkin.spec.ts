@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { buildDepthCss, DEPTH_FLAG_CLASS } from './depthSkin';
+import { buildDepthCss, DEPTH_FLAG_CLASS, FRAMELESS_LIGHTS_POSITION } from './depthSkin';
 
 /**
  * These guard a failure mode that a green build does NOT catch.
@@ -106,6 +106,41 @@ describe('depthSkin', () => {
 				const bare_rcx_sidebar = selectors.filter((sel) => /\.rcx-sidebar$/.test(sel) || /\.rcx-sidebar[^-:\w]/.test(sel));
 				expect(bare_rcx_sidebar).toStrictEqual([]);
 			});
+		});
+	});
+
+	describe('frameless desktop geometry', () => {
+		// The protruding tab and the client-drawn window lights are positioned from the SAME numbers.
+		// When the tab was narrowed from 78 to 64, hardcoded light coordinates left them sitting on
+		// the tab instead of the title bar — outside the green frame. These invariants make the two
+		// impossible to desync, whatever the tab width becomes next.
+		const css = buildDepthCss('dark');
+		const num = (re: RegExp): number => Number((css.match(re) ?? [])[1]);
+
+		const tabWidth = num(/\.mc-rail-workspace \{[\s\S]*?width: (\d+)px/);
+		const gutter = num(/margin-inline-start: (\d+)px !important/);
+		const bezel = num(/#react-root \{[\s\S]*?inset: (\d+)px/);
+		const frameLeftEdge = gutter + bezel;
+
+		it('leaves room for the tab inside the transparent gutter', () => {
+			expect(tabWidth).toBeLessThanOrEqual(gutter);
+		});
+
+		it('puts the window lights inside the frame, never on the tab', () => {
+			expect(FRAMELESS_LIGHTS_POSITION.left).toBeGreaterThan(gutter);
+			expect(FRAMELESS_LIGHTS_POSITION.left).toBeGreaterThan(frameLeftEdge);
+		});
+
+		it('puts the window lights vertically within the title bar', () => {
+			expect(FRAMELESS_LIGHTS_POSITION.top).toBeGreaterThan(bezel);
+			expect(FRAMELESS_LIGHTS_POSITION.top).toBeLessThan(bezel + 48);
+		});
+
+		it('makes the window itself transparent, or none of the above is visible', () => {
+			// MATTERCHAT_FRAME_CSS paints <html> opaque for the browser. Left in place on a frameless
+			// Electron window it fills the whole window rect and cancels `transparent: true`, so the
+			// tab reads as welded to a black slab instead of floating beside the app.
+			expect(css).toMatch(/html:has\(body\.mc-depth\.mc-desktop-frameless\)[\s\S]*?background: transparent/);
 		});
 	});
 
