@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { FRAMELESS_LIGHTS_POSITION } from './depthSkin';
 import { desktopApi, useIsFramelessDesktop } from './desktopShell';
 
 /**
@@ -60,8 +61,11 @@ const WindowLights = () => {
 			onMouseLeave={() => setHovered(false)}
 			style={{
 				position: 'fixed',
-				top: 26,
-				insetInlineStart: 26,
+				// Derived from the frame geometry — see FRAMELESS_LIGHTS_POSITION. Hardcoding these is
+				// what put the lights on the protruding tab, outside the green frame: they were still
+				// positioned for a layout without the tab gutter.
+				top: FRAMELESS_LIGHTS_POSITION.top,
+				insetInlineStart: FRAMELESS_LIGHTS_POSITION.left,
 				zIndex: 100,
 				display: 'flex',
 				gap: 8,
