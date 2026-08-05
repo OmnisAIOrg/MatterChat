@@ -870,12 +870,19 @@ export const MainLayoutStyleTags = () => {
 	// Desktop app (Electron): tag <body> so the full-bleed frame + macOS traffic-light padding above
 	// activate. Inert on web/PWA (matterchatDesktop is only injected by the desktop wrapper's preload).
 	useEffect(() => {
-		const w = window as unknown as { matterchatDesktop?: unknown };
-		if (!w.matterchatDesktop) return undefined;
-		document.body.classList.add('mc-desktop-app');
+		const w = window as unknown as { matterchatDesktop?: { frameless?: boolean; windowClose?: unknown } };
+		const desktop = w.matterchatDesktop;
+		if (!desktop) return undefined;
+		const classes = ['mc-desktop-app'];
 		const isMac = /Mac/i.test(navigator.platform) || /Macintosh/i.test(navigator.userAgent);
-		if (isMac) document.body.classList.add('mc-desktop-mac');
-		return () => document.body.classList.remove('mc-desktop-app', 'mc-desktop-mac');
+		if (isMac) classes.push('mc-desktop-mac');
+		// The protruding workspace tab and the client-drawn window lights only make sense on a
+		// frameless + transparent shell. Require a usable close handler alongside the flag: a shell
+		// that claims frameless but cannot close the window would trap the user behind lights that
+		// do nothing, so we'd rather fall back to whatever native chrome it has.
+		if (desktop.frameless && typeof desktop.windowClose === 'function') classes.push('mc-desktop-frameless');
+		document.body.classList.add(...classes);
+		return () => document.body.classList.remove(...classes);
 	}, []);
 
 	/**
