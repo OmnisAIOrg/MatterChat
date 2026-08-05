@@ -72,43 +72,71 @@ type DepthTokens = {
  * dark (the signature "global nav is dark" treatment — see AppLeftRail), so the bezel, frame,
  * groove and raised recipes are identical in light and dark. Only the well and cards re-theme.
  */
+/**
+ * VALUES ARE COPIED FROM THE SUITE REFERENCE IMPLEMENTATION — do not "improve" them in isolation.
+ *
+ * Omnis Command Center implements this same spec (OMNIS-SUITE-FRAME-SPEC.md) and is the app the
+ * founder points at when he says "exactly like this". Its tokens live in
+ * `~/Downloads/omnis-command-center/src/renderer/src/styles.css` under the
+ * "Omnis Suite frame & depth reskin" banner. Every value below is that file's value, so the two
+ * apps read as one product. If CC retunes, re-copy rather than diverge.
+ */
 const CHROME = {
-	/** Bezel — the brand accent. These three stops are the EXISTING frame gradient, unchanged. */
-	bezelTop: '#2FA251',
-	bezelMid: '#1F8A3A',
-	bezelBottom: '#176B2C',
+	/** Bezel — the product's own accent. Green for both Command Center and MatterChat. */
+	bezelTop: '#5FCB7A',
+	bezelMid: '#2BA14C',
+	bezelBottom: '#1B7A2E',
 	/** Edge lip: a light top edge and a dark bottom edge make it a lip, not an outline. */
 	bezelEdgeHighlight: 'rgba(255, 255, 255, 0.45)',
-	bezelEdgeShade: 'rgba(0, 0, 0, 0.30)',
+	bezelEdgeShade: 'rgba(9, 44, 21, 0.30)',
 	/**
-	 * Ambient shadow in the bezel's OWN dark hue, never neutral black (spec §3) — a neutral shadow
-	 * under a saturated green reads as grime; a green-black reads as the object's own shadow.
+	 * Ambient shadow in the bezel's OWN dark hue, never neutral black — a neutral shadow under a
+	 * saturated green reads as grime; a green-black reads as the object's own shadow.
+	 *
+	 * DELIBERATELY SMALL (CC's note, and it matters the moment the desktop window goes transparent):
+	 * the blur must die out INSIDE the window's transparent gutter. A blur larger than the gutter
+	 * gets clipped by the window bounds and you see a hard straight line where the transparency
+	 * ends. An earlier value here was `0 28px 64px`, which would have done exactly that.
 	 */
-	bezelShadowAmbient: 'rgba(10, 46, 20, 0.55)',
-	bezelShadowContact: 'rgba(10, 46, 20, 0.35)',
+	bezelShadowAmbient: '0 8px 20px rgba(9, 44, 21, 0.45)',
+	bezelShadowContact: '0 2px 6px rgba(9, 44, 21, 0.35)',
 
-	/** Chrome frame — vertical gradient, light to dark. */
-	chromeTop: '#1F2734',
-	chromeBottom: '#131922',
-	chromeEdgeHighlight: 'rgba(255, 255, 255, 0.11)',
-	chromeRing: 'rgba(255, 255, 255, 0.055)',
+	/**
+	 * Chrome frame — vertical gradient, light to dark. Kept clearly LIGHTER than the groove below
+	 * it: if the chrome and the groove converge, the channel stops reading as carved.
+	 */
+	chromeTop: '#212A38',
+	chromeBottom: '#161D27',
+	chromeEdgeHighlight: 'rgba(255, 255, 255, 0.07)',
+	chromeRing: 'rgba(255, 255, 255, 0.045)',
 	chromeEdgeShade: 'rgba(0, 0, 0, 0.55)',
-	chromeContact: 'rgba(0, 0, 0, 0.40)',
-	/** The frame's darkest hue — used for the well seam and the scroll shade. */
-	chromeDarkest: '#0C1119',
+	chromeContact: '0 2px 6px rgba(6, 20, 11, 0.45)',
 
-	/** Groove — carved into the chrome. The bottom light line is what reads as carved, not painted. */
-	grooveFill: 'rgba(0, 0, 0, 0.22)',
-	grooveShadow: 'inset 0 2px 5px rgba(0, 0, 0, 0.72)',
+	/**
+	 * Groove hosted BY THE CHROME — rail channels, title-bar search, icon buttons.
+	 *
+	 * SOLID, not a translucent wash. This is load-bearing: a translucent groove composites with
+	 * whatever happens to sit behind it, so one stray light ancestor turns the whole channel into a
+	 * pale grey block (which is exactly the bug that shipped mid-build). A solid fill is immune to
+	 * its backdrop.
+	 */
+	grooveFill: '#0A0E14',
+	grooveShadow: 'inset 0 2px 5px rgba(0, 0, 0, 0.55)',
 	grooveHighlight: 'inset 0 -1px 0 rgba(255, 255, 255, 0.055)',
 
 	/**
-	 * The ONE raised recipe. Active nav items, primary buttons, the avatar, the active workspace
-	 * tile and the room-list status bar all share it — that reuse is what tells the user "these are
-	 * the lifted, interactive things" (spec §4).
+	 * The ONE raised recipe — active nav, primary buttons, the avatar, the active workspace tile,
+	 * the room-list status bar. A GRADIENT, not a flat fill; that reuse is what tells the user
+	 * "these are the lifted, interactive things".
 	 */
-	raiseShadow: '0 2px 7px rgba(0, 0, 0, 0.35)',
-	raiseHighlight: 'inset 0 1px 0 rgba(255, 255, 255, 0.16)',
+	raiseFill: 'linear-gradient(180deg, #22B43F 0%, #1B7A2E 100%)',
+	raiseFillHover: 'linear-gradient(180deg, #1FA439 0%, #176B28 100%)',
+	raiseShadow: '0 2px 7px rgba(6, 20, 11, 0.45)',
+	raiseHighlight: 'inset 0 1px 0 rgba(255, 255, 255, 0.22)',
+
+	/** Ink hosted directly by the chrome — the content accent fails contrast there. */
+	chromeInk: '#C9D2E0',
+	chromeInkMuted: '#8892A2',
 
 	/** Hairline rule + section label color inside the chrome. */
 	rule: 'rgba(255, 255, 255, 0.08)',
@@ -117,17 +145,20 @@ const CHROME = {
 
 const LIGHT_DEPTH: DepthTokens = {
 	wellFill: '#F6F6F3',
-	wellSeam: 'rgba(9, 14, 21, 0.55)',
-	wellInsetTop: 'inset 0 3px 9px rgba(16, 24, 20, 0.10)',
-	wellInsetLeft: 'inset 3px 0 8px rgba(16, 24, 20, 0.07)',
-	wellInsetRight: 'inset -3px 0 8px rgba(16, 24, 20, 0.05)',
-	wellInsetBottom: 'inset 0 -1px 4px rgba(16, 24, 20, 0.04)',
+	/** CC's --well-seam, a near-black hairline that reads as the frame's own edge. */
+	wellSeam: '#070A0F',
+	/** CC's --well-recess, verbatim. Asymmetric so light reads as coming from above. */
+	wellInsetTop: 'inset 0 3px 8px rgba(12, 20, 34, 0.17)',
+	wellInsetLeft: 'inset 3px 0 7px rgba(12, 20, 34, 0.11)',
+	wellInsetRight: 'inset -3px 0 7px rgba(12, 20, 34, 0.08)',
+	wellInsetBottom: 'inset 0 -1px 4px rgba(12, 20, 34, 0.06)',
 	wellSeamHighlight: '0 1px 0 rgba(255, 255, 255, 0.55)',
 	cardFill: '#FFFFFF',
 	cardBorder: 'rgba(16, 24, 20, 0.08)',
-	cardShadowContact: '0 1px 2px rgba(16, 24, 20, 0.06)',
-	cardShadowAmbient: '0 6px 14px -6px rgba(16, 24, 20, 0.16)',
-	scrollShade: 'rgba(16, 24, 20, 0.13)',
+	/** CC's --card-shadow, verbatim. */
+	cardShadowContact: '0 1px 2px rgba(20, 30, 60, 0.06)',
+	cardShadowAmbient: '0 6px 14px -6px rgba(20, 30, 60, 0.16)',
+	scrollShade: 'rgba(12, 20, 34, 0.14)',
 };
 
 const DARK_DEPTH: DepthTokens = {
@@ -197,12 +228,15 @@ ${f} {
 	--mc-bezel-bottom: ${CHROME.bezelBottom};
 	--mc-chrome-top: ${CHROME.chromeTop};
 	--mc-chrome-bottom: ${CHROME.chromeBottom};
-	--mc-chrome-darkest: ${CHROME.chromeDarkest};
 	--mc-groove-fill: ${CHROME.grooveFill};
 	--mc-groove-shadow: ${CHROME.grooveShadow};
 	--mc-groove-highlight: ${CHROME.grooveHighlight};
+	--mc-raise-fill: ${CHROME.raiseFill};
+	--mc-raise-fill-hover: ${CHROME.raiseFillHover};
 	--mc-raise-shadow: ${CHROME.raiseShadow};
 	--mc-raise-highlight: ${CHROME.raiseHighlight};
+	--mc-chrome-ink: ${CHROME.chromeInk};
+	--mc-chrome-ink-muted: ${CHROME.chromeInkMuted};
 	--mc-rule: ${CHROME.rule};
 	--mc-section-label: ${CHROME.sectionLabel};
 	--mc-well-fill: ${t.wellFill};
@@ -232,8 +266,8 @@ ${f} {
 	box-shadow:
 		inset 0 1px 0 ${CHROME.bezelEdgeHighlight},
 		inset 0 -1px 0 ${CHROME.bezelEdgeShade},
-		0 3px 10px ${CHROME.bezelShadowContact},
-		0 28px 64px ${CHROME.bezelShadowAmbient} !important;
+		${CHROME.bezelShadowContact},
+		${CHROME.bezelShadowAmbient} !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -250,7 +284,7 @@ ${f} #react-root {
 		inset 0 1px 0 ${CHROME.chromeEdgeHighlight},
 		inset 0 0 0 1px ${CHROME.chromeRing},
 		inset 0 -1px 0 ${CHROME.chromeEdgeShade},
-		0 2px 6px ${CHROME.chromeContact} !important;
+		${CHROME.chromeContact} !important;
 }
 
 /* The rails + well row. padding-right/bottom ARE the frame's gutters; the left gutter comes from
@@ -348,7 +382,24 @@ ${f} .rcx-navbar .rcx-input-box__wrapper {
    One recipe, reused, so "lifted" always means the same thing.
    --------------------------------------------------------------------------- */
 ${f} .mc-raised {
+	background: var(--mc-raise-fill);
 	box-shadow: var(--mc-raise-shadow), var(--mc-raise-highlight);
+	color: #fff;
+}
+
+${f} .mc-raised:hover {
+	background: var(--mc-raise-fill-hover);
+}
+
+/* The active nav item in both owned rails uses the SAME raised recipe. Overriding the flat green
+   the rails set inline keeps one definition of "lifted" across the whole shell. */
+${f} .mc-rail-menu button[aria-current='page'] {
+	background: var(--mc-raise-fill) !important;
+	box-shadow: var(--mc-raise-shadow), var(--mc-raise-highlight) !important;
+}
+
+${f} .mc-rail-menu button[aria-current='page']:hover {
+	background: var(--mc-raise-fill-hover) !important;
 }
 
 /* Resting nav items carry NO shadow, NO border, NO fill — ten identical raised chips read as a
