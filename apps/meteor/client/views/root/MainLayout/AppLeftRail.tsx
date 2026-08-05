@@ -81,6 +81,10 @@ const WS_RAIL_BG = '#0C0F14';
 const railClass = css`
 	width: ${RAIL_WIDTH}px;
 	min-width: ${RAIL_WIDTH}px;
+	/* Frame spec §3: the rail is 88px INCLUDING its 6px side padding — border-box is required or the
+	   padding widens the column and the whole chrome grid shifts right. */
+	padding-inline: 6px;
+	box-sizing: border-box;
 	height: 100%;
 	z-index: 3;
 	background-color: ${NAV_RAIL_BG};
@@ -105,57 +109,85 @@ const brandClass = css`
 `;
 
 const sectionLabelClass = css`
-	font-size: 9px;
-	font-weight: 800;
-	letter-spacing: 1.5px;
+	font-size: 7.5px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
 	color: #6b7585;
-	padding-block-end: 9px;
+	padding: 3px 6px;
+	align-self: flex-start;
 `;
 
+/**
+ * Frame spec §3: the rule is inset 6px on each side so the channel's rounded edge stays continuous —
+ * a full-bleed divider visually cuts the groove in half. Rendered after every group EXCEPT the last;
+ * a trailing rule reads as a missing group.
+ */
 const dividerClass = css`
-	width: 60px;
+	width: calc(100% - 12px);
 	height: 1px;
-	background-color: #323c4a;
-	margin-block: 12px;
+	background-color: rgba(255, 255, 255, 0.08);
+	margin: 5px 6px 0;
 `;
 
 const itemClass = css`
-	width: 64px;
+	width: 100%;
 	border: 0;
 	background: transparent;
 	color: #a4aebe;
-	border-radius: 11px;
-	padding-block: 8px 7px;
+	/* Frame spec §3: radius 7 inside the channel's radius 11 — a tighter inner radius is what makes
+	   the item read as sitting IN the groove rather than floating on it. */
+	border-radius: 7px;
+	padding: 7px 2px 5px;
+	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 5px;
+	gap: 4px;
 	cursor: pointer;
 	font-family: inherit;
+	/* Only background-color and box-shadow ever animate — never transform, size, or position. */
 	transition:
-		background-color 0.12s ease,
-		color 0.12s ease;
+		background-color 0.12s ease-out,
+		box-shadow 0.12s ease-out,
+		color 0.12s ease-out;
 
+	/* Rest: the groove shows through. No fill, no border, no shadow. */
 	&:hover {
-		background-color: rgba(255, 255, 255, 0.06);
+		background-color: rgba(255, 255, 255, 0.08);
 		color: #ffffff;
 	}
 
 	&:focus-visible {
 		outline: 2px solid ${BRAND_GREEN_BRIGHT};
-		outline-offset: 1px;
+		outline-offset: 2px;
 	}
 
+	/* Active is the ONE raised recipe, shared with primary buttons, the avatar and the active
+	   workspace tile — that reuse is what tells the user "these are the lifted things". */
 	&[aria-current='page'] {
 		background-color: ${BRAND_GREEN};
 		color: #ffffff;
-		box-shadow: 0 1px 4px ${ACCENT_RING};
+		box-shadow:
+			0 2px 7px ${ACCENT_RING},
+			inset 0 1px 0 rgba(255, 255, 255, 0.16);
+	}
+
+	&[aria-current='page']:hover {
+		background-color: #166626;
 	}
 
 	.rail-label {
-		font-size: 10.5px;
+		font-size: 9.5px;
+		font-weight: 500;
+		line-height: 1.2;
+		letter-spacing: -0.005em;
+		/* Labels WRAP to two lines — never truncate, never nowrap; the item grows instead. */
+		text-align: center;
+		white-space: normal;
+	}
+
+	&[aria-current='page'] .rail-label {
 		font-weight: 600;
-		line-height: 1;
 	}
 `;
 
@@ -385,7 +417,10 @@ const AppLeftRail = () => {
 			is='nav'
 			aria-label={t('Navigation')}
 			role='navigation'
-			className={railClass}
+			// MATTERCHAT: `mc-rail-menu` is the depth pass's hook (depthSkin.ts) — it drops the rail's
+			// own fill and divider so the chrome gradient reads through as one continuous surface.
+			// className must be the ARRAY form — see the note at the ensō badge below.
+			className={[railClass, 'mc-rail-menu']}
 			display='flex'
 			flexDirection='column'
 			alignItems='center'
@@ -402,7 +437,17 @@ const AppLeftRail = () => {
 			</Box>
 			<Box className={dividerClass} />
 			<Box className={sectionLabelClass}>MENU</Box>
-			<Box display='flex' flexDirection='column' alignItems='center' flexGrow={1} style={{ gap: '4px', width: '100%' }}>
+			{/* The CHANNEL — the groove the nav items are carved into (frame spec §3). Items sit at a
+			    deliberately tight 2px gap so the run reads as one carved strip rather than a stack of
+			    chips; separation comes from the group gap and the divider, never from item spacing. */}
+			<Box
+				className='mc-groove'
+				display='flex'
+				flexDirection='column'
+				alignItems='center'
+				flexGrow={1}
+				style={{ gap: '2px', width: '100%', padding: '4px', boxSizing: 'border-box' }}
+			>
 				{/* Chats is MatterChat-native — hidden in external-workspace mode (the M tile / workspace header
 				    is the way back to MatterChat). Boards + LitBox stay (they remain meaningful inside it). */}
 				{!inExternalMode && renderItem('balloons', t('Chats'), handleChat, chatActive)}

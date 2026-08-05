@@ -2,7 +2,9 @@ import { css } from '@rocket.chat/css-in-js';
 import { Box } from '@rocket.chat/fuselage';
 import type { AllHTMLAttributes } from 'react';
 
-const MainContent = ({ className, ...props }: Omit<AllHTMLAttributes<HTMLDivElement>, 'is'>) => {
+import WellScrollShade from './WellScrollShade';
+
+const MainContent = ({ className, children, ...props }: Omit<AllHTMLAttributes<HTMLDivElement>, 'is'>) => {
 	const customCSS = css`
 		@media print {
 			overflow: visible !important; /* 1 */
@@ -34,7 +36,13 @@ const MainContent = ({ className, ...props }: Omit<AllHTMLAttributes<HTMLDivElem
 			width='1vw'
 			height='100%'
 			{...props}
-		/>
+		>
+			{/* MATTERCHAT: the well's top-edge scroll shade (frame spec §4.3). Absolutely positioned
+			    against this box — which is why #main-content is already position:relative — so it adds
+			    no layout. Invisible until something inside scrolls, and inert unless the depth flag is on. */}
+			<WellScrollShade />
+			{children}
+		</Box>
 	);
 };
 
