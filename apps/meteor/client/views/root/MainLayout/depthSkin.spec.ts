@@ -136,6 +136,17 @@ describe('depthSkin', () => {
 			expect(FRAMELESS_LIGHTS_POSITION.top).toBeLessThan(bezel + 48);
 		});
 
+		it('leaves body with no background to propagate to the canvas', () => {
+			// CSS backgrounds §2.11.2: when the ROOT element's background is transparent, the BODY's
+			// background is propagated to the canvas and painted across the WHOLE viewport, ignoring
+			// body's margins and radius. Since <body> is the bezel, clearing <html> alone flooded the
+			// entire window green — worse than before. body must carry no background on the frameless
+			// shell, with the bezel drawn by a pseudo-element confined to body's box.
+			const framelessBody = /body\.mc-depth\.mc-desktop-frameless \{([^}]*)\}/.exec(css)?.[1] ?? '';
+			expect(framelessBody).toMatch(/background:\s*none/);
+			expect(css).toMatch(/body\.mc-depth\.mc-desktop-frameless::before[\s\S]*?linear-gradient/);
+		});
+
 		it('makes the window itself transparent, or none of the above is visible', () => {
 			// MATTERCHAT_FRAME_CSS paints <html> opaque for the browser. Left in place on a frameless
 			// Electron window it fills the whole window rect and cancels `transparent: true`, so the

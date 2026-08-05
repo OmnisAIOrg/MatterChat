@@ -621,6 +621,52 @@ html:has(body.${DEPTH_FLAG_CLASS}.mc-desktop-frameless) {
 	background: transparent !important;
 }
 
+/*
+ * CANVAS BACKGROUND PROPAGATION — the reason the first attempt made things WORSE.
+ *
+ * Clearing the background on <html> alone is not enough, and is actively counterproductive. Per
+ * CSS backgrounds §2.11.2, when the ROOT element's background is transparent the BODY's background
+ * is propagated to the canvas and painted across the ENTIRE viewport — ignoring body's own margins
+ * and border-radius. And <body> IS the green bezel here. So transparent-html didn't reveal the
+ * desktop; it let the bezel's green flood the whole window, corners and gutter included.
+ *
+ * You cannot fix that by re-adding a background to <html> either — a non-transparent root is
+ * exactly what we're trying to avoid on a transparent window.
+ *
+ * So: <body> gets NO background (nothing left to propagate), and the bezel moves to a fixed
+ * pseudo-element occupying precisely body's border box. The green is then confined to that rect,
+ * and everything outside it — the tab gutter, the margins, outside the rounded corners — is
+ * genuinely see-through to the desktop.
+ */
+${f}.mc-desktop-frameless {
+	background: none !important;
+	box-shadow: none !important;
+}
+
+${f}.mc-desktop-frameless::before {
+	content: '';
+	position: fixed;
+	/* Matches body's own box: bodyMargin on three sides, the tab gutter on the leading edge. */
+	top: ${GEO.bodyMargin}px;
+	inset-inline-end: ${GEO.bodyMargin}px;
+	bottom: ${GEO.bodyMargin}px;
+	inset-inline-start: ${DERIVED.tabGutter}px;
+	z-index: -1;
+	pointer-events: none;
+	border-radius: ${GEO.radiusBezel}px;
+	background: linear-gradient(
+		180deg,
+		var(--mc-bezel-top) 0%,
+		var(--mc-bezel-mid) 52%,
+		var(--mc-bezel-bottom) 100%
+	);
+	box-shadow:
+		inset 0 1px 0 ${CHROME.bezelEdgeHighlight},
+		inset 0 -1px 0 ${CHROME.bezelEdgeShade},
+		${CHROME.bezelShadowContact},
+		${CHROME.bezelShadowAmbient};
+}
+
 ${f}.mc-desktop-frameless {
 	/* Open a ${DERIVED.tabGutter}px transparent gutter on the left for the tab to live in. The bezel
 	   starts after it, so the tab reads as tucked BEHIND the bezel's rounded edge. */
