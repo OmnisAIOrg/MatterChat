@@ -136,6 +136,33 @@ describe('depthSkin', () => {
 			expect(FRAMELESS_LIGHTS_POSITION.top).toBeLessThan(bezel + 48);
 		});
 
+		it('paints nothing outside the frame — no outward shadows on the frameless shell', () => {
+			// A drop shadow is real painted pixels. On a TRANSPARENT window it lands in the see-through
+			// region — i.e. on the user's desktop — as a grey-green smudge around the frame and tab.
+			// The spec's ambient/contact pairs assume an opaque backdrop to fall onto; there isn't one
+			// here, and macOS contributes no native shadow either (hasShadow:false). So every shadow
+			// that survives on this shell must be `inset`.
+			const bare = stripComments(css);
+			const offenders = bare
+				.split('}')
+				.map((block) => {
+					const [selector, body = ''] = block.split('{');
+					return { selector: selector.trim(), body };
+				})
+				.filter(({ selector, body }) => {
+					if (!/mc-desktop-frameless/.test(selector)) return false;
+					const shadow = /box-shadow:([^;]*)/.exec(body);
+					if (!shadow) return false;
+					return shadow[1]
+						.split(/,(?![^(]*\))/)
+						.map((layer) => layer.trim().replace('!important', '').trim())
+						.some((layer) => layer && layer !== 'none' && !layer.includes('inset'));
+				})
+				.map(({ selector }) => selector);
+
+			expect(offenders).toStrictEqual([]);
+		});
+
 		it('leaves body with no background to propagate to the canvas', () => {
 			// CSS backgrounds §2.11.2: when the ROOT element's background is transparent, the BODY's
 			// background is propagated to the canvas and painted across the WHOLE viewport, ignoring

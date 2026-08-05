@@ -660,11 +660,19 @@ ${f}.mc-desktop-frameless::before {
 		var(--mc-bezel-mid) 52%,
 		var(--mc-bezel-bottom) 100%
 	);
+	/*
+	 * INSET EDGES ONLY — no outward shadow on the frameless shell.
+	 *
+	 * A drop shadow is a real painted pixel, and on a transparent window it paints INTO the
+	 * see-through region: over the user's desktop, as a grey-green smudge around the frame. That is
+	 * the opposite of transparent. The spec's ambient/contact pair assumes an opaque backdrop to
+	 * fall onto; here there isn't one. macOS also gives the window no native shadow
+	 * (hasShadow:false), so nothing replaces it — which is the intent: outside the frame, nothing
+	 * is drawn at all.
+	 */
 	box-shadow:
 		inset 0 1px 0 ${CHROME.bezelEdgeHighlight},
-		inset 0 -1px 0 ${CHROME.bezelEdgeShade},
-		${CHROME.bezelShadowContact},
-		${CHROME.bezelShadowAmbient};
+		inset 0 -1px 0 ${CHROME.bezelEdgeShade};
 }
 
 ${f}.mc-desktop-frameless {
@@ -709,14 +717,14 @@ ${f}.mc-desktop-frameless .mc-rail-workspace {
 	   read through it when it is INSIDE the frame). As a protruding tab it is no longer sitting on
 	   the chrome — it IS chrome — so it has to paint the gradient itself and out-rank that rule. */
 	background: linear-gradient(180deg, var(--mc-chrome-top) 0%, var(--mc-chrome-bottom) 100%) !important;
+	/* INSET EDGES ONLY. The spec gives the tab a directional shadow falling left and down, to sell
+	   "this sits behind the window". That works against an opaque backdrop; on a TRANSPARENT window
+	   it paints a large green-black smudge straight onto the user's desktop — the biggest single
+	   source of visible bleed outside the frame. The tab's own edge highlights carry the depth. */
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.14),
 		inset 1px 0 0 rgba(255, 255, 255, 0.08),
-		inset 0 -1px 0 rgba(0, 0, 0, 0.60),
-		/* The shadow falls LEFT and DOWN — away from the frame — which is what sells "this sits
-		   behind the window" instead of "this floats on top of it". */
-		-3px 3px 8px rgba(9, 44, 21, 0.40),
-		-16px 14px 34px rgba(9, 44, 21, 0.60);
+		inset 0 -1px 0 rgba(0, 0, 0, 0.60);
 	/* Under the bezel (which the frame gives z-index 1), so the bezel overlaps the tab's inner edge. */
 	z-index: 0;
 }
