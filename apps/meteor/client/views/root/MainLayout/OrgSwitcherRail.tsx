@@ -15,9 +15,11 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import ConnectWorkspaceModal from './ConnectWorkspaceModal';
+import { useIsFramelessDesktop } from './desktopShell';
 import { externalConnectionIdFromSelection, externalSelectionId, useOrgSwitcherSelection } from './OrgSwitcherContext';
 import { externalProviderBranding } from './externalProviders';
 import { useExternalInboundPush } from './useExternalInboundPush';
@@ -569,6 +571,12 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactElement | null => {
 	const { t } = useTranslation();
 	const { isMobile, sidebar } = useLayout();
+	/**
+	 * Portal this rail out to <body> only for the DESKTOP shell instance. `inDrawer` is the mobile
+	 * drawer's copy of the same component — portalling that one would rip it out of the drawer and
+	 * strand it over the app, so the drawer keeps rendering in place regardless of the shell.
+	 */
+	const portalAsTab = useIsFramelessDesktop() && !inDrawer;
 	// Live inbound push for connected external workspaces (subscribe once — desktop mount only;
 	// the drawer re-mount passes enabled=false so events never double-fire).
 	useExternalInboundPush(!inDrawer);
@@ -651,9 +659,24 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 		switchOrg(org);
 	};
 
-	return (
-		// MATTERCHAT: `mc-rail-workspace` is the depth pass's hook (depthSkin.ts) — the strip drops its
-		// own fill so the chrome gradient is continuous, and its tiles sit in a groove.
+	/**
+	 * MATTERCHAT: on the frameless desktop shell this strip becomes a tab that protrudes OUTSIDE the
+	 * window frame, which means `position: fixed` against the viewport.
+	 *
+	 * It has to be PORTALLED to <body> to do that. Rocket.Chat wraps the sidebar in an element that
+	 * runs a CSS transition on `transform` (the drawer slide), and any transformed ancestor becomes
+	 * the containing block for fixed positioning — so in place, the tab is positioned against, and
+	 * clipped by, that wrapper. It was landing at x=-219, 20px tall, dragged along by the wrapper's
+	 * translateX(-320px).
+	 *
+	 * Neutralising the ancestor with `transform: none !important` does NOT work and never could:
+	 * a RUNNING TRANSITION outranks !important in the CSS cascade. The only robust fix is to not be
+	 * inside the transformed subtree at all. React portals preserve context, so the org-switcher
+	 * context and every hook above keep working unchanged.
+	 */
+	const rail = (
+		// `mc-rail-workspace` is the depth pass's hook (depthSkin.ts) — the strip drops its own fill
+		// so the chrome gradient is continuous, and its tiles sit in a groove.
 		// className must be the ARRAY form — css() returns a css-in-js object, not a string, so
 		// .join(' ') stringifies it into garbage and NO styles apply.
 		<Box is='nav' aria-label={t('Workspaces', { defaultValue: 'Workspaces' })} className={[columnClass, 'mc-rail-workspace']}>
@@ -685,6 +708,10 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 			</Box>
 		</Box>
 	);
+
+	// In place on web/PWA and on non-frameless desktop builds; portalled out only where it has to
+	// escape the transformed sidebar wrapper to protrude past the window frame.
+	return portalAsTab ? createPortal(rail, document.body) : rail;
 };
 
 export default memo(OrgSwitcherRail);
