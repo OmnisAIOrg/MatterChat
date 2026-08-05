@@ -54,6 +54,12 @@ const formatBadgeCount = (count: number): string => (count > 99 ? '99+' : String
 const columnClass = css`
 	width: 62px;
 	min-width: 62px;
+	/* Frame spec §3 (web): the strip is the frame's FIRST COLUMN — 62px including its own padding, so
+	   the 9px on the left doubles as the frame's left gutter and the groove never touches the bezel.
+	   The protruding desktop "tab" variant is deliberately not built: it needs a transparent frameless
+	   Electron window, which would cost the native traffic lights, window shadow and resize edges. */
+	padding: 0 6px 0 9px;
+	box-sizing: border-box;
 	height: 100%;
 	flex-shrink: 0;
 	z-index: 4;
@@ -63,22 +69,30 @@ const columnClass = css`
 	}
 `;
 
+/** The workspace CHANNEL — the same groove recipe as the menu rail's channel. */
 const tabClass = css`
-	width: 62px;
+	width: 100%;
 	height: 100%;
-	background-color: ${RAIL_BG};
-	padding-block: 12px;
+	padding: 4px;
+	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 9px;
+	gap: 6px;
 `;
 
+/**
+ * Frame spec §3: 36×36, radius 10. The tile keeps its EXISTING artwork and color — the only thing
+ * added is the raised recipe (a top highlight + a contact shadow) so tiles sit ON the groove.
+ */
 const tileClass = css`
-	width: 40px;
-	height: 40px;
+	width: 36px;
+	height: 36px;
 	border: 0;
-	border-radius: 12px;
+	border-radius: 10px;
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.28),
+		0 1px 3px rgba(0, 0, 0, 0.35);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -104,10 +118,10 @@ const tileClass = css`
 `;
 
 const addClass = css`
-	width: 40px;
-	height: 40px;
+	width: 36px;
+	height: 36px;
 	border: 1.5px dashed rgba(255, 255, 255, 0.3);
-	border-radius: 12px;
+	border-radius: 10px;
 	background: rgba(255, 255, 255, 0.06);
 	color: #ffffff;
 	font-size: 22px;
@@ -271,7 +285,11 @@ const ExternalTile = ({
 					style={{
 						backgroundColor: branding.color,
 						opacity: isSelected ? 1 : 0.82,
-						boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
+						// Frame spec §3: the active tile is the shared RAISED recipe (accent ring + lift), and it must
+				// restate the base tile shadow — an inline boxShadow replaces the class's, it doesn't merge.
+				boxShadow: isSelected
+					? `inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0 0 2px ${ACCENT_RING}, 0 2px 7px rgba(0, 0, 0, 0.35)`
+					: undefined,
 					}}
 				>
 					<branding.Mark size={22} />
@@ -459,7 +477,11 @@ const OrgTile = ({ org, isSelected, onClick }: { org: SwitchableOrg; isSelected:
 			style={{
 				backgroundColor: isSlack ? '#ffffff' : org.color || '#3a3d44',
 				opacity: isSelected ? 1 : org.unread ? 0.9 : 0.78,
-				boxShadow: isSelected ? `0 0 0 2px ${RAIL_BG}, 0 0 0 4px ${ACCENT_RING}` : undefined,
+				// Frame spec §3: the active tile is the shared RAISED recipe (accent ring + lift), and it must
+				// restate the base tile shadow — an inline boxShadow replaces the class's, it doesn't merge.
+				boxShadow: isSelected
+					? `inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0 0 2px ${ACCENT_RING}, 0 2px 7px rgba(0, 0, 0, 0.35)`
+					: undefined,
 				fontSize: org.initial.length > 1 ? '14px' : '16px',
 			}}
 		>
@@ -630,8 +652,12 @@ const OrgSwitcherRail = ({ inDrawer = false }: { inDrawer?: boolean }): ReactEle
 	};
 
 	return (
-		<Box is='nav' aria-label={t('Workspaces', { defaultValue: 'Workspaces' })} className={columnClass}>
-			<Box className={tabClass}>
+		// MATTERCHAT: `mc-rail-workspace` is the depth pass's hook (depthSkin.ts) — the strip drops its
+		// own fill so the chrome gradient is continuous, and its tiles sit in a groove.
+		// className must be the ARRAY form — css() returns a css-in-js object, not a string, so
+		// .join(' ') stringifies it into garbage and NO styles apply.
+		<Box is='nav' aria-label={t('Workspaces', { defaultValue: 'Workspaces' })} className={[columnClass, 'mc-rail-workspace']}>
+			<Box className={[tabClass, 'mc-groove']}>
 				{orgs.map((org) => (
 					<OrgTile key={org.id} org={org} isSelected={selectedOrgId === org.id} onClick={(): void => handleSelect(org)} />
 				))}

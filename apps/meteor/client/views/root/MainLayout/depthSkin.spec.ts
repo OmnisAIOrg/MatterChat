@@ -1,0 +1,93 @@
+import { buildDepthCss, DEPTH_FLAG_CLASS } from './depthSkin';
+
+/**
+ * These guard a failure mode that a green build does NOT catch.
+ *
+ * `buildDepthCss` returns CSS assembled in a template literal. A stray backtick anywhere in that
+ * string — easiest to introduce inside a CSS comment, e.g. writing `padding: 22` with code quotes —
+ * silently TERMINATES the literal. Babel then emits a syntactically valid module whose CSS is
+ * truncated at that point, the build passes, and every rule after the backtick is missing at
+ * runtime. That exact bug shipped a half-applied skin during this pass (the content well, cards and
+ * overlay rules all vanished) and was invisible until the built chunk was inspected by hand.
+ *
+ * The brace-balance and tail assertions below fail loudly on truncation.
+ */
+/**
+ * Structural assertions must run on comment-free CSS: the comments legitimately quote upstream
+ * selectors and rule bodies, so their braces would otherwise be counted as real blocks and their
+ * text parsed as selectors.
+ */
+const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+describe('depthSkin', () => {
+	const themes = ['light', 'dark'] as const;
+
+	themes.forEach((theme) => {
+		describe(`${theme} theme`, () => {
+			const css = buildDepthCss(theme);
+			const bare = stripComments(css);
+
+			it('is not truncated — braces balance', () => {
+				const open = (bare.match(/\{/g) ?? []).length;
+				const close = (bare.match(/\}/g) ?? []).length;
+				expect(open).toBe(close);
+			});
+
+			it('emits every plane, including the ones after the midpoint', () => {
+				// Ordered outermost → innermost. A truncation shows up as the tail entries missing.
+				expect(css).toContain('#react-root'); // plane 2, chrome frame
+				expect(css).toContain('.mc-groove'); // the repeating recess
+				expect(css).toContain('#main-content'); // plane 3, the content well
+				expect(css).toContain('.mc-card'); // plane 4, cards
+				expect(css).toContain('.mc-scroll-shade'); // §4.3
+				expect(css).toContain('@media print'); // the very last block
+			});
+
+			it('scopes every rule under the feature-flag class so the pass is revertible', () => {
+				// Spec §8: dropping `body.mc-depth` must revert the whole reskin. Any selector that
+				// escapes the flag would leak the reskin into the un-flagged state.
+				const selectors = bare
+					.split('}')
+					.map((block) => block.split('{')[0].trim())
+					.filter((sel) => sel && !sel.startsWith('@') && !sel.startsWith('--'));
+
+				const unscoped = selectors.filter((sel) => !sel.includes(`body.${DEPTH_FLAG_CLASS}`));
+				expect(unscoped).toStrictEqual([]);
+			});
+
+			it('resolves every interpolation', () => {
+				expect(css).not.toMatch(/undefined|NaN|\[object Object\]/);
+			});
+
+			it('never blanket-targets .rcx-sidebar — only the wrapper that holds the room list', () => {
+				// REGRESSION GUARD. '.rcx-sidebar' is worn by both the chat room-list wrapper (content is
+				// light-on-dark, safe to make transparent) AND fork-owned light panels — .mc-boards-sidebar,
+				// .flex-nav, Activity/Admin — whose content is dark-text-on-light. A blanket
+				// '.rcx-sidebar { background: transparent }' deletes those panels' backgrounds and leaves
+				// dark text on the dark chrome, i.e. invisible nav on every non-chat route. Chat is the one
+				// place it looks fine, which is exactly why this slips through a spot check.
+				const selectors = bare
+					.split('}')
+					.flatMap((block) => block.split('{')[0].split(','))
+					.map((sel) => sel.trim())
+					.filter(Boolean);
+
+				const bare_rcx_sidebar = selectors.filter((sel) => /\.rcx-sidebar$/.test(sel) || /\.rcx-sidebar[^-:\w]/.test(sel));
+				expect(bare_rcx_sidebar).toStrictEqual([]);
+			});
+		});
+	});
+
+	it('re-themes the well and cards but keeps the chrome identical across themes', () => {
+		// The rails and title bar are always dark by design, so bezel/chrome/groove tokens must not
+		// vary by theme — only the well and card surfaces do.
+		const light = buildDepthCss('light');
+		const dark = buildDepthCss('dark');
+
+		const bezelOf = (css: string) => /--mc-bezel-top:\s*([^;]+);/.exec(css)?.[1];
+		const wellOf = (css: string) => /--mc-well-fill:\s*([^;]+);/.exec(css)?.[1];
+
+		expect(bezelOf(light)).toBe(bezelOf(dark));
+		expect(wellOf(light)).not.toBe(wellOf(dark));
+	});
+});

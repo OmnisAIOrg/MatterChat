@@ -1,7 +1,8 @@
 import { PaletteStyleTag } from '@rocket.chat/fuselage';
 import { useThemeMode } from '@rocket.chat/ui-client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
+import { DEPTH_FLAG_CLASS, DEPTH_FLAG_STORAGE_KEY, buildDepthCss } from './depthSkin';
 import { codeBlock } from '../lib/codeBlockStyles';
 
 /**
@@ -877,6 +878,26 @@ export const MainLayoutStyleTags = () => {
 		return () => document.body.classList.remove('mc-desktop-app', 'mc-desktop-mac');
 	}, []);
 
+	/**
+	 * FRAME & DEPTH pass (depthSkin.ts) — spec §8 puts the whole reskin behind one class on <body>
+	 * so it can be A/B'd and reverted without touching component code. Default ON; set
+	 * `localStorage['matterchat:depth'] = 'off'` and reload to see the previous flat treatment.
+	 */
+	const [depthOn] = useState(() => {
+		try {
+			return window.localStorage.getItem(DEPTH_FLAG_STORAGE_KEY) !== 'off';
+		} catch {
+			// Private mode / storage disabled — the reskin is the intended default, so fail ON.
+			return true;
+		}
+	});
+
+	useEffect(() => {
+		if (!depthOn) return undefined;
+		document.body.classList.add(DEPTH_FLAG_CLASS);
+		return () => document.body.classList.remove(DEPTH_FLAG_CLASS);
+	}, [depthOn]);
+
 	// Brand the light and dark themes; leave high-contrast (a11y) entirely stock.
 	const branded = theme === 'light' || theme === 'dark';
 	const ledger = theme === 'dark' ? DARK_LEDGER : LIGHT_LEDGER;
@@ -901,6 +922,9 @@ export const MainLayoutStyleTags = () => {
 			{branded && <style dangerouslySetInnerHTML={{ __html: buildPremiumRefreshCss(premium) }} />}
 			{/* Premium dashboard tokens — Wave 3 refresh design. */}
 			{branded && <style dangerouslySetInnerHTML={{ __html: buildPremiumDashboardCss(theme) }} />}
+			{/* Frame & depth pass — LAST so its scoped `body.mc-depth` rules win over the flat frame
+			    above without needing extra specificity. Static, theme-derived constant string. */}
+			{depthOn && <style dangerouslySetInnerHTML={{ __html: buildDepthCss(theme) }} />}
 		</>
 	);
 };

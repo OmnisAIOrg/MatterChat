@@ -134,7 +134,9 @@ const SectionCard = ({
 	action?: ReactNode;
 	children: ReactNode;
 }) => (
-	<Box borderRadius='x8' borderWidth='default' p={12} mbe={12} style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE }}>
+	// MATTERCHAT: `mc-card` is plane 4 of the frame spec — it adds ONLY the shared elevation pair
+	// (contact + ambient). The card's fill and rule keep their existing ledger colors below.
+	<Box className='mc-card' borderRadius='x8' borderWidth='default' p={12} mbe={12} style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE }}>
 		<Box display='flex' alignItems='center' mbe={8}>
 			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x16' mie={6} color='hint' />
 			<Box fontScale='p2b' color='default' style={LEDGER_CAPTION_STYLE}>
@@ -155,7 +157,10 @@ const SectionCard = ({
 // SOL ≤30d segment is red-accented (number + a 3px heat rule) whenever it is non-zero.
 // eslint-disable-next-line react/no-multi-comp -- local presentational subcomponent, kept in-file per the fork-safe confinement rule
 const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red' }[] }) => (
+	// MATTERCHAT: ONE card with internal border-left dividers (below), never four cards — four would
+	// read as four planes. Same single elevation as every other card.
 	<Box
+		className='mc-card'
 		display='flex'
 		flexWrap='wrap'
 		mbe={12}
