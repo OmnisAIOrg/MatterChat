@@ -50,6 +50,12 @@ const WindowLights = () => {
 		<div
 			role='group'
 			aria-label='Window controls'
+			// The no-drag opt-out is ALSO declared in depthSkin.ts against this class. Belt and braces
+			// on purpose: if the inline property is ever dropped (a style-prop refactor, a sanitizer,
+			// a React version that stops mapping WebkitAppRegion), the buttons would silently start
+			// dragging the window instead of clicking — which presents as "the close button is broken"
+			// on a window that has no other way to close. The CSS rule survives that.
+			className='mc-window-lights'
 			onMouseEnter={() => setHovered(true)}
 			onMouseLeave={() => setHovered(false)}
 			style={{

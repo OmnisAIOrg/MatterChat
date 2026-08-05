@@ -647,6 +647,15 @@ ${f}.mc-desktop-frameless #rocket-chat {
 	padding-inline-start: ${GEO.frameGutter}px;
 }
 
+/* The client-drawn window lights must be excluded from the window's drag region, or clicking Close
+   drags the window instead — on a window that has no other way to close. WindowLights also sets this
+   inline; this rule is the belt-and-braces copy that survives a style-prop refactor. */
+${f} .mc-window-lights,
+${f} .mc-window-lights button {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}
+
 /* The frameless shell has no native title bar, so the client's own lights need the room the native
    traffic lights used to be given. Same 78px, different owner. */
 ${f}.mc-desktop-frameless .rcx-navbar {
