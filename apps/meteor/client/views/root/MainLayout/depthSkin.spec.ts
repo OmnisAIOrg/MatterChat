@@ -82,7 +82,17 @@ describe('depthSkin', () => {
 					.map((block) => block.split('{')[0].trim())
 					.filter((sel) => sel && !sel.startsWith('@') && !sel.startsWith('--'));
 
-				const unscoped = selectors.filter((sel) => !sel.includes(`body.${DEPTH_FLAG_CLASS}`));
+				// ONE DELIBERATE EXEMPTION: the window lights' no-drag opt-out.
+				//
+				// Every other rule here is cosmetic, so scoping it under the flag is what makes the
+				// pass revertible. This one is not cosmetic — without it the frameless window's close
+				// button falls inside the drag region and the user cannot close the app. Tying that to
+				// a cosmetic A/B flag would mean `localStorage['matterchat:depth']='off'` strands
+				// someone in an uncloseable window. Safety rules do not get feature-flagged.
+				const SAFETY_EXEMPT = ['.mc-window-lights'];
+				const unscoped = selectors.filter(
+					(sel) => !sel.includes(`body.${DEPTH_FLAG_CLASS}`) && !SAFETY_EXEMPT.some((safe) => sel.startsWith(safe)),
+				);
 				expect(unscoped).toStrictEqual([]);
 			});
 
