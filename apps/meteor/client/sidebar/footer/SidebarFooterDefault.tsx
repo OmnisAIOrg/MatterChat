@@ -20,7 +20,9 @@ const SidebarFooterDefault = () => {
 		<Footer>
 			<WordClockMount />
 			<SidebarDivider />
-			<Box is='footer' pbs={12} pbe={4} pi={16}>
+			{/* Centered to match the Omnis AI lockup below it — the footer reads as ONE centered
+			    sign-off stack (product wordmark over suite lockup), the way CasePro signs its frame. */}
+			<Box is='footer' pbs={12} pbe={4} pi={16} display='flex' justifyContent='center'>
 				<Box is='span' style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1 }}>
 					<Box is='span' style={{ color: MATTERCHAT_RED }}>
 						Matter

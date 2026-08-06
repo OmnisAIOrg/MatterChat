@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { buildDepthCss, DEPTH_FLAG_CLASS, FRAMELESS_LIGHTS_POSITION } from './depthSkin';
+import { buildDepthCss, DEPTH_FLAG_CLASS, FRAMELESS_LIGHTS_POSITION, FRAMELESS_SHADOW_GUTTER, framelessShadowExtent } from './depthSkin';
 
 /**
  * These guard a failure mode that a green build does NOT catch.
@@ -145,6 +145,56 @@ describe('depthSkin', () => {
 			const framelessBody = /body\.mc-depth\.mc-desktop-frameless \{([^}]*)\}/.exec(css)?.[1] ?? '';
 			expect(framelessBody).toMatch(/background:\s*none/);
 			expect(css).toMatch(/body\.mc-depth\.mc-desktop-frameless::before[\s\S]*?linear-gradient/);
+		});
+
+		it('keeps the bezel shadow inside the transparent gutter', () => {
+			// THE "LEAK ON THE SIDES". A transparent window has no canvas outside its rect, so a drop
+			// shadow reaching past the bezel is CLIPPED — and a clipped blur does not fade, it ends on
+			// a hard straight line running the full height of the window. That band down the edges is
+			// what the founder kept seeing after the flooding fix.
+			//
+			// The gutter is body's own margin, and every direction the shadow reaches has to die
+			// inside it. The web bezel's `0 8px 20px` reaches 28px below and 20px sideways into 8px of
+			// room, which is why the frameless shell must not reuse it.
+			const extent = framelessShadowExtent();
+			expect(extent.bottom).toBeLessThanOrEqual(FRAMELESS_SHADOW_GUTTER);
+			expect(extent.top).toBeLessThanOrEqual(FRAMELESS_SHADOW_GUTTER);
+			expect(extent.side).toBeLessThanOrEqual(FRAMELESS_SHADOW_GUTTER);
+
+			// …and the emitted CSS must actually use that stack. The pseudo-element may only carry
+			// INSET shadows (the edge lip, which costs no gutter) plus the budgeted drop layers.
+			const bezel = /body\.mc-depth\.mc-desktop-frameless::before \{([^}]*)\}/.exec(css)?.[1] ?? '';
+
+			// Layers are comma-separated, but so are the components of `rgba(9, 44, 21, 0.4)` — a naive
+			// split shreds every colour into fragments that parse as NaN. Only commas at paren depth 0
+			// separate layers.
+			const splitLayers = (value: string): string[] => {
+				const layers: string[] = [];
+				let depth = 0;
+				let current = '';
+				for (const char of value) {
+					if (char === '(') depth += 1;
+					if (char === ')') depth -= 1;
+					if (char === ',' && depth === 0) {
+						layers.push(current.trim());
+						current = '';
+						continue;
+					}
+					current += char;
+				}
+				if (current.trim()) layers.push(current.trim());
+				return layers;
+			};
+
+			const dropLayers = splitLayers(/box-shadow:([\s\S]*?);/.exec(bezel)?.[1] ?? '').filter(
+				(layer) => layer && !layer.startsWith('inset'),
+			);
+			expect(dropLayers.length).toBeGreaterThan(0);
+			dropLayers.forEach((layer) => {
+				const [, y, blur] = /^0 (\d+)px (\d+)px/.exec(layer) ?? [];
+				expect(Number.isNaN(Number(blur) + Number(y))).toBe(false);
+				expect(Number(blur) + Number(y)).toBeLessThanOrEqual(FRAMELESS_SHADOW_GUTTER);
+			});
 		});
 
 		it('makes the window itself transparent, or none of the above is visible', () => {

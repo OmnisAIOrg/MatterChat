@@ -234,6 +234,46 @@ const DERIVED = {
 } as const;
 
 /**
+ * THE SHADOW BUDGET — why the frameless bezel does NOT reuse CHROME.bezelShadow*.
+ *
+ * On a transparent window there is no canvas outside the window rect, so anything painted past that
+ * rect is CLIPPED — and a clipped blur does not fade out, it ends on a hard straight line. That line
+ * runs the full height of the window and reads as a dark band bleeding down the edges: the "leak on
+ * the sides".
+ *
+ * The gutter available for a shadow to fade out in is exactly body's own margin — ${GEO.bodyMargin}px
+ * on the top, trailing and bottom edges (the leading edge has the whole tab gutter, so it is never
+ * the constraint). The web/PWA bezel can afford `0 8px 20px` because <html> is painted #0C0F14 and
+ * there is a real backdrop to cast onto; on the frameless shell that same shadow reaches 28px below
+ * and 20px to the side of a box with 8px of room, so 20px of it gets guillotined.
+ *
+ * So the frameless shell gets its OWN shadow stack, declared as data and BUDGET-CHECKED rather than
+ * eyeballed. A blur/offset pair is legal only while every direction it reaches stays inside the
+ * gutter. depthSkin.spec.ts asserts this, so retuning the shadow can never silently reintroduce the
+ * band again.
+ */
+const FRAMELESS_SHADOW_BUDGET = GEO.bodyMargin;
+
+const FRAMELESS_SHADOW_LAYERS = [
+	/** Contact — the tight dark seam that seats the card on the desktop. */
+	{ y: 1, blur: 3, color: 'rgba(9, 44, 21, 0.40)' },
+	/** Ambient — the soft lift. As large as ${GEO.bodyMargin}px of gutter permits, and no larger. */
+	{ y: 3, blur: 5, color: 'rgba(9, 44, 21, 0.45)' },
+] as const;
+
+/** How far the shadow stack actually reaches past the bezel, per direction. */
+export const framelessShadowExtent = (layers: readonly { y: number; blur: number }[] = FRAMELESS_SHADOW_LAYERS) => ({
+	bottom: Math.max(...layers.map(({ y, blur }) => blur + y)),
+	top: Math.max(...layers.map(({ y, blur }) => blur - y)),
+	side: Math.max(...layers.map(({ blur }) => blur)),
+});
+
+/** The budget the extents above must respect. Exported so the spec asserts the real number. */
+export const FRAMELESS_SHADOW_GUTTER = FRAMELESS_SHADOW_BUDGET;
+
+const FRAMELESS_BEZEL_SHADOW = FRAMELESS_SHADOW_LAYERS.map(({ y, blur, color }) => `0 ${y}px ${blur}px ${color}`).join(',\n\t\t');
+
+/**
  * Where the client-drawn window lights belong on a frameless shell, in WINDOW coordinates.
  * Consumed by WindowLights — see the note there on why this is exported rather than hardcoded.
  * 10px in from the frame's left edge, vertically centred in the title bar.
@@ -660,11 +700,13 @@ ${f}.mc-desktop-frameless::before {
 		var(--mc-bezel-mid) 52%,
 		var(--mc-bezel-bottom) 100%
 	);
+	/* The edge lip is INSET, so it costs no gutter. The two drop layers are the budget-checked
+	   frameless stack — NOT CHROME.bezelShadow*, which overshoots the gutter and gets clipped into
+	   a hard-edged dark band down the sides. See FRAMELESS_SHADOW_BUDGET. */
 	box-shadow:
 		inset 0 1px 0 ${CHROME.bezelEdgeHighlight},
 		inset 0 -1px 0 ${CHROME.bezelEdgeShade},
-		${CHROME.bezelShadowContact},
-		${CHROME.bezelShadowAmbient};
+		${FRAMELESS_BEZEL_SHADOW};
 }
 
 ${f}.mc-desktop-frameless {
