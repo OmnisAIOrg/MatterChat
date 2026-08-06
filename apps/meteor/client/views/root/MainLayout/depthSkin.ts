@@ -785,8 +785,8 @@ ${f}.mc-desktop-frameless #rocket-chat {
 /* The client-drawn window lights must be excluded from the window's drag region, or clicking Close
    drags the window instead — on a window that has no other way to close. WindowLights also sets this
    inline; this rule is the belt-and-braces copy that survives a style-prop refactor. */
-${f} .mc-window-lights,
-${f} .mc-window-lights button {
+.mc-window-lights,
+.mc-window-lights button {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }

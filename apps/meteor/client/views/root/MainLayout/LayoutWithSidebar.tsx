@@ -236,9 +236,23 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 			<AccessibilityShortcut />
 			{/* MATTERCHAT: the frameless desktop shell draws no native window controls, so the client
 			    owes it a set. Renders null on web/PWA and on pre-frameless desktop builds. Mounted
-			    OUTSIDE #rocket-chat and position:fixed, so it adds no layout anywhere. */}
-			{!embeddedLayout && <WindowLights />}
+			    OUTSIDE #rocket-chat and position:fixed, so it adds no layout anywhere.
+
+			    ORDER IS LOAD-BEARING — WindowLights MUST come AFTER NavBar.
+
+			    Electron builds the window's draggable region by walking the tree IN ORDER, adding
+			    `app-region: drag` rects and subtracting `no-drag` ones. NavBar is the drag surface
+			    (NAVBAR_DRAG_REGION_CSS). With the lights rendered FIRST, their no-drag rect was
+			    subtracted before the NavBar's drag rect was added — so the drag region was then laid
+			    back over the buttons, and macOS turned every click on them into a window drag. The
+			    lights painted perfectly and did nothing, on a window with no other way to close
+			    (founder, 2026-08-06). Rendering them after NavBar makes the subtraction land last.
+
+			    This is also why the navbar's OWN controls were never affected: they are descendants
+			    of .rcx-navbar, so they are already visited after it. Only a preceding SIBLING hits
+			    this. Position is fixed, so the move costs nothing visually. */}
 			{!embeddedLayout && <NavBar />}
+			{!embeddedLayout && <WindowLights />}
 			<Box
 				bg='surface-light'
 				id='rocket-chat'

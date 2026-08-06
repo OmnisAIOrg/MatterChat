@@ -83,6 +83,12 @@ const WindowLights = () => {
 					title={light.label}
 					onClick={() => onClick(light.id)}
 					style={{
+						// Per-BUTTON no-drag, not just on the container. app-region regions are
+						// accumulated by walking the tree, so the most specific rect wins last —
+						// declaring it here means a light can never end up inside the drag region no
+						// matter what an ancestor or a later sibling does.
+						WebkitAppRegion: 'no-drag',
+						appRegion: 'no-drag',
 						width: 12,
 						height: 12,
 						padding: 0,
@@ -100,7 +106,8 @@ const WindowLights = () => {
 						fontWeight: 700,
 						color: hovered ? 'rgba(0, 0, 0, 0.55)' : 'transparent',
 						transition: 'color 120ms ease-out',
-					}}
+						// Cast for the same reason as the container: app-region is not in CSSProperties.
+					} as CSSProperties}
 				>
 					{light.id === 'close' ? '✕' : light.id === 'minimize' ? '–' : '+'}
 				</button>
