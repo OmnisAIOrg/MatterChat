@@ -10,6 +10,7 @@ import { getContentDisposition } from './helper';
 import { UploadFS } from '../../../../server/ufs';
 import { FileUploadClass, FileUpload } from '../lib/FileUpload';
 import { getFileRange, setRangeHeaders } from '../lib/ranges';
+import { applyActiveContentSafety } from '../lib/svgSafety';
 
 const logger = new Logger('FileUpload');
 
@@ -166,6 +167,8 @@ new FileUploadClass({
 		file.uploadedAt && res.setHeader('Last-Modified', file.uploadedAt.toUTCString());
 		res.setHeader('Content-Type', file.type || 'application/octet-stream');
 		res.setHeader('Content-Length', file.size || 0);
+		// MATTERCHAT: SVG is uploadable here (upstream blocks it) — strip its ability to execute.
+		applyActiveContentSafety(file, res);
 
 		await readFromGridFS(file.store, file._id, file, req, res);
 	},

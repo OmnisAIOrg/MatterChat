@@ -19,7 +19,23 @@ export const createFileUploadSettings = () =>
 			i18nDescription: 'FileUpload_MediaTypeWhiteListDescription',
 		});
 
-		await this.add('FileUpload_MediaTypeBlackList', 'image/svg+xml', {
+		/**
+		 * MATTERCHAT: upstream seeds this with 'image/svg+xml', which is why "you can't send SVG files".
+		 * An SVG is an XML document that can carry <script>, so served inline from our own origin it is
+		 * stored XSS — hence upstream's blanket block.
+		 *
+		 * We need SVGs (logos, diagrams, exhibits), so the execution is removed instead of the file
+		 * type: every upload response for an active image type is forced to a sandboxed, nosniff
+		 * ATTACHMENT (app/file-upload/server/lib/svgSafety.ts). Inline <img> previews still render,
+		 * and an SVG loaded through <img> is script-disabled by spec. Do NOT re-add the type here
+		 * without also removing that hardening's reason to exist.
+		 *
+		 * NOTE: this is only the DEFAULT for a fresh workspace. An existing deployment already has the
+		 * old value persisted in the settings collection, and a default change never overwrites it —
+		 * clear "Blocked Media Types" in Admin → Settings → File Upload (or pin
+		 * OVERWRITE_SETTING_FileUpload_MediaTypeBlackList) to take effect there.
+		 */
+		await this.add('FileUpload_MediaTypeBlackList', '', {
 			type: 'string',
 			public: true,
 			i18nDescription: 'FileUpload_MediaTypeBlackListDescription',

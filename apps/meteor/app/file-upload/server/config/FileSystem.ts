@@ -5,6 +5,7 @@ import { UploadFS } from '../../../../server/ufs';
 import { settings } from '../../../settings/server';
 import { FileUploadClass, FileUpload } from '../lib/FileUpload';
 import { getFileRange, setRangeHeaders } from '../lib/ranges';
+import { applyActiveContentSafety } from '../lib/svgSafety';
 
 const FileSystemUploads = new FileUploadClass({
 	name: 'FileSystem:Uploads',
@@ -31,6 +32,8 @@ const FileSystemUploads = new FileUploadClass({
 			res.setHeader('Content-Disposition', `${getContentDisposition(req)}; filename*=UTF-8''${encodeURIComponent(file.name || '')}`);
 			file.uploadedAt && res.setHeader('Last-Modified', file.uploadedAt.toUTCString());
 			res.setHeader('Content-Type', file.type || 'application/octet-stream');
+			// MATTERCHAT: SVG is uploadable here (upstream blocks it) — strip its ability to execute.
+			applyActiveContentSafety(file, res);
 
 			if (req.headers.range) {
 				const range = getFileRange(file, req);

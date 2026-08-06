@@ -37,6 +37,7 @@ import { settings } from '../../../settings/server';
 import { mime } from '../../../utils/lib/mimeTypes';
 import { validateAndDecodeJWT, generateJWT } from '../../../utils/server/lib/JWTHelper';
 import { fileUploadIsValidContentType } from '../../../utils/server/restrictions';
+import { applyActiveContentSafety } from './svgSafety';
 
 const cookie = new Cookies();
 let maxFileSize = 0;
@@ -704,6 +705,10 @@ export const FileUpload = {
 			headersToProxy.forEach((header) => {
 				fileRes.headers[header] && res.setHeader(header, String(fileRes.headers[header]));
 			});
+
+			// MATTERCHAT: this is the LAST place the type is decided on the S3/GCS path — the proxied
+			// content-type above is what the browser acts on, so the SVG hardening has to run after it.
+			applyActiveContentSafety({ type: String(fileRes.headers['content-type'] ?? ''), name: fileName }, res);
 
 			fileRes.pipe(res);
 		});
