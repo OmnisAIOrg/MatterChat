@@ -50,11 +50,31 @@ WORKDIR /src
 COPY . .
 # @omnisaiorg GitHub Packages auth is handled by .yarnrc.yml + the NPM_TOKEN env
 # var promoted above (Yarn 4). No .npmrc needed.
-# Install workspace deps, pre-build the packages Meteor links (turbo), then build
-# the server-only bundle (mirrors `yarn build:ci`). The prebuild is best-effort;
-# `meteor build` rebuilds whatever it needs.
+# Install workspace deps, pre-build the packages Meteor links (turbo), then build the server-only
+# bundle (mirrors `yarn build:ci`).
+#
+# THE PREBUILD IS NOT "BEST-EFFORT" — that old comment was wrong, and the `|| true` it justified
+# cost a full debugging round on 2026-08-06. `meteor build` does NOT regenerate the i18n typed keys;
+# packages/rocketchat-i18n/i18n is produced HERE and nowhere else. So a swallowed prebuild failure
+# does not degrade gracefully, it resurfaces two steps later as
+#     Error: ENOENT: no such file or directory, scandir '.../packages/rocketchat-i18n/i18n'
+# which names neither the failing package nor the real cause. The actual failure that night was a
+# ts-patch/typia race truncating node_modules/typescript/lib/_tsc.js, after which
+# @rocket.chat/base64 died with "SyntaxError: Unexpected end of input" — three removes from the
+# error the log actually reported.
+#
+# Retry once, because that corruption is transient on a cold turbo cache and a re-run clears it.
+# Then fail loudly rather than silently.
 RUN yarn install --immutable || yarn install
-RUN yarn build --filter=@rocket.chat/meteor^... || true
+RUN yarn build --filter=@rocket.chat/meteor^... \
+ || (echo ">>> prebuild failed — retrying once (ts-patch/typia can corrupt node_modules/typescript on a cold cache)" \
+     && yarn build --filter=@rocket.chat/meteor^...)
+# Belt and braces: a PARTIALLY successful prebuild must not pass silently either. Assert the one
+# artifact meteor cannot produce for itself, and say so in terms someone can act on.
+RUN test -d /src/apps/meteor/packages/rocketchat-i18n/i18n \
+ || (echo ">>> FATAL: packages/rocketchat-i18n/i18n is missing after the prebuild." \
+     && echo ">>> meteor build would now fail with a misleading ENOENT. Fix the turbo prebuild above." \
+     && false)
 WORKDIR /src/apps/meteor
 RUN METEOR_DISABLE_OPTIMISTIC_CACHING=1 meteor build --server-only --directory /build
 
