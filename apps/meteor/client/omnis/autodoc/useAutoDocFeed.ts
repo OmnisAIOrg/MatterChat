@@ -101,13 +101,14 @@ export const useAutoDocFeed = (enabled: boolean) => {
 		if (!enabled || !uid) {
 			return;
 		}
-		// The stream key is declared in packages/ddp-client/src/types/streams.ts, but
-		// its payload type there is intentionally loose (`document: unknown`) so the
-		// typings package doesn't have to depend on AutoDoc's domain types. Narrow it
-		// here, where those types actually live.
-		const { stop } = sdk.stream('notify-user', [`${uid}/autodoc-feed`], ((delta: FeedDelta) => {
-			queryClient.setQueryData<AutoDocFeed>(QUERY_KEY, (current) => (current ? applyDelta(current, delta) : current));
-		}) as (...args: never) => void);
+		// The stream key is declared in packages/ddp-client/src/types/streams.ts, so
+		// the callback's parameter type is inferred from that declaration. Its
+		// payload is intentionally loose there (`document: unknown`) — the typings
+		// package must not depend on AutoDoc's domain types — so the narrowing
+		// happens here, where those types actually live.
+		const { stop } = sdk.stream('notify-user', [`${uid}/autodoc-feed`], (delta) => {
+			queryClient.setQueryData<AutoDocFeed>(QUERY_KEY, (current) => (current ? applyDelta(current, delta as FeedDelta) : current));
+		});
 		return stop;
 	}, [enabled, uid, queryClient]);
 

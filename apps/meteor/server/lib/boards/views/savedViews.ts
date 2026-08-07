@@ -1,4 +1,4 @@
-import type { IBoardCard, ISavedView, ISavedViewConfig, OmnisCardQuery, SavedViewType, SavedViewScope } from '@rocket.chat/core-typings';
+import type { IBoardCard, ISavedView, ISavedViewConfig, IOmnisCardQuery, SavedViewType, SavedViewScope } from '@rocket.chat/core-typings';
 import { BoardsSavedViews, BoardsCards, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
@@ -261,7 +261,7 @@ export type QueryBoardCardsPaging = {
 /**
  * Run a saved view's `config` over a board's cards for the Table / Timeline /
  * Dashboard / Calendar client views to consume. Filters are translated to the
- * `OmnisCardQuery` the indexed `BoardsCards.search` understands (text / labels /
+ * `IOmnisCardQuery` the indexed `BoardsCards.search` understands (text / labels /
  * assignees / cardType / listIds / due / fieldFilters); `sort`, `groupBy`, and
  * `dateField` are applied in JS afterwards. Gated by `boards-view` + board visibility.
  *
@@ -324,11 +324,11 @@ export async function queryBoardCards(
 }
 
 /**
- * Translate a saved-view filter map into an `OmnisCardQuery`. Only recognised keys are
+ * Translate a saved-view filter map into an `IOmnisCardQuery`. Only recognised keys are
  * consumed; the rest are ignored so a richer client filter never breaks the server.
  */
-function toCardQuery(uid: string, filters: Record<string, unknown> | undefined): OmnisCardQuery {
-	const query: OmnisCardQuery = {};
+function toCardQuery(uid: string, filters: Record<string, unknown> | undefined): IOmnisCardQuery {
+	const query: IOmnisCardQuery = {};
 	if (!filters) {
 		return query;
 	}
@@ -345,7 +345,7 @@ function toCardQuery(uid: string, filters: Record<string, unknown> | undefined):
 	if (assignees.length) {
 		query.assignees = assignees;
 	}
-	const cardType = asStringArray(filters.cardType) as OmnisCardQuery['cardType'];
+	const cardType = asStringArray(filters.cardType) as IOmnisCardQuery['cardType'];
 	if (cardType?.length) {
 		query.cardType = cardType;
 	}
@@ -354,7 +354,7 @@ function toCardQuery(uid: string, filters: Record<string, unknown> | undefined):
 		query.listIds = listIds;
 	}
 	if (typeof filters.due === 'string' && DUE_VALUES.has(filters.due)) {
-		query.due = filters.due as OmnisCardQuery['due'];
+		query.due = filters.due as IOmnisCardQuery['due'];
 	}
 	if (Array.isArray(filters.fieldFilters)) {
 		const ff = filters.fieldFilters.filter(
@@ -362,7 +362,7 @@ function toCardQuery(uid: string, filters: Record<string, unknown> | undefined):
 				Boolean(f) && typeof (f as { fieldId?: unknown }).fieldId === 'string' && typeof (f as { op?: unknown }).op === 'string',
 		);
 		if (ff.length) {
-			query.fieldFilters = ff as OmnisCardQuery['fieldFilters'];
+			query.fieldFilters = ff as IOmnisCardQuery['fieldFilters'];
 		}
 	}
 	if (filters.includeArchived === true) {

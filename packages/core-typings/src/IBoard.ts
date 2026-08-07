@@ -9,17 +9,7 @@ export type BoardsPipelineType = 'leads' | 'matters' | 'general';
  */
 export type BoardsStatus = 'active' | 'on_hold' | 'completed' | 'archived';
 
-export type BoardsFieldType =
-	| 'text'
-	| 'number'
-	| 'date'
-	| 'checkbox'
-	| 'dropdown'
-	| 'member'
-	| 'currency'
-	| 'phone'
-	| 'email'
-	| 'url';
+export type BoardsFieldType = 'text' | 'number' | 'date' | 'checkbox' | 'dropdown' | 'member' | 'currency' | 'phone' | 'email' | 'url';
 
 export interface IBoardMember {
 	userId: IUser['_id'];

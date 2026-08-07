@@ -228,7 +228,7 @@ export interface ICardCalendarSync {
  * to a Mongo filter (text index for `text`, `$in` for labels/assignees/listIds,
  * computed date windows for `due`, dotted `fieldValues.<id>` for fieldFilters).
  */
-export interface OmnisCardQuery {
+export interface IOmnisCardQuery {
 	text?: string;
 	labels?: string[];
 	assignees?: string[]; // any-of, or 'me'

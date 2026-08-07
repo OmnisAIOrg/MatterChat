@@ -4,7 +4,7 @@ import type {
 	ICardCalendarSync,
 	IMatterSnapshot,
 	BoardsFieldValue,
-	OmnisCardQuery,
+	IOmnisCardQuery,
 	RocketChatRecordDeleted,
 } from '@rocket.chat/core-typings';
 import type { IBoardsCardsModel } from '@rocket.chat/model-typings';
@@ -63,7 +63,7 @@ export class BoardsCardsRaw extends BaseRaw<IBoardCard> implements IBoardsCardsM
 		return this.findOne({ 'link.leadId': leadId });
 	}
 
-	public search(boardId: string, query: OmnisCardQuery): FindCursor<IBoardCard> {
+	public search(boardId: string, query: IOmnisCardQuery): FindCursor<IBoardCard> {
 		// dotted custom-field paths aren't expressible on Filter<IBoardCard>, so build
 		// the filter as a loose record and cast once at the end.
 		const filter: Record<string, unknown> = { boardId };
