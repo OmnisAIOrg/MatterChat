@@ -16,7 +16,7 @@ import type { OmnisFeedItem } from '../omnis/feedPoller';
  * are sent anything.
  */
 
-export const AUTODOC_FEED_EVENT = 'autodoc-feed';
+export const AUTODOC_FEED_EVENT = 'autodoc-feed' as const;
 
 type AutoDocFeedDelta = OmnisFeedItem & { document: AutoDocDocument };
 

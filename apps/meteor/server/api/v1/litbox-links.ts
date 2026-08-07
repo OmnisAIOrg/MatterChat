@@ -1,4 +1,5 @@
 import { API } from '../api';
+import { omnisCtx } from './omnisApiContext';
 import { getUploadFormData } from '../lib/getUploadFormData';
 import { resolveLitboxLinksConfig } from '../../lib/litbox-links/config';
 import { createLink, describeLink, listLinks, revokeLink, sanitizeFilename, uploadThroughLink } from '../../lib/litbox-links/client';
@@ -66,12 +67,12 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['litbox-view-matter-files'] },
 	{
 		async get() {
-			const { roomId, workspaceId } = this.queryParams as { roomId?: string; workspaceId?: string };
+			const { roomId, workspaceId } = omnisCtx(this).queryParams as { roomId?: string; workspaceId?: string };
 
 			// Scope follows the shared context rule: in a matter channel the widget
 			// shows that matter's workspace; elsewhere, the user's own LitBox.
 			const matter = roomId ? await resolveRoomMatter(roomId) : null;
-			const feed = await listMatterFiles(this.userId, workspaceId ? { workspaceId } : {});
+			const feed = await listMatterFiles(omnisCtx(this).userId, workspaceId ? { workspaceId } : {});
 
 			return API.v1.success({ ...feed, scope: matter ? { matterId: matter.matterId, matterName: matter.matterName } : null });
 		},
@@ -98,7 +99,7 @@ API.v1.addRoute(
 		async post() {
 			const cfg = resolveLitboxLinksConfig();
 			const { fileBuffer, filename, mimetype, fields } = await getUploadFormData(
-				{ request: this.request },
+				{ request: omnisCtx(this).request },
 				{ field: 'file', sizeLimit: cfg.maxFileBytes },
 			);
 
@@ -111,13 +112,13 @@ API.v1.addRoute(
 					contentType: mimetype,
 					content: fileBuffer,
 					folder: matter ? 'Matter documents' : undefined,
-					uploadedByLabel: this.user?.username,
+					uploadedByLabel: omnisCtx(this).user?.username,
 				});
 
 				if (roomId) {
 					await postOmnisNote(
 						roomId,
-						this.userId,
+						omnisCtx(this).userId,
 						`📎 Uploaded \`${sanitizeFilename(filename)}\`${matter ? ` to **${matter.matterName}**` : ''} in LitBox.`,
 					);
 				}
@@ -136,7 +137,8 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['litbox-create-upload-link'] },
 	{
 		async post() {
-			const body = this.bodyParams as {
+			const { username } = omnisCtx(this).user ?? {};
+			const body = omnisCtx(this).bodyParams as {
 				roomId?: string;
 				destination?: 'matter' | 'personal';
 				matterId?: string;
@@ -175,7 +177,7 @@ API.v1.addRoute(
 					...(body.sendToAutoDoc !== undefined ? { sendToAutoDoc: body.sendToAutoDoc } : {}),
 					...(body.password ? { password: body.password } : {}),
 					...(body.expiryDays !== undefined ? { expiryDays: body.expiryDays } : {}),
-					createdBy: { _id: this.userId, ...(this.user?.username ? { username: this.user.username } : {}) },
+					createdBy: { _id: omnisCtx(this).userId, ...(username ? { username } : {}) },
 				});
 
 				// `url` carries the ONE-TIME plaintext token; only the hash is stored.
@@ -192,9 +194,9 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['litbox-create-upload-link'] },
 	{
 		async get() {
-			const { roomId } = this.queryParams as { roomId?: string };
+			const { roomId } = omnisCtx(this).queryParams as { roomId?: string };
 			const matter = roomId ? await resolveRoomMatter(roomId) : null;
-			const links = await listLinks(matter ? { matterId: matter.matterId } : { createdBy: this.userId });
+			const links = await listLinks(matter ? { matterId: matter.matterId } : { createdBy: omnisCtx(this).userId });
 			return API.v1.success({ links: links.map(publicLinkShape) });
 		},
 	},
@@ -205,7 +207,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['litbox-create-upload-link'] },
 	{
 		async post() {
-			const { linkId } = this.bodyParams as { linkId?: string };
+			const { linkId } = omnisCtx(this).bodyParams as { linkId?: string };
 			if (!linkId) {
 				return API.v1.failure('linkId is required');
 			}
@@ -232,7 +234,7 @@ API.v1.addRoute(
 		// parameter here would put it straight back into access logs and any
 		// Referer header the page emits.
 		async post() {
-			const { token } = this.bodyParams as { token?: string };
+			const { token } = omnisCtx(this).bodyParams as { token?: string };
 			if (!token) {
 				return API.v1.failure('token is required');
 			}
@@ -266,7 +268,7 @@ API.v1.addRoute(
 
 			const cfg = resolveLitboxLinksConfig();
 			const { fileBuffer, filename, fields } = await getUploadFormData(
-				{ request: this.request },
+				{ request: omnisCtx(this).request },
 				// A hard ceiling at the parser, before anything is buffered further.
 				{ field: 'file', sizeLimit: cfg.maxFileBytes },
 			);

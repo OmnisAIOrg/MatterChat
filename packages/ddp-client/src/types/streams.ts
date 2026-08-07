@@ -181,6 +181,18 @@ export interface StreamerEvents {
 			key: `${string}/chi-local-tool`;
 			args: [{ callId: string; app: string; tool: string; args: Record<string, unknown> }];
 		},
+		// MATTERCHAT: Omnis product widgets. One server-side poller per workspace diffs the
+		// product feed and pushes ONLY the deltas to users holding the product's view
+		// permission — clients never poll. `changed` carries whole records so the widget can
+		// apply a delta without a refetch; `removed` carries ids that left the feed.
+		{
+			key: `${string}/autodoc-feed`;
+			args: [{ changed: { id: string; changedAt: string; document: unknown }[]; removed: string[] }];
+		},
+		{
+			key: `${string}/casenotes-feed`;
+			args: [{ changed: { id: string; changedAt: string; meeting: unknown }[]; removed: string[] }];
+		},
 		{ key: `${string}/call.hangup`; args: [{ roomId: string }] },
 		{ key: `${string}/uiInteraction`; args: [UiKit.ServerInteraction] },
 		{

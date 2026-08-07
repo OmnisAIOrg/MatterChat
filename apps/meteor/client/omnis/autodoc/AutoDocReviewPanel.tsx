@@ -9,7 +9,7 @@ import {
 	ContextualbarTitle,
 } from '@rocket.chat/ui-client';
 import { useToastMessageDispatch } from '@rocket.chat/ui-contexts';
-import type { ReactElement } from 'react';
+import type { ChangeEvent, ReactElement } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -194,8 +194,8 @@ const AutoDocReviewPanel = ({ document, webUrl, onClose, onDone }: AutoDocReview
 							<FieldRow>
 								<TextInput
 									value={values[field.name] ?? ''}
-									onChange={(event) =>
-										setValues((current) => ({ ...current, [field.name]: (event.target as HTMLInputElement).value }))
+									onChange={(e: ChangeEvent<HTMLInputElement>) =>
+										setValues((current) => ({ ...current, [field.name]: e.currentTarget.value }))
 									}
 								/>
 							</FieldRow>

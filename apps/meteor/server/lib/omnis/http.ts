@@ -80,7 +80,14 @@ function withQuery(url: string, query?: OmnisRequestInit['query']): string {
  * Throws {@link OmnisHttpError} on a non-2xx — callers decide whether that
  * degrades (reads) or propagates (writes).
  */
-export async function omnisFetch(cfg: OmnisProductConfig, path: string, init: OmnisRequestInit = {}): Promise<Response> {
+/**
+ * `serverFetch` returns node-fetch's Response, which is NOT structurally the
+ * DOM `Response` (it lacks `bytes`/`formData`). Deriving the type from the
+ * function keeps us honest instead of asserting a lie.
+ */
+type ServerFetchResponse = Awaited<ReturnType<typeof serverFetch>>;
+
+export async function omnisFetch(cfg: OmnisProductConfig, path: string, init: OmnisRequestInit = {}): Promise<ServerFetchResponse> {
 	const base = cfg.baseUrl.replace(/\/+$/, '');
 	const url = withQuery(`${base}/${path.replace(/^\/+/, '')}`, init.query);
 

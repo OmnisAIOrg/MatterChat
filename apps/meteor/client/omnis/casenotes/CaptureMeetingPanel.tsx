@@ -10,7 +10,7 @@ import {
 } from '@rocket.chat/ui-client';
 import { useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactElement } from 'react';
+import type { ChangeEvent, ReactElement } from 'react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -134,7 +134,7 @@ const CaptureMeetingPanel = ({ onClose, onStarted }: { onClose(): void; onStarte
 							<TextInput
 								value={meetingUrl}
 								placeholder={t('CaseNotes_Meeting_link_placeholder')}
-								onChange={(e) => setMeetingUrl((e.target as HTMLInputElement).value)}
+								onChange={(e: ChangeEvent<HTMLInputElement>) => setMeetingUrl(e.currentTarget.value)}
 							/>
 						</FieldRow>
 						<Box fontScale='micro' color='annotation' marginBlockStart={4}>

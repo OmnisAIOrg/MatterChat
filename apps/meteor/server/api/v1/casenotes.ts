@@ -1,4 +1,5 @@
 import { API } from '../api';
+import { omnisCtx } from './omnisApiContext';
 import { canPostToChannel, dispatchBot, listMeetingsFeed, startRecording, stopRecording } from '../../lib/casenotes/client';
 import { resolveCaseNotesConfig } from '../../lib/casenotes/config';
 import type { MeetingKind } from '../../lib/casenotes/transport';
@@ -31,7 +32,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['casenotes-view-queue'] },
 	{
 		async get() {
-			const { roomId } = this.queryParams as { roomId?: string };
+			const { roomId } = omnisCtx(this).queryParams as { roomId?: string };
 			const matter = roomId ? await resolveRoomMatter(roomId) : null;
 			return API.v1.success(await listMeetingsFeed(matter?.matterId));
 		},
@@ -49,7 +50,7 @@ API.v1.addRoute(
 	{
 		async get() {
 			const cfg = resolveCaseNotesConfig();
-			const { roomId, kind } = this.queryParams as { roomId?: string; kind?: string };
+			const { roomId, kind } = omnisCtx(this).queryParams as { roomId?: string; kind?: string };
 
 			const parsedKind = parseKind(kind);
 			const postingBlocked = parsedKind && roomId ? !(await canPostToChannel(parsedKind, roomId)) : false;
@@ -74,7 +75,7 @@ API.v1.addRoute(
 	},
 	{
 		async post() {
-			const { meetingUrl, kind, matterId, roomId } = this.bodyParams as {
+			const { meetingUrl, kind, matterId, roomId } = omnisCtx(this).bodyParams as {
 				meetingUrl?: string;
 				kind?: string;
 				matterId?: string;
@@ -98,7 +99,7 @@ API.v1.addRoute(
 					kind: parsedKind,
 					...(resolvedMatterId ? { matterId: resolvedMatterId } : {}),
 					...(roomId ? { roomId } : {}),
-					requestedBy: this.userId,
+					requestedBy: omnisCtx(this).userId,
 				});
 				return API.v1.success({ meeting });
 			} catch (err) {
@@ -113,7 +114,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['casenotes-record'] },
 	{
 		async post() {
-			const { kind, matterId, roomId } = this.bodyParams as { kind?: string; matterId?: string; roomId?: string };
+			const { kind, matterId, roomId } = omnisCtx(this).bodyParams as { kind?: string; matterId?: string; roomId?: string };
 			const parsedKind = parseKind(kind);
 			if (!parsedKind) {
 				return API.v1.failure('A recording type is required');
@@ -127,7 +128,7 @@ API.v1.addRoute(
 					kind: parsedKind,
 					...(resolvedMatterId ? { matterId: resolvedMatterId } : {}),
 					...(roomId ? { roomId } : {}),
-					requestedBy: this.userId,
+					requestedBy: omnisCtx(this).userId,
 				});
 				return API.v1.success({ meeting });
 			} catch (err) {
@@ -142,13 +143,13 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['casenotes-record'] },
 	{
 		async post() {
-			const { meetingId } = this.bodyParams as { meetingId?: string };
+			const { meetingId } = omnisCtx(this).bodyParams as { meetingId?: string };
 			if (!meetingId) {
 				return API.v1.failure('meetingId is required');
 			}
 			try {
 				// No dispatcher check by design — see the note at the top of this file.
-				await stopRecording(meetingId, this.userId);
+				await stopRecording(meetingId, omnisCtx(this).userId);
 				return API.v1.success();
 			} catch (err) {
 				return API.v1.failure(err instanceof Error ? err.message : 'Could not stop the recording');

@@ -10,7 +10,7 @@ import {
 } from '@rocket.chat/ui-client';
 import { useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactElement } from 'react';
+import type { ChangeEvent, ReactElement } from 'react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -130,7 +130,7 @@ const SendForSignaturePanel = ({ onClose, onSent }: { onClose(): void; onSent():
 						<TextInput
 							value={documentName}
 							placeholder={t('OmnisProof_Document_placeholder')}
-							onChange={(e) => setDocumentName((e.target as HTMLInputElement).value)}
+							onChange={(e: ChangeEvent<HTMLInputElement>) => setDocumentName(e.currentTarget.value)}
 						/>
 					</FieldRow>
 				</Field>
@@ -145,14 +145,14 @@ const SendForSignaturePanel = ({ onClose, onSent }: { onClose(): void; onSent():
 							<TextInput
 								value={signer.name}
 								placeholder={t('OmnisProof_Signer_name')}
-								onChange={(e) => updateSigner(index, { name: (e.target as HTMLInputElement).value })}
+								onChange={(e: ChangeEvent<HTMLInputElement>) => updateSigner(index, { name: e.currentTarget.value })}
 							/>
 						</Box>
 						<Box flexGrow={1}>
 							<TextInput
 								value={signer.email}
 								placeholder={t('OmnisProof_Signer_email')}
-								onChange={(e) => updateSigner(index, { email: (e.target as HTMLInputElement).value })}
+								onChange={(e: ChangeEvent<HTMLInputElement>) => updateSigner(index, { email: e.currentTarget.value })}
 							/>
 						</Box>
 						<Select

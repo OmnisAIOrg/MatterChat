@@ -1,6 +1,7 @@
 import { Rooms } from '@rocket.chat/models';
 
 import { API } from '../api';
+import { omnisCtx } from './omnisApiContext';
 import { getUploadFormData } from '../lib/getUploadFormData';
 import {
 	approveAutoDocDocument,
@@ -46,7 +47,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['view-document-queue'] },
 	{
 		async get() {
-			const { documentId } = this.queryParams as { documentId?: string };
+			const { documentId } = omnisCtx(this).queryParams as { documentId?: string };
 			if (!documentId) {
 				return API.v1.failure('documentId is required');
 			}
@@ -69,7 +70,7 @@ API.v1.addRoute(
 	{
 		async post() {
 			const { fileBuffer, filename, mimetype, fields } = await getUploadFormData(
-				{ request: this.request },
+				{ request: omnisCtx(this).request },
 				{ field: 'file', sizeLimit: MAX_UPLOAD_BYTES },
 			);
 
@@ -86,7 +87,7 @@ API.v1.addRoute(
 				content: fileBuffer,
 				...(matter ? { matterId: matter.matterId } : {}),
 				...(roomId ? { roomId } : {}),
-				submittedBy: this.userId,
+				submittedBy: omnisCtx(this).userId,
 			});
 
 			return API.v1.success({
@@ -104,7 +105,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['view-document-queue'] },
 	{
 		async post() {
-			const { documentId, matterId, corrections, roomId } = this.bodyParams as {
+			const { documentId, matterId, corrections, roomId } = omnisCtx(this).bodyParams as {
 				documentId?: string;
 				matterId?: string;
 				corrections?: { name: string; value: string }[];
@@ -126,7 +127,7 @@ API.v1.addRoute(
 					matterId,
 					...(corrections?.length ? { corrections } : {}),
 					...(roomId ? { roomId } : {}),
-					uid: this.userId,
+					uid: omnisCtx(this).userId,
 				});
 				return API.v1.success(result);
 			} catch (err) {
@@ -144,7 +145,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['view-document-queue'] },
 	{
 		async post() {
-			const { documentId, reason } = this.bodyParams as { documentId?: string; reason?: string };
+			const { documentId, reason } = omnisCtx(this).bodyParams as { documentId?: string; reason?: string };
 			if (!documentId) {
 				return API.v1.failure('documentId is required');
 			}
@@ -168,7 +169,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['submit-documents'] },
 	{
 		async post() {
-			const { roomId, enabled } = this.bodyParams as { roomId?: string; enabled?: boolean };
+			const { roomId, enabled } = omnisCtx(this).bodyParams as { roomId?: string; enabled?: boolean };
 			if (!roomId || typeof enabled !== 'boolean') {
 				return API.v1.failure('roomId and enabled are required');
 			}
@@ -178,7 +179,7 @@ API.v1.addRoute(
 				return API.v1.failure('Auto-processing is only available on matter-linked channels');
 			}
 
-			if (!(await hasPermissionAsync(this.userId, 'edit-room', roomId))) {
+			if (!(await hasPermissionAsync(omnisCtx(this).userId, 'edit-room', roomId))) {
 				return API.v1.unauthorized();
 			}
 

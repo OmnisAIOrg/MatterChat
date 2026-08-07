@@ -9,7 +9,7 @@ import { SystemLogger } from '../logger/system';
 export { listMeetingsFeed, dispatchBot, startRecording, stopRecording, canPostToChannel, recordingAuditFor } from './client';
 export { resolveCaseNotesConfig } from './config';
 
-export const CASENOTES_FEED_EVENT = 'casenotes-feed';
+export const CASENOTES_FEED_EVENT = 'casenotes-feed' as const;
 
 type MeetingDelta = OmnisFeedItem & { meeting: MeetingRecord };
 

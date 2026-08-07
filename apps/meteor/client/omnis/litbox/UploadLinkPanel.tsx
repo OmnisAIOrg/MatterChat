@@ -10,7 +10,7 @@ import {
 } from '@rocket.chat/ui-client';
 import { useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactElement } from 'react';
+import type { ChangeEvent, ReactElement } from 'react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -178,7 +178,7 @@ const UploadLinkPanel = ({ onClose }: { onClose(): void }): ReactElement => {
 								<TextInput
 									value={recipientLabel}
 									placeholder={t('Litbox_Who_placeholder')}
-									onChange={(e) => setRecipientLabel((e.target as HTMLInputElement).value)}
+									onChange={(e: ChangeEvent<HTMLInputElement>) => setRecipientLabel(e.currentTarget.value)}
 								/>
 							</FieldRow>
 						</Field>
@@ -189,7 +189,7 @@ const UploadLinkPanel = ({ onClose }: { onClose(): void }): ReactElement => {
 								<TextInput
 									value={requestText}
 									placeholder={t('Litbox_What_placeholder')}
-									onChange={(e) => setRequestText((e.target as HTMLInputElement).value)}
+									onChange={(e: ChangeEvent<HTMLInputElement>) => setRequestText(e.currentTarget.value)}
 								/>
 							</FieldRow>
 						</Field>
@@ -243,7 +243,7 @@ const UploadLinkPanel = ({ onClose }: { onClose(): void }): ReactElement => {
 									<TextInput
 										type='password'
 										value={password}
-										onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
+										onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.currentTarget.value)}
 									/>
 								</FieldRow>
 							)}

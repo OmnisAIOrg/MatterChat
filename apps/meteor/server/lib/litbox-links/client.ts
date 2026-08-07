@@ -191,19 +191,14 @@ export async function uploadThroughLink(
 
 	// Everything after this point is best-effort: the file IS in the workspace,
 	// and failing the request now would invite the client to upload it twice.
-	await afterUpload(link, uploaded.documentId, file, contentType).catch((err) =>
+	await afterUpload(link, file, contentType).catch((err) =>
 		SystemLogger.warn({ msg: 'Upload-link post-processing failed', linkId: link._id, err }),
 	);
 
 	return { documentId: uploaded.documentId, name: uploaded.name };
 }
 
-async function afterUpload(
-	link: UploadLinkRecord,
-	documentId: string,
-	file: { filename: string; content: Buffer },
-	contentType: string,
-): Promise<void> {
+async function afterUpload(link: UploadLinkRecord, file: { filename: string; content: Buffer }, contentType: string): Promise<void> {
 	const who = link.recipientLabel ?? 'A client';
 
 	if (link.notifyOnUpload && link.notifyRoomId) {

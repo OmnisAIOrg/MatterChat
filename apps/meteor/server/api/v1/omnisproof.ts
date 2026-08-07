@@ -1,4 +1,5 @@
 import { API } from '../api';
+import { omnisCtx } from './omnisApiContext';
 import { previewEsignActions } from '../../lib/omnisproof/automations';
 import { handleLifecycleEvent, listSignatureFeed, remindSigner, sendForSignature } from '../../lib/omnisproof/client';
 import { resolveOmnisProofConfig } from '../../lib/omnisproof/config';
@@ -27,7 +28,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['omnisproof-view-queue'] },
 	{
 		async get() {
-			const { roomId } = this.queryParams as { roomId?: string };
+			const { roomId } = omnisCtx(this).queryParams as { roomId?: string };
 			const matter = roomId ? await resolveRoomMatter(roomId) : null;
 			return API.v1.success(await listSignatureFeed(matter?.matterId));
 		},
@@ -57,7 +58,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['omnisproof-send'] },
 	{
 		async post() {
-			const { documentTypeKey, matterId, matterName, roomId } = this.bodyParams as {
+			const { documentTypeKey, matterId, matterName, roomId } = omnisCtx(this).bodyParams as {
 				documentTypeKey?: string;
 				matterId?: string;
 				matterName?: string;
@@ -81,7 +82,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['omnisproof-send'] },
 	{
 		async post() {
-			const body = this.bodyParams as {
+			const body = omnisCtx(this).bodyParams as {
 				documentName?: string;
 				documentRef?: string;
 				signers?: EnvelopeSigner[];
@@ -122,7 +123,7 @@ API.v1.addRoute(
 					...(matterId && body.documentTypeKey ? { documentTypeKey: body.documentTypeKey } : {}),
 					...(body.roomId ? { roomId: body.roomId } : {}),
 					...(body.subject ? { subject: body.subject } : {}),
-					sentBy: { _id: this.userId, ...(this.user?.username ? { username: this.user.username } : {}) },
+					sentBy: { _id: omnisCtx(this).userId, ...(omnisCtx(this).user?.username ? { username: this.user.username } : {}) },
 				});
 
 				return API.v1.success({
@@ -142,7 +143,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['omnisproof-send'] },
 	{
 		async post() {
-			const { envelopeId } = this.bodyParams as { envelopeId?: string };
+			const { envelopeId } = omnisCtx(this).bodyParams as { envelopeId?: string };
 			if (!envelopeId) {
 				return API.v1.failure('envelopeId is required');
 			}
@@ -179,10 +180,10 @@ API.v1.addRoute(
 				return API.v1.failure('OmnisProof is not enabled');
 			}
 
-			const request = this.request as unknown as { rawBody?: string; headers: Record<string, string | undefined> };
+			const request = omnisCtx(this).request as unknown as { rawBody?: string; headers: Record<string, string | undefined> };
 			// Sign over the RAW body: re-serialising the parsed object would change
 			// key order and whitespace, and the HMAC would never match.
-			const rawBody = request.rawBody ?? JSON.stringify(this.bodyParams ?? {});
+			const rawBody = request.rawBody ?? JSON.stringify(omnisCtx(this).bodyParams ?? {});
 			const signature = request.headers['x-omnisproof-signature'] ?? request.headers['x-signature'];
 
 			if (!verifyWebhookSignature(cfg.webhookSecret, rawBody, signature)) {
@@ -190,7 +191,7 @@ API.v1.addRoute(
 				return API.v1.unauthorized();
 			}
 
-			const { envelopeId, event, signedDocRef } = this.bodyParams as {
+			const { envelopeId, event, signedDocRef } = omnisCtx(this).bodyParams as {
 				envelopeId?: string;
 				event?: string;
 				signedDocRef?: string;

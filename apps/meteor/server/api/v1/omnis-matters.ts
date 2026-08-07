@@ -1,4 +1,5 @@
 import { API } from '../api';
+import { omnisCtx } from './omnisApiContext';
 import { recentMattersForUser, resolveRoomMatter, searchMatters } from '../../lib/omnis/matter';
 
 /**
@@ -28,7 +29,7 @@ API.v1.addRoute(
 	{ authRequired: true },
 	{
 		async get() {
-			const { roomId } = this.queryParams as { roomId?: string };
+			const { roomId } = omnisCtx(this).queryParams as { roomId?: string };
 
 			const bound = roomId ? await resolveRoomMatter(roomId) : null;
 			if (bound) {
@@ -37,7 +38,7 @@ API.v1.addRoute(
 				return API.v1.success({ bound, recent: [] });
 			}
 
-			return API.v1.success({ bound: null, recent: await recentMattersForUser(this.userId) });
+			return API.v1.success({ bound: null, recent: await recentMattersForUser(omnisCtx(this).userId) });
 		},
 	},
 );
@@ -47,7 +48,7 @@ API.v1.addRoute(
 	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 120, intervalTimeInMS: 60000 } },
 	{
 		async get() {
-			const { q, limit } = this.queryParams as { q?: string; limit?: string };
+			const { q, limit } = omnisCtx(this).queryParams as { q?: string; limit?: string };
 			const parsedLimit = Math.min(Math.max(Number.parseInt(limit ?? '20', 10) || 20, 1), 50);
 			return API.v1.success({ matters: await searchMatters(q ?? '', parsedLimit) });
 		},

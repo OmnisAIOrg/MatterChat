@@ -1,6 +1,6 @@
 import { Box, Button, Chip, Icon, Option, Tag, TextInput, Throbber } from '@rocket.chat/fuselage';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactElement } from 'react';
+import type { ChangeEvent, ReactElement } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -101,7 +101,7 @@ const MatterContextField = ({ context, guess, personalLabel, personalHint }: Mat
 				value={term}
 				placeholder={t('Omnis_Matter_search_placeholder')}
 				addon={<Icon name='magnifier' size={18} />}
-				onChange={(event) => setTerm((event.target as HTMLInputElement).value)}
+				onChange={(e: ChangeEvent<HTMLInputElement>) => setTerm(e.currentTarget.value)}
 			/>
 
 			<Box marginBlockStart={8} style={{ maxHeight: 220, overflowY: 'auto' }}>

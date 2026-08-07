@@ -1,3 +1,4 @@
+import { UserStatus } from '@rocket.chat/core-typings';
 import { Users } from '@rocket.chat/models';
 
 import { SystemLogger } from '../logger/system';
@@ -42,11 +43,22 @@ export type OmnisFeedItem = {
 	[key: string]: unknown;
 };
 
+/**
+ * The notify-user events this poller may emit.
+ *
+ * A literal union, not `string`: `notifyUser` is generic over the stream keys
+ * declared in `packages/ddp-client/src/types/streams.ts`, so a widened `string`
+ * collapses its payload parameter to `never`. Adding a product here means
+ * adding its key there too — which is the correct coupling, since a client
+ * cannot subscribe to a key the typings don't know about.
+ */
+export type OmnisFeedEvent = 'autodoc-feed' | 'casenotes-feed';
+
 export type OmnisPollerOptions<T extends OmnisFeedItem> = {
-	/** Product name, used in the stream event name and log lines. */
+	/** Product name, used in log lines. */
 	product: string;
-	/** notify-user event, e.g. `autodoc-feed`. Clients subscribe to `${uid}/${event}`. */
-	event: string;
+	/** notify-user event. Clients subscribe to `${uid}/${event}`. */
+	event: OmnisFeedEvent;
 	/** Only users holding this permission receive deltas. */
 	viewPermission: string;
 	/** Seconds between polls. Clamped to a floor of 5 by {@link startOmnisPoller}. */
@@ -135,7 +147,7 @@ export class OmnisFeedPoller<T extends OmnisFeedItem> {
 	private async broadcast(payload: { changed: T[]; removed: string[] }): Promise<void> {
 		try {
 			const online = await Users.find(
-				{ active: { $ne: false }, status: { $ne: 'offline' } },
+				{ active: { $ne: false }, status: { $ne: UserStatus.OFFLINE } },
 				{ projection: { _id: 1 }, limit: 500 },
 			).toArray();
 
