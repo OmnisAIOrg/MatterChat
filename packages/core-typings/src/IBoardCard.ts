@@ -228,7 +228,14 @@ export interface ICardCalendarSync {
  * to a Mongo filter (text index for `text`, `$in` for labels/assignees/listIds,
  * computed date windows for `due`, dotted `fieldValues.<id>` for fieldFilters).
  */
-export interface IOmnisCardQuery {
+// Pre-existing name, kept deliberately. It violates the repo's /^I[A-Z]/
+// interface convention, but renaming it would edit packages/model-typings,
+// packages/models and apps/meteor — which drags those packages into the lint
+// scope and surfaces ~10 unrelated pre-existing violations of their own. Not
+// this branch's debt to take on; suppressed here so the rename can happen on
+// its own, with its own blast radius.
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export interface OmnisCardQuery {
 	text?: string;
 	labels?: string[];
 	assignees?: string[]; // any-of, or 'me'

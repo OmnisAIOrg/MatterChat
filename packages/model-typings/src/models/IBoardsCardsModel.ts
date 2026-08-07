@@ -1,4 +1,4 @@
-import type { IBoardCard, IBoardCardLink, ICardCalendarSync, IMatterSnapshot, BoardsFieldValue, IOmnisCardQuery } from '@rocket.chat/core-typings';
+import type { IBoardCard, IBoardCardLink, ICardCalendarSync, IMatterSnapshot, BoardsFieldValue, OmnisCardQuery } from '@rocket.chat/core-typings';
 import type { FindCursor, FindOptions, UpdateResult } from 'mongodb';
 
 import type { IBaseModel } from './IBaseModel';
@@ -10,7 +10,7 @@ export interface IBoardsCardsModel extends IBaseModel<IBoardCard> {
 	findDueBetween(from: Date, to: Date, boardId?: string): FindCursor<IBoardCard>;
 	findByMatterId(matterId: string): FindCursor<IBoardCard>;
 	findOneByLeadId(leadId: string): Promise<IBoardCard | null>;
-	search(boardId: string, query: IOmnisCardQuery): FindCursor<IBoardCard>;
+	search(boardId: string, query: OmnisCardQuery): FindCursor<IBoardCard>;
 
 	/** The drag-drop write: a single $set listId/position/subStatus + $inc rev. */
 	move(cardId: string, listId: string, position: number, subStatus?: string): Promise<UpdateResult>;
