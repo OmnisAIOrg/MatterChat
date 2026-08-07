@@ -1,6 +1,6 @@
+import type { BoardsPipelineType, IBoardFieldDef, IBoardLabelDef } from './IBoard';
 import type { IRocketChatRecord } from './IRocketChatRecord';
 import type { IUser } from './IUser';
-import type { BoardsPipelineType, IBoardFieldDef, IBoardLabelDef } from './IBoard';
 
 export interface IBoardTemplate extends IRocketChatRecord {
 	name: string;

@@ -12,6 +12,7 @@ import { CredentialTokens, Users } from '@rocket.chat/models';
 import { Accounts } from 'meteor/accounts-base';
 import { Meteor } from 'meteor/meteor';
 
+import { ensureFirmForOrg } from '../../../server/lib/firms/firmsService';
 import { SystemLogger } from '../../../server/lib/logger/system';
 import { encryptToken } from './litboxCrypto';
 import { provisionOrgFromRoster } from './orgProvision';
@@ -27,6 +28,13 @@ export type OmnisAIProfile = {
 	name?: string;
 	username?: string;
 	orgId?: string;
+	/**
+	 * MATTERCHAT: display name of the Omnis org, used to name the mirrored firm.
+	 * CentralAuth does not reliably emit this today, so `ensureFirmForOrg` falls
+	 * back to a placeholder the firm owner can rename — better than blocking the
+	 * link on a claim that may never arrive.
+	 */
+	orgName?: string;
 	role?: string;
 	// LitBox credential, captured at the OIDC callback. Server-only — persisted on the user doc
 	// for the /api/litbox proxy; never published/projected to the client (verified).
@@ -197,6 +205,18 @@ Accounts.registerLoginHandler('omnisai', async (loginRequest) => {
 
 	try {
 		const result = await upsertOmnisaiUser(profile);
+
+		// MATTERCHAT: the Omnis org IS the firm. Without this the two org models
+		// stay disconnected and a CentralAuth user — already a member of an org —
+		// carries no firmId, so they get asked to "create your firm" for a firm
+		// they are already in, and the directory scoping files them under the
+		// unstamped cohort. Awaited (not fire-and-forget) so the firm stamp is on
+		// the user document before the client's first users.info read decides
+		// whether to show the onboarding wizard. Never throws.
+		if (profile.orgId) {
+			await ensureFirmForOrg(result.userId, profile.orgId, profile.orgName);
+		}
+
 		// Fire-and-forget the team mirror (gated to first admin login w/ orgId).
 		await maybeAutoProvisionOrg(result.userId, profile);
 		return result;

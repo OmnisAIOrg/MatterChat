@@ -17,13 +17,7 @@ export type PreferredContact = 'phone' | 'email' | 'sms' | 'any';
 
 export type LeadCapturedChannel = 'manual' | 'web-form' | 'csv-import' | 'call' | 'sms' | 'email-parse' | 'api';
 
-export type LeadLostReason =
-	| 'declined-unqualified'
-	| 'declined-lost'
-	| 'no-response'
-	| 'referred-out'
-	| 'duplicate'
-	| 'other';
+export type LeadLostReason = 'declined-unqualified' | 'declined-lost' | 'no-response' | 'referred-out' | 'duplicate' | 'other';
 
 /** Emergent-role contact captured at intake (the prospective client). */
 export interface ILeadContact {

@@ -13,9 +13,15 @@ export type DropTargetOverlayProps = {
 	onFileDrop?: (files: File[]) => void;
 	visible?: boolean;
 	onDismiss?: () => void;
+	// MATTERCHAT: optional copy override so a matter channel can say what the drop
+	// will actually DO ("Drop to process with AutoDoc" / "Files are read and filed
+	// to Alvarez v. Diaz") instead of the generic upload line. Both optional; when
+	// absent the overlay is byte-for-byte the upstream one.
+	title?: ReactNode;
+	subtitle?: ReactNode;
 };
 
-function DropTargetOverlay({ enabled, reason, onFileDrop, visible = true, onDismiss }: DropTargetOverlayProps) {
+function DropTargetOverlay({ enabled, reason, onFileDrop, visible = true, onDismiss, title, subtitle }: DropTargetOverlayProps) {
 	const { t } = useTranslation();
 
 	const handleDragLeave = useStableCallback((event: DragEvent) => {
@@ -71,6 +77,8 @@ function DropTargetOverlay({ enabled, reason, onFileDrop, visible = true, onDism
 			zIndex={1_000_000}
 			inset={0}
 			display='flex'
+			// MATTERCHAT: column so the optional subtitle sits under the title.
+			flexDirection='column'
 			alignItems='center'
 			justifyContent='center'
 			fontScale='hero'
@@ -88,7 +96,14 @@ function DropTargetOverlay({ enabled, reason, onFileDrop, visible = true, onDism
 			onDragOver={handleDragOver}
 			onDrop={handleDrop}
 		>
-			{enabled ? t('Drop_to_upload_file') : reason}
+			{/* MATTERCHAT: `title`/`subtitle` override the generic line when a product
+			    claims the drop (see client/omnis/autodoc/useAutoDocChannelDrop.ts). */}
+			{enabled ? (title ?? t('Drop_to_upload_file')) : reason}
+			{enabled && subtitle && (
+				<Box fontScale='p2' marginBlockStart={8}>
+					{subtitle}
+				</Box>
+			)}
 		</Box>
 	);
 }

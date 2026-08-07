@@ -43,6 +43,13 @@ import { createGoogleSettings } from './google';
 import { createChiAssistantSettings } from './chi-assistant';
 // MATTERCHAT: new-user onboarding (welcome) email settings.
 import { createMatterChatEmailSettings } from './matterchat-email';
+// MATTERCHAT: Omnis product widgets — AutoDoc intake, LitBox upload links,
+// OmnisProof signatures, CaseNotes meetings. Each group registers the shared
+// seven connection settings (see ./omnis-product.ts) plus its own extras.
+import { createAutoDocSettings } from './autodoc';
+import { createLitboxLinksSettings } from './litbox-links';
+import { createOmnisProofSettings } from './omnisproof';
+import { createCaseNotesSettings } from './casenotes';
 import { createSlackSettings } from './slack';
 import { createTeamsSettings } from './teams';
 import { createThreadSettings } from './threads';
@@ -94,6 +101,11 @@ await Promise.all([
 	createGoogleSettings(),
 	createChiAssistantSettings(),
 	createMatterChatEmailSettings(),
+	// MATTERCHAT: Omnis product widgets.
+	createAutoDocSettings(),
+	createLitboxLinksSettings(),
+	createOmnisProofSettings(),
+	createCaseNotesSettings(),
 	createSlackSettings(),
 	createTeamsSettings(),
 	createThreadSettings(),

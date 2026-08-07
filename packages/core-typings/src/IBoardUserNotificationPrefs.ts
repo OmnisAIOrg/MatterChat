@@ -1,6 +1,6 @@
+import type { IBoard } from './IBoard';
 import type { IRocketChatRecord } from './IRocketChatRecord';
 import type { IUser } from './IUser';
-import type { IBoard } from './IBoard';
 
 /**
  * Per-user notification preferences for Boards events.

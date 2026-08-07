@@ -29,6 +29,13 @@ import './v1/cross-firm';
 import './v1/webpush';
 import './v1/channels';
 import './v1/chi';
+// MATTERCHAT: Omnis product widgets — the shared matter-context endpoint plus
+// one route file per product surface.
+import './v1/omnis-matters';
+import './v1/autodoc';
+import './v1/litbox-links';
+import './v1/omnisproof';
+import './v1/casenotes';
 import './v1/chat';
 import './v1/cloud';
 import './v1/commands';

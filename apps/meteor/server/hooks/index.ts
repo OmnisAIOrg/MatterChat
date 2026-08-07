@@ -4,5 +4,11 @@ import '../lib/message-read-receipt/hooks';
 import '../lib/caseProCommsLog';
 // CasePro auto-sync on login: trigger background matters+leads sync on user login.
 import '../lib/boards/casepro/loginSync';
+// MATTERCHAT: Omnis product widgets — AutoDoc feed poller + auto-process hook,
+// CaseNotes meeting poller, OmnisProof document-type seed. All no-ops when the
+// respective product is disabled.
+import '../lib/omnis/startup';
+// MATTERCHAT: stamp brand-new accounts as needing firm setup (self-serve firms).
+import '../lib/firms/startup';
 import './sauMonitorHooks';
 import './userLogoutCleanUp';

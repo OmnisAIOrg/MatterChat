@@ -251,6 +251,9 @@ async function handleCallback(req: any, res: any): Promise<void> {
 				name: u.name,
 				username: u.preferred_username,
 				orgId: u['casepro:org_id'],
+				// MATTERCHAT: names the mirrored firm when CentralAuth supplies it.
+				// Optional — ensureFirmForOrg falls back to a renameable placeholder.
+				orgName: u['casepro:org_name'] ?? u.organization_name,
 				role: u['casepro:role'],
 				// LitBox credential captured at login → persisted server-side (loginHandler) →
 				// read by the /api/litbox proxy. CredentialTokens is one-time + server-only; the

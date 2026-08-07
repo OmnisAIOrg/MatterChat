@@ -46,6 +46,12 @@ export default {
 				'<rootDir>/server/lib/rooms/**.spec.ts',
 				'<rootDir>/server/lib/caseProCommsLog/**.spec.ts',
 				'<rootDir>/server/lib/boards/**/*.spec.ts',
+				// MATTERCHAT: Omnis product widgets (AutoDoc / LitBox / OmnisProof / CaseNotes).
+				'<rootDir>/server/lib/omnis/**/*.spec.ts',
+				'<rootDir>/server/lib/autodoc/**/*.spec.ts',
+				'<rootDir>/server/lib/omnisproof/**/*.spec.ts',
+				'<rootDir>/server/lib/litbox-links/**/*.spec.ts',
+				'<rootDir>/server/lib/casenotes/**/*.spec.ts',
 				'<rootDir>/server/services/automation/**/*.spec.ts',
 				'<rootDir>/server/services/import/**/*.spec.ts',
 				'<rootDir>/server/settings/lib/**.spec.ts',

@@ -317,4 +317,54 @@ export const permissions = [
 	// birthdays / shout-outs). Manage = create/edit/delete entries; every authenticated
 	// user can read the feed (no view permission needed). Seeded to admin + owner.
 	{ _id: 'firm-feed-manage', roles: ['admin', 'owner'] },
+
+	// MATTERCHAT: Omnis product widgets (AutoDoc / LitBox / OmnisProof / CaseNotes).
+	//
+	// TWO AXES PER PRODUCT, and the split is the point:
+	//   - SUBMIT / ACT is granted broadly. Anyone should be able to drop a document,
+	//     request a signature, or start a recording.
+	//   - VIEW THE QUEUE is admin-granted. These feeds are FIRM-WIDE, not
+	//     matter-scoped, so seeing one exposes every document / envelope / meeting
+	//     in the firm.
+	//
+	// The consequence — a user who can submit but not view the queue would have no
+	// way to learn what became of their document — is closed by design, not by
+	// widening the permission: an immediate confirmation on submit, plus the
+	// completion receipt posted INTO the channel the document came from.
+	//
+	// Admins retune all of these in Admin → Permissions like any other permission;
+	// there is deliberately no bespoke settings UI.
+	{
+		_id: 'submit-documents',
+		roles: ['admin', 'owner', 'moderator', 'user', 'partner', 'attorney', 'case-manager', 'paralegal'],
+	},
+	{ _id: 'view-document-queue', roles: ['admin', 'owner'] },
+
+	// LitBox: viewing a matter's files is broad; creating an upload link is handing
+	// out a writable door into a matter workspace, so it sits with the narrower group.
+	{
+		_id: 'litbox-view-matter-files',
+		roles: ['admin', 'owner', 'moderator', 'user', 'partner', 'attorney', 'case-manager', 'paralegal'],
+	},
+	{
+		_id: 'litbox-create-upload-link',
+		roles: ['admin', 'owner', 'partner', 'attorney', 'case-manager', 'paralegal'],
+	},
+
+	// OmnisProof: narrower than AutoDoc's submit permission on purpose — sending a
+	// fee agreement for signature is a consequential act, not a routine one.
+	{
+		_id: 'omnisproof-send',
+		roles: ['admin', 'owner', 'partner', 'attorney', 'case-manager', 'paralegal'],
+	},
+	{ _id: 'omnisproof-view-queue', roles: ['admin', 'owner'] },
+
+	// CaseNotes: transcripts of client and defense calls are among the most
+	// sensitive material the firm holds, so the queue permission stays narrow and
+	// firms will likely tighten it further.
+	{
+		_id: 'casenotes-record',
+		roles: ['admin', 'owner', 'moderator', 'user', 'partner', 'attorney', 'case-manager', 'paralegal'],
+	},
+	{ _id: 'casenotes-view-queue', roles: ['admin', 'owner'] },
 ];

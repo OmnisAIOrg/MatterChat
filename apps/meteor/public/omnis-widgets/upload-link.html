@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!--
+			Upload page for a LitBox upload link.
+
+			Public and tokenised: no login, no account, no app install. The primary
+			use case is a CLIENT PHOTOGRAPHING PAPERWORK IN A CLINIC WAITING ROOM, so
+			this is built mobile-first and self-contained — no framework, no bundle,
+			no external fonts, and it works on a slow phone connection.
+
+			SECURITY: the token lives in the URL FRAGMENT (`#<token>`), which browsers
+			never send to a server. It therefore stays out of access logs, out of any
+			Referer header this page emits, and out of the server-side history of the
+			request that loaded the page. Both API calls put it in a POST body.
+
+			`noindex` + `noreferrer` keep the link out of search results and stop the
+			fragment leaking through outbound navigation.
+		-->
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="referrer" content="no-referrer" />
+		<title>Send files to your legal team</title>
+		<style>
+			:root {
+				--ink: #0b1a14;
+				--muted: #5b6b64;
+				--line: #dfe5e1;
+				--green: #12b981;
+				--green-deep: #0e7a4a;
+				--danger: #c2334d;
+				--surface: #fffdf9;
+				--card: #ffffff;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--ink: #f2f5f3;
+					--muted: #9aa8a2;
+					--line: #2a3733;
+					--surface: #0d1512;
+					--card: #141d1a;
+				}
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: var(--surface);
+				color: var(--ink);
+				font:
+					16px/1.5 -apple-system,
+					BlinkMacSystemFont,
+					'Segoe UI',
+					Roboto,
+					sans-serif;
+				padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+			}
+			main {
+				max-width: 560px;
+				margin: 0 auto;
+				padding: 24px 16px 48px;
+			}
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				margin-bottom: 24px;
+			}
+			.mark {
+				width: 32px;
+				height: 32px;
+				border-radius: 8px;
+				background: linear-gradient(135deg, var(--green), var(--green-deep));
+			}
+			.brand strong {
+				font-size: 17px;
+			}
+			.card {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 12px;
+				padding: 20px;
+			}
+			h1 {
+				font-size: 20px;
+				margin: 0 0 8px;
+			}
+			p.lede {
+				margin: 0 0 4px;
+				color: var(--muted);
+			}
+			.meta {
+				font-size: 13px;
+				color: var(--muted);
+				margin-top: 12px;
+			}
+			#drop {
+				margin-top: 20px;
+				border: 2px dashed var(--line);
+				border-radius: 12px;
+				padding: 36px 20px;
+				text-align: center;
+				cursor: pointer;
+				transition: border-color 0.15s, background 0.15s;
+			}
+			#drop:hover,
+			#drop.over {
+				border-color: var(--green);
+				background: rgba(18, 185, 129, 0.06);
+			}
+			#drop .big {
+				font-size: 17px;
+				font-weight: 600;
+			}
+			#drop .small {
+				font-size: 13px;
+				color: var(--muted);
+				margin-top: 6px;
+			}
+			ul#files {
+				list-style: none;
+				margin: 20px 0 0;
+				padding: 0;
+			}
+			ul#files li {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				padding: 10px 0;
+				border-bottom: 1px solid var(--line);
+				font-size: 14px;
+			}
+			.name {
+				flex: 1;
+				min-width: 0;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+			.state {
+				font-size: 13px;
+				color: var(--muted);
+				flex-shrink: 0;
+			}
+			.state.done {
+				color: var(--green-deep);
+				font-weight: 600;
+			}
+			.state.err {
+				color: var(--danger);
+			}
+			.bar {
+				height: 4px;
+				border-radius: 2px;
+				background: var(--line);
+				overflow: hidden;
+				width: 72px;
+				flex-shrink: 0;
+			}
+			.bar span {
+				display: block;
+				height: 100%;
+				width: 0;
+				background: var(--green);
+				transition: width 0.2s;
+			}
+			footer {
+				margin-top: 28px;
+				text-align: center;
+				font-size: 13px;
+				color: var(--muted);
+			}
+			.pwd {
+				margin-top: 16px;
+			}
+			.pwd label {
+				display: block;
+				font-size: 13px;
+				margin-bottom: 6px;
+				color: var(--muted);
+			}
+			.pwd input {
+				width: 100%;
+				padding: 12px;
+				border-radius: 8px;
+				border: 1px solid var(--line);
+				background: var(--surface);
+				color: var(--ink);
+				font-size: 16px; /* 16px stops iOS Safari zooming the page on focus */
+			}
+			.state-msg {
+				text-align: center;
+				padding: 40px 20px;
+				color: var(--muted);
+			}
+			.hidden {
+				display: none;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<div class="brand"><div class="mark"></div><strong>MatterChat</strong></div>
+
+			<div id="loading" class="state-msg">Checking this link…</div>
+
+			<div id="invalid" class="card hidden">
+				<h1>This link is no longer active</h1>
+				<p class="lede" id="invalid-detail">
+					It may have expired or been turned off. Please ask the person who sent it for a new one.
+				</p>
+			</div>
+
+			<div id="panel" class="card hidden">
+				<h1 id="title">Send files to your legal team</h1>
+				<p class="lede" id="request"></p>
+				<div class="meta" id="meta"></div>
+
+				<div class="pwd hidden" id="pwd-wrap">
+					<label for="pwd">This link is password protected</label>
+					<input id="pwd" type="password" autocomplete="off" />
+				</div>
+
+				<div id="drop" role="button" tabindex="0" aria-label="Choose files to upload">
+					<div class="big">Drop files here — or tap to choose</div>
+					<div class="small" id="limits"></div>
+				</div>
+				<input id="picker" type="file" multiple class="hidden" />
+
+				<ul id="files"></ul>
+			</div>
+
+			<footer>No account needed. Files go straight to your legal team.</footer>
+		</main>
+
+		<script>
+			(function () {
+				'use strict';
+
+				// The token never leaves the fragment except inside a POST body.
+				var token = decodeURIComponent((location.hash || '').replace(/^#/, '').trim());
+
+				var el = function (id) {
+					return document.getElementById(id);
+				};
+				var loading = el('loading');
+				var invalid = el('invalid');
+				var panel = el('panel');
+				var filesList = el('files');
+				var remaining = 0;
+				var maxBytes = 0;
+
+				function show(node) {
+					loading.classList.add('hidden');
+					node.classList.remove('hidden');
+				}
+
+				function fail(detail) {
+					if (detail) {
+						el('invalid-detail').textContent = detail;
+					}
+					show(invalid);
+				}
+
+				if (!token) {
+					fail('This link is missing its access code. Please open the full link you were sent.');
+					return;
+				}
+
+				function post(endpoint, body, isForm) {
+					return fetch('/api/v1/' + endpoint, {
+						method: 'POST',
+						headers: isForm ? undefined : { 'Content-Type': 'application/json' },
+						body: isForm ? body : JSON.stringify(body),
+					}).then(function (r) {
+						return r.json().catch(function () {
+							return {};
+						});
+					});
+				}
+
+				post('litbox.publicLinkInfo', { token: token })
+					.then(function (res) {
+						if (!res || !res.valid) {
+							fail(
+								res && res.reason === 'expired'
+									? 'This link has expired. Please ask the person who sent it for a new one.'
+									: undefined,
+							);
+							return;
+						}
+						var info = res.info || {};
+						remaining = info.remainingFiles || 0;
+						maxBytes = (info.maxFileMb || 50) * 1024 * 1024;
+
+						if (info.recipientLabel) {
+							el('title').textContent = 'Hello ' + info.recipientLabel;
+						}
+						el('request').textContent = info.requestText || 'Please send any documents or photos you have.';
+
+						var bits = [];
+						if (info.expiresAt) {
+							bits.push('This link works until ' + new Date(info.expiresAt).toLocaleDateString());
+						}
+						bits.push(remaining + ' file' + (remaining === 1 ? '' : 's') + ' can still be sent');
+						el('meta').textContent = bits.join(' · ');
+						el('limits').textContent = 'PDF, photos, up to ' + (info.maxFileMb || 50) + ' MB each';
+
+						if (info.requiresPassword) {
+							el('pwd-wrap').classList.remove('hidden');
+						}
+						show(panel);
+						wire();
+					})
+					.catch(function () {
+						fail('We could not reach the server. Please check your connection and try again.');
+					});
+
+				function wire() {
+					var drop = el('drop');
+					var picker = el('picker');
+
+					drop.addEventListener('click', function () {
+						picker.click();
+					});
+					drop.addEventListener('keydown', function (e) {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							picker.click();
+						}
+					});
+					picker.addEventListener('change', function () {
+						handle(Array.prototype.slice.call(picker.files || []));
+						picker.value = '';
+					});
+
+					['dragenter', 'dragover'].forEach(function (evt) {
+						drop.addEventListener(evt, function (e) {
+							e.preventDefault();
+							drop.classList.add('over');
+						});
+					});
+					['dragleave', 'drop'].forEach(function (evt) {
+						drop.addEventListener(evt, function (e) {
+							e.preventDefault();
+							drop.classList.remove('over');
+						});
+					});
+					drop.addEventListener('drop', function (e) {
+						handle(Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []));
+					});
+				}
+
+				function row(name) {
+					var li = document.createElement('li');
+					var n = document.createElement('span');
+					n.className = 'name';
+					n.textContent = name;
+					var bar = document.createElement('span');
+					bar.className = 'bar';
+					var fill = document.createElement('span');
+					bar.appendChild(fill);
+					var st = document.createElement('span');
+					st.className = 'state';
+					st.textContent = 'Sending…';
+					li.appendChild(n);
+					li.appendChild(bar);
+					li.appendChild(st);
+					filesList.appendChild(li);
+					return { fill: fill, state: st, bar: bar };
+				}
+
+				var REASONS = {
+					'too-large': 'Too large',
+					'unsupported-type': 'Not a supported file',
+					exhausted: 'Link is full',
+					expired: 'Link expired',
+					revoked: 'Link turned off',
+					'bad-password': 'Wrong password',
+					'not-found': 'Link not valid',
+				};
+
+				function handle(files) {
+					files.forEach(function (file) {
+						var ui = row(file.name);
+
+						if (maxBytes && file.size > maxBytes) {
+							// Checked here purely for a fast, clear message — the server
+							// enforces the real ceiling regardless of what this page does.
+							ui.bar.classList.add('hidden');
+							ui.state.className = 'state err';
+							ui.state.textContent = REASONS['too-large'];
+							return;
+						}
+
+						var form = new FormData();
+						form.append('file', file, file.name);
+						form.append('token', token);
+						var pwd = el('pwd');
+						if (pwd && pwd.value) {
+							form.append('password', pwd.value);
+						}
+
+						var xhr = new XMLHttpRequest();
+						xhr.open('POST', '/api/v1/litbox.publicUpload');
+						xhr.upload.onprogress = function (e) {
+							if (e.lengthComputable) {
+								ui.fill.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+							}
+						};
+						xhr.onload = function () {
+							var res = {};
+							try {
+								res = JSON.parse(xhr.responseText);
+							} catch (err) {
+								/* fall through to the generic failure below */
+							}
+							ui.bar.classList.add('hidden');
+							if (res && res.uploaded) {
+								ui.state.className = 'state done';
+								ui.state.textContent = '✓ Sent';
+							} else {
+								ui.state.className = 'state err';
+								ui.state.textContent = (res && REASONS[res.reason]) || 'Could not send';
+							}
+						};
+						xhr.onerror = function () {
+							ui.bar.classList.add('hidden');
+							ui.state.className = 'state err';
+							ui.state.textContent = 'Connection lost';
+						};
+						xhr.send(form);
+					});
+				}
+			})();
+		</script>
+	</body>
+</html>
