@@ -241,7 +241,19 @@ export const ensureFirmForOrg = async (userId: string, orgId: string, orgName?: 
 					{ _id: team.roomId },
 					{ $set: { 'fname': name, 'customFields.firmTeam': true, 'customFields.firmName': name, 'customFields.omnisOrgId': orgId } },
 				);
-				await seedStarterChannels(userId, team, name);
+
+				// Seed in the BACKGROUND. This function runs inline on the OIDC login
+				// round-trip so the firm stamp exists before the client's first
+				// users.info read — but three room creations do not need to be in
+				// that critical path, and awaiting them would add their latency to
+				// the first sign-in of every org. The channels appear a moment later;
+				// the firm link, which is what gates the UI, is already committed.
+				setImmediate(() => {
+					void seedStarterChannels(userId, team as ITeam, name).catch((err) =>
+						console.warn('[firms] background starter-channel seeding failed', err),
+					);
+				});
+
 				teamId = team._id;
 				firmName = name;
 			}
