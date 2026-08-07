@@ -33,8 +33,8 @@ import { CASEPRO_ROUTE_PREFIX, CASEPRO_SIGNATURE_HEADER, caseproWebhookSecret } 
 import { EventMemo, MatterDigestBuffer, formatCaseUpdateMessage } from './processing';
 import type { CaseProEvent } from './security';
 import { isTimestampFresh, parseCaseProEvent, verifySignature } from './security';
-import { sendMessage } from '../../lib/server/functions/sendMessage';
-import { settings } from '../../settings/server';
+import { sendMessage } from '../../../server/lib/messages/sendMessage';
+import { settings } from '../../../server/settings';
 import { SystemLogger } from '../../../server/lib/logger/system';
 
 /** Bound the raw request body (a case-update event is <1 KB; 1 MB is generous). */

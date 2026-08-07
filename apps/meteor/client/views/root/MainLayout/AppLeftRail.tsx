@@ -248,12 +248,21 @@ const AppLeftRail = () => {
 	// Total-unread state for the ensō badge — the SAME session key the favicon/title badge uses
 	// (kept by useUnread: a number, '999+', '•' = alert-only, or '' = none).
 	const unreadSession = useSession('unread') as string | number | null | undefined;
-	const unreadLabel = typeof unreadSession === 'number' ? String(unreadSession) : unreadSession && unreadSession !== '•' ? unreadSession : '';
+	const unreadLabel =
+		typeof unreadSession === 'number' ? String(unreadSession) : unreadSession && unreadSession !== '•' ? unreadSession : '';
 	const hasUnread = Boolean(unreadLabel) || unreadSession === '•';
 	// The unread rooms themselves (same filter as useUnread) — clicking the ensō jumps to the
 	// most recent one.
 	const unreadSubs = useUserSubscriptions(
-		useMemo(() => ({ 'open': { $ne: false }, 'hideUnreadStatus': { $ne: true }, 'archived': { $ne: true }, '$or': [{ alert: true }, { unread: { $gt: 0 } }] }), []),
+		useMemo(
+			() => ({
+				open: { $ne: false },
+				hideUnreadStatus: { $ne: true },
+				archived: { $ne: true },
+				$or: [{ alert: true }, { unread: { $gt: 0 } }],
+			}),
+			[],
+		),
 		useMemo(() => ({ fields: { rid: 1, t: 1, unread: 1, alert: 1, lm: 1 } }), []),
 	);
 	const goToRoom = useGoToRoom();
@@ -386,13 +395,7 @@ const AppLeftRail = () => {
 			className={itemClass}
 			onClick={onClick}
 			title={label}
-			aria-label={
-				badgeCount > 0
-					? `${label} (${badgeCount > 99 ? '99+' : badgeCount})`
-					: hasNewBadge
-						? `${label} (new)`
-						: label
-			}
+			aria-label={badgeCount > 0 ? `${label} (${badgeCount > 99 ? '99+' : badgeCount})` : hasNewBadge ? `${label} (new)` : label}
 			aria-current={active ? 'page' : undefined}
 		>
 			{/* Relatively-positioned wrapper so the unread badge overlays the icon's top-right
@@ -425,8 +428,8 @@ const AppLeftRail = () => {
 			flexDirection='column'
 			alignItems='center'
 			flexShrink={0}
-			pbs={12}
-			pbe={12}
+			paddingBlockStart={12}
+			paddingBlockEnd={12}
 		>
 			{/* MatterChat mark — "Matter" + the original red "Chat" (brand name stays red on the green theme). */}
 			<Box className={brandClass}>
@@ -506,7 +509,7 @@ const AppLeftRail = () => {
 				onClick={handleEnsoClick}
 				title={hasUnread ? t('Unread_Messages', { defaultValue: 'Unread messages' }) : t('Chats')}
 				aria-label={hasUnread ? t('Unread_Messages', { defaultValue: 'Unread messages' }) : t('Chats')}
-				mbs={8}
+				marginBlockStart={8}
 				style={{
 					position: 'relative',
 					width: '100%',
@@ -529,7 +532,11 @@ const AppLeftRail = () => {
 				</Box>
 				{/* className must be the ARRAY form — css() classes are css-in-js objects, not strings;
 				    .join(' ') stringifies them into garbage and NO styles apply. */}
-				{hasUnread && <Box is='span' className={[ensoUnreadBadgeClass, UNREAD_PULSE_BADGE_CLASS]}>{unreadLabel || '•'}</Box>}
+				{hasUnread && (
+					<Box is='span' className={[ensoUnreadBadgeClass, UNREAD_PULSE_BADGE_CLASS]}>
+						{unreadLabel || '•'}
+					</Box>
+				)}
 			</Box>
 		</Box>
 	);

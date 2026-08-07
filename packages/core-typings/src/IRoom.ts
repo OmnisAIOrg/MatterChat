@@ -406,6 +406,7 @@ export type RoomAdminFieldsType =
 	| 'teamMain'
 	| 'announcement'
 	| 'description'
+	| 'customFields'
 	| 'broadcast'
 	| 'uids'
 	| 'avatarETag'

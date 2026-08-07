@@ -20,7 +20,7 @@ const PremiumRoomsCard = ({ statistics }: PremiumRoomsCardProps) => {
 
 	return (
 		<Box
-			bg='var(--surface)'
+			backgroundColor='var(--surface)'
 			borderRadius='14px'
 			border='1px solid var(--border)'
 			boxShadow='var(--shadow1)'
@@ -57,7 +57,11 @@ const PremiumRoomsCard = ({ statistics }: PremiumRoomsCardProps) => {
 						{t('Total')}
 					</Box>
 					<Box fontSize='13px' fontWeight='650' color='var(--ink)' fontVariantNumeric='tabular-nums'>
-						{statistics.channelsCount + statistics.privateGroupsCount + statistics.directMessagesCount + statistics.discussionsCount + statistics.omniChannelCount}
+						{statistics.channelsCount +
+							statistics.privateGroupsCount +
+							statistics.directMessagesCount +
+							statistics.discussionsCount +
+							statistics.omniChannelCount}
 					</Box>
 				</Box>
 			</Box>

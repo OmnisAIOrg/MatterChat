@@ -1,5 +1,5 @@
 import type { SavedViewType, Serialized, ISavedView } from '@rocket.chat/core-typings';
-import { Box, Button, Icon, Tabs } from '@rocket.chat/fuselage';
+import { Box, Button, Icon, Tabs, TabsItem } from '@rocket.chat/fuselage';
 import { GenericMenu } from '@rocket.chat/ui-client';
 import type { GenericMenuItemProps } from '@rocket.chat/ui-client';
 import { usePermission, useSetModal } from '@rocket.chat/ui-contexts';
@@ -89,7 +89,9 @@ const ViewSwitcher = ({
 			<Box display='flex' alignItems='center' style={{ gap: '6px' }}>
 				{v.name}
 				{v.shared && <Icon name='team' size='x12' color='hint' title={t('Boards_Views_Shared', { defaultValue: 'Shared' })} />}
-				{v.isDefault && <Icon name='star-filled' size='x12' color='warning' title={t('Boards_Views_Default', { defaultValue: 'Default' })} />}
+				{v.isDefault && (
+					<Icon name='star-filled' size='x12' color='warning' title={t('Boards_Views_Default', { defaultValue: 'Default' })} />
+				)}
 			</Box>
 		),
 		onClick: () => onSelectSavedView(v),
@@ -141,20 +143,16 @@ const ViewSwitcher = ({
 			<Box display='flex' alignItems='center' minWidth={0}>
 				<Tabs>
 					{tabs.map((tab) => (
-						<Tabs.Item
-							key={tab.type}
-							selected={!activeViewId && view === tab.type}
-							onClick={() => onSelectViewType(tab.type)}
-						>
+						<TabsItem key={tab.type} selected={!activeViewId && view === tab.type} onClick={() => onSelectViewType(tab.type)}>
 							{t(tab.i18n as Parameters<typeof t>[0], { defaultValue: tab.fallback })}
-						</Tabs.Item>
+						</TabsItem>
 					))}
 				</Tabs>
 			</Box>
 			<Box display='flex' alignItems='center' style={{ gap: '8px', flexShrink: 0 }}>
 				{activeSavedView && (
 					<Box fontScale='c1' color='hint' withTruncatedText style={{ maxWidth: 160 }}>
-						<Icon name={safeViewTypeIcon(activeSavedView.viewType)} size='x14' mie={4} />
+						<Icon name={safeViewTypeIcon(activeSavedView.viewType)} size='x14' marginInlineEnd={4} />
 						{activeSavedView.name}
 					</Box>
 				)}
@@ -168,7 +166,7 @@ const ViewSwitcher = ({
 				)}
 				{canManageViews && !activeSavedView && (
 					<Button small onClick={() => openSaveModal()}>
-						<Icon name='plus' size='x16' mie={4} />
+						<Icon name='plus' size='x16' marginInlineEnd={4} />
 						{t('Boards_Views_Save', { defaultValue: 'Save view' })}
 					</Button>
 				)}

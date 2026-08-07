@@ -1,5 +1,18 @@
 import type { IAutomation, Serialized } from '@rocket.chat/core-typings';
-import { Box, Button, Callout, Icon, Table, TableBody, TableCell, TableHead, TableRow, Tag, Throbber, ToggleSwitch } from '@rocket.chat/fuselage';
+import {
+	Box,
+	Button,
+	Callout,
+	Icon,
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableRow,
+	Tag,
+	Throbber,
+	ToggleSwitch,
+} from '@rocket.chat/fuselage';
 import type { Keys as IconName } from '@rocket.chat/icons';
 import { useEndpoint, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -58,7 +71,8 @@ const AutomationList = ({ boardId, kind, queryKey, canManage, canRun, onEdit, sh
 	};
 
 	const toggleMutation = useMutation({
-		mutationFn: ({ automationId, enabled }: { automationId: string; enabled: boolean }) => updateEndpoint({ automationId, patch: { enabled } }),
+		mutationFn: ({ automationId, enabled }: { automationId: string; enabled: boolean }) =>
+			updateEndpoint({ automationId, patch: { enabled } }),
 		onSuccess: invalidate,
 		onError: (error) => dispatchToastMessage({ type: 'error', message: error }),
 	});
@@ -77,7 +91,7 @@ const AutomationList = ({ boardId, kind, queryKey, canManage, canRun, onEdit, sh
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -86,7 +100,7 @@ const AutomationList = ({ boardId, kind, queryKey, canManage, canRun, onEdit, sh
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -115,10 +129,10 @@ const AutomationList = ({ boardId, kind, queryKey, canManage, canRun, onEdit, sh
 						<TableRow key={automation._id} action={Boolean(onEdit)} onClick={onEdit ? () => onEdit(automation) : undefined}>
 							<TableCell>
 								<Box display='flex' alignItems='center'>
-									{automation.icon && <Icon name={automation.icon as IconName} size='x16' mie={6} color='hint' />}
+									{automation.icon && <Icon name={automation.icon as IconName} size='x16' marginInlineEnd={6} color='hint' />}
 									<Box display='flex' flexDirection='column'>
 										<Box display='flex' alignItems='center'>
-											<Box withTruncatedText mie={6}>
+											<Box withTruncatedText marginInlineEnd={6}>
 												{automation.name}
 											</Box>
 											{automation.isSystem && <Tag>{t('Default', { defaultValue: 'Default' })}</Tag>}
@@ -162,8 +176,8 @@ const AutomationList = ({ boardId, kind, queryKey, canManage, canRun, onEdit, sh
 							</TableCell>
 							<TableCell align='end' onClick={(e) => e.stopPropagation()}>
 								{isButton && canRun && (
-									<Button small mie={4} disabled={runMutation.isPending} onClick={() => runMutation.mutate(automation._id)}>
-										<Icon name='play' size='x16' mie={4} />
+									<Button small marginInlineEnd={4} disabled={runMutation.isPending} onClick={() => runMutation.mutate(automation._id)}>
+										<Icon name='play' size='x16' marginInlineEnd={4} />
 										{t('Boards_Automation_Run_Now', { defaultValue: 'Run' })}
 									</Button>
 								)}

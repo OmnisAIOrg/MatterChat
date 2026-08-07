@@ -90,7 +90,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 			className='mc-board-header mc-board-header--tabs'
 			title={
 				<Box display='flex' alignItems='center'>
-					<Icon name={getPipelineTypeIcon(board.pipelineType)} size='x24' mie={8} color='hint' />
+					<Icon name={getPipelineTypeIcon(board.pipelineType)} size='x24' marginInlineEnd={8} color='hint' />
 					<Box withTruncatedText>{board.title}</Box>
 				</Box>
 			}
@@ -98,7 +98,7 @@ const BoardHeader = ({ board, view, activeViewId, onSelectViewType, onSelectSave
 		>
 			<Box display='flex' alignItems='center' flexGrow={1} minWidth={0} style={{ gap: '8px' }}>
 				{/* The ViewSwitcher tab strip must live in its OWN scroll container: Fuselage
-				    Tabs.Item buttons don't flex-shrink, so at narrow widths (~1280px viewport
+				    TabsItem buttons don't flex-shrink, so at narrow widths (~1280px viewport
 				    with the boards sidebar open) the 5-tab strip painted OVER the CasePro
 				    Test-connection/Sync cluster and intercepted its clicks. minWidth:0 lets the
 				    box shrink; overflow-x:auto clips + scrolls the tabs inside it instead of

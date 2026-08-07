@@ -111,14 +111,12 @@ const ConnectWorkspaceModal = ({ onClose, onConnect }: ConnectWorkspaceModalProp
 			return (
 				<Box display='flex' alignItems='center'>
 					{count > 0 && (
-						<Tag variant='primary' mie={8}>
+						<Tag variant='primary' marginInlineEnd={8}>
 							{t('Connector_Connected', { defaultValue: 'Connected' })}
 						</Tag>
 					)}
 					<Button small primary={count === 0} secondary={count > 0} onClick={(): void => onConnect(spec.provider)}>
-						{count > 0
-							? t('Connector_Add_Another', { defaultValue: 'Add another' })
-							: t('Connector_Connect', { defaultValue: 'Connect' })}
+						{count > 0 ? t('Connector_Add_Another', { defaultValue: 'Add another' }) : t('Connector_Connect', { defaultValue: 'Connect' })}
 					</Button>
 				</Box>
 			);
@@ -136,7 +134,7 @@ const ConnectWorkspaceModal = ({ onClose, onConnect }: ConnectWorkspaceModalProp
 						router.navigate(`/admin/settings/${spec.settingsGroup}`);
 					}}
 				>
-					<Icon name='cog' size='x16' mie={4} />
+					<Icon name='cog' size='x16' marginInlineEnd={4} />
 					{state.enabled
 						? t('Connector_Finish_Setup', { defaultValue: 'Finish setup' })
 						: t('Connector_Enable', { defaultValue: 'Enable' })}
@@ -155,42 +153,42 @@ const ConnectWorkspaceModal = ({ onClose, onConnect }: ConnectWorkspaceModalProp
 			onCancel={onClose}
 			cancelText={t('Close')}
 		>
-				<Box fontScale='p2' color='hint' mbe={16}>
-					{t('Connect_A_Workspace_Subtitle', { defaultValue: 'Bring the places your contacts already chat into one inbox.' })}
-				</Box>
-				{cards.map((spec) => (
-					<Box
-						key={spec.provider}
-						display='flex'
-						alignItems='center'
-						pb={12}
-						pi={12}
-						mbe={8}
-						borderWidth='default'
-						borderColor='extra-light'
-						borderRadius='x8'
-						opacity={!isLoading && !availability[spec.provider].enabled && !isAdmin ? 0.6 : 1}
-					>
-						<Box mie={12} display='flex' alignItems='center'>
-							{spec.mark}
-						</Box>
-						<Box flexGrow={1} minWidth={0}>
-							<Box fontScale='p2b'>{spec.name}</Box>
-							<Box fontScale='c1' color='hint' withTruncatedText>
-								{spec.description}
-							</Box>
-						</Box>
-						<Box mis={12} flexShrink={0}>
-							{renderAction(spec)}
+			<Box fontScale='p2' color='hint' marginBlockEnd={16}>
+				{t('Connect_A_Workspace_Subtitle', { defaultValue: 'Bring the places your contacts already chat into one inbox.' })}
+			</Box>
+			{cards.map((spec) => (
+				<Box
+					key={spec.provider}
+					display='flex'
+					alignItems='center'
+					paddingBlock={12}
+					paddingInline={12}
+					marginBlockEnd={8}
+					borderWidth='default'
+					borderColor='extra-light'
+					borderRadius='x8'
+					opacity={!isLoading && !availability[spec.provider].enabled && !isAdmin ? 0.6 : 1}
+				>
+					<Box marginInlineEnd={12} display='flex' alignItems='center'>
+						{spec.mark}
+					</Box>
+					<Box flexGrow={1} minWidth={0}>
+						<Box fontScale='p2b'>{spec.name}</Box>
+						<Box fontScale='c1' color='hint' withTruncatedText>
+							{spec.description}
 						</Box>
 					</Box>
-				))}
-				<Box fontScale='c1' color='hint' mbs={12} display='flex' alignItems='center'>
-					<Icon name='info' size='x16' mie={4} />
-					{t('Connector_OAuth_Note', {
-						defaultValue: "You'll be sent to the provider to approve access, then brought right back here.",
-					})}
+					<Box marginInlineStart={12} flexShrink={0}>
+						{renderAction(spec)}
+					</Box>
 				</Box>
+			))}
+			<Box fontScale='c1' color='hint' marginBlockStart={12} display='flex' alignItems='center'>
+				<Icon name='info' size='x16' marginInlineEnd={4} />
+				{t('Connector_OAuth_Note', {
+					defaultValue: "You'll be sent to the provider to approve access, then brought right back here.",
+				})}
+			</Box>
 		</GenericModal>
 	);
 };

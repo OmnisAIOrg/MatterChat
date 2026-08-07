@@ -1,7 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 
-import * as Mailer from '../../../app/mailer/server/api';
-import { settings } from '../../../app/settings/server';
+import * as Mailer from '../../lib/notifications/email/api';
+import { settings } from '../../settings';
 import { SystemLogger } from '../../lib/logger/system';
 
 /**

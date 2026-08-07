@@ -31,7 +31,7 @@ const BoardAutomationsButton = ({ boardId, small = true }: BoardAutomationsButto
 	return (
 		<>
 			<Button small={small} onClick={() => setOpen(true)} title={t('Boards_Automations', { defaultValue: 'Automations' })}>
-				<Icon name='lightning' size='x16' mie={4} />
+				<Icon name='lightning' size='x16' marginInlineEnd={4} />
 				{t('Boards_Automations', { defaultValue: 'Automations' })}
 			</Button>
 			{open && <AutomationsContextualBar boardId={boardId} onClose={() => setOpen(false)} />}

@@ -139,7 +139,7 @@ const DeadlinesSection = ({ cardId }: DeadlinesSectionProps): ReactElement => {
 
 	const addAction = canManage ? (
 		<Button tiny onClick={(): void => (formOpen ? resetForm() : setFormOpen(true))}>
-			<Icon name={formOpen ? 'cross' : 'plus'} size='x12' mie={2} />
+			<Icon name={formOpen ? 'cross' : 'plus'} size='x12' marginInlineEnd={2} />
 			{formOpen ? t('Cancel') : t('Boards_Matters_Deadline_Add', { defaultValue: 'Add deadline' })}
 		</Button>
 	) : undefined;
@@ -147,8 +147,8 @@ const DeadlinesSection = ({ cardId }: DeadlinesSectionProps): ReactElement => {
 	return (
 		<MatterSection title={t('Boards_Matters_Deadlines', { defaultValue: 'Deadlines' })} icon='stopwatch' action={addAction}>
 			{formOpen && (
-				<Box bg='tint' p={12} borderRadius='x4' mbe={12}>
-					<Box display='flex' alignItems='center' mbe={8} style={{ gap: '8px' }}>
+				<Box backgroundColor='tint' padding={12} borderRadius='x4' marginBlockEnd={12}>
+					<Box display='flex' alignItems='center' marginBlockEnd={8} style={{ gap: '8px' }}>
 						<Box flexGrow={1}>
 							<Select
 								small
@@ -165,7 +165,7 @@ const DeadlinesSection = ({ cardId }: DeadlinesSectionProps): ReactElement => {
 							aria-label={t('Boards_Matters_Deadline_Due', { defaultValue: 'Due' })}
 						/>
 					</Box>
-					<Box mbe={8}>
+					<Box marginBlockEnd={8}>
 						<TextInput
 							small
 							value={label}
@@ -186,13 +186,13 @@ const DeadlinesSection = ({ cardId }: DeadlinesSectionProps): ReactElement => {
 			)}
 
 			{isLoading && (
-				<Box display='flex' justifyContent='center' p={8}>
+				<Box display='flex' justifyContent='center' padding={8}>
 					<Throbber size='x16' />
 				</Box>
 			)}
 
 			{!isLoading && deadlines.length === 0 && (
-				<Box fontScale='c1' color='hint' mbe={8}>
+				<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 					{t('No_results_found')}
 				</Box>
 			)}
@@ -230,7 +230,14 @@ const DeadlinesSection = ({ cardId }: DeadlinesSectionProps): ReactElement => {
 					return t('Boards_Matters_SOL_In_Days', { date: datePart, days, defaultValue: '{{date}} ({{days}}d)' });
 				})();
 				return (
-					<Box key={deadline._id} display='flex' justifyContent='space-between' alignItems='flex-start' mbe={10} style={{ gap: '8px' }}>
+					<Box
+						key={deadline._id}
+						display='flex'
+						justifyContent='space-between'
+						alignItems='flex-start'
+						marginBlockEnd={10}
+						style={{ gap: '8px' }}
+					>
 						<Box display='flex' flexDirection='column' style={{ gap: '4px', minWidth: 0 }}>
 							<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '4px' }}>
 								<Tag variant={variant === 'secondary' ? 'secondary' : variant}>
@@ -246,7 +253,7 @@ const DeadlinesSection = ({ cardId }: DeadlinesSectionProps): ReactElement => {
 								)}
 							</Box>
 							<Box fontScale='c1' color='hint' withTruncatedText>
-								<Icon name='clock' size='x14' mie={4} />
+								<Icon name='clock' size='x14' marginInlineEnd={4} />
 								{t('Boards_Matters_Deadline_Due', { defaultValue: 'Due' })}: {dueLabel}
 								{deadline.label ? ` · ${deadline.label}` : ''}
 							</Box>

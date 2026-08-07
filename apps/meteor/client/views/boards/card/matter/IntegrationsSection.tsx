@@ -57,7 +57,7 @@ const IntegrationsSection = ({ snapshot }: IntegrationsSectionProps): ReactEleme
 						onClick={openFiles}
 						title={`${t('Boards_Matters_LitBox_Workspace', { defaultValue: 'LitBox workspace' })}: ${workspaceId}`}
 					>
-						<Icon name='clip' size='x16' mie={4} />
+						<Icon name='clip' size='x16' marginInlineEnd={4} />
 						{t('Boards_Matters_Files', { defaultValue: 'Files' })}
 					</Button>
 				)}
@@ -66,7 +66,7 @@ const IntegrationsSection = ({ snapshot }: IntegrationsSectionProps): ReactEleme
 						variant='secondary'
 						title={`${t('Boards_Matters_MedChron_Matter', { defaultValue: 'MedChron matter' })}: ${snapshot.medchronMatterId}`}
 					>
-						<Icon name='file' size='x12' mie={4} />
+						<Icon name='file' size='x12' marginInlineEnd={4} />
 						{t('Boards_Matters_MedChron_Matter', { defaultValue: 'MedChron matter' })}
 					</Tag>
 				)}

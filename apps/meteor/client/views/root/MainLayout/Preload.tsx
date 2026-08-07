@@ -6,7 +6,9 @@ import PageLoading from '../PageLoading';
 import { useMainReady } from '../hooks/useMainReady';
 import { useOauthResultToasts } from './useOauthResultToasts';
 
-const Preload = ({ children }: { children: ReactNode }) => {
+export type PreloadProps = { children: ReactNode };
+
+const Preload = ({ children }: PreloadProps) => {
 	const ready = useMainReady();
 
 	// Display OAuth connection result toasts (slack_connected, teams_error, etc.)

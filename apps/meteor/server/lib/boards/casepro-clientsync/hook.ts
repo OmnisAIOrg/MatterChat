@@ -2,7 +2,7 @@ import type { IMessage, IRoom } from '@rocket.chat/core-typings';
 
 import { forwardOutbound, isClientSyncEnabled } from './index';
 import { callbacks } from '../../callbacks';
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 
 /**

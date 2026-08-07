@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 import { WELCOME_BODY } from '../omnis/email/theme';
 
 /**

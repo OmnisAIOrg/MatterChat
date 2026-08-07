@@ -2,7 +2,7 @@ import type { ISignUpPacket, SignUpPacketStatus, EsignProvider, ILead } from '@r
 import { BoardsSignupPackets, BoardsLeads, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 
 /**
  * Sign-up / retainer packet + e-sign state machine (M6 — intake-lead-management

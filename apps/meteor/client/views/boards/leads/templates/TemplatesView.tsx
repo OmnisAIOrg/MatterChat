@@ -144,7 +144,7 @@ const TemplateEditorModal = ({ template, onClose, onSaved }: TemplateEditorModal
 			confirmDisabled={isSubmitting || upsertMutation.isPending}
 		>
 			{(isSubmitting || upsertMutation.isPending) && (
-				<Box display='flex' justifyContent='center' mbe={8}>
+				<Box display='flex' justifyContent='center' marginBlockEnd={8}>
 					<Throbber />
 				</Box>
 			)}
@@ -157,7 +157,7 @@ const TemplateEditorModal = ({ template, onClose, onSaved }: TemplateEditorModal
 				{errors.name && <FieldError>{errors.name.message}</FieldError>}
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={channelId}>{t('Boards_Leads_Template_Channel_Email', { defaultValue: 'Email' })}</FieldLabel>
 				<FieldRow>
 					<Controller
@@ -171,7 +171,7 @@ const TemplateEditorModal = ({ template, onClose, onSaved }: TemplateEditorModal
 			</Field>
 
 			{channel === 'email' && (
-				<Field mbs={12}>
+				<Field marginBlockStart={12}>
 					<FieldLabel>{t('Subject')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('subject')} placeholder='{lead.firstName}, your case' />
@@ -179,7 +179,7 @@ const TemplateEditorModal = ({ template, onClose, onSaved }: TemplateEditorModal
 				</Field>
 			)}
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Message')}</FieldLabel>
 				<FieldRow>
 					<TextAreaInput
@@ -194,7 +194,7 @@ const TemplateEditorModal = ({ template, onClose, onSaved }: TemplateEditorModal
 				{errors.body && <FieldError>{errors.body.message}</FieldError>}
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Boards_PracticeArea', { defaultValue: 'Practice area' })}</FieldLabel>
 				<FieldRow>
 					<TextInput {...register('practiceArea')} placeholder={t('Optional', { defaultValue: 'Optional' })} />
@@ -232,7 +232,7 @@ const TemplatesPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -241,7 +241,7 @@ const TemplatesPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -252,7 +252,7 @@ const TemplatesPanel = (): ReactElement => {
 
 	return (
 		<Box>
-			<Box display='flex' justifyContent='flex-end' mbe={8}>
+			<Box display='flex' justifyContent='flex-end' marginBlockEnd={8}>
 				<Button small primary onClick={() => openEditor()}>
 					{t('Boards_Leads_Template_New', { defaultValue: 'New template' })}
 				</Button>
@@ -272,7 +272,7 @@ const TemplatesPanel = (): ReactElement => {
 						<TableRow key={template._id}>
 							<TableCell>
 								<Box display='flex' alignItems='center'>
-									<Box withTruncatedText mie={6}>
+									<Box withTruncatedText marginInlineEnd={6}>
 										{template.name}
 									</Box>
 									{template.isSystem && <Tag>{t('Default', { defaultValue: 'Default' })}</Tag>}
@@ -320,7 +320,7 @@ const SequencesPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -329,7 +329,7 @@ const SequencesPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -388,7 +388,7 @@ const SequencesPanel = (): ReactElement => {
 
 // Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: React.ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
+	<Box fontScale='h4' color='default' marginBlockStart={20} marginBlockEnd={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -403,7 +403,7 @@ const TemplatesView = (): ReactElement => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='mail' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='mail' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Leads_Templates', { defaultValue: 'Templates' })}
 						</Box>

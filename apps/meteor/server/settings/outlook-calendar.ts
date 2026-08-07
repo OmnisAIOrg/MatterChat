@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 // MATTERCHAT: re-declared in MIT. Calendar_BusyStatus_Enabled was previously registered only by the
 // EE-only apps/meteor/ee/server/settings/outlookCalendar.ts, but it is read by MIT server code

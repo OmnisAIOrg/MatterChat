@@ -87,7 +87,7 @@ const BoardsHome = () => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='squares' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='squares' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards')}
 						</Box>
@@ -95,7 +95,7 @@ const BoardsHome = () => {
 				}
 			>
 				<Button primary onClick={handleNewBoard} disabled={createMutation.isPending}>
-					<Icon name='plus' size='x16' mie={4} />
+					<Icon name='plus' size='x16' marginInlineEnd={4} />
 					{t('Boards_New_Board')}
 				</Button>
 			</PageHeader>
@@ -103,7 +103,7 @@ const BoardsHome = () => {
 				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
 				<LedgerPageStyleTag />
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}
@@ -125,9 +125,9 @@ const BoardsHome = () => {
 						<StatesIcon name='squares' />
 						<StatesTitle>{t('Boards')}</StatesTitle>
 						<StatesSubtitle>{t('No_results_found')}</StatesSubtitle>
-						<Box mbs={16}>
+						<Box marginBlockStart={16}>
 							<Button primary onClick={handleNewBoard}>
-								<Icon name='plus' size='x16' mie={4} />
+								<Icon name='plus' size='x16' marginInlineEnd={4} />
 								{t('Boards_New_Board')}
 							</Button>
 						</Box>
@@ -135,9 +135,9 @@ const BoardsHome = () => {
 				)}
 
 				{grouped.map((group) => (
-					<Box key={group.type} mbe={20}>
+					<Box key={group.type} marginBlockEnd={20}>
 						{/* Mono "docket stamp" group eyebrow — replaces the airy stock h4. */}
-						<Box mbe={8} style={monoLabel(tones)}>
+						<Box marginBlockEnd={8} style={monoLabel(tones)}>
 							{t(group.labelKey)}
 						</Box>
 						<Box display='flex' flexWrap='wrap' style={{ gap: '10px' }}>
@@ -153,7 +153,7 @@ const BoardsHome = () => {
 								>
 									<CardTitle>
 										<Box display='flex' alignItems='center'>
-											<Icon name={getPipelineTypeIcon(board.pipelineType)} size='x20' mie={8} color='hint' />
+											<Icon name={getPipelineTypeIcon(board.pipelineType)} size='x20' marginInlineEnd={8} color='hint' />
 											<Box withTruncatedText>{board.title}</Box>
 										</Box>
 									</CardTitle>

@@ -72,35 +72,35 @@ const BoardsCalendar = () => {
 	const todayKey = ymd(now);
 
 	return (
-		<Box p={24} style={{ overflowY: 'auto', height: '100%', background: tones.paper }}>
-			<Box display='flex' alignItems='center' mbe={12}>
+		<Box padding={24} style={{ overflowY: 'auto', height: '100%', background: tones.paper }}>
+			<Box display='flex' alignItems='center' marginBlockEnd={12}>
 				<Box fontScale='h2' flexGrow={1} style={serifCaption}>
 					{MONTHS[ym.m]} {ym.y}
 				</Box>
 				<Button
 					small
-					mie={4}
+					marginInlineEnd={4}
 					icon='calendar'
 					onClick={openSubscribe}
 					title={t('Boards_Subscribe_Calendar', { defaultValue: 'Subscribe in your calendar' })}
 				>
 					{t('Boards_Subscribe_Calendar_Button', { defaultValue: 'Subscribe' })}
 				</Button>
-				<Button small mie={4} title='Previous month' onClick={() => shift(-1)}>
+				<Button small marginInlineEnd={4} title='Previous month' onClick={() => shift(-1)}>
 					<Icon name='chevron-left' size='x16' />
 				</Button>
-				<Button small mie={4} onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() })}>
+				<Button small marginInlineEnd={4} onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() })}>
 					Today
 				</Button>
 				<Button small title='Next month' onClick={() => shift(1)}>
 					<Icon name='chevron-right' size='x16' />
 				</Button>
 			</Box>
-			<Box fontScale='c1' mbe={12} style={{ color: tones.inkMuted }}>
+			<Box fontScale='c1' marginBlockEnd={12} style={{ color: tones.inkMuted }}>
 				Your tasks by due date, across all your boards. ◆ = milestone · struck‑through = done.
 			</Box>
 			{isLoading && <Throbber />}
-			<Box display='flex' mbe={4}>
+			<Box display='flex' marginBlockEnd={4}>
 				{DAYS.map((d) => (
 					<Box key={d} flexGrow={1} flexBasis={0} style={{ ...monoLabel(tones), textAlign: 'center' }}>
 						{d}

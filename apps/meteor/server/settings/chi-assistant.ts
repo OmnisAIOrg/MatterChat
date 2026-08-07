@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 /**
  * Settings for the Chi Admin Assistant — the in-app AI ops bot admins DM (@chi.bot) to execute

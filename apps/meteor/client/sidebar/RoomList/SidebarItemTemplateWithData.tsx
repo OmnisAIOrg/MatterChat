@@ -7,7 +7,9 @@ import type { AllHTMLAttributes, ComponentType, ReactNode } from 'react';
 import { memo, useMemo } from 'react';
 
 import { RoomIcon } from '../../components/RoomIcon';
+import { useUserStatusTooltip } from '../../hooks/useUserStatusTooltip';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
+import { getUidDirectMessage } from '../../lib/utils/getUidDirectMessage';
 import { isIOsDevice } from '../../lib/utils/isIOsDevice';
 import { getMessagePreview } from '../../lib/utils/normalizeMessagePreview/getMessagePreview';
 import { useOmnichannelPriorities } from '../../views/omnichannel/hooks/useOmnichannelPriorities';
@@ -42,6 +44,7 @@ type RoomListRowProps = {
 	openedRoom?: string;
 	// sidebarViewMode: 'extended';
 	isAnonymous?: boolean;
+	userId?: string;
 
 	room: SubscriptionWithRoom;
 	id?: string;
@@ -67,6 +70,7 @@ const SidebarItemTemplateWithData = ({
 	t,
 	isAnonymous,
 	videoConfActions,
+	userId,
 }: RoomListRowProps) => {
 	const { sidebar } = useLayout();
 	const sidebarGroupByType = useUserPreference('sidebarGroupByType');
@@ -79,6 +83,9 @@ const SidebarItemTemplateWithData = ({
 	// list. Navigation (href), the room menu identity and search are unaffected: they key off the
 	// real room, not this label. Falls back to the raw name when no topic was captured at link time.
 	const title = sidebarGroupByType && room.matterCardId && room.topic ? room.topic : rawTitle;
+
+	const dmUserId = getUidDirectMessage(room, userId);
+	const dmStatusTooltipHandlers = useUserStatusTooltip(dmUserId, title);
 
 	const { unreadTitle, showUnread, unreadCount, highlightUnread: highlighted } = useUnreadDisplay(room);
 
@@ -146,6 +153,7 @@ const SidebarItemTemplateWithData = ({
 						)
 					: undefined
 			}
+			{...dmStatusTooltipHandlers}
 		/>
 	);
 };

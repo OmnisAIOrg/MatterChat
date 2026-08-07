@@ -34,7 +34,7 @@
 import type { IBoardCard } from '@rocket.chat/core-typings';
 import { Users } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { caseProTransportDiagnostics, resolveTransportFromConfig, type ICaseProTransport } from '../casepro/transport';
 import { SystemLogger } from '../../logger/system';
 import type { ICalendarEvent } from './CalendarProvider';

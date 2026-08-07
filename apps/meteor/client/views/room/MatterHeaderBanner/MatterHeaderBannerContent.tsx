@@ -199,10 +199,15 @@ const MatterHeaderBannerContent = ({ room }: MatterHeaderBannerContentProps): Re
 			ref={ref}
 			role='region'
 			aria-label={t('Boards_Matters_Linked_Matter', { defaultValue: 'Linked Matter' })}
-			bg='tint'
+			backgroundColor='tint'
 			style={{ borderBlockEnd: '1px solid var(--rcx-color-stroke-extra-light, transparent)' }}
 		>
-			<Box display='flex' alignItems='center' pi={16} style={{ minHeight: '38px', gap: '8px', overflow: 'hidden', flexWrap: 'nowrap' }}>
+			<Box
+				display='flex'
+				alignItems='center'
+				paddingInline={16}
+				style={{ minHeight: '38px', gap: '8px', overflow: 'hidden', flexWrap: 'nowrap' }}
+			>
 				{/* Ledger row (grows, clips before it ever wraps) */}
 				<Box display='flex' alignItems='center' flexGrow={1} style={{ minWidth: 0, gap: '8px', overflow: 'hidden', flexWrap: 'nowrap' }}>
 					{segments.map((segment, index) => (

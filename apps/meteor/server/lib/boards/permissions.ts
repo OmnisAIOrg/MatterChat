@@ -2,7 +2,7 @@ import type { IBoard, IBoardMember } from '@rocket.chat/core-typings';
 import { Boards } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../authorization/hasPermission';
 
 /**
  * Board ACL roles in increasing privilege. `observer` may read + comment;

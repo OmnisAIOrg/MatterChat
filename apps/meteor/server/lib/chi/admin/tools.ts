@@ -43,15 +43,15 @@ import {
 } from './helpers';
 import type { SoundOption } from './helpers';
 import type { ToolDef } from './llm';
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
-import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
-import { addUserToRoom } from '../../../../app/lib/server/functions/addUserToRoom';
-import { createRoom } from '../../../../app/lib/server/functions/createRoom';
-import { saveUser } from '../../../../app/lib/server/functions/saveUser';
-import { setUserActiveStatus } from '../../../../app/lib/server/functions/setUserActiveStatus';
-import { notifyOnSettingChangedById } from '../../../../app/lib/server/lib/notifyListener';
-import { settings } from '../../../../app/settings/server';
-import { saveUserPreferences } from '../../../methods/saveUserPreferences';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
+import { hasRoleAsync } from '../../authorization/hasRole';
+import { addUserToRoom } from '../../rooms/addUserToRoom';
+import { createRoom } from '../../rooms/createRoom';
+import { saveUser } from '../../users/saveUser';
+import { setUserActiveStatus } from '../../users/setUserActiveStatus';
+import { notifyOnSettingChangedById } from '../../notifyListener';
+import { settings } from '../../../settings';
+import { saveUserPreferences } from '../../../meteor-methods/users/saveUserPreferences';
 import { updateAuditedByUser } from '../../../settings/lib/auditedSettingUpdates';
 
 export type ChiToolAccess = 'admin' | 'user';

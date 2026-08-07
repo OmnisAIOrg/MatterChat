@@ -38,8 +38,8 @@ import { Settings } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
-import { notifyOnSettingChangedById } from '../../lib/server/lib/notifyListener';
-import { settings } from '../../settings/server';
+import { notifyOnSettingChangedById } from '../../../server/lib/notifyListener';
+import { settings } from '../../../server/settings';
 
 function omnisaiModeEnabled(): boolean {
 	return Boolean(settings.get('OmnisAI_OIDC_Enabled')) || process.env.OMNISAI_OIDC_ENABLED === 'true';

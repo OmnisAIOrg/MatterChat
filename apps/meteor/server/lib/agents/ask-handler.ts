@@ -125,7 +125,7 @@ export async function handleAskQuestion(
 	// Post placeholder
 	let placeholder: IMessage | false | undefined;
 	try {
-		const { sendMessage } = await import('../../../app/lib/server/functions/sendMessage');
+		const { sendMessage } = await import('../messages/sendMessage');
 		placeholder = await sendMessage(botUser, { rid, msg: THINKING }, room);
 	} catch (err) {
 		return notifyEphemeral(userId, rid, formatAgentFailure('could not post to this channel'));
@@ -188,7 +188,7 @@ async function invokeAgentAsync(
 			? formatAgentAnswer(answer.text, { agentName, askedBy, matterId })
 			: formatAgentFailure(answer.note);
 
-		const { updateMessage } = await import('../../../app/lib/server/functions/updateMessage');
+		const { updateMessage } = await import('../messages/updateMessage');
 		const room = await Rooms.findOneById(rid);
 		const botUser = await Users.findOneById(`agent.${agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
 

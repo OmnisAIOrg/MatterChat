@@ -140,7 +140,7 @@ function ImportHistoryPage() {
 			</PageHeader>
 			<PageScrollableContentWithShadow>
 				<Callout type='info' title='Bring your team from Slack' marginBlockEnd='x16'>
-					<Box mbe='x8'>
+					<Box marginBlockEnd='x8'>
 						Move your Slack workspace into MatterChat — channels, members, and message history come across in one step. Everyone keeps the
 						same account when they sign in with OmnisAI.
 					</Box>

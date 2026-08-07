@@ -12,7 +12,7 @@ import {
 	TextAreaInput,
 	TextInput,
 } from '@rocket.chat/fuselage';
-import { Form, VerticalWizardLayout } from '@rocket.chat/layout';
+import { Form, FormContainer, FormFooter, FormHeader, FormSubtitle, FormTitle, VerticalWizardLayout } from '@rocket.chat/layout';
 import { useEndpoint, useLogout, useToastMessageDispatch, useTranslation } from '@rocket.chat/ui-contexts';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -95,11 +95,11 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 			<Form>
 				{step === 'name' ? (
 					<>
-						<Form.Header>
-							<Form.Title>{t('Firm_onboarding_title')}</Form.Title>
-							<Form.Subtitle>{t('Firm_onboarding_subtitle')}</Form.Subtitle>
-						</Form.Header>
-						<Form.Container>
+						<FormHeader>
+							<FormTitle>{t('Firm_onboarding_title')}</FormTitle>
+							<FormSubtitle>{t('Firm_onboarding_subtitle')}</FormSubtitle>
+						</FormHeader>
+						<FormContainer>
 							<FieldGroup>
 								<Field>
 									<FieldLabel htmlFor={nameFieldId}>{t('Firm_name')}</FieldLabel>
@@ -116,11 +116,11 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 									{error && <FieldError>{error}</FieldError>}
 								</Field>
 							</FieldGroup>
-							<Box mbs={16} fontScale='c1' color='hint'>
+							<Box marginBlockStart={16} fontScale='c1' color='hint'>
 								{t('Firm_onboarding_invited_hint')}
 							</Box>
-						</Form.Container>
-						<Form.Footer>
+						</FormContainer>
+						<FormFooter>
 							<ButtonGroup stretch vertical>
 								<Button primary loading={busy} onClick={() => void handleCreate()}>
 									{t('Firm_create_action')}
@@ -132,17 +132,17 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 									{t('Logout')}
 								</Button>
 							</ButtonGroup>
-						</Form.Footer>
+						</FormFooter>
 					</>
 				) : (
 					<>
-						<Form.Header>
-							<Form.Title>{t('Firm_invite_title', { firmName: createdFirmName })}</Form.Title>
-							<Form.Subtitle>{t('Firm_invite_subtitle')}</Form.Subtitle>
-						</Form.Header>
-						<Form.Container>
+						<FormHeader>
+							<FormTitle>{t('Firm_invite_title', { firmName: createdFirmName })}</FormTitle>
+							<FormSubtitle>{t('Firm_invite_subtitle')}</FormSubtitle>
+						</FormHeader>
+						<FormContainer>
 							<Callout type='success' title={t('Firm_created_callout', { firmName: createdFirmName })} />
-							<FieldGroup mbs={16}>
+							<FieldGroup marginBlockStart={16}>
 								<Field>
 									<FieldLabel htmlFor={emailsFieldId}>{t('Firm_invite_emails')}</FieldLabel>
 									<FieldRow>
@@ -159,8 +159,8 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 									{error && <FieldError>{error}</FieldError>}
 								</Field>
 							</FieldGroup>
-						</Form.Container>
-						<Form.Footer>
+						</FormContainer>
+						<FormFooter>
 							<ButtonGroup stretch vertical>
 								<Button primary loading={busy} onClick={() => void handleInvite()}>
 									{t('Firm_invite_send_action')}
@@ -169,7 +169,7 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 									{t('Firm_invite_skip_action')}
 								</Button>
 							</ButtonGroup>
-						</Form.Footer>
+						</FormFooter>
 					</>
 				)}
 			</Form>

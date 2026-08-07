@@ -2,7 +2,7 @@ import type { ILead } from '@rocket.chat/core-typings';
 import { BoardsLeads, BoardsLists } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 import { ensureLeadsBoard } from './service';
 import { sourceRoi as marketingSourceRoi, type SourceRoiResult, type SourceRoiOptions } from './marketing';
 

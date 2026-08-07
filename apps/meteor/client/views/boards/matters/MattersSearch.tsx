@@ -58,7 +58,11 @@ const MattersSearch = (_props: MattersSearchProps) => {
 	const debouncedQuery = useDebouncedValue(searchText, 250);
 
 	// Perform search when debounced query changes
-	const { data: searchResult, isPending, isError } = useQuery({
+	const {
+		data: searchResult,
+		isPending,
+		isError,
+	} = useQuery({
 		queryKey: ['boards.cards.search', debouncedQuery],
 		queryFn: async () => {
 			if (!debouncedQuery.trim()) {
@@ -126,7 +130,7 @@ const MattersSearch = (_props: MattersSearchProps) => {
 				ref={inputRef}
 				aria-label={t('Search_Matters')}
 				placeholder={t('Search_Matters')}
-				addon={<Icon name='magnifier' size='x20' />}
+				endAddon={<Icon name='magnifier' size='x20' />}
 				value={searchText}
 				onChange={handleSearchTextChange}
 				onKeyDown={handleKeyDown}
@@ -147,13 +151,13 @@ const MattersSearch = (_props: MattersSearchProps) => {
 			{isOpen && debouncedQuery && (
 				<Box className={searchResultsDropdownClass}>
 					{isPending && (
-						<Box pi={12} pb={12} display='flex' alignItems='center' justifyContent='center' minHeight='80px'>
+						<Box paddingInline={12} paddingBlock={12} display='flex' alignItems='center' justifyContent='center' minHeight='80px'>
 							<Throbber size='x12' />
 						</Box>
 					)}
 
 					{!isPending && cards.length === 0 && (
-						<Box pi={12} pb={12} pbs={12}>
+						<Box paddingInline={12} paddingBlock={12} paddingBlockStart={12}>
 							<Box fontScale='p2' color='hint'>
 								{t('No_Matters_Found')}
 							</Box>
@@ -190,7 +194,7 @@ const MattersSearch = (_props: MattersSearchProps) => {
 						))}
 
 					{isError && (
-						<Box pi={12} pb={12}>
+						<Box paddingInline={12} paddingBlock={12}>
 							<Callout type='danger'>{t('Something_went_wrong')}</Callout>
 						</Box>
 					)}

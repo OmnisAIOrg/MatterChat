@@ -33,7 +33,7 @@ const PremiumUsersCard = ({ statistics }: PremiumUsersCardProps) => {
 
 	return (
 		<Box
-			bg='var(--surface)'
+			backgroundColor='var(--surface)'
 			borderRadius='14px'
 			border='1px solid var(--border)'
 			boxShadow='var(--shadow1)'
@@ -57,12 +57,7 @@ const PremiumUsersCard = ({ statistics }: PremiumUsersCardProps) => {
 						borderBottomWidth={idx < userRows.length - 1 ? '1px' : '0'}
 						borderBottomColor='var(--border)'
 					>
-						<Box
-							width='8px'
-							height='8px'
-							borderRadius='9999px'
-							bg={getUserDotColor(status as string)}
-						/>
+						<Box width='8px' height='8px' borderRadius='9999px' backgroundColor={getUserDotColor(status as string)} />
 						<Box flex='1' fontSize='12.5px' color='var(--ink2)'>
 							{label}
 						</Box>

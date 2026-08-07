@@ -1,7 +1,7 @@
 import type { BoardNotificationAction, IBoardCard, IBoardNotification } from '@rocket.chat/core-typings';
 import { BoardsNotifications } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 import type { BoardEventName } from '../events';
 import { boardNotificationPrefsService } from './preferences.service';

@@ -72,7 +72,7 @@ const PlaybooksSection = ({ cardId, checklists }: PlaybooksSectionProps): ReactE
 	return (
 		<MatterSection title={t('Boards_Matters_Playbooks', { defaultValue: 'Playbooks' })} icon='book'>
 			{visibleChecklists.length === 0 && (
-				<Box fontScale='c1' color='hint' mbe={8}>
+				<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 					{t('Boards_Matters_Playbook_None', {
 						defaultValue: 'No playbook applied yet. Applying one adds its checklist items and deadlines to this card.',
 					})}
@@ -84,10 +84,10 @@ const PlaybooksSection = ({ cardId, checklists }: PlaybooksSectionProps): ReactE
 				const done = checklist.items.filter((i) => i.done).length;
 				const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 				return (
-					<Box key={checklist.id} mbe={12}>
-						<Box display='flex' justifyContent='space-between' alignItems='center' mbe={4}>
+					<Box key={checklist.id} marginBlockEnd={12}>
+						<Box display='flex' justifyContent='space-between' alignItems='center' marginBlockEnd={4}>
 							<Box display='flex' alignItems='center' style={{ minWidth: 0 }}>
-								{pct === 100 && <Icon name='check' size='x14' mie={4} color='status-font-on-success' />}
+								{pct === 100 && <Icon name='check' size='x14' marginInlineEnd={4} color='status-font-on-success' />}
 								<Box fontScale='p2' color='default' withTruncatedText>
 									{checklist.title}
 								</Box>
@@ -102,7 +102,7 @@ const PlaybooksSection = ({ cardId, checklists }: PlaybooksSectionProps): ReactE
 			})}
 
 			{/* Apply playbook picker */}
-			<Box display='flex' alignItems='center' mbs={8} style={{ gap: '8px' }}>
+			<Box display='flex' alignItems='center' marginBlockStart={8} style={{ gap: '8px' }}>
 				<Box flexGrow={1}>
 					<Select
 						small

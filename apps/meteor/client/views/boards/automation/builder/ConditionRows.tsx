@@ -77,8 +77,8 @@ const ConditionRow = ({
 	};
 
 	return (
-		<Box display='flex' alignItems='flex-start' mbe={8} mi='neg-x2'>
-			<Box mi={2} flexGrow={1} flexBasis={0}>
+		<Box display='flex' alignItems='flex-start' marginBlockEnd={8} marginInline='neg-x2'>
+			<Box marginInline={2} flexGrow={1} flexBasis={0}>
 				<Select
 					value={custom ? CUSTOM_FIELD_SENTINEL : condition.field}
 					placeholder={t('Boards_Automation_Field', { defaultValue: 'Field' })}
@@ -86,7 +86,7 @@ const ConditionRow = ({
 					onChange={(next) => handleFieldChange(next as string)}
 				/>
 				{custom && (
-					<Box mbs={4}>
+					<Box marginBlockStart={4}>
 						<ParamInput
 							kind='field'
 							value={customFieldId}
@@ -96,7 +96,7 @@ const ConditionRow = ({
 							placeholder={t('Boards_Automation_Filter_field', { defaultValue: 'Field' })}
 						/>
 						{fieldDefOptions.length === 0 && (
-							<Box fontScale='micro' color='hint' mbs={2}>
+							<Box fontScale='micro' color='hint' marginBlockStart={2}>
 								{t('Boards_Automation_NoFieldsHint', { defaultValue: 'Enter the field id' })}
 							</Box>
 						)}
@@ -104,15 +104,11 @@ const ConditionRow = ({
 				)}
 			</Box>
 
-			<Box mi={2} flexGrow={1} flexBasis={0}>
-				<Select
-					value={condition.op}
-					options={opOptions}
-					onChange={(next) => onChange({ ...condition, op: next as BoardConditionOp })}
-				/>
+			<Box marginInline={2} flexGrow={1} flexBasis={0}>
+				<Select value={condition.op} options={opOptions} onChange={(next) => onChange({ ...condition, op: next as BoardConditionOp })} />
 			</Box>
 
-			<Box mi={2} flexGrow={1} flexBasis={0}>
+			<Box marginInline={2} flexGrow={1} flexBasis={0}>
 				{!valueless && (
 					<ParamInput
 						kind={valueKind}
@@ -125,7 +121,7 @@ const ConditionRow = ({
 				)}
 			</Box>
 
-			<Button mi={2} small icon='trash' title={t('Remove')} onClick={onRemove} />
+			<Button marginInline={2} small icon='trash' title={t('Remove')} onClick={onRemove} />
 		</Box>
 	);
 };
@@ -146,7 +142,7 @@ const ConditionRows = ({ conditions, options, boardId, onChange }: ConditionRows
 	return (
 		<Box>
 			{conditions.length === 0 && (
-				<Box fontScale='c1' color='hint' mbe={8}>
+				<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 					{t('Boards_Automation_NoConditionsHint', { defaultValue: 'No conditions — runs whenever the trigger fires.' })}
 				</Box>
 			)}
@@ -160,8 +156,8 @@ const ConditionRows = ({ conditions, options, boardId, onChange }: ConditionRows
 					onRemove={() => remove(index)}
 				/>
 			))}
-			<Button small mbs={4} onClick={add}>
-				<Icon name='plus' size='x16' mie={4} />
+			<Button small marginBlockStart={4} onClick={add}>
+				<Icon name='plus' size='x16' marginInlineEnd={4} />
 				{t('Boards_Automation_AddCondition', { defaultValue: 'Add condition' })}
 			</Button>
 		</Box>

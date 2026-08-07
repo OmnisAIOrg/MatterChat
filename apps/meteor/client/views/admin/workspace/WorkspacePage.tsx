@@ -32,7 +32,7 @@ const WorkspacePage = ({
 	const { t } = useTranslation();
 
 	return (
-		<Page bg='tint'>
+		<Page background='tint'>
 			<PageHeader title={t('Workspace')}>
 				{canViewStatistics && (
 					<ButtonGroup>
@@ -44,7 +44,7 @@ const WorkspacePage = ({
 				)}
 			</PageHeader>
 
-			<PageScrollableContentWithShadow p={16}>
+			<PageScrollableContentWithShadow padding={16}>
 				<Box marginBlock='none' marginInline='auto' width='full' maxWidth='1000px' color='default'>
 					{/* Premium Version Card - Hero */}
 					<PremiumVersionCard serverInfo={serverInfo} />

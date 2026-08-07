@@ -1,4 +1,4 @@
-import { Box, Callout, Tabs } from '@rocket.chat/fuselage';
+import { Box, Callout, Tabs, TabsItem } from '@rocket.chat/fuselage';
 import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
 import { useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement } from 'react';
@@ -43,25 +43,24 @@ const AdminAutomationsPage = ({ tab = 'all' }: AdminAutomationsPageProps): React
 		<Page>
 			<PageHeader title={t('Boards_Automations', { defaultValue: 'Automations' })} />
 			<Tabs>
-				<Tabs.Item selected={tab === 'all'} onClick={() => goTo('all')}>
+				<TabsItem selected={tab === 'all'} onClick={() => goTo('all')}>
 					{t('Boards_Automation_AllAutomations', { defaultValue: 'All automations' })}
-				</Tabs.Item>
-				<Tabs.Item selected={tab === 'runs'} onClick={() => goTo('runs')}>
+				</TabsItem>
+				<TabsItem selected={tab === 'runs'} onClick={() => goTo('runs')}>
 					{t('Boards_Automation_RunLog', { defaultValue: 'Run log' })}
-				</Tabs.Item>
+				</TabsItem>
 			</Tabs>
 			<PageScrollableContentWithShadow>
-				<Box mbe={16}>
+				<Box marginBlockEnd={16}>
 					<Callout type='info' icon='info' title={t('Boards_Automation_AdminHint_Title', { defaultValue: 'Engine settings' })}>
 						{t('Boards_Automation_AdminHint_Body', {
-							defaultValue: 'Loop-guard budgets, the firm timezone, CasePro write-back and SMS gates live under Admin → Settings → Automation.',
+							defaultValue:
+								'Loop-guard budgets, the firm timezone, CasePro write-back and SMS gates live under Admin → Settings → Automation.',
 						})}
 					</Callout>
 				</Box>
 
-				{tab === 'all' && (
-					<AutomationList queryKey={listQueryKey} canManage canRun showScope />
-				)}
+				{tab === 'all' && <AutomationList queryKey={listQueryKey} canManage canRun showScope />}
 
 				{tab === 'runs' && <AutomationActivity queryKey={runsQueryKey} />}
 			</PageScrollableContentWithShadow>

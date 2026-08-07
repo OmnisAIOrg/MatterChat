@@ -106,7 +106,7 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 	const showStale = Boolean(snapshot && (snapshot.stale || usingCachedFallback || isSnapshotOld(snapshot.fetchedAt)));
 
 	return (
-		<Box mbs={16}>
+		<Box marginBlockStart={16}>
 			<Divider />
 
 			<MatterHeader
@@ -119,16 +119,16 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 				onRefresh={(): void => refreshMutation.mutate()}
 			/>
 
-			<CaseProStubBanner mbs={8} mbe={12} />
+			<CaseProStubBanner marginBlockStart={8} marginBlockEnd={12} />
 
 			{isLoading && (
-				<Box display='flex' justifyContent='center' p={16}>
+				<Box display='flex' justifyContent='center' padding={16}>
 					<Throbber />
 				</Box>
 			)}
 
 			{isError && !isLoading && (
-				<Box mbs={8} mbe={8}>
+				<Box marginBlockStart={8} marginBlockEnd={8}>
 					{snapshot ? (
 						<Callout type='warning' icon='warning' title={t('Boards_Matters_Cached_Snapshot', { defaultValue: 'Showing cached snapshot' })}>
 							{t('Boards_Matters_Cached_Snapshot_Body', {
@@ -137,7 +137,7 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 						</Callout>
 					) : (
 						<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-							<Button small mbs={8} onClick={(): void => void refetch()}>
+							<Button small marginBlockStart={8} onClick={(): void => void refetch()}>
 								{t('Retry')}
 							</Button>
 						</Callout>
@@ -146,7 +146,7 @@ const MatterPanel = ({ card }: MatterPanelProps): ReactElement | null => {
 			)}
 
 			{!isLoading && !isError && !snapshot && (
-				<Box fontScale='c1' color='hint' p={8}>
+				<Box fontScale='c1' color='hint' padding={8}>
 					{t('No_results_found')}
 				</Box>
 			)}

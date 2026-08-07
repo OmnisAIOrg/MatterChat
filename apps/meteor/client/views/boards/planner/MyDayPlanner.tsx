@@ -58,11 +58,11 @@ const MyDayPlanner = () => {
 	const openCount = cards.filter((c) => !c.dueComplete && !c.completed && c.dueDate).length;
 
 	return (
-		<Box p={24} style={{ overflowY: 'auto', height: '100%', background: tones.paper }}>
+		<Box padding={24} style={{ overflowY: 'auto', height: '100%', background: tones.paper }}>
 			<Box fontScale='h2' style={serifCaption}>
 				My Day
 			</Box>
-			<Box fontScale='c1' mbe={20} style={{ color: tones.inkMuted }}>
+			<Box fontScale='c1' marginBlockEnd={20} style={{ color: tones.inkMuted }}>
 				Everything assigned to you, by when it&apos;s due — across all your boards. Works with or without CasePro.
 			</Box>
 			{isLoading && <Throbber />}
@@ -74,9 +74,9 @@ const MyDayPlanner = () => {
 			{buckets.map(
 				(b) =>
 					b.list.length > 0 && (
-						<Box key={b.label} mbe={16}>
-							<Box display='flex' alignItems='center' mbe={6}>
-								<Box fontScale='h4' mie={8} style={serifCaption}>
+						<Box key={b.label} marginBlockEnd={16}>
+							<Box display='flex' alignItems='center' marginBlockEnd={6}>
+								<Box fontScale='h4' marginInlineEnd={8} style={serifCaption}>
 									{b.label}
 								</Box>
 								<Box is='span' style={{ ...monoLabel(tones), fontWeight: 400 }}>
@@ -90,8 +90,8 @@ const MyDayPlanner = () => {
 										key={c._id}
 										display='flex'
 										alignItems='center'
-										p={8}
-										mbe={4}
+										padding={8}
+										marginBlockEnd={4}
 										style={{
 											background: tones.card,
 											border: `1px solid ${tones.strokeSoft}`,
@@ -99,7 +99,7 @@ const MyDayPlanner = () => {
 											boxShadow: `inset 3px 0 0 0 ${hot ? tones.red : tones.green}`,
 										}}
 									>
-										<Button mini mie={8} title='Mark done' onClick={() => markDone.mutate(c._id)}>
+										<Button mini marginInlineEnd={8} title='Mark done' onClick={() => markDone.mutate(c._id)}>
 											<Icon name='check' size='x16' />
 										</Button>
 										<Box flexGrow={1} style={{ cursor: 'pointer' }} onClick={() => openCard(c)}>

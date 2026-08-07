@@ -284,7 +284,7 @@ const LeadsBoardView = ({ board, lists }: LeadsBoardViewProps) => {
 	if (isLoading) {
 		return (
 			<PageScrollableContent>
-				<Box display='flex' justifyContent='center' p={24}>
+				<Box display='flex' justifyContent='center' padding={24}>
 					<Throbber />
 				</Box>
 			</PageScrollableContent>

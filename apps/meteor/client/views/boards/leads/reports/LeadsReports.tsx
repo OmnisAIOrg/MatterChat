@@ -71,21 +71,21 @@ const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?
 	const tones = useLedgerTones();
 	return (
 		<Box
-			pb={10}
-			pi={12}
+			paddingBlock={10}
+			paddingInline={12}
 			minWidth={160}
 			flexGrow={1}
 			flexBasis={160}
 			style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
 		>
-			<Box mbe={4} style={monoLabel(tones)}>
+			<Box marginBlockEnd={4} style={monoLabel(tones)}>
 				{label}
 			</Box>
 			<Box fontScale='h3' color='default' style={tabularNums}>
 				{value}
 			</Box>
 			{hint !== undefined && hint !== null && hint !== '' && (
-				<Box fontScale='micro' color='hint' mbs={4}>
+				<Box fontScale='micro' color='hint' marginBlockStart={4}>
 					{hint}
 				</Box>
 			)}
@@ -95,7 +95,7 @@ const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?
 
 // Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
+	<Box fontScale='h4' color='default' marginBlockStart={20} marginBlockEnd={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -117,7 +117,7 @@ const FunnelPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -126,7 +126,7 @@ const FunnelPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -137,7 +137,7 @@ const FunnelPanel = (): ReactElement => {
 
 	return (
 		<Box>
-			<Box display='flex' flexWrap='wrap' mbe={16} style={{ gap: '12px' }}>
+			<Box display='flex' flexWrap='wrap' marginBlockEnd={16} style={{ gap: '12px' }}>
 				<Metric label={t('Boards_Leads_Funnel_New', { defaultValue: 'New' })} value={data.totalLeads} />
 				<Metric label={t('Boards_Leads_Conversion_Rate', { defaultValue: 'Conversion rate' })} value={fmtPct(data.overallConversionPct)} />
 				<Metric
@@ -151,10 +151,10 @@ const FunnelPanel = (): ReactElement => {
 				/>
 			</Box>
 
-			<Box mbe={20}>
+			<Box marginBlockEnd={20}>
 				{data.gates.map((gate) => (
-					<Box key={gate.gate} mbe={12}>
-						<Box display='flex' justifyContent='space-between' mbe={4}>
+					<Box key={gate.gate} marginBlockEnd={12}>
+						<Box display='flex' justifyContent='space-between' marginBlockEnd={4}>
 							<Box fontScale='p2b' color='default'>
 								{gateLabel(gate.gate, t)}
 							</Box>
@@ -175,7 +175,7 @@ const FunnelPanel = (): ReactElement => {
 
 			{data.avgTimeInStageHours.length > 0 && (
 				<Box>
-					<Box fontScale='p2b' color='default' mbe={8}>
+					<Box fontScale='p2b' color='default' marginBlockEnd={8}>
 						{t('Boards_Matters_Days_In_Stage', { defaultValue: 'Time in stage' })}
 					</Box>
 					<Table fixed>
@@ -213,7 +213,7 @@ const ScoreboardPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -222,7 +222,7 @@ const ScoreboardPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -232,7 +232,7 @@ const ScoreboardPanel = (): ReactElement => {
 	return (
 		<Box>
 			{data.unassigned > 0 && (
-				<Box mbe={12}>
+				<Box marginBlockEnd={12}>
 					<Tag variant='secondary-warning'>
 						{t('Boards_Matters_Unassigned', { defaultValue: 'Unassigned' })}: {data.unassigned}
 					</Tag>
@@ -291,7 +291,7 @@ const LeadsReports = (): ReactElement => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='dashboard' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='dashboard' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Leads_Report_Funnel', { defaultValue: 'Intake reports' })}
 						</Box>
@@ -301,7 +301,7 @@ const LeadsReports = (): ReactElement => {
 			<PageScrollableContentWithShadow>
 				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
 				<LedgerPageStyleTag />
-				<CaseProStubBanner mbe={16} />
+				<CaseProStubBanner marginBlockEnd={16} />
 
 				<SectionTitle>{t('Boards_Leads_Report_Funnel', { defaultValue: 'Intake funnel' })}</SectionTitle>
 				<FunnelPanel />

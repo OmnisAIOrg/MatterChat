@@ -55,9 +55,9 @@ const RuleTrigger = ({ draft, options, boardId, onChange }: TriggerEditorProps):
 			</Field>
 
 			{spec && spec.filters.length > 0 && (
-				<Box mbs={8} pis={12} style={{ borderInlineStart: '2px solid var(--rcx-color-stroke-light, #e4e7ea)' }}>
+				<Box marginBlockStart={8} paddingInlineStart={12} style={{ borderInlineStart: '2px solid var(--rcx-color-stroke-light, #e4e7ea)' }}>
 					{spec.filters.map((f) => (
-						<Field key={f.key} mbs={8}>
+						<Field key={f.key} marginBlockStart={8}>
 							<FieldLabel>
 								{t(f.labelKey as Parameters<typeof t>[0])}
 								{f.required === false ? ` (${t('Optional', { defaultValue: 'optional' })})` : ''}
@@ -91,11 +91,17 @@ const ScheduleTrigger = ({ draft, onChange }: TriggerEditorProps): ReactElement 
 	};
 
 	const kindOptions = useMemo<SelectOption[]>(
-		() => SCHEDULE_KINDS.map((k) => [k, t(`Boards_Automation_ScheduleKind_${k}` as Parameters<typeof t>[0], { defaultValue: k })] as SelectOption),
+		() =>
+			SCHEDULE_KINDS.map(
+				(k) => [k, t(`Boards_Automation_ScheduleKind_${k}` as Parameters<typeof t>[0], { defaultValue: k })] as SelectOption,
+			),
 		[t],
 	);
 	const cadenceOptions = useMemo<SelectOption[]>(
-		() => SCHEDULE_CADENCES.map((c) => [c, t(`Boards_Automation_Cadence_${c}` as Parameters<typeof t>[0], { defaultValue: c })] as SelectOption),
+		() =>
+			SCHEDULE_CADENCES.map(
+				(c) => [c, t(`Boards_Automation_Cadence_${c}` as Parameters<typeof t>[0], { defaultValue: c })] as SelectOption,
+			),
 		[t],
 	);
 	const dowOptions = useMemo<SelectOption[]>(
@@ -119,31 +125,46 @@ const ScheduleTrigger = ({ draft, onChange }: TriggerEditorProps): ReactElement 
 
 			{schedule.kind === 'every' && (
 				<>
-					<Field mbs={8}>
+					<Field marginBlockStart={8}>
 						<FieldLabel htmlFor={cadenceId}>{t('Boards_Automation_Cadence', { defaultValue: 'Cadence' })}</FieldLabel>
 						<FieldRow>
-							<Select id={cadenceId} value={schedule.cadence ?? 'daily'} options={cadenceOptions} onChange={(next) => patchSchedule({ cadence: next as ScheduleDraft['cadence'] })} />
+							<Select
+								id={cadenceId}
+								value={schedule.cadence ?? 'daily'}
+								options={cadenceOptions}
+								onChange={(next) => patchSchedule({ cadence: next as ScheduleDraft['cadence'] })}
+							/>
 						</FieldRow>
 					</Field>
 					{schedule.cadence === 'weekly' && (
-						<Field mbs={8}>
+						<Field marginBlockStart={8}>
 							<FieldLabel>{t('Boards_Automation_DayOfWeek', { defaultValue: 'Day of week' })}</FieldLabel>
 							<FieldRow>
-								<Select value={String(schedule.dayOfWeek ?? 1)} options={dowOptions} onChange={(next) => patchSchedule({ dayOfWeek: Number(next) })} />
+								<Select
+									value={String(schedule.dayOfWeek ?? 1)}
+									options={dowOptions}
+									onChange={(next) => patchSchedule({ dayOfWeek: Number(next) })}
+								/>
 							</FieldRow>
 						</Field>
 					)}
-					<Box display='flex' mbs={8} mi='neg-x4'>
-						<Field mi={4}>
+					<Box display='flex' marginBlockStart={8} marginInline='neg-x4'>
+						<Field marginInline={4}>
 							<FieldLabel>{t('Boards_Automation_Hour', { defaultValue: 'Hour' })}</FieldLabel>
 							<FieldRow>
-								<NumberInput value={String(schedule.hour ?? 8)} onChange={(e) => patchSchedule({ hour: Number((e.target as HTMLInputElement).value) })} />
+								<NumberInput
+									value={String(schedule.hour ?? 8)}
+									onChange={(e) => patchSchedule({ hour: Number((e.target as HTMLInputElement).value) })}
+								/>
 							</FieldRow>
 						</Field>
-						<Field mi={4}>
+						<Field marginInline={4}>
 							<FieldLabel>{t('Boards_Automation_Minute', { defaultValue: 'Minute' })}</FieldLabel>
 							<FieldRow>
-								<NumberInput value={String(schedule.minute ?? 0)} onChange={(e) => patchSchedule({ minute: Number((e.target as HTMLInputElement).value) })} />
+								<NumberInput
+									value={String(schedule.minute ?? 0)}
+									onChange={(e) => patchSchedule({ minute: Number((e.target as HTMLInputElement).value) })}
+								/>
 							</FieldRow>
 						</Field>
 					</Box>
@@ -151,19 +172,27 @@ const ScheduleTrigger = ({ draft, onChange }: TriggerEditorProps): ReactElement 
 			)}
 
 			{schedule.kind === 'at' && (
-				<Field mbs={8}>
+				<Field marginBlockStart={8}>
 					<FieldLabel>{t('Boards_Automation_At', { defaultValue: 'At (ISO datetime)' })}</FieldLabel>
 					<FieldRow>
-						<TextInput value={schedule.at ?? ''} placeholder='2026-07-01T08:00:00Z' onChange={(e) => patchSchedule({ at: (e.target as HTMLInputElement).value })} />
+						<TextInput
+							value={schedule.at ?? ''}
+							placeholder='2026-07-01T08:00:00Z'
+							onChange={(e) => patchSchedule({ at: (e.target as HTMLInputElement).value })}
+						/>
 					</FieldRow>
 				</Field>
 			)}
 
 			{schedule.kind === 'cron' && (
-				<Field mbs={8}>
+				<Field marginBlockStart={8}>
 					<FieldLabel>{t('Boards_Automation_Cron', { defaultValue: 'Cron expression' })}</FieldLabel>
 					<FieldRow>
-						<TextInput value={schedule.cron ?? ''} placeholder='0 8 * * 1-5' onChange={(e) => patchSchedule({ cron: (e.target as HTMLInputElement).value })} />
+						<TextInput
+							value={schedule.cron ?? ''}
+							placeholder='0 8 * * 1-5'
+							onChange={(e) => patchSchedule({ cron: (e.target as HTMLInputElement).value })}
+						/>
 					</FieldRow>
 				</Field>
 			)}

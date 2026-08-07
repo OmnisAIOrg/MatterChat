@@ -11,7 +11,7 @@
  */
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../../settings/server';
+import { settings } from '../../../../../server/settings';
 
 /** Microsoft Graph v1.0 base URL — the only Graph host the provider talks to. */
 export const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';

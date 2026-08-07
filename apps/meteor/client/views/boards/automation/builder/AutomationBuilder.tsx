@@ -1,5 +1,18 @@
 import type { IAutomation, Serialized } from '@rocket.chat/core-typings';
-import { Accordion, AccordionItem, Box, Button, Divider, Field, FieldLabel, FieldRow, TextAreaInput, TextInput, Throbber, ToggleSwitch } from '@rocket.chat/fuselage';
+import {
+	Accordion,
+	AccordionItem,
+	Box,
+	Button,
+	Divider,
+	Field,
+	FieldLabel,
+	FieldRow,
+	TextAreaInput,
+	TextInput,
+	Throbber,
+	ToggleSwitch,
+} from '@rocket.chat/fuselage';
 import { useEndpoint, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -88,27 +101,35 @@ const AutomationBuilder = ({ boardId, kind, existing, listQueryKey, onClose }: A
 
 	return (
 		<Box>
-			<Box fontScale='h4' color='default' mbe={4}>
+			<Box fontScale='h4' color='default' marginBlockEnd={4}>
 				{existing
 					? t('Boards_Automation_EditTitle', { defaultValue: 'Edit automation' })
 					: t('Boards_Automation_NewOfKind', { defaultValue: 'New {{kind}}', kind: t(KIND_LABEL[draft.kind] as Parameters<typeof t>[0]) })}
 			</Box>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Name')}</FieldLabel>
 				<FieldRow>
-					<TextInput value={draft.name} placeholder={t('Boards_Automation_NamePlaceholder', { defaultValue: 'e.g. Demand response timer' })} onChange={(e) => patch({ name: (e.target as HTMLInputElement).value })} />
+					<TextInput
+						value={draft.name}
+						placeholder={t('Boards_Automation_NamePlaceholder', { defaultValue: 'e.g. Demand response timer' })}
+						onChange={(e) => patch({ name: (e.target as HTMLInputElement).value })}
+					/>
 				</FieldRow>
 			</Field>
 
-			<Field mbs={8}>
+			<Field marginBlockStart={8}>
 				<FieldLabel>{t('Description')}</FieldLabel>
 				<FieldRow>
-					<TextAreaInput rows={2} value={draft.description ?? ''} onChange={(e) => patch({ description: (e.target as HTMLTextAreaElement).value })} />
+					<TextAreaInput
+						rows={2}
+						value={draft.description ?? ''}
+						onChange={(e) => patch({ description: (e.target as HTMLTextAreaElement).value })}
+					/>
 				</FieldRow>
 			</Field>
 
-			<Field mbs={8}>
+			<Field marginBlockStart={8}>
 				<Box display='flex' alignItems='center' justifyContent='space-between'>
 					<FieldLabel>{t('Enabled', { defaultValue: 'Enabled' })}</FieldLabel>
 					<ToggleSwitch checked={draft.enabled} onChange={(e) => patch({ enabled: (e.target as HTMLInputElement).checked })} />
@@ -116,30 +137,55 @@ const AutomationBuilder = ({ boardId, kind, existing, listQueryKey, onClose }: A
 			</Field>
 
 			{optionsLoading && boardId ? (
-				<Box display='flex' justifyContent='center' p={16}>
+				<Box display='flex' justifyContent='center' padding={16}>
 					<Throbber />
 				</Box>
 			) : (
-				<Accordion mbs={12}>
+				<Accordion marginBlockStart={12}>
 					{draft.kind !== 'card-button' && draft.kind !== 'board-button' && (
-						<AccordionItem defaultExpanded title={isSequence ? t('Boards_Automation_Sequence', { defaultValue: 'Sequence' }) : t('Boards_Automation_When', { defaultValue: 'When' })}>
+						<AccordionItem
+							defaultExpanded
+							title={
+								isSequence
+									? t('Boards_Automation_Sequence', { defaultValue: 'Sequence' })
+									: t('Boards_Automation_When', { defaultValue: 'When' })
+							}
+						>
 							<TriggerEditor draft={draft} options={options} boardId={boardId} onChange={patch} />
 						</AccordionItem>
 					)}
 
 					{!isSequence && (
 						<AccordionItem defaultExpanded title={t('Boards_Automation_If', { defaultValue: 'If (conditions)' })}>
-							<ConditionRows conditions={draft.conditions} options={options} boardId={boardId} onChange={(conditions) => patch({ conditions })} />
+							<ConditionRows
+								conditions={draft.conditions}
+								options={options}
+								boardId={boardId}
+								onChange={(conditions) => patch({ conditions })}
+							/>
 						</AccordionItem>
 					)}
 
-					<AccordionItem defaultExpanded title={isSequence ? t('Boards_Automation_Steps', { defaultValue: 'Steps' }) : t('Boards_Automation_Then', { defaultValue: 'Then (actions)' })}>
-						<ActionRows actions={draft.actions} options={options} boardId={boardId} isSequence={isSequence} onChange={(actions) => patch({ actions })} />
+					<AccordionItem
+						defaultExpanded
+						title={
+							isSequence
+								? t('Boards_Automation_Steps', { defaultValue: 'Steps' })
+								: t('Boards_Automation_Then', { defaultValue: 'Then (actions)' })
+						}
+					>
+						<ActionRows
+							actions={draft.actions}
+							options={options}
+							boardId={boardId}
+							isSequence={isSequence}
+							onChange={(actions) => patch({ actions })}
+						/>
 					</AccordionItem>
 
 					{isSequence && (
 						<AccordionItem title={t('Boards_Automation_StopConditions', { defaultValue: 'Stop conditions' })}>
-							<Box display='flex' alignItems='center' justifyContent='space-between' mbe={8}>
+							<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={8}>
 								<Box fontScale='p2'>{t('Boards_Automation_StopOnReply', { defaultValue: 'Stop when the lead replies' })}</Box>
 								<ToggleSwitch
 									checked={draft.sequence?.stopOnReply ?? false}
@@ -161,17 +207,21 @@ const AutomationBuilder = ({ boardId, kind, existing, listQueryKey, onClose }: A
 			<Divider />
 
 			{/* Dry run */}
-			<Box mbs={12}>
-				<Box fontScale='p2b' color='default' mbe={4}>
+			<Box marginBlockStart={12}>
+				<Box fontScale='p2b' color='default' marginBlockEnd={4}>
 					{t('Boards_Automation_Test', { defaultValue: 'Test (dry run)' })}
 				</Box>
 				<Field>
 					<FieldLabel>{t('Boards_Automation_SampleCard', { defaultValue: 'Sample card id (optional)' })}</FieldLabel>
 					<FieldRow>
-						<TextInput value={sampleCardId} placeholder={t('Optional', { defaultValue: 'optional' })} onChange={(e) => setSampleCardId((e.target as HTMLInputElement).value)} />
+						<TextInput
+							value={sampleCardId}
+							placeholder={t('Optional', { defaultValue: 'optional' })}
+							onChange={(e) => setSampleCardId((e.target as HTMLInputElement).value)}
+						/>
 					</FieldRow>
 				</Field>
-				<Button small mbs={8} onClick={() => dryRunMutation.mutate()} disabled={!valid || dryRunMutation.isPending}>
+				<Button small marginBlockStart={8} onClick={() => dryRunMutation.mutate()} disabled={!valid || dryRunMutation.isPending}>
 					{dryRunMutation.isPending ? <Throbber inheritColor size='x12' /> : t('Boards_Automation_RunTest', { defaultValue: 'Run test' })}
 				</Button>
 				{dryRun && <DryRunPanel result={dryRun} />}
@@ -179,8 +229,8 @@ const AutomationBuilder = ({ boardId, kind, existing, listQueryKey, onClose }: A
 
 			<Divider />
 
-			<Box display='flex' justifyContent='flex-end' mbs={12}>
-				<Button mie={8} onClick={onClose}>
+			<Box display='flex' justifyContent='flex-end' marginBlockStart={12}>
+				<Button marginInlineEnd={8} onClick={onClose}>
 					{t('Cancel')}
 				</Button>
 				<Button primary disabled={!valid || saveMutation.isPending} onClick={() => saveMutation.mutate()}>

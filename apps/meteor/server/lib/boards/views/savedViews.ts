@@ -2,7 +2,7 @@ import type { IBoardCard, ISavedView, ISavedViewConfig, OmnisCardQuery, SavedVie
 import { BoardsSavedViews, BoardsCards, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 import { getBoardForUser } from '../permissions';
 
 /**

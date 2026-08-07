@@ -65,10 +65,7 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 				confirmDisabled={false}
 				onConfirm={() => setShowTemplates(false)}
 			>
-				<BoardTemplateGallery
-					pipelineType={pipelineType}
-					onSelectTemplate={handleSelectTemplate}
-				/>
+				<BoardTemplateGallery pipelineType={pipelineType} onSelectTemplate={handleSelectTemplate} />
 			</GenericModal>
 		);
 	}
@@ -83,8 +80,8 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 			confirmDisabled={isSubmitting}
 		>
 			{selectedTemplate && (
-				<Box mbe={16} p={12} bg='tint' borderRadius='x4'>
-					<Box fontScale='p2b' mbe={4}>
+				<Box marginBlockEnd={16} padding={12} backgroundColor='tint' borderRadius='x4'>
+					<Box fontScale='p2b' marginBlockEnd={4}>
 						{t('Template_Selected')}: {selectedTemplate.name}
 					</Box>
 					<Button
@@ -119,7 +116,7 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 					</FieldError>
 				)}
 			</Field>
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={pipelineId}>{t('Type')}</FieldLabel>
 				<FieldRow>
 					<Controller
@@ -132,7 +129,7 @@ const NewBoardModal = ({ onConfirm, onClose }: NewBoardModalProps) => {
 				</FieldRow>
 			</Field>
 
-			<Box mbs={12} display='flex' gap={8}>
+			<Box marginBlockStart={12} display='flex' gap={8}>
 				<Button secondary onClick={() => setShowTemplates(true)}>
 					{t('Browse_Templates')}
 				</Button>

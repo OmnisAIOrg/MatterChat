@@ -2,7 +2,7 @@ import { ServiceClassInternal } from '@rocket.chat/core-services';
 import type { IAutomation, BoardAutomationTriggerEvent } from '@rocket.chat/core-typings';
 import { BoardsAutomationRuns } from '@rocket.chat/models';
 
-import { settings } from '../../../app/settings/server';
+import { settings } from '../../settings';
 import { SystemLogger } from '../../lib/logger/system';
 import type { LoopGuardState } from './context';
 import { childLoopState } from './context';

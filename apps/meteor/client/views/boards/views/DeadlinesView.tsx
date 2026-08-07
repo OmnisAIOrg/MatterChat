@@ -373,10 +373,13 @@ const DeadlinesView = (): ReactElement => {
 	const isError = boardQuery.isError || deadlinesQuery.isError;
 
 	const atRisk = useMemo(
-		() => deadlines.filter((d) => d.highRisk ?? HIGH_RISK_KINDS.includes(d.kind)).filter((d) => {
-			const days = daysUntil(d.dueDate);
-			return (days !== undefined && days < 30) || (days === undefined && !RESOLVED_STATUSES.includes(d.status));
-		}).length,
+		() =>
+			deadlines
+				.filter((d) => d.highRisk ?? HIGH_RISK_KINDS.includes(d.kind))
+				.filter((d) => {
+					const days = daysUntil(d.dueDate);
+					return (days !== undefined && days < 30) || (days === undefined && !RESOLVED_STATUSES.includes(d.status));
+				}).length,
 		[deadlines],
 	);
 
@@ -485,10 +488,10 @@ const DeadlinesView = (): ReactElement => {
 					)}
 				</PageHeader>
 				<PageScrollableContentWithShadow>
-					<CaseProStubBanner mbe={16} />
+					<CaseProStubBanner marginBlockEnd={16} />
 
 					{isLoading && (
-						<Box display='flex' justifyContent='center' p={24}>
+						<Box display='flex' justifyContent='center' padding={24}>
 							<Throbber />
 						</Box>
 					)}

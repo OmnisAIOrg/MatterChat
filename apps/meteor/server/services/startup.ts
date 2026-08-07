@@ -3,8 +3,8 @@ import { api } from '@rocket.chat/core-services';
 // with the Enterprise tree — MatterChat does not use Omnichannel. MongoInternals/i18n imports
 // went with it (they only fed the removed QueueWorker/OmnichannelTranscript constructors).
 
-import { AuthorizationLivechat } from '../../app/livechat/server/roomAccessValidator.internalService';
 import { isRunningMs } from '../lib/isRunningMs';
+import { AISearchService } from './ai-search/service';
 import { AnalyticsService } from './analytics/service';
 import { Automation } from './automation/service';
 import { AppsEngineService } from './apps-engine/service';
@@ -31,6 +31,7 @@ import { UiKitCoreAppService } from './uikit-core-app/service';
 import { UploadService } from './upload/service';
 import { UserService } from './user/service';
 import { VideoConfService } from './video-conference/service';
+import { AuthorizationLivechat } from '../lib/omnichannel/roomAccessValidator.internalService';
 
 export const registerServices = async (): Promise<void> => {
 	api.registerService(new AppsEngineService());
@@ -59,6 +60,7 @@ export const registerServices = async (): Promise<void> => {
 	api.registerService(new UserService());
 	api.registerService(new MediaCallService());
 	api.registerService(new CallHistoryService());
+	api.registerService(new AISearchService());
 	// Boards Automation engine (M7) — register the same singleton the event seam / cron /
 	// REST call directly, so the core-services lifecycle and the direct-call surface agree.
 	api.registerService(Automation);

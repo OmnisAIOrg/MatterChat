@@ -2,7 +2,7 @@ import { isEditedMessage } from '@rocket.chat/core-typings';
 import type { IRoom, IUser } from '@rocket.chat/core-typings';
 import { ReadReceipts } from '@rocket.chat/models';
 
-import { settings } from '../../../app/settings/server';
+import { settings } from '../../settings';
 import { callbacks } from '../callbacks';
 import { ReadReceipt } from './ReadReceipt';
 

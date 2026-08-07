@@ -172,9 +172,16 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 	};
 
 	return (
-		<Box mbs={12}>
+		<Box marginBlockStart={12}>
 			{/* Compact small-caps section head + tabular counter over a khaki rule. */}
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={6} pbe={2} style={ledgerRule(tone)}>
+			<Box
+				display='flex'
+				alignItems='center'
+				justifyContent='space-between'
+				marginBlockEnd={6}
+				paddingBlockEnd={2}
+				style={ledgerRule(tone)}
+			>
 				<Box style={ledgerHead(tone)}>{t('Boards_Subtasks', { defaultValue: 'Subtasks' })}</Box>
 				{total > 0 && (
 					<Box fontScale='c1' color='hint' style={tabularFigures}>
@@ -184,23 +191,23 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 			</Box>
 
 			{total > 0 && (
-				<Box mbe={6}>
+				<Box marginBlockEnd={6}>
 					<LedgerProgress percent={percent} tone={tone} />
 				</Box>
 			)}
 
 			{isLoading && children.length === 0 && childIds.length > 0 && (
-				<Box display='flex' justifyContent='center' pb={8}>
+				<Box display='flex' justifyContent='center' paddingBlock={8}>
 					<Throbber size='x12' />
 				</Box>
 			)}
 
 			{children.map((child) => (
-				<Box key={child._id} display='flex' alignItems='center' mbe={2} pbe={2} style={ledgerRule(tone)}>
+				<Box key={child._id} display='flex' alignItems='center' marginBlockEnd={2} paddingBlockEnd={2} style={ledgerRule(tone)}>
 					<CheckBox
 						checked={Boolean(child.completed)}
 						disabled={busy}
-						mie={8}
+						marginInlineEnd={8}
 						aria-label={child.title}
 						onChange={() => toggleMutation.mutate(child)}
 					/>
@@ -225,7 +232,7 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 				</Box>
 			))}
 
-			<Box display='flex' alignItems='center' mbs={8}>
+			<Box display='flex' alignItems='center' marginBlockStart={8}>
 				<TextInput
 					value={newTitle}
 					placeholder={t('Boards_Add_Subtask', { defaultValue: 'Add a subtask' })}
@@ -233,7 +240,7 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 					onChange={(e) => setNewTitle((e.target as HTMLInputElement).value)}
 					onKeyDown={handleKeyDown}
 				/>
-				<Button small primary mis={8} disabled={!newTitle.trim() || addMutation.isPending} onClick={handleAdd}>
+				<Button small primary marginInlineStart={8} disabled={!newTitle.trim() || addMutation.isPending} onClick={handleAdd}>
 					{addMutation.isPending ? <Throbber inheritColor size='x12' /> : t('Add')}
 				</Button>
 			</Box>
@@ -251,19 +258,19 @@ const SubtasksPanel = ({ boardId, cardId, card }: SubtasksPanelProps): ReactElem
 						{t('Boards_Subtask_Convert_From_Checklist', { defaultValue: 'Convert checklist items' })}
 					</Button>
 					{showChecklistConversion && (
-						<Box mts={8} p={8} borderRadius='x4' style={{ backgroundColor: tone.card, boxShadow: `inset 0 0 0 1px ${tone.rule}` }}>
+						<Box mts={8} padding={8} borderRadius='x4' style={{ backgroundColor: tone.card, boxShadow: `inset 0 0 0 1px ${tone.rule}` }}>
 							{card.checklists?.map((checklist: IChecklist) => (
-								<Box key={checklist.id} mbe={8}>
-									<Box fontScale='c1' color='hint' mbe={4} style={tabularFigures}>
+								<Box key={checklist.id} marginBlockEnd={8}>
+									<Box fontScale='c1' color='hint' marginBlockEnd={4} style={tabularFigures}>
 										{checklist.title}
 									</Box>
 									{checklist.items.length === 0 ? (
-										<Box fontScale='p2' color='hint' pis={8}>
+										<Box fontScale='p2' color='hint' paddingInlineStart={8}>
 											{t('No_results_found')}
 										</Box>
 									) : (
 										checklist.items.map((item: IChecklistItem) => (
-											<Box key={item.id} display='flex' alignItems='center' mbe={4} pis={8}>
+											<Box key={item.id} display='flex' alignItems='center' marginBlockEnd={4} paddingInlineStart={8}>
 												<Box flexGrow={1} fontScale='p2'>
 													{item.text}
 												</Box>

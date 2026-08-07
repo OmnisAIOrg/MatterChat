@@ -16,10 +16,10 @@ type MatterSectionProps = {
  * above the body. Ledger-dense: compact small-caps section heads + tighter spacing.
  */
 const MatterSection = ({ title, icon, action, children }: MatterSectionProps): ReactElement => (
-	<Box mbs={14}>
-		<Box display='flex' alignItems='center' justifyContent='space-between' mbe={6}>
+	<Box marginBlockStart={14}>
+		<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={6}>
 			<Box display='flex' alignItems='center'>
-				{icon && <Icon name={icon} size='x16' mie={6} color='hint' />}
+				{icon && <Icon name={icon} size='x16' marginInlineEnd={6} color='hint' />}
 				<Box fontScale='p2b' color='default' style={LEDGER_LABEL_STYLE}>
 					{title}
 				</Box>

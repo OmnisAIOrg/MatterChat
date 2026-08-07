@@ -2,7 +2,7 @@ import type { ILead, IMatterSnapshot, IReferralSource } from '@rocket.chat/core-
 import { BoardsCards, BoardsLeads, BoardsReferralSources } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 import { funnel, type FunnelResult } from '../leads/reports';
 import { caseProClient } from '../matters/caseProClient';
 import { aging, financial, caseload, type AgingReport, type FinancialReport, type CaseloadReport } from '../matters/reports';

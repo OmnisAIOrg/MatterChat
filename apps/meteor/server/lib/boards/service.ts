@@ -16,7 +16,7 @@ import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
 import { assertBoardRole, getBoardForUser } from './permissions';
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../authorization/hasPermission';
 import { emitBoardEvent } from './events';
 
 /**

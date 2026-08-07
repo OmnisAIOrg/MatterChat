@@ -378,7 +378,7 @@ const ExternalChannelView = (): ReactElement => {
 				{isLoading && (
 					<Box display='flex' flexDirection='column' alignItems='center' justifyContent='center' flexGrow={1}>
 						<Throbber />
-						<Box mbs={12} color='hint' fontSize={13}>
+						<Box marginBlockStart={12} color='hint' fontSize={13}>
 							{t('Loading_messages', { defaultValue: 'Loading messages…' })}
 						</Box>
 					</Box>
@@ -403,7 +403,7 @@ const ExternalChannelView = (): ReactElement => {
 
 				{!isLoading && !error && ordered.length === 0 && (
 					<Box display='flex' flexDirection='column' alignItems='center' justifyContent='center' flexGrow={1} color='hint'>
-						<Icon name='balloon' size='x32' mbe={8} />
+						<Icon name='balloon' size='x32' marginBlockEnd={8} />
 						<Box fontSize={14}>{t('No_messages_yet', { defaultValue: 'No messages yet — say hello.' })}</Box>
 					</Box>
 				)}

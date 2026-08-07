@@ -383,7 +383,6 @@ const PremiumMetric = ({
 	</div>
 );
 
-
 const FinancialPanel = (): ReactElement => {
 	const { t } = useTranslation();
 	const [, , theme] = useThemeMode();
@@ -397,7 +396,7 @@ const FinancialPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -406,7 +405,7 @@ const FinancialPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -472,7 +471,7 @@ const AgingPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -481,7 +480,7 @@ const AgingPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -599,8 +598,22 @@ const MattersReports = (): ReactElement => {
 							{t('Boards_Matters_Reports', { defaultValue: 'Reports' })}
 						</Box>
 						<span style={{ flex: 1 }} />
-						<div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: tokens.ink2, padding: '4px 10px', borderRadius: 99, border: `1px solid ${tokens.border}`, background: tokens.surface }}>
-							<span style={{ width: 7, height: 7, borderRadius: 99, background: tokens.green, animation: 'pulse 2.6s ease-out infinite' }} />
+						<div
+							style={{
+								display: 'inline-flex',
+								alignItems: 'center',
+								gap: 6,
+								fontSize: 12,
+								color: tokens.ink2,
+								padding: '4px 10px',
+								borderRadius: 99,
+								border: `1px solid ${tokens.border}`,
+								background: tokens.surface,
+							}}
+						>
+							<span
+								style={{ width: 7, height: 7, borderRadius: 99, background: tokens.green, animation: 'pulse 2.6s ease-out infinite' }}
+							/>
 							CasePro synced
 						</div>
 						<button
@@ -638,7 +651,7 @@ const MattersReports = (): ReactElement => {
 				<style dangerouslySetInnerHTML={{ __html: buildLedgerTableCss(tones.strokeSoft, tones.cardAlt) }} />
 
 				<div style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
-					<CaseProStubBanner mbe={16} />
+					<CaseProStubBanner marginBlockEnd={16} />
 
 					<div style={{ fontSize: 15, fontWeight: 650, color: tokens.ink, marginTop: 22 }}>Financial</div>
 					<FinancialPanel />

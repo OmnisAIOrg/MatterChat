@@ -393,9 +393,9 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 	const empty = model.rows.length === 0 && model.undated.length === 0;
 
 	return (
-		<Box pi={24} pb={16} display='flex' flexDirection='column' style={{ minWidth: 0, background: tones.paper }}>
+		<Box paddingInline={24} paddingBlock={16} display='flex' flexDirection='column' style={{ minWidth: 0, background: tones.paper }}>
 			{/* toolbar */}
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={12} style={{ gap: '12px', flexWrap: 'wrap' }}>
+			<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={12} style={{ gap: '12px', flexWrap: 'wrap' }}>
 				<Box display='flex' alignItems='center' fontScale='c1' style={{ gap: '14px', flexWrap: 'wrap', color: tones.inkMuted }}>
 					<Box display='flex' alignItems='center' style={{ gap: '5px' }}>
 						<Box style={{ width: 10, height: 10, borderRadius: 3, background: tones.green }} />{' '}
@@ -456,7 +456,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 								}}
 								display='flex'
 								alignItems='center'
-								pi={12}
+								paddingInline={12}
 							>
 								{t('Boards_Gantt_Task', { defaultValue: 'Task' })}
 							</Box>
@@ -551,7 +551,7 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 											borderInlineEnd: `1px solid ${tones.stroke}`,
 											borderBlockEnd: `1px solid ${tones.strokeSoft}`,
 										}}
-										pi={12}
+										paddingInline={12}
 									>
 										<Icon name={getCardTypeIcon(row.card.cardType)} size='x16' style={{ color: tones.inkMuted }} />
 										<Box fontScale='c1' color='default' withTruncatedText flexGrow={1}>
@@ -624,8 +624,8 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 
 			{/* undated cards */}
 			{model.undated.length > 0 && (
-				<Box mbs={16}>
-					<Box mbe={8} style={monoLabel(tones)}>
+				<Box marginBlockStart={16}>
+					<Box marginBlockEnd={8} style={monoLabel(tones)}>
 						{t('Boards_Gantt_Undated', { defaultValue: 'Undated' })} ({model.undated.length})
 					</Box>
 					<Box display='flex' style={{ gap: '6px', flexWrap: 'wrap' }}>
@@ -642,8 +642,8 @@ const GanttChart = ({ board, cards, onOpenCard }: GanttChartProps): ReactElement
 								}}
 								display='flex'
 								alignItems='center'
-								pi={8}
-								pb={4}
+								paddingInline={8}
+								paddingBlock={4}
 								style={{
 									cursor: 'pointer',
 									gap: '6px',

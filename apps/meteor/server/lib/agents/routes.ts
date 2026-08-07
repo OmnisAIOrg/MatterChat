@@ -19,7 +19,7 @@ import type { IUser } from '@rocket.chat/core-typings';
 import type { Request, Response } from 'express';
 
 import * as agentService from './service';
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../authorization/hasPermission';
 
 const notConfigured = (res: Response): void => {
 	res.status(400).json({

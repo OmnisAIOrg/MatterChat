@@ -92,9 +92,9 @@ const ChecklistPanel = ({ boardId, cardId, checklists }: ChecklistPanelProps): R
 	};
 
 	return (
-		<Box mbs={12}>
+		<Box marginBlockStart={12}>
 			{/* Compact small-caps section head over a khaki rule (ledger-dense chrome). */}
-			<Box mbe={6} pbe={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
+			<Box marginBlockEnd={6} paddingBlockEnd={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
 				{t('Boards_Checklist', { defaultValue: 'Checklist' })}
 			</Box>
 
@@ -104,28 +104,28 @@ const ChecklistPanel = ({ boardId, cardId, checklists }: ChecklistPanelProps): R
 				const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
 				return (
-					<Box key={checklist.id} mbe={10}>
-						<Box display='flex' alignItems='center' justifyContent='space-between' mbe={4}>
+					<Box key={checklist.id} marginBlockEnd={10}>
+						<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={4}>
 							<Box fontScale='c1' color='hint'>
 								{checklist.title}
 							</Box>
-							<Box fontScale='c1' color='hint' mis={8} style={tabularFigures}>
+							<Box fontScale='c1' color='hint' marginInlineStart={8} style={tabularFigures}>
 								{done}/{total}
 							</Box>
 						</Box>
 
 						{total > 0 && (
-							<Box mbe={6}>
+							<Box marginBlockEnd={6}>
 								<LedgerProgress percent={percent} tone={tone} />
 							</Box>
 						)}
 
 						{checklist.items.map((item) => (
-							<Box key={item.id} display='flex' alignItems='center' mbe={2} pbe={2} style={ledgerRule(tone)}>
+							<Box key={item.id} display='flex' alignItems='center' marginBlockEnd={2} paddingBlockEnd={2} style={ledgerRule(tone)}>
 								<CheckBox
 									checked={item.done}
 									disabled={busy}
-									mie={8}
+									marginInlineEnd={8}
 									aria-label={item.text}
 									onChange={() => toggleMutation.mutate(item.id)}
 								/>
@@ -138,20 +138,14 @@ const ChecklistPanel = ({ boardId, cardId, checklists }: ChecklistPanelProps): R
 								>
 									{item.text}
 								</Box>
-								<IconButton
-									tiny
-									icon='trash'
-									disabled={busy}
-									aria-label={t('Remove')}
-									onClick={() => removeMutation.mutate(item.id)}
-								/>
+								<IconButton tiny icon='trash' disabled={busy} aria-label={t('Remove')} onClick={() => removeMutation.mutate(item.id)} />
 							</Box>
 						))}
 					</Box>
 				);
 			})}
 
-			<Box display='flex' alignItems='center' mbs={8}>
+			<Box display='flex' alignItems='center' marginBlockStart={8}>
 				<TextInput
 					value={newItemText}
 					placeholder={t('Boards_Checklist_Add_Item', { defaultValue: 'Add an item' })}
@@ -159,7 +153,7 @@ const ChecklistPanel = ({ boardId, cardId, checklists }: ChecklistPanelProps): R
 					onChange={(e) => setNewItemText((e.target as HTMLInputElement).value)}
 					onKeyDown={handleKeyDown}
 				/>
-				<Button small primary mis={8} disabled={!newItemText.trim() || addMutation.isPending} onClick={handleAdd}>
+				<Button small primary marginInlineStart={8} disabled={!newItemText.trim() || addMutation.isPending} onClick={handleAdd}>
 					{addMutation.isPending ? <Throbber inheritColor size='x12' /> : t('Add')}
 				</Button>
 			</Box>

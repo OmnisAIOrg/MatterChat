@@ -61,9 +61,9 @@ const ActionRow = ({
 	};
 
 	return (
-		<Box mbe={12} p={12} bg='tint' borderRadius='x4'>
-			<Box display='flex' alignItems='center' mbe={8}>
-				<Box fontScale='c1' color='hint' mie={8}>
+		<Box marginBlockEnd={12} padding={12} backgroundColor='tint' borderRadius='x4'>
+			<Box display='flex' alignItems='center' marginBlockEnd={8}>
+				<Box fontScale='c1' color='hint' marginInlineEnd={8}>
 					{index + 1}.
 				</Box>
 				<Box flexGrow={1}>
@@ -82,33 +82,51 @@ const ActionRow = ({
 				</Box>
 				{isSequence && (
 					<>
-						<Button mis={4} small icon='chevron-up' title={t('Move_up', { defaultValue: 'Move up' })} disabled={index === 0} onClick={() => onMove(-1)} />
-						<Button mis={2} small icon='chevron-down' title={t('Move_down', { defaultValue: 'Move down' })} disabled={index === count - 1} onClick={() => onMove(1)} />
+						<Button
+							marginInlineStart={4}
+							small
+							icon='chevron-up'
+							title={t('Move_up', { defaultValue: 'Move up' })}
+							disabled={index === 0}
+							onClick={() => onMove(-1)}
+						/>
+						<Button
+							marginInlineStart={2}
+							small
+							icon='chevron-down'
+							title={t('Move_down', { defaultValue: 'Move down' })}
+							disabled={index === count - 1}
+							onClick={() => onMove(1)}
+						/>
 					</>
 				)}
-				<Button mis={4} small icon='trash' title={t('Remove')} onClick={onRemove} />
+				<Button marginInlineStart={4} small icon='trash' title={t('Remove')} onClick={onRemove} />
 			</Box>
 
 			{spec?.gated && (
-				<Box mbe={8}>
+				<Box marginBlockEnd={8}>
 					<Chip>
-						<Icon name='warning' size='x12' mie={4} />
+						<Icon name='warning' size='x12' marginInlineEnd={4} />
 						{t('Boards_Automation_GatedAction', { defaultValue: 'Requires a server setting to be enabled' })}
 					</Chip>
 				</Box>
 			)}
 
 			{isSequence && (
-				<Field mbe={8}>
+				<Field marginBlockEnd={8}>
 					<FieldLabel>{t('Boards_Automation_StepDelay', { defaultValue: 'Delay before this step' })}</FieldLabel>
 					<FieldRow>
-						<TextInput value={action.delay ?? ''} placeholder='1d' onChange={(e) => setParam('delay', (e.target as HTMLInputElement).value)} />
+						<TextInput
+							value={action.delay ?? ''}
+							placeholder='1d'
+							onChange={(e) => setParam('delay', (e.target as HTMLInputElement).value)}
+						/>
 					</FieldRow>
 				</Field>
 			)}
 
 			{spec?.params.map((p) => (
-				<Field key={p.key} mbe={8}>
+				<Field key={p.key} marginBlockEnd={8}>
 					<FieldLabel>
 						{t(p.labelKey as Parameters<typeof t>[0])}
 						{p.required === false ? ` (${t('Optional', { defaultValue: 'optional' })})` : ''}
@@ -161,7 +179,7 @@ const ActionRows = ({ actions, options, boardId, isSequence, onChange }: ActionR
 	return (
 		<Box>
 			{actions.length === 0 && (
-				<Box fontScale='c1' color='hint' mbe={8}>
+				<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 					{t('Boards_Automation_NoActionsHint', { defaultValue: 'Add at least one action.' })}
 				</Box>
 			)}
@@ -179,8 +197,8 @@ const ActionRows = ({ actions, options, boardId, isSequence, onChange }: ActionR
 					onMove={(dir) => move(index, dir)}
 				/>
 			))}
-			<Button small primary mbs={4} onClick={add}>
-				<Icon name='plus' size='x16' mie={4} />
+			<Button small primary marginBlockStart={4} onClick={add}>
+				<Icon name='plus' size='x16' marginInlineEnd={4} />
 				{t('Boards_Automation_AddAction', { defaultValue: 'Add action' })}
 			</Button>
 		</Box>

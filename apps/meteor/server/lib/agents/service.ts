@@ -4,7 +4,7 @@ import { Db } from 'mongodb';
 import type { IKnowledgeAgent, IKnowledgeAgentAuditLog } from './types';
 import { getChiConfig } from '../chi/config';
 import { getChiBotUser } from '../chi/bot';
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../authorization/hasPermission';
 
 let agentsCollection: any;
 let auditLogCollection: any;

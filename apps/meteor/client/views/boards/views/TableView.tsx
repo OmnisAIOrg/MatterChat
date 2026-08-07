@@ -153,7 +153,7 @@ const TableView = ({ board, viewId }: TableViewProps): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={24}>
+			<Box display='flex' justifyContent='center' padding={24}>
 				<Throbber />
 			</Box>
 		);
@@ -184,11 +184,16 @@ const TableView = ({ board, viewId }: TableViewProps): ReactElement => {
 	const tableFrame = { background: tones.card, border: `1px solid ${tones.stroke}`, borderRadius: 6 } as const;
 
 	return (
-		<Box className='mcLedgerTableView' pi={24} pb={16} style={{ overflowX: 'auto', background: tones.paper, minHeight: '100%' }}>
+		<Box
+			className='mcLedgerTableView'
+			paddingInline={24}
+			paddingBlock={16}
+			style={{ overflowX: 'auto', background: tones.paper, minHeight: '100%' }}
+		>
 			{/* Static, theme-derived constant string — the dense ruled-table skin. */}
 			<style dangerouslySetInnerHTML={{ __html: buildLedgerTableCss(tones.strokeSoft, tones.cardAlt) }} />
 			{isError && (
-				<Box mbe={12}>
+				<Box marginBlockEnd={12}>
 					<Box is='span' style={heatPill(tones.red, tones.redSoft)}>
 						{t('Something_went_wrong')}
 					</Box>

@@ -1,5 +1,5 @@
 import type { IAutomation, Serialized } from '@rocket.chat/core-typings';
-import { Box, Button, Icon, Tabs } from '@rocket.chat/fuselage';
+import { Box, Button, Icon, Tabs, TabsItem } from '@rocket.chat/fuselage';
 import {
 	ContextualbarClose,
 	ContextualbarDialog,
@@ -74,7 +74,7 @@ const AutomationsContextualBar = ({ boardId, onClose }: AutomationsContextualBar
 	return (
 		<ContextualbarDialog onClose={onClose}>
 			<ContextualbarHeader>
-				<Icon name='lightning' size='x20' mie={4} />
+				<Icon name='lightning' size='x20' marginInlineEnd={4} />
 				<ContextualbarTitle>{t('Boards_Automations', { defaultValue: 'Automations' })}</ContextualbarTitle>
 				<ContextualbarClose onClick={onClose} />
 			</ContextualbarHeader>
@@ -82,9 +82,9 @@ const AutomationsContextualBar = ({ boardId, onClose }: AutomationsContextualBar
 			{!editing && (
 				<Tabs>
 					{tabs.map(({ tab: tabKey, labelKey }) => (
-						<Tabs.Item key={tabKey} selected={tab === tabKey} onClick={() => setTab(tabKey)}>
+						<TabsItem key={tabKey} selected={tab === tabKey} onClick={() => setTab(tabKey)}>
 							{t(labelKey as Parameters<typeof t>[0])}
-						</Tabs.Item>
+						</TabsItem>
 					))}
 				</Tabs>
 			)}
@@ -102,16 +102,14 @@ const AutomationsContextualBar = ({ boardId, onClose }: AutomationsContextualBar
 					<>
 						{tab === 'activity' && canViewRuns && <AutomationActivity boardId={boardId} queryKey={runsQueryKey} />}
 
-						{tab === 'templates' && (
-							<TemplateGallery boardId={boardId} canManage={canManage} rulesQueryKey={rulesQueryKey} />
-						)}
+						{tab === 'templates' && <TemplateGallery boardId={boardId} canManage={canManage} rulesQueryKey={rulesQueryKey} />}
 
 						{tab !== 'activity' && tab !== 'templates' && (
 							<Box>
 								{canManage && (
-									<Box display='flex' justifyContent='flex-end' mbe={8}>
+									<Box display='flex' justifyContent='flex-end' marginBlockEnd={8}>
 										<Button small primary onClick={() => setEditing({})}>
-											<Icon name='plus' size='x16' mie={4} />
+											<Icon name='plus' size='x16' marginInlineEnd={4} />
 											{t('Boards_Automation_New', { defaultValue: 'New' })}
 										</Button>
 									</Box>

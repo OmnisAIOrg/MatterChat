@@ -36,7 +36,7 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { SystemLogger } from '../../../server/lib/logger/system';
-import { settings } from '../../settings/server';
+import { settings } from '../../../server/settings';
 
 // CFCS base: server-side setting first (admin-configurable, hot), else env. The in-cluster service DNS
 // (e.g. "cfcs" / "cfcs.staging.svc.cluster.local") may be http; any host with a public-looking domain

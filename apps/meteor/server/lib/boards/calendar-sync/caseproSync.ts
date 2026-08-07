@@ -17,7 +17,7 @@
 import type { IBoardCard, ICardCalendarSync } from '@rocket.chat/core-typings';
 import { BoardsCards } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 import type { CaseProCalendarBridge } from './caseproBridge';
 import { cardToEvent, decideInboundDueDate, decideOutbound } from './mapping';

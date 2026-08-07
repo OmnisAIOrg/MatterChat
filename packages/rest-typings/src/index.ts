@@ -3,6 +3,7 @@ import type { KeyOfEach } from '@rocket.chat/core-typings';
 import type { AppsEndpoints } from './apps';
 import type { DefaultEndpoints } from './default';
 import type { ReplacePlaceholders } from './helpers/ReplacePlaceholders';
+import type { AISearchEndpoints } from './v1/aiSearch';
 import type { AssetsEndpoints } from './v1/assets';
 import type { AuthEndpoints } from './v1/auth';
 import type { AutoTranslateEndpoints } from './v1/autoTranslate';
@@ -55,12 +56,14 @@ import type { SettingsEndpoints } from './v1/settings';
 import type { StatisticsEndpoints } from './v1/statistics';
 import type { SubscriptionsEndpoints } from './v1/subscriptionsEndpoints';
 import type { TeamsEndpoints } from './v1/teams';
+import type { TwoFactorChallengesEndpoints } from './v1/twoFactorChallenges';
 import type { UsersEndpoints } from './v1/users';
 import type { VideoConferenceEndpoints } from './v1/videoConference';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export interface Endpoints
-	extends ChannelsEndpoints,
+	extends AISearchEndpoints,
+		ChannelsEndpoints,
 		MeEndpoints,
 		ModerationEndpoints,
 		BannersEndpoints,
@@ -117,6 +120,7 @@ export interface Endpoints
 		AuthEndpoints,
 		ImportEndpoints,
 		ServerEventsEndpoints,
+		TwoFactorChallengesEndpoints,
 		ExternalWorkspacesEndpoints,
 		DefaultEndpoints {}
 
@@ -237,6 +241,7 @@ export * from './v1/settings';
 export * from './v1/teams';
 export * from './v1/videoConference';
 export * from './v1/assets';
+export * from './v1/aiSearch';
 export * from './v1/channels';
 export * from './v1/customSounds';
 export type * from './v1/customUserStatus';
@@ -305,6 +310,7 @@ export * from './v1/auth';
 export * from './v1/cloud';
 export * from './v1/banners';
 export * from './default';
+export * from './v1/twoFactorChallenges';
 
 // Export the ajv instance for use in other packages
 export * from './v1/Ajv';

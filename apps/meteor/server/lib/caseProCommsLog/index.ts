@@ -15,7 +15,7 @@ import type { IMessage, IRoom } from '@rocket.chat/core-typings';
 import { Messages, Rooms } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../app/settings/server';
+import { settings } from '../../settings';
 import { caseProClient } from '../boards/casepro/client';
 import { callbacks } from '../callbacks';
 import { SystemLogger } from '../logger/system';

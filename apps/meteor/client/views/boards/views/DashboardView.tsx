@@ -37,8 +37,8 @@ const Metric = ({ label, value, tone }: { label: string; value: ReactNode; tone?
 	const rail = risk ?? warn ?? tones.green;
 	return (
 		<Box
-			pb={10}
-			pi={12}
+			paddingBlock={10}
+			paddingInline={12}
 			minWidth={150}
 			flexGrow={1}
 			flexBasis={150}
@@ -49,7 +49,7 @@ const Metric = ({ label, value, tone }: { label: string; value: ReactNode; tone?
 				boxShadow: `inset 3px 0 0 0 ${rail}`,
 			}}
 		>
-			<Box mbe={4} style={monoLabel(tones)}>
+			<Box marginBlockEnd={4} style={monoLabel(tones)}>
 				{label}
 			</Box>
 			<Box fontScale='h2' style={{ ...tabularNums, color: risk ?? warn }}>
@@ -112,15 +112,15 @@ const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={24}>
+			<Box display='flex' justifyContent='center' padding={24}>
 				<Throbber />
 			</Box>
 		);
 	}
 
 	return (
-		<Box pi={24} pb={16} style={{ background: tones.paper, minHeight: '100%' }}>
-			<Box display='flex' flexWrap='wrap' mbe={24} style={{ gap: '10px' }}>
+		<Box paddingInline={24} paddingBlock={16} style={{ background: tones.paper, minHeight: '100%' }}>
+			<Box display='flex' flexWrap='wrap' marginBlockEnd={24} style={{ gap: '10px' }}>
 				<Metric label={t('Boards_Views_Dash_Total', { defaultValue: 'Total cards' })} value={stats.total} />
 				<Metric
 					label={t('Boards_Views_Dash_Overdue', { defaultValue: 'Overdue' })}
@@ -135,7 +135,7 @@ const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 				<Metric label={t('Boards_Views_Dash_Completed', { defaultValue: 'Completed (dated)' })} value={stats.completedDue} />
 			</Box>
 
-			<Box fontScale='h4' color='default' mbe={12} style={serifCaption}>
+			<Box fontScale='h4' color='default' marginBlockEnd={12} style={serifCaption}>
 				{t('Boards_Views_Dash_Distribution', { defaultValue: 'Distribution' })}
 			</Box>
 
@@ -146,8 +146,8 @@ const DashboardView = ({ board, viewId }: DashboardViewProps): ReactElement => {
 			)}
 
 			{distribution.map((d) => (
-				<Box key={d.label} mbe={10}>
-					<Box display='flex' justifyContent='space-between' mbe={3}>
+				<Box key={d.label} marginBlockEnd={10}>
+					<Box display='flex' justifyContent='space-between' marginBlockEnd={3}>
 						<Box fontScale='p2b' color='default' withTruncatedText>
 							{d.label}
 						</Box>

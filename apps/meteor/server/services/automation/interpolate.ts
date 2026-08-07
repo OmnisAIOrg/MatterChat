@@ -1,4 +1,4 @@
-import { settings } from '../../../app/settings/server';
+import { settings } from '../../settings';
 import type { AutomationContext } from './context';
 
 /**

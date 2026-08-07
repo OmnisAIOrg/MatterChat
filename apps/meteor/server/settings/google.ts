@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 /**
  * Settings for the Google Chat connector (the greenfield Google Chat REST provider for the

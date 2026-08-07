@@ -12,7 +12,7 @@
  */
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../../settings/server';
+import { settings } from '../../../../../server/settings';
 
 /** Google Chat REST v1 base URL — the only Chat host the provider talks to. */
 export const CHAT_BASE = 'https://chat.googleapis.com/v1';

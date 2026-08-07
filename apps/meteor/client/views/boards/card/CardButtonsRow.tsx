@@ -68,8 +68,8 @@ const CardButtonsRow = ({ boardId, cardId, cardType }: CardButtonsRowProps): Rea
 	}
 
 	return (
-		<Box mbs={16}>
-			<Box fontScale='c1' color='hint' mbe={8}>
+		<Box marginBlockStart={16}>
+			<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 				{t('Boards_Automation_Card_Buttons', { defaultValue: 'Card buttons' })}
 			</Box>
 			<ButtonGroup>
@@ -82,9 +82,9 @@ const CardButtonsRow = ({ boardId, cardId, cardType }: CardButtonsRowProps): Rea
 						title={automation.description ?? automation.name}
 					>
 						{runMutation.isPending && runMutation.variables === automation._id ? (
-							<Throbber inheritColor size='x12' mie={4} />
+							<Throbber inheritColor size='x12' marginInlineEnd={4} />
 						) : (
-							<Icon name={(automation.icon as IconName) ?? 'play'} size='x16' mie={4} />
+							<Icon name={(automation.icon as IconName) ?? 'play'} size='x16' marginInlineEnd={4} />
 						)}
 						{automation.name}
 					</Button>

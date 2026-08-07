@@ -47,25 +47,34 @@ const DryRunPanel = ({ result }: { result: DryRunResult }): ReactElement => {
 	const actions = (result.actionsRun as DryRunActionResult[]) ?? [];
 
 	return (
-		<Box mbs={12}>
+		<Box marginBlockStart={12}>
 			<Callout type='info' icon='eye' title={t('Boards_Automation_DryRunTitle', { defaultValue: 'Dry run — nothing was changed' })}>
 				{t('Boards_Automation_DryRunSubtitle', {
 					defaultValue: 'These are the actions that would run. Integration actions were validated only.',
 				})}
 			</Callout>
 
-			<Box mbs={12}>
+			<Box marginBlockStart={12}>
 				{actions.length === 0 && (
 					<Box fontScale='c1' color='hint'>
 						{t('Boards_Automation_DryRunNoActions', { defaultValue: 'No actions would run (conditions did not match).' })}
 					</Box>
 				)}
 				{actions.map((a) => (
-					<Box key={a.index} display='flex' alignItems='flex-start' mbe={8} pb={8} pi={8} bg='tint' borderRadius='x4'>
-						<Icon name='arrow-forward' size='x16' mie={8} mbs={2} color='hint' />
+					<Box
+						key={a.index}
+						display='flex'
+						alignItems='flex-start'
+						marginBlockEnd={8}
+						paddingBlock={8}
+						paddingInline={8}
+						backgroundColor='tint'
+						borderRadius='x4'
+					>
+						<Icon name='arrow-forward' size='x16' marginInlineEnd={8} marginBlockStart={2} color='hint' />
 						<Box flexGrow={1}>
-							<Box display='flex' alignItems='center' mbe={2}>
-								<Box fontScale='p2b' color='default' mie={8}>
+							<Box display='flex' alignItems='center' marginBlockEnd={2}>
+								<Box fontScale='p2b' color='default' marginInlineEnd={8}>
 									{a.type}
 								</Box>
 								{statusTag(a.status, t)}

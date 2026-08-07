@@ -38,7 +38,7 @@ import { WebApp } from 'meteor/webapp';
 
 import { encryptToken, decryptToken, getKeyStatus, isEncryptedValue } from './litboxCrypto';
 import { SystemLogger } from '../../../server/lib/logger/system';
-import { settings } from '../../settings/server';
+import { settings } from '../../../server/settings';
 
 // Parsed once at boot. Must be an absolute https URL; the proxy pins outbound calls to this origin.
 function getLitboxBase(): URL | null {

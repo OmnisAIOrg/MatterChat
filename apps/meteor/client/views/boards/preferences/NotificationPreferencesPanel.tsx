@@ -98,55 +98,50 @@ export const NotificationPreferencesPanel: React.FC<NotificationPreferencesPanel
 	);
 
 	if (loading) {
-		return <Box mbe={16}>Loading preferences...</Box>;
+		return <Box marginBlockEnd={16}>Loading preferences...</Box>;
 	}
 
 	if (!preferences) {
-		return <Box mbe={16}>Unable to load preferences</Box>;
+		return <Box marginBlockEnd={16}>Unable to load preferences</Box>;
 	}
 
 	return (
-		<Box mbe={24}>
+		<Box marginBlockEnd={24}>
 			<Callout type='info' title='Notification Settings'>
 				Choose when you want to be notified about board activity across different channels.
 			</Callout>
 
 			<Margins block={16}>
 				{/* Preset selector */}
-				<Box mbe={24}>
-					<Box mbe={12} fontScale='p2' fontWeight={600}>
+				<Box marginBlockEnd={24}>
+					<Box marginBlockEnd={12} fontScale='p2' fontWeight={600}>
 						Quick Presets
 					</Box>
 					<ToggleGroup value={selectedPreset} onChange={(value) => handlePresetChange(value as NotificationPreset)}>
 						{PRESETS.map((preset) => (
-							<ToggleGroupOption
-								key={preset}
-								value={preset}
-								label={PRESET_LABELS[preset]}
-								disabled={saving}
-							/>
+							<ToggleGroupOption key={preset} value={preset} label={PRESET_LABELS[preset]} disabled={saving} />
 						))}
 					</ToggleGroup>
 				</Box>
 
 				{/* Custom preference matrix */}
-				<Box mbe={24}>
-					<Box mbe={12} fontScale='p2' fontWeight={600}>
+				<Box marginBlockEnd={24}>
+					<Box marginBlockEnd={12} fontScale='p2' fontWeight={600}>
 						Customize by Event Type
 					</Box>
 
 					{/* Table header */}
-					<Box display='grid' gridTemplateColumns='2fr 1fr 1fr 1fr' gap={8} mbe={8}>
+					<Box display='grid' gridTemplateColumns='2fr 1fr 1fr 1fr' gap={8} marginBlockEnd={8}>
 						<Box fontScale='p1' fontWeight={600} color='font-secondary'>
 							Event Type
 						</Box>
-						<Box fontScale='p1' fontWeight={600} color='font-secondary' ta='center'>
+						<Box fontScale='p1' fontWeight={600} color='font-secondary' textAlign='center'>
 							In-App
 						</Box>
-						<Box fontScale='p1' fontWeight={600} color='font-secondary' ta='center'>
+						<Box fontScale='p1' fontWeight={600} color='font-secondary' textAlign='center'>
 							Email
 						</Box>
-						<Box fontScale='p1' fontWeight={600} color='font-secondary' ta='center'>
+						<Box fontScale='p1' fontWeight={600} color='font-secondary' textAlign='center'>
 							Push
 						</Box>
 					</Box>
@@ -158,44 +153,32 @@ export const NotificationPreferencesPanel: React.FC<NotificationPreferencesPanel
 							display='grid'
 							gridTemplateColumns='2fr 1fr 1fr 1fr'
 							gap={8}
-							pbs={8}
-							pbe={8}
+							paddingBlockStart={8}
+							paddingBlockEnd={8}
 							borderBlockEnd='default'
 						>
 							<Box fontScale='p2'>{ACTION_LABELS[action]}</Box>
 							<Box display='flex' justifyContent='center'>
-								<Switch
-									checked={preferences.preferences[action].inApp}
-									onChange={() => handleToggle(action, 'inApp')}
-									disabled={saving}
-								/>
+								<Switch checked={preferences.preferences[action].inApp} onChange={() => handleToggle(action, 'inApp')} disabled={saving} />
 							</Box>
 							<Box display='flex' justifyContent='center'>
-								<Switch
-									checked={preferences.preferences[action].email}
-									onChange={() => handleToggle(action, 'email')}
-									disabled={saving}
-								/>
+								<Switch checked={preferences.preferences[action].email} onChange={() => handleToggle(action, 'email')} disabled={saving} />
 							</Box>
 							<Box display='flex' justifyContent='center'>
-								<Switch
-									checked={preferences.preferences[action].push}
-									onChange={() => handleToggle(action, 'push')}
-									disabled={saving}
-								/>
+								<Switch checked={preferences.preferences[action].push} onChange={() => handleToggle(action, 'push')} disabled={saving} />
 							</Box>
 						</Box>
 					))}
 				</Box>
 
 				{/* Digest settings */}
-				<Box mbe={24}>
-					<Box mbe={12} fontScale='p2' fontWeight={600}>
+				<Box marginBlockEnd={24}>
+					<Box marginBlockEnd={12} fontScale='p2' fontWeight={600}>
 						Digest Email Settings
 					</Box>
 					<Box display='flex' gap={16}>
 						<Box flex={1}>
-							<Box mbe={4} fontScale='p1'>
+							<Box marginBlockEnd={4} fontScale='p1'>
 								Frequency
 							</Box>
 							<ToggleGroup
@@ -221,7 +204,7 @@ export const NotificationPreferencesPanel: React.FC<NotificationPreferencesPanel
 						</Box>
 
 						<Box flex={1}>
-							<Box mbe={4} fontScale='p1'>
+							<Box marginBlockEnd={4} fontScale='p1'>
 								Send at (HH:MM)
 							</Box>
 							<input

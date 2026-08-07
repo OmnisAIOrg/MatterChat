@@ -114,16 +114,12 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 	const practiceAreaId = useId();
 	const preferredId = useId();
 
-	const practiceAreaOptions = useMemo<SelectOption[]>(
-		() => PRACTICE_AREAS.map((pa) => [pa, pa] as [string, string]),
-		[],
-	);
+	const practiceAreaOptions = useMemo<SelectOption[]>(() => PRACTICE_AREAS.map((pa) => [pa, pa] as [string, string]), []);
 	const preferredOptions = useMemo<SelectOption[]>(
 		() =>
-			PREFERRED_CONTACT.map((p) => [
-				p,
-				t(`Boards_PreferredContact_${p}` as Parameters<typeof t>[0], { defaultValue: p }),
-			] as [string, string]),
+			PREFERRED_CONTACT.map(
+				(p) => [p, t(`Boards_PreferredContact_${p}` as Parameters<typeof t>[0], { defaultValue: p })] as [string, string],
+			),
 		[t],
 	);
 
@@ -192,29 +188,26 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 	const submit = handleSubmit((values) => createMutation.mutateAsync(values));
 
 	const dupName =
-		duplicateOf && (duplicateOf.contact.fullName || [duplicateOf.contact.firstName, duplicateOf.contact.lastName].filter(Boolean).join(' '));
+		duplicateOf &&
+		(duplicateOf.contact.fullName || [duplicateOf.contact.firstName, duplicateOf.contact.lastName].filter(Boolean).join(' '));
 
 	return (
 		<GenericModal
 			wrapperFunction={(props) => <Box is='form' onSubmit={submit} {...props} />}
 			title={t('Boards_New_Lead', { defaultValue: 'New Lead' })}
-			confirmText={
-				duplicateOf
-					? t('Boards_Lead_CreateAnyway', { defaultValue: 'Create anyway' })
-					: t('Create')
-			}
+			confirmText={duplicateOf ? t('Boards_Lead_CreateAnyway', { defaultValue: 'Create anyway' }) : t('Create')}
 			onCancel={onClose}
 			onClose={onClose}
 			confirmDisabled={isSubmitting || createMutation.isPending}
 		>
 			{(isSubmitting || createMutation.isPending) && (
-				<Box display='flex' justifyContent='center' mbe={8}>
+				<Box display='flex' justifyContent='center' marginBlockEnd={8}>
 					<Throbber />
 				</Box>
 			)}
 
 			{duplicateOf && (
-				<Callout type='warning' title={t('Boards_Lead_PossibleDuplicate', { defaultValue: 'Possible duplicate' })} mbe={12}>
+				<Callout type='warning' title={t('Boards_Lead_PossibleDuplicate', { defaultValue: 'Possible duplicate' })} marginBlockEnd={12}>
 					{t('Boards_Lead_DuplicateHint', {
 						defaultValue: 'An open lead with this phone or email already exists',
 					})}
@@ -244,15 +237,15 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				{errors.practiceArea && <FieldError>{errors.practiceArea.message}</FieldError>}
 			</Field>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel>{t('First_name')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('firstName', { required: t('Required_field', { field: t('First_name') }) })} />
 					</FieldRow>
 					{errors.firstName && <FieldError>{errors.firstName.message}</FieldError>}
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Last_name')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('lastName')} />
@@ -260,20 +253,21 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			</Box>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Phone')}</FieldLabel>
 					<FieldRow>
 						<TextInput
 							{...register('phone', {
-								validate: (v) => Boolean(v.trim() || email.trim()) || t('Boards_Lead_PhoneOrEmail', { defaultValue: 'Phone or email is required' }),
+								validate: (v) =>
+									Boolean(v.trim() || email.trim()) || t('Boards_Lead_PhoneOrEmail', { defaultValue: 'Phone or email is required' }),
 							})}
 							placeholder='(555) 555-5555'
 						/>
 					</FieldRow>
 					{errors.phone && <FieldError>{errors.phone.message}</FieldError>}
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Email')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('email')} placeholder='name@example.com' />
@@ -281,7 +275,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			</Box>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={preferredId}>{t('Boards_PreferredContact', { defaultValue: 'Preferred contact' })}</FieldLabel>
 				<FieldRow>
 					<Controller
@@ -294,14 +288,14 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</FieldRow>
 			</Field>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Boards_IncidentType', { defaultValue: 'Incident type' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('incidentType')} placeholder={t('Boards_IncidentType', { defaultValue: 'Incident type' })} />
 					</FieldRow>
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Boards_IncidentDate', { defaultValue: 'Incident date' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('incidentDate')} placeholder='YYYY-MM-DD' />
@@ -309,15 +303,15 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			</Box>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Boards_JurisdictionState', { defaultValue: 'State (jurisdiction)' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('jurisdictionState')} placeholder='TX' />
 					</FieldRow>
 					<FieldHint>{t('Boards_JurisdictionStateHint', { defaultValue: 'Drives SOL rules' })}</FieldHint>
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Boards_Source', { defaultValue: 'Source' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('source')} placeholder={t('Boards_Source', { defaultValue: 'Source' })} />
@@ -327,7 +321,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 
 			{/* Conditional-by-practice-area fields */}
 			{isMotorVehicle(practiceArea) && (
-				<Field mbs={12}>
+				<Field marginBlockStart={12}>
 					<FieldLabel>{t('Boards_NumberOfVehicles', { defaultValue: 'Number of vehicles involved' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('numberOfVehicles')} placeholder='0' />
@@ -335,7 +329,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			)}
 			{isPremises(practiceArea) && (
-				<Field mbs={12}>
+				<Field marginBlockStart={12}>
 					<FieldLabel>{t('Boards_PropertyType', { defaultValue: 'Property type' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('propertyType')} placeholder={t('Boards_PropertyType', { defaultValue: 'Property type' })} />
@@ -343,7 +337,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			)}
 			{isWorkersComp(practiceArea) && (
-				<Field mbs={12}>
+				<Field marginBlockStart={12}>
 					<FieldLabel>{t('Boards_Employer', { defaultValue: 'Employer' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('employer')} />
@@ -351,7 +345,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			)}
 			{isWrongfulDeath(practiceArea) && (
-				<Field mbs={12}>
+				<Field marginBlockStart={12}>
 					<FieldLabel>{t('Boards_DateOfDeath', { defaultValue: 'Date of death' })}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('dateOfDeath')} placeholder='YYYY-MM-DD' />
@@ -359,7 +353,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 				</Field>
 			)}
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Description')}</FieldLabel>
 				<FieldRow>
 					<TextAreaInput
@@ -372,7 +366,7 @@ const LeadCaptureModal = ({ onClose, onCreated }: LeadCaptureModalProps) => {
 
 			{/* live conflict/duplicate hint area (also populated by the server response above) */}
 			{!duplicateOf && (phone.trim() || email.trim()) && (
-				<Box fontScale='c1' color='hint' mbs={8}>
+				<Box fontScale='c1' color='hint' marginBlockStart={8}>
 					{t('Boards_Lead_DedupeNote', {
 						defaultValue: 'Duplicate and conflict checks run on save against open leads.',
 					})}

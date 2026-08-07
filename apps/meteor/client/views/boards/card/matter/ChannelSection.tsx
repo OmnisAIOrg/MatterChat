@@ -65,7 +65,7 @@ const ChannelSection = ({ cardId, link }: ChannelSectionProps): ReactElement => 
 		<MatterSection title={t('Boards_Matters_Channel', { defaultValue: 'Channel' })} icon='hash'>
 			{roomId ? (
 				<Box>
-					<Box display='flex' alignItems='center' flexWrap='wrap' mbe={8} style={{ gap: '6px' }}>
+					<Box display='flex' alignItems='center' flexWrap='wrap' marginBlockEnd={8} style={{ gap: '6px' }}>
 						<Tag>
 							<Icon name='hash' size='x16' />{' '}
 							{linkedRoom?.name ?? t('Boards_Matters_Channel_LinkedShort', { defaultValue: 'Channel linked' })}
@@ -80,7 +80,7 @@ const ChannelSection = ({ cardId, link }: ChannelSectionProps): ReactElement => 
 					</Box>
 					<ButtonGroup>
 						<Button small primary onClick={jumpToChannel} disabled={!canJump}>
-							<Icon name='arrow-jump' size='x14' mie={4} />
+							<Icon name='arrow-jump' size='x14' marginInlineEnd={4} />
 							{t('Boards_Matters_Jump_To_Channel', { defaultValue: 'Jump to channel' })}
 						</Button>
 						<Button small onClick={(): void => unlinkMutation.mutate()} disabled={unlinkMutation.isPending}>
@@ -98,7 +98,7 @@ const ChannelSection = ({ cardId, link }: ChannelSectionProps): ReactElement => 
 						<Throbber inheritColor size='x12' />
 					) : (
 						<>
-							<Icon name='plus' size='x14' mie={4} />
+							<Icon name='plus' size='x14' marginInlineEnd={4} />
 							{t('Boards_Matters_Channel_Create', { defaultValue: 'Create channel' })}
 						</>
 					)}

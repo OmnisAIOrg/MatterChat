@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 /**
  * Settings for Boards two-way calendar sync (Google Calendar + Outlook/Graph Calendar) and

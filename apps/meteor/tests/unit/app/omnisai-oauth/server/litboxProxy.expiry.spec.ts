@@ -48,7 +48,7 @@ proxyquire.noCallThru().load('../../../../../app/omnisai-oauth/server/litboxProx
 	'../../../server/lib/logger/system': {
 		SystemLogger: { error: sinon.stub(), warn: sinon.stub() },
 	},
-	'../../settings/server': {
+	'../../../server/settings': {
 		settings: { get: settingsGet },
 	},
 	'./litboxCrypto': {

@@ -92,9 +92,9 @@ const BulkActionBar = ({ boardId, selectedIds, lists, onClearSelection }: BulkAc
 			display='flex'
 			alignItems='center'
 			flexWrap='wrap'
-			p={8}
-			mbe={8}
-			bg='tint'
+			padding={8}
+			marginBlockEnd={8}
+			backgroundColor='tint'
 			borderRadius='x4'
 			borderWidth='default'
 			borderColor='extra-light'
@@ -102,8 +102,8 @@ const BulkActionBar = ({ boardId, selectedIds, lists, onClearSelection }: BulkAc
 			aria-label={t('Boards_Bulk_Toolbar', { defaultValue: 'Bulk actions' })}
 			className='rcx-boards-bulk-bar'
 		>
-			<Box display='flex' alignItems='center' mie={12} fontScale='p2b' color='default'>
-				{busy && <Throbber inheritColor size='x12' mie={8} />}
+			<Box display='flex' alignItems='center' marginInlineEnd={12} fontScale='p2b' color='default'>
+				{busy && <Throbber inheritColor size='x12' marginInlineEnd={8} />}
 				{t('Boards_Bulk_Selected', { defaultValue: '{{count}} selected', count: selectedIds.length })}
 			</Box>
 
@@ -111,20 +111,20 @@ const BulkActionBar = ({ boardId, selectedIds, lists, onClearSelection }: BulkAc
 			    props at runtime (type-level only). */}
 			<ButtonGroup {...({ mie: 8 } as unknown as ComponentProps<typeof ButtonGroup>)}>
 				<Button small disabled={busy} onClick={() => run({ action: 'complete', completed: true })}>
-					<Icon name='circle-check' size='x16' mie={4} />
+					<Icon name='circle-check' size='x16' marginInlineEnd={4} />
 					{t('Complete', { defaultValue: 'Complete' })}
 				</Button>
 				<Button small disabled={busy} onClick={() => run({ action: 'archive' })}>
-					<Icon name='arrow-down-box' size='x16' mie={4} />
+					<Icon name='arrow-down-box' size='x16' marginInlineEnd={4} />
 					{t('Archive', { defaultValue: 'Archive' })}
 				</Button>
 				<Button small danger disabled={busy} onClick={() => run({ action: 'delete' })}>
-					<Icon name='trash' size='x16' mie={4} />
+					<Icon name='trash' size='x16' marginInlineEnd={4} />
 					{t('Delete', { defaultValue: 'Delete' })}
 				</Button>
 			</ButtonGroup>
 
-			<Box mie={8}>
+			<Box marginInlineEnd={8}>
 				<GenericMenu
 					title={t('Boards_Bulk_SetPriority', { defaultValue: 'Set priority' })}
 					icon='flag'
@@ -134,7 +134,7 @@ const BulkActionBar = ({ boardId, selectedIds, lists, onClearSelection }: BulkAc
 				/>
 			</Box>
 
-			<Box mie={8}>
+			<Box marginInlineEnd={8}>
 				<GenericMenu
 					title={t('Boards_Bulk_MoveToList', { defaultValue: 'Move to list' })}
 					icon='arrow-forward'

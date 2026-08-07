@@ -186,7 +186,7 @@ const LeadsBoardRoute = () => {
 						{board.title}
 					</h1>
 					<Box style={{ flex: 1 }} />
-					<CaseProStatusChip mie={4} />
+					<CaseProStatusChip marginInlineEnd={4} />
 					<ButtonGroup>
 						{!caseProStub && (
 							<IconButton
@@ -210,12 +210,12 @@ const LeadsBoardRoute = () => {
 								borderRadius: LEADS_RADIUS.button,
 							}}
 						>
-							<Icon name='plus' size='x16' mie={4} />
+							<Icon name='plus' size='x16' marginInlineEnd={4} />
 							{t('Boards_New_Lead', { defaultValue: 'New Lead' })}
 						</Button>
 					</ButtonGroup>
 				</Box>
-				<CaseProStubBanner variant='leads' pi={24} pbs={16} />
+				<CaseProStubBanner variant='leads' paddingInline={24} paddingBlockStart={16} />
 				<LeadsBoardView board={board} lists={lists} />
 			</Page>
 			{cardId && boardId && <CardDetail boardId={boardId} cardId={cardId} onClose={handleCloseCard} />}

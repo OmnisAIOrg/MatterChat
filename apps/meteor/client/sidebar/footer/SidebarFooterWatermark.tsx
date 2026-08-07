@@ -83,7 +83,7 @@ const suitemarkClass = css`
 // link so anyone on the web can download the installer (macOS / Windows / Linux).
 export const SidebarFooterWatermark = () => {
 	return (
-		<Box pi={16} pbs={12} pbe={8}>
+		<Box paddingInline={16} paddingBlockStart={12} paddingBlockEnd={8}>
 			{!inDesktopApp && (
 				<Box
 					is='a'
@@ -94,9 +94,9 @@ export const SidebarFooterWatermark = () => {
 					display='flex'
 					alignItems='center'
 					justifyContent='center'
-					pbe={8}
+					paddingBlockEnd={8}
 				>
-					<Icon name='download' size='x14' color='hint' mie={4} />
+					<Icon name='download' size='x14' color='hint' marginInlineEnd={4} />
 					<Box fontScale='micro' color='hint'>
 						Get the desktop app
 					</Box>
@@ -109,7 +109,7 @@ export const SidebarFooterWatermark = () => {
 				rel='noopener noreferrer'
 				title='Powered by Omnis AI'
 				className={suitemarkClass}
-				pbe={4}
+				paddingBlockEnd={4}
 			>
 				<Box is='span' className='mc-suitemark__label'>
 					Powered by

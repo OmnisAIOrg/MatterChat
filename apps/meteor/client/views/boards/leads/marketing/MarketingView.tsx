@@ -95,21 +95,21 @@ const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?
 	const tones = useLedgerTones();
 	return (
 		<Box
-			pb={10}
-			pi={12}
+			paddingBlock={10}
+			paddingInline={12}
 			minWidth={140}
 			flexGrow={1}
 			flexBasis={140}
 			style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
 		>
-			<Box mbe={4} style={monoLabel(tones)}>
+			<Box marginBlockEnd={4} style={monoLabel(tones)}>
 				{label}
 			</Box>
 			<Box fontScale='h3' color='default' style={tabularNums}>
 				{value}
 			</Box>
 			{hint !== undefined && hint !== null && hint !== '' && (
-				<Box fontScale='micro' color='hint' mbs={4}>
+				<Box fontScale='micro' color='hint' marginBlockStart={4}>
 					{hint}
 				</Box>
 			)}
@@ -122,9 +122,9 @@ const RoiRow = ({ row, isCampaign }: { row: SourceRoiRow; isCampaign: boolean })
 	return (
 		<TableRow>
 			<TableCell>
-				<Box display='flex' alignItems='center' pis={isCampaign ? 20 : 0}>
-					{isCampaign && <Icon name='kebab' size='x12' mie={4} color='hint' />}
-					<Box withTruncatedText color={isCampaign ? 'hint' : 'default'} mie={6}>
+				<Box display='flex' alignItems='center' paddingInlineStart={isCampaign ? 20 : 0}>
+					{isCampaign && <Icon name='kebab' size='x12' marginInlineEnd={4} color='hint' />}
+					<Box withTruncatedText color={isCampaign ? 'hint' : 'default'} marginInlineEnd={6}>
 						{isCampaign ? row.campaignName : row.sourceName}
 					</Box>
 					{!isCampaign && row.kind && (
@@ -180,7 +180,7 @@ const MarketingView = (): ReactElement => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='dashboard' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='dashboard' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Leads_Marketing_ROI', { defaultValue: 'Marketing ROI' })}
 						</Box>
@@ -190,10 +190,10 @@ const MarketingView = (): ReactElement => {
 			<PageScrollableContentWithShadow>
 				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
 				<LedgerPageStyleTag />
-				<CaseProStubBanner mbe={16} />
+				<CaseProStubBanner marginBlockEnd={16} />
 
 				{!revenueResolved && (
-					<Box mbe={16}>
+					<Box marginBlockEnd={16}>
 						<Callout
 							type='warning'
 							icon='warning'
@@ -206,20 +206,20 @@ const MarketingView = (): ReactElement => {
 					</Box>
 				)}
 
-				<Box display='flex' alignItems='flex-end' mbe={16} mi='neg-x4'>
-					<Field mi={4} maxWidth={180}>
+				<Box display='flex' alignItems='flex-end' marginBlockEnd={16} marginInline='neg-x4'>
+					<Field marginInline={4} maxWidth={180}>
 						<FieldLabel>{t('From', { defaultValue: 'From' })}</FieldLabel>
 						<FieldRow>
 							<TextInput value={from} onChange={(e) => setFrom((e.target as HTMLInputElement).value)} placeholder='YYYY-MM-DD' />
 						</FieldRow>
 					</Field>
-					<Field mi={4} maxWidth={180}>
+					<Field marginInline={4} maxWidth={180}>
 						<FieldLabel>{t('To', { defaultValue: 'To' })}</FieldLabel>
 						<FieldRow>
 							<TextInput value={to} onChange={(e) => setTo((e.target as HTMLInputElement).value)} placeholder='YYYY-MM-DD' />
 						</FieldRow>
 					</Field>
-					<Box mi={4} mbe={4}>
+					<Box marginInline={4} marginBlockEnd={4}>
 						<Button small onClick={() => refetch()}>
 							{t('Apply', { defaultValue: 'Apply' })}
 						</Button>
@@ -227,7 +227,7 @@ const MarketingView = (): ReactElement => {
 				</Box>
 
 				{totals && (
-					<Box display='flex' flexWrap='wrap' mbe={16} style={{ gap: '12px' }}>
+					<Box display='flex' flexWrap='wrap' marginBlockEnd={16} style={{ gap: '12px' }}>
 						<Metric label={t('Boards_Leads_Funnel_New', { defaultValue: 'Leads' })} value={totals.leads} />
 						<Metric label={t('Boards_Leads_Funnel_Signed', { defaultValue: 'Signed' })} value={totals.signed} />
 						<Metric label={t('Boards_Leads_Conversion_Rate', { defaultValue: 'Conversion rate' })} value={fmtPct(totals.conversionPct)} />
@@ -238,14 +238,14 @@ const MarketingView = (): ReactElement => {
 				)}
 
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}
 
 				{isError && !isLoading && (
 					<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-						<Button small mbs={8} onClick={() => refetch()}>
+						<Button small marginBlockStart={8} onClick={() => refetch()}>
 							{t('Reload_page')}
 						</Button>
 					</Callout>

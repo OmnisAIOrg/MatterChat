@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 /**
  * Settings for the Slack connector (the Slack Web API provider for the external-workspace connector

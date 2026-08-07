@@ -274,7 +274,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 		// Ledger-dense skin (style-only): paper ground + serif caption + card-tone
 		// panels — parity with the redesigned board views around this surface.
 		<Box padding={16} overflow='auto' height='100%' style={{ background: tones.paper }}>
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={12}>
+			<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={12}>
 				<Box fontScale='h3' style={serifCaption}>
 					{t('Boards_Forms_Title', { defaultValue: 'Forms' })}
 				</Box>
@@ -297,13 +297,13 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 							})
 						}
 					>
-						<Icon name='plus' size='x16' mie={4} />
+						<Icon name='plus' size='x16' marginInlineEnd={4} />
 						{t('Boards_Forms_New', { defaultValue: 'New form' })}
 					</Button>
 				)}
 			</Box>
 
-			<Callout type='info' mbe={16} title={t('Boards_Forms_Intro_Title', { defaultValue: 'Intake without an account' })}>
+			<Callout type='info' marginBlockEnd={16} title={t('Boards_Forms_Intro_Title', { defaultValue: 'Intake without an account' })}>
 				{t('Boards_Forms_Intro', {
 					defaultValue:
 						'Share a form link publicly — every submission becomes a card in the list you choose. Disable a form any time to kill its link.',
@@ -312,19 +312,19 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 
 			{/* ------------------------------------------------ editor */}
 			{editor && (
-				<Box mbe={20} padding={16} style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}>
-					<Box fontScale='h4' mbe={12} style={serifCaption}>
+				<Box marginBlockEnd={20} padding={16} style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}>
+					<Box fontScale='h4' marginBlockEnd={12} style={serifCaption}>
 						{editor.formId ? t('Boards_Forms_Edit', { defaultValue: 'Edit form' }) : t('Boards_Forms_New', { defaultValue: 'New form' })}
 					</Box>
 
-					<Field mbe={8}>
+					<Field marginBlockEnd={8}>
 						<FieldLabel>{t('Title', { defaultValue: 'Title' })}</FieldLabel>
 						<FieldRow>
 							<TextInput value={editor.title} onChange={(e) => setEditor({ ...editor, title: (e.target as HTMLInputElement).value })} />
 						</FieldRow>
 					</Field>
 
-					<Field mbe={8}>
+					<Field marginBlockEnd={8}>
 						<FieldLabel>{t('Description', { defaultValue: 'Description' })}</FieldLabel>
 						<FieldRow>
 							<TextAreaInput
@@ -335,7 +335,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 						</FieldRow>
 					</Field>
 
-					<Field mbe={8}>
+					<Field marginBlockEnd={8}>
 						<FieldLabel>{t('Boards_Forms_TargetList', { defaultValue: 'Cards go to list' })}</FieldLabel>
 						<FieldRow>
 							<Select
@@ -346,7 +346,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 						</FieldRow>
 					</Field>
 
-					<Field mbe={16}>
+					<Field marginBlockEnd={16}>
 						<FieldLabel>{t('Boards_Forms_TitleTemplate', { defaultValue: 'Card title template (optional)' })}</FieldLabel>
 						<FieldRow>
 							<TextInput
@@ -359,11 +359,11 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 						</FieldRow>
 					</Field>
 
-					<Box fontScale='p2b' mbe={8}>
+					<Box fontScale='p2b' marginBlockEnd={8}>
 						{t('Boards_Forms_Fields', { defaultValue: 'Fields (in order)' })}
 					</Box>
 					{editor.fields.map((field, index) => (
-						<Box key={field.id ?? `new-${index}`} display='flex' alignItems='flex-start' mbe={8} style={{ gap: '8px' }}>
+						<Box key={field.id ?? `new-${index}`} display='flex' alignItems='flex-start' marginBlockEnd={8} style={{ gap: '8px' }}>
 							<Box flexGrow={2} minWidth={0}>
 								<TextInput
 									placeholder={t('Boards_Forms_FieldLabel', { defaultValue: 'Label' })}
@@ -391,7 +391,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 								display='flex'
 								alignItems='center'
 								flexShrink={0}
-								mbs={8}
+								marginBlockStart={8}
 								title={t('Boards_Forms_FieldRequired', { defaultValue: 'Required' })}
 							>
 								<CheckBox checked={field.required} onChange={() => patchField(index, { required: !field.required })} />
@@ -403,16 +403,16 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 							</ButtonGroup>
 						</Box>
 					))}
-					<Button small mbe={16} onClick={() => setEditor({ ...editor, fields: [...editor.fields, emptyField()] })}>
-						<Icon name='plus' size='x16' mie={4} />
+					<Button small marginBlockEnd={16} onClick={() => setEditor({ ...editor, fields: [...editor.fields, emptyField()] })}>
+						<Icon name='plus' size='x16' marginInlineEnd={4} />
 						{t('Boards_Forms_AddField', { defaultValue: 'Add field' })}
 					</Button>
 
 					{/* ------------------------------------------ send to intake */}
-					<Box fontScale='p2b' mbe={8}>
+					<Box fontScale='p2b' marginBlockEnd={8}>
 						{t('Boards_Forms_Intake_Title', { defaultValue: 'Send to intake' })}
 					</Box>
-					<Field mbe={8}>
+					<Field marginBlockEnd={8}>
 						<FieldRow>
 							<Select
 								value={editor.intakeRouting}
@@ -430,8 +430,12 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 					</Field>
 
 					{editor.intakeRouting !== 'none' && (
-						<Box mbe={16} padding={12} style={{ background: tones.cardAlt, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}>
-							<Box fontScale='c1' color='hint' mbe={8}>
+						<Box
+							marginBlockEnd={16}
+							padding={12}
+							style={{ background: tones.cardAlt, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
+						>
+							<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 								{editor.intakeRouting === 'lead'
 									? t('Boards_Forms_Intake_Lead_Help', {
 											defaultValue:
@@ -444,7 +448,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 							</Box>
 
 							{MAPPING_KEYS.map(({ key, label }) => (
-								<Field key={key} mbe={4}>
+								<Field key={key} marginBlockEnd={4}>
 									<Box display='flex' alignItems='center' style={{ gap: '8px' }}>
 										<Box width='x140' flexShrink={0} fontScale='c1'>
 											{t(`Boards_Forms_Intake_Map_${key}`, { defaultValue: label })}
@@ -472,7 +476,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 
 							{editor.intakeRouting === 'casepro-direct' && (
 								<>
-									<Field mbe={8} mbs={8}>
+									<Field marginBlockEnd={8} marginBlockStart={8}>
 										<FieldLabel>{t('Boards_Forms_Intake_CaseProOrgId', { defaultValue: 'CasePro org id' })}</FieldLabel>
 										<FieldRow>
 											<TextInput
@@ -481,7 +485,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 											/>
 										</FieldRow>
 									</Field>
-									<Field mbe={4}>
+									<Field marginBlockEnd={4}>
 										<FieldLabel>{t('Boards_Forms_Intake_CaseProSourceToken', { defaultValue: 'CasePro source token' })}</FieldLabel>
 										<FieldRow>
 											<TextInput
@@ -517,7 +521,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 					alignItems='center'
 					justifyContent='space-between'
 					padding={10}
-					mbe={6}
+					marginBlockEnd={6}
 					style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
 				>
 					<Box minWidth={0}>
@@ -541,7 +545,7 @@ const FormsManager = ({ board, lists }: FormsManagerProps): ReactElement => {
 					</Box>
 					<ButtonGroup>
 						<Button small onClick={() => copyLink(form.slug)} title={publicUrlFor(form.slug)}>
-							<Icon name='link' size='x16' mie={4} />
+							<Icon name='link' size='x16' marginInlineEnd={4} />
 							{t('Boards_Forms_CopyLink', { defaultValue: 'Copy link' })}
 						</Button>
 						<Button small onClick={() => toggleMutation.mutate(form)} disabled={toggleMutation.isPending}>

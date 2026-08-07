@@ -57,21 +57,21 @@ const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?
 	const tones = useLedgerTones();
 	return (
 		<Box
-			pb={10}
-			pi={12}
+			paddingBlock={10}
+			paddingInline={12}
 			minWidth={150}
 			flexGrow={1}
 			flexBasis={150}
 			style={{ background: tones.card, border: `1px solid ${tones.strokeSoft}`, borderRadius: 6 }}
 		>
-			<Box mbe={4} style={monoLabel(tones)}>
+			<Box marginBlockEnd={4} style={monoLabel(tones)}>
 				{label}
 			</Box>
 			<Box fontScale='h3' color='default' style={tabularNums}>
 				{value}
 			</Box>
 			{hint !== undefined && hint !== null && hint !== '' && (
-				<Box fontScale='micro' color='hint' mbs={4}>
+				<Box fontScale='micro' color='hint' marginBlockStart={4}>
 					{hint}
 				</Box>
 			)}
@@ -81,7 +81,7 @@ const Metric = ({ label, value, hint }: { label: string; value: ReactNode; hint?
 
 // Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
+	<Box fontScale='h4' color='default' marginBlockStart={20} marginBlockEnd={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -165,7 +165,7 @@ const SourceToSettlement = (): ReactElement => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='dashboard' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='dashboard' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Reports_SourceToSettlement', { defaultValue: 'Source-to-settlement' })}
 						</Box>
@@ -175,16 +175,16 @@ const SourceToSettlement = (): ReactElement => {
 			<PageScrollableContentWithShadow>
 				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
 				<LedgerPageStyleTag />
-				<Box fontScale='c1' color='hint' mbe={16}>
+				<Box fontScale='c1' color='hint' marginBlockEnd={16}>
 					{t('Boards_Reports_SourceToSettlement_Subtitle', {
 						defaultValue: 'Marketing source → signed case → settlement. The closed loop most CRMs lose at "signed".',
 					})}
 				</Box>
 
-				<CaseProStubBanner mbe={16} />
+				<CaseProStubBanner marginBlockEnd={16} />
 
 				{report && !report.revenueResolved && (
-					<Box mbe={16}>
+					<Box marginBlockEnd={16}>
 						<Callout
 							type='warning'
 							icon='warning'
@@ -198,14 +198,14 @@ const SourceToSettlement = (): ReactElement => {
 				)}
 
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}
 
 				{isError && !isLoading && (
 					<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-						<Button small mbs={8} onClick={() => refetch()}>
+						<Button small marginBlockStart={8} onClick={() => refetch()}>
 							{t('Reload_page')}
 						</Button>
 					</Callout>
@@ -306,8 +306,8 @@ const SourceToSettlement = (): ReactElement => {
 						</Box>
 
 						{report.totals.signed > 0 && report.totals.revenue === 0 && report.revenueResolved && (
-							<Box mbs={16} fontScale='c1' color='hint'>
-								<Icon name='info' size='x14' mie={4} />
+							<Box marginBlockStart={16} fontScale='c1' color='hint'>
+								<Icon name='info' size='x14' marginInlineEnd={4} />
 								{t('Boards_Reports_SignedAwaitingRevenue', {
 									defaultValue:
 										'Signed cases are in the pipeline but have no settlement/demand value yet — revenue will populate as matters resolve.',

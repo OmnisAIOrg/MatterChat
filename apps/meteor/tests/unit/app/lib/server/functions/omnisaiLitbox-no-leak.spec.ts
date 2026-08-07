@@ -49,7 +49,7 @@ import { describe, it, beforeEach } from 'mocha';
 import mock from 'proxyquire';
 import Sinon from 'sinon';
 
-import { getDefaultUserFields } from '../../../../../../app/utils/server/functions/getDefaultUserFields';
+import { getDefaultUserFields } from '../../../../../../server/lib/utils/functions/getDefaultUserFields';
 
 type ProjectionFields = Record<string, 0 | 1>;
 
