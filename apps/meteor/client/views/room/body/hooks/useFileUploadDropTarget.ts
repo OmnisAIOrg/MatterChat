@@ -4,6 +4,8 @@ import type { DragEvent, ReactNode } from 'react';
 import { useMemo, useSyncExternalStore } from 'react';
 
 import { useDropTarget } from './useDropTarget';
+// MATTERCHAT: AutoDoc claims the drop in a matter channel — see the note at onFileDrop.
+import { useAutoDocChannelDrop } from '../../../../omnis/autodoc/useAutoDocChannelDrop';
 import { roomCoordinator } from '../../../../lib/rooms/roomCoordinator';
 import { useIsRoomOverMacLimit } from '../../../omnichannel/hooks/useIsRoomOverMacLimit';
 import { useChat } from '../../contexts/ChatContext';
@@ -18,10 +20,16 @@ export const useFileUploadDropTarget = (): readonly [
 		onDismiss: () => void;
 		enabled: boolean;
 		reason?: ReactNode;
+		// MATTERCHAT: product-supplied drop copy (AutoDoc in a matter channel).
+		title?: ReactNode;
+		subtitle?: ReactNode;
 	},
 ] => {
 	const room = useRoom();
 	const { triggerProps, overlayProps } = useDropTarget();
+
+	// MATTERCHAT: AutoDoc intake.
+	const autoDoc = useAutoDocChannelDrop(room);
 
 	const isRoomOverMacLimit = useIsRoomOverMacLimit(room);
 
@@ -66,6 +74,12 @@ export const useFileUploadDropTarget = (): readonly [
 		});
 
 		chat?.flows.uploadFiles({ files: uploads });
+
+		// MATTERCHAT: additionally send readable files to AutoDoc, bound to this
+		// channel's matter. Deliberately AFTER the normal upload and non-blocking:
+		// if AutoDoc submission fails the file is already in the channel as an
+		// ordinary attachment, and the user can retry from the message menu.
+		autoDoc.submit(uploads);
 	});
 
 	const allOverlayProps = useMemo(() => {
@@ -88,9 +102,24 @@ export const useFileUploadDropTarget = (): readonly [
 		return {
 			enabled: true,
 			onFileDrop,
+			// MATTERCHAT: undefined unless AutoDoc claims this room, in which case
+			// the overlay names the matter the files will be filed to.
+			...(autoDoc.active ? { title: autoDoc.title, subtitle: autoDoc.subtitle } : {}),
 			...overlayProps,
 		} as const;
-	}, [isEditing, fileUploadAllowedForUser, fileUploadEnabled, isRoomOverMacLimit, onFileDrop, overlayProps, subscription, t]);
+	}, [
+		isEditing,
+		fileUploadAllowedForUser,
+		fileUploadEnabled,
+		isRoomOverMacLimit,
+		onFileDrop,
+		overlayProps,
+		subscription,
+		t,
+		autoDoc.active,
+		autoDoc.title,
+		autoDoc.subtitle,
+	]);
 
 	return [triggerProps, allOverlayProps] as const;
 };

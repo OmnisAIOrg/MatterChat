@@ -40,6 +40,12 @@ export interface IRoom extends IRocketChatRecord {
 	// this Client channel. The inbound poll reads `> clientSyncCursor` and advances it. Present
 	// only on rooms where `clientChannel` is true.
 	clientSyncCursor?: string;
+	// MATTERCHAT: AutoDoc auto-processing of PDFs posted to this channel. OFF unless
+	// explicitly true — an absent flag must never mean "on", because auto-processing
+	// spends OCR credits with no human in the loop. Only offered on matter-linked
+	// channels; see server/lib/autodoc/autoProcess.ts for the remaining guards
+	// (PDFs only, per-file size ceiling, per-channel daily cap).
+	autodocAutoProcess?: boolean;
 	importIds?: string[]; // Slack channel ids when this room is bridged via SlackBridge
 	// CasePro comms-log — auto-log this channel's messages onto the linked matter's
 	// communication history (only meaningful when `matterId` is set).

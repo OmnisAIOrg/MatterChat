@@ -3,6 +3,7 @@ import { BoardsSignupPackets, BoardsLeads, BoardsActivities } from '@rocket.chat
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermissionAsync } from '../../authorization/hasPermission';
+import { omnisProofEsignProvider } from '../../omnisproof/provider';
 
 /**
  * Sign-up / retainer packet + e-sign state machine (M6 — intake-lead-management
@@ -51,21 +52,31 @@ export interface IEsignProvider {
 const manualProvider: IEsignProvider = {
 	name: 'manual',
 	async send(input) {
-		// TODO(esign): swap for a live DocuSign/Dropbox-Sign/OmnisProof adapter that
-		// uploads `input.docRef`, adds the signer, and returns the real envelope id +
-		// signing URL. Live creds are configured in a later phase.
 		return { envelopeId: `manual:${input.docRef}:${Date.now()}` };
 	},
 };
 
-/** Live adapters register here keyed by provider name (none wired in M6). */
+/**
+ * Live adapters register here keyed by provider name.
+ *
+ * `omnisproof` is wired (server/lib/omnisproof/provider.ts). DocuSign and
+ * Dropbox-Sign remain unregistered and fall back to `manual` — the seam is the
+ * integration point, so adding one is a single line here plus an adapter that
+ * implements {@link IEsignProvider}.
+ */
 const PROVIDERS: Partial<Record<EsignProvider, IEsignProvider>> = {
 	manual: manualProvider,
+	omnisproof: omnisProofEsignProvider,
 };
 
-/** Resolve a provider adapter by name, falling back to manual. */
+/**
+ * Resolve a provider adapter by name, falling back to manual.
+ *
+ * The fallback is load-bearing: a packet whose stored provider is no longer
+ * registered still sends by hand rather than throwing, so a configuration
+ * change cannot strand existing packets mid-state-machine.
+ */
 function resolveProvider(provider?: EsignProvider): IEsignProvider {
-	// TODO(esign): register live DocuSign/Dropbox-Sign/OmnisProof adapters in PROVIDERS.
 	return (provider && PROVIDERS[provider]) || manualProvider;
 }
 

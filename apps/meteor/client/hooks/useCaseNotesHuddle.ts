@@ -1,48 +1,57 @@
+import { useSetting } from '@rocket.chat/ui-contexts';
 import { useCallback } from 'react';
 
+import { omnisPost } from '../omnis/shell/omnisRest';
+
 /**
- * useCaseNotesHuddle: Integration hook for CaseNotes auto-note on huddle start
- * Designed to work best-effort (non-blocking, graceful failure)
+ * useCaseNotesHuddle: CaseNotes capture when a huddle starts.
  *
- * When a huddle starts in a channel linked to a CaseNotes case/matter,
- * this hook sends a signal to auto-create an entry in the case notes.
- * If CaseNotes is not available or the room is not linked, it fails silently.
+ * Previously a placeholder that only `console.debug`d in development. It now
+ * calls the real dispatch endpoint — but its original contract is preserved
+ * DELIBERATELY and completely: **best-effort, non-blocking, fail-silent.**
+ *
+ * A huddle must start whether or not CaseNotes is reachable. Nothing in this
+ * hook is awaited by the caller, no error is surfaced, and every failure path
+ * returns normally. If CaseNotes is disabled, the room is not matter-linked, or
+ * the backend is down, the huddle is simply not recorded.
+ *
+ * The matter binding is resolved SERVER-side from `roomId` (the shared
+ * matter-context rule), so a huddle in a matter channel is filed to that matter
+ * and a huddle anywhere else is filed to nobody rather than guessed at.
+ *
+ * Consent still applies: the server refuses to start any capture without a bot
+ * display name and disclosure text, so this path cannot produce a silent
+ * recorder either.
  */
 export const useCaseNotesHuddle = () => {
+	const caseNotesEnabled = useSetting('CaseNotes_Enabled', false);
+
 	/**
-	 * notifyHuddleStart: Send best-effort notification to CaseNotes
-	 * @param roomId - MatterChat room ID where huddle started
-	 * @returns Promise<void> - resolves when notification sent (or fails silently)
+	 * @param roomId - MatterChat room where the huddle started
+	 * @returns resolves once the attempt is made (or immediately skipped)
 	 */
-	const notifyHuddleStart = useCallback(async (roomId: string) => {
-		try {
-			// Best-effort: Check if room is linked to a case/matter
-			// This is a placeholder for the actual CaseNotes integration
-			// In production, this would:
-			// 1. Query the room metadata for linked case/matter ID
-			// 2. POST to CaseNotes API to create an auto-note entry
-			// 3. Include huddle start time, participants, duration placeholder
-
-			// For now, we log the attempt (visible in dev console)
-			if (process.env.NODE_ENV === 'development') {
-				console.debug('[Huddles] CaseNotes auto-note request:', { roomId });
+	const notifyHuddleStart = useCallback(
+		async (roomId: string) => {
+			if (!caseNotesEnabled) {
+				return;
 			}
-
-			// Placeholder API call (when CaseNotes integration is ready)
-			// await fetch(`/api/v1/cases/auto-note`, {
-			//   method: 'POST',
-			//   headers: { 'Content-Type': 'application/json' },
-			//   body: JSON.stringify({
-			//     type: 'huddle_start',
-			//     roomId,
-			//     timestamp: new Date().toISOString(),
-			//   }),
-			// });
-		} catch (error) {
-			// Silently fail - CaseNotes integration is optional
-			// Never block huddle start on CaseNotes unavailability
-		}
-	}, []);
+			try {
+				await omnisPost('/v1/casenotes.startRecording', {
+					// `internal-strategy` is the conservative default for a huddle
+					// nobody has classified: it is treated as WORK PRODUCT, so the
+					// summary is filed to the matter but never posted to a
+					// client-facing channel. Guessing "client check-in" here would
+					// risk publishing an internal discussion to a client.
+					kind: 'internal-strategy',
+					roomId,
+				});
+			} catch {
+				// Silent by design — CaseNotes is optional and must never block a
+				// huddle. See the contract note above.
+			}
+		},
+		[caseNotesEnabled],
+	);
 
 	return { notifyHuddleStart };
 };

@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 
 import { useCopyAction } from './useCopyAction';
 import { useCreateCardFromMessageAction } from './useCreateCardFromMessageAction';
+// MATTERCHAT: AutoDoc intake for a document already posted to the channel.
+import { useProcessWithAutoDocAction } from './useProcessWithAutoDocAction';
 import { useDeleteMessageAction } from './useDeleteMessageAction';
 import { useEditMessageAction } from './useEditMessageAction';
 import { useFollowMessageAction } from './useFollowMessageAction';
@@ -46,6 +48,9 @@ const MessageToolbarActionMenu = ({ message, context, room, subscription, onChan
 	// TODO: move this to another place
 	const menuItems = [
 		useCreateCardFromMessageAction(message),
+		// MATTERCHAT: returns null unless AutoDoc is on, the user can submit, and
+		// the message carries an attachment AutoDoc can read.
+		useProcessWithAutoDocAction(message, { room }),
 		useWebDAVMessageAction(message, { subscription }),
 		useNewDiscussionMessageAction(message, { room, subscription }),
 		useUnpinMessageAction(message, { room, subscription }),
