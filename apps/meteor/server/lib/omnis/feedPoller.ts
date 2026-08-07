@@ -156,7 +156,18 @@ export class OmnisFeedPoller<T extends OmnisFeedItem> {
 					if (!(await hasPermissionAsync(user._id, this.options.viewPermission))) {
 						return;
 					}
-					notifications.notifyUser(user._id, this.options.event, payload);
+					// `notifyUser` is generic over the concrete stream-key payloads
+					// declared in packages/ddp-client. This poller is generic over T,
+					// so no single declared payload can match statically even though
+					// every instantiation does at runtime — each product's T IS the
+					// shape declared for its key. Narrowed at the one call site rather
+					// than by loosening the declarations, which would remove the
+					// type safety from the clients that consume them.
+					(notifications.notifyUser as (uid: string, event: OmnisFeedEvent, args: unknown) => void)(
+						user._id,
+						this.options.event,
+						payload,
+					);
 				}),
 			);
 		} catch (err) {

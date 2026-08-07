@@ -26,12 +26,31 @@ export type OmnisApiContext = {
 	user?: { _id: string; username?: string };
 	queryParams: Record<string, string | undefined>;
 	bodyParams: Record<string, unknown>;
-	request: {
-		/** Raw request body, needed for HMAC verification over the exact bytes. */
-		rawBody?: string;
-		headers: Record<string, string | undefined>;
-	};
+	/**
+	 * Typed as the global `Request` because that is what `getUploadFormData`
+	 * accepts. At runtime this is the Express request, which also carries
+	 * `rawBody` and a plain-object `headers` — see {@link omnisRawRequest} for
+	 * reaching those without loosening this type for every caller.
+	 */
+	request: Request;
 };
+
+/**
+ * The webhook-only view of the request: the RAW body and plain headers.
+ *
+ * Signing must be verified over the exact bytes received — re-serialising the
+ * parsed body would change key order and whitespace, and the HMAC would never
+ * match. Kept separate from {@link OmnisApiContext} so only the code that
+ * genuinely needs the Express shape asserts it.
+ */
+export type OmnisRawRequest = {
+	rawBody?: string;
+	headers: Record<string, string | undefined>;
+};
+
+export function omnisRawRequest(self: unknown): OmnisRawRequest {
+	return (self as { request: unknown }).request as OmnisRawRequest;
+}
 
 /** Narrow an Omnis route handler's `this` to the fields the API layer provides. */
 export function omnisCtx(self: unknown): OmnisApiContext {

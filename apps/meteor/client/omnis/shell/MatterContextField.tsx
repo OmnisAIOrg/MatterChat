@@ -100,7 +100,6 @@ const MatterContextField = ({ context, guess, personalLabel, personalHint }: Mat
 			<TextInput
 				value={term}
 				placeholder={t('Omnis_Matter_search_placeholder')}
-				addon={<Icon name='magnifier' size={18} />}
 				onChange={(e: ChangeEvent<HTMLInputElement>) => setTerm(e.currentTarget.value)}
 			/>
 

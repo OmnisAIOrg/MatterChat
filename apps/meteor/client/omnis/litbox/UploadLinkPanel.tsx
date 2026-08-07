@@ -1,4 +1,17 @@
-import { Box, Button, ButtonGroup, Callout, Field, FieldLabel, FieldRow, Select, Tag, TextInput, ToggleSwitch } from '@rocket.chat/fuselage';
+import {
+	Box,
+	Button,
+	ButtonGroup,
+	Callout,
+	Field,
+	FieldLabel,
+	FieldRow,
+	PasswordInput,
+	Select,
+	Tag,
+	TextInput,
+	ToggleSwitch,
+} from '@rocket.chat/fuselage';
 import {
 	ContextualbarClose,
 	ContextualbarContent,
@@ -240,8 +253,7 @@ const UploadLinkPanel = ({ onClose }: { onClose(): void }): ReactElement => {
 							</FieldRow>
 							{requirePassword && (
 								<FieldRow>
-									<TextInput
-										type='password'
+									<PasswordInput
 										value={password}
 										onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.currentTarget.value)}
 									/>

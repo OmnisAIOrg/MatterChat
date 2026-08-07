@@ -25,7 +25,7 @@ const item = (id: string, changedAt: string): Item => ({ id, changedAt });
 const makePoller = (fetchFeed: () => Promise<Item[]>) =>
 	new OmnisFeedPoller<Item>({
 		product: 'Test',
-		event: 'test-feed',
+		event: 'autodoc-feed',
 		viewPermission: 'view-document-queue',
 		intervalSeconds: () => 5,
 		isEnabled: () => true,
@@ -85,7 +85,7 @@ describe('tick', () => {
 		expect(notifyUser).toHaveBeenCalledTimes(1);
 		const [uid, event, payload] = notifyUser.mock.calls[0] as [string, string, { changed: Item[]; removed: string[] }];
 		expect(uid).toBe('u1');
-		expect(event).toBe('test-feed');
+		expect(event).toBe('autodoc-feed');
 		expect(payload.changed.map((i) => i.id)).toEqual(['a']);
 	});
 
@@ -129,7 +129,7 @@ describe('tick', () => {
 		const fetchFeed = jest.fn(async () => [item('a', '1')]);
 		const poller = new OmnisFeedPoller<Item>({
 			product: 'Test',
-			event: 'test-feed',
+			event: 'autodoc-feed',
 			viewPermission: 'view-document-queue',
 			intervalSeconds: () => 5,
 			isEnabled: () => false,

@@ -1,5 +1,5 @@
 import { API } from '../api';
-import { omnisCtx } from './omnisApiContext';
+import { omnisCtx, omnisRawRequest } from './omnisApiContext';
 import { previewEsignActions } from '../../lib/omnisproof/automations';
 import { handleLifecycleEvent, listSignatureFeed, remindSigner, sendForSignature } from '../../lib/omnisproof/client';
 import { resolveOmnisProofConfig } from '../../lib/omnisproof/config';
@@ -82,6 +82,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['omnisproof-send'] },
 	{
 		async post() {
+			const { username } = omnisCtx(this).user ?? {};
 			const body = omnisCtx(this).bodyParams as {
 				documentName?: string;
 				documentRef?: string;
@@ -123,7 +124,7 @@ API.v1.addRoute(
 					...(matterId && body.documentTypeKey ? { documentTypeKey: body.documentTypeKey } : {}),
 					...(body.roomId ? { roomId: body.roomId } : {}),
 					...(body.subject ? { subject: body.subject } : {}),
-					sentBy: { _id: omnisCtx(this).userId, ...(omnisCtx(this).user?.username ? { username: this.user.username } : {}) },
+					sentBy: { _id: omnisCtx(this).userId, ...(username ? { username } : {}) },
 				});
 
 				return API.v1.success({
@@ -180,7 +181,7 @@ API.v1.addRoute(
 				return API.v1.failure('OmnisProof is not enabled');
 			}
 
-			const request = omnisCtx(this).request as unknown as { rawBody?: string; headers: Record<string, string | undefined> };
+			const request = omnisRawRequest(this);
 			// Sign over the RAW body: re-serialising the parsed object would change
 			// key order and whitespace, and the HMAC would never match.
 			const rawBody = request.rawBody ?? JSON.stringify(omnisCtx(this).bodyParams ?? {});
