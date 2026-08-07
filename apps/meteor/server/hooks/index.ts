@@ -8,5 +8,7 @@ import '../lib/boards/casepro/loginSync';
 // CaseNotes meeting poller, OmnisProof document-type seed. All no-ops when the
 // respective product is disabled.
 import '../lib/omnis/startup';
+// MATTERCHAT: stamp brand-new accounts as needing firm setup (self-serve firms).
+import '../lib/firms/startup';
 import './sauMonitorHooks';
 import './userLogoutCleanUp';

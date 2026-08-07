@@ -137,6 +137,17 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 	const omnisaiEnabled = useSetting('OmnisAI_OIDC_Enabled', false);
 	const omnisaiLabel = useSetting('OmnisAI_OIDC_Button_Label', 'Sign in with Omnis ID') as string;
 	const registrationForm = useSetting('Accounts_RegistrationForm', 'Public') as string;
+	// MATTERCHAT: when CentralAuth is configured it OWNS identity — it becomes the
+	// primary (and visually only) way in, and self-registration is hidden, because a
+	// MatterChat-local account would be a second identity for the same person.
+	// The workspace-password form stays reachable behind a link rather than being
+	// removed: an admin must never be locked out of their own workspace if the IdP
+	// is misconfigured or unreachable.
+	const [showPasswordForm, setShowPasswordForm] = useState(false);
+	const centralAuthPrimary = omnisaiEnabled === true;
+	// Password fields are visible unless CentralAuth is leading and the user has
+	// not explicitly asked for the fallback.
+	const passwordFormVisible = !centralAuthPrimary || showPasswordForm;
 	const resetEnabled = useSetting('Accounts_PasswordReset', true);
 
 	if (stockRoute) {
@@ -467,6 +478,8 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 									Welcome back
 								</h1>
 
+								{passwordFormVisible && (
+								<>
 								<label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#33423b', marginBottom: 7, letterSpacing: '.01em' }}>
 									Email or username
 								</label>
@@ -684,14 +697,18 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 										)
 									)}
 								</button>
+								</>
+								)}
 
 								{omnisaiEnabled && (
 									<>
+										{passwordFormVisible && (
 										<div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '18px 0' }}>
 											<span style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, #e3e8e2)' }} />
 											<span style={{ fontSize: 11.5, color: '#93a29b' }}>or</span>
 											<span style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, #e3e8e2, transparent)' }} />
 										</div>
+										)}
 										<button
 											type='button'
 											onClick={handleOmnisai}
@@ -717,11 +734,30 @@ const MatterChatLoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginR
 											<img className='mclg-omnis-icon' src='/images/pwa/icon-192.png' alt='' style={{ width: 20, height: 20, borderRadius: 6, display: 'block' }} />
 											{omnisaiLabel}
 										</button>
+										{centralAuthPrimary && !showPasswordForm && (
+											<button
+												type='button'
+												onClick={() => setShowPasswordForm(true)}
+												style={{
+													width: '100%',
+													marginTop: 14,
+													background: 'none',
+													border: 'none',
+													color: '#5b6b86',
+													fontSize: 13,
+													fontFamily: 'inherit',
+													cursor: 'pointer',
+													textDecoration: 'underline',
+												}}
+											>
+												Use a workspace password instead
+											</button>
+										)}
 									</>
 								)}
 							</form>
 
-							{registrationForm === 'Public' && (
+							{registrationForm === 'Public' && !centralAuthPrimary && (
 								<p style={{ textAlign: 'center', fontSize: 14.5, color: '#5b6b86', margin: '18px 0 0' }}>
 									New to the firm?{' '}
 									<a
