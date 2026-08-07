@@ -274,6 +274,37 @@ export const FRAMELESS_SHADOW_GUTTER = FRAMELESS_SHADOW_BUDGET;
 const FRAMELESS_BEZEL_SHADOW = FRAMELESS_SHADOW_LAYERS.map(({ y, blur, color }) => `0 ${y}px ${blur}px ${color}`).join(',\n\t\t');
 
 /**
+ * THE SAME BUDGET, FOR THE PROTRUDING TAB — the element with the least room of anything on screen.
+ *
+ * The tab is pinned `inset-inline-start: GEO.bodyMargin` and `bottom: TAB_INSET_BLOCK_END`, so its
+ * shadow may reach only that far before the window's edge guillotines it. Its layers are offset
+ * LEFT and DOWN by design (that direction is what makes the tab read as sitting BEHIND the window),
+ * which means the x-offset spends the left budget and the y-offset spends the bottom one — a
+ * stricter test than the bezel's, where the offsets are purely vertical.
+ *
+ * This was missed when the bezel was fixed: the bezel's `0 8px 20px` was budgeted and the tab's
+ * `-16px 14px 34px` — bigger blur, tighter gutter — was left alone, so the visible grey band simply
+ * moved from the bezel to the tab. Both are checked together now.
+ */
+const TAB_INSET_BLOCK_END = 22;
+
+const FRAMELESS_TAB_SHADOW_LAYERS = [
+	{ x: 1, y: 1, blur: 3, color: 'rgba(9, 44, 21, 0.45)' },
+	{ x: 2, y: 2, blur: 5, color: 'rgba(9, 44, 21, 0.55)' },
+] as const;
+
+/** How far the tab's shadow reaches past its box, per direction (x is LEFTWARD — see above). */
+export const framelessTabShadowExtent = (layers: readonly { x: number; y: number; blur: number }[] = FRAMELESS_TAB_SHADOW_LAYERS) => ({
+	left: Math.max(...layers.map(({ x, blur }) => blur + x)),
+	bottom: Math.max(...layers.map(({ y, blur }) => blur + y)),
+});
+
+/** The walls the extents above must respect. Exported so the spec asserts the real numbers. */
+export const FRAMELESS_TAB_GUTTER = { left: GEO.bodyMargin, bottom: TAB_INSET_BLOCK_END } as const;
+
+const TAB_SHADOW = FRAMELESS_TAB_SHADOW_LAYERS.map(({ x, y, blur, color }) => `-${x}px ${y}px ${blur}px ${color}`).join(',\n\t\t');
+
+/**
  * Where the client-drawn window lights belong on a frameless shell, in WINDOW coordinates.
  * Consumed by WindowLights — see the note there on why this is exported rather than hardcoded.
  * 10px in from the frame's left edge, vertically centred in the title bar.
@@ -751,14 +782,21 @@ ${f}.mc-desktop-frameless .mc-rail-workspace {
 	   read through it when it is INSIDE the frame). As a protruding tab it is no longer sitting on
 	   the chrome — it IS chrome — so it has to paint the gradient itself and out-rank that rule. */
 	background: linear-gradient(180deg, var(--mc-chrome-top) 0%, var(--mc-chrome-bottom) 100%) !important;
+	/* The drop layers fall LEFT and DOWN — away from the frame — which is what sells "this sits
+	   behind the window" instead of "this floats on top of it".
+
+	   BUT the tab lives in the TRANSPARENT gutter, so those layers spend the same budget the bezel
+	   does, against much tighter walls: ${GEO.bodyMargin}px to the window's left edge and
+	   ${TAB_INSET_BLOCK_END}px below. They previously ran -16px 14px 34px, which reaches 50px left
+	   and 48px down — roughly 42px of it outside the window on the left alone. Clipped by the window
+	   bounds, that is not a shadow, it is a hard-edged grey slab down the side and across the bottom.
+	   It is the same defect as the bezel's, on the element with the LEAST room to spend.
+	   Budget-checked in depthSkin.spec.ts along with every other outward layer. */
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.14),
 		inset 1px 0 0 rgba(255, 255, 255, 0.08),
 		inset 0 -1px 0 rgba(0, 0, 0, 0.60),
-		/* The shadow falls LEFT and DOWN — away from the frame — which is what sells "this sits
-		   behind the window" instead of "this floats on top of it". */
-		-3px 3px 8px rgba(9, 44, 21, 0.40),
-		-16px 14px 34px rgba(9, 44, 21, 0.60);
+		${TAB_SHADOW};
 	/* Under the bezel (which the frame gives z-index 1), so the bezel overlaps the tab's inner edge. */
 	z-index: 0;
 }

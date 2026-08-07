@@ -83,7 +83,7 @@ const suitemarkClass = css`
 // link so anyone on the web can download the installer (macOS / Windows / Linux).
 export const SidebarFooterWatermark = () => {
 	return (
-		<Box pi={16} pbe={8}>
+		<Box pi={16} pbs={12} pbe={8}>
 			{!inDesktopApp && (
 				<Box
 					is='a'

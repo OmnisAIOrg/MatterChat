@@ -1,7 +1,15 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { buildDepthCss, DEPTH_FLAG_CLASS, FRAMELESS_LIGHTS_POSITION, FRAMELESS_SHADOW_GUTTER, framelessShadowExtent } from './depthSkin';
+import {
+	buildDepthCss,
+	DEPTH_FLAG_CLASS,
+	FRAMELESS_LIGHTS_POSITION,
+	FRAMELESS_SHADOW_GUTTER,
+	framelessShadowExtent,
+	FRAMELESS_TAB_GUTTER,
+	framelessTabShadowExtent,
+} from './depthSkin';
 
 /**
  * These guard a failure mode that a green build does NOT catch.
@@ -204,6 +212,34 @@ describe('depthSkin', () => {
 				const [, y, blur] = /^0 (\d+)px (\d+)px/.exec(layer) ?? [];
 				expect(Number.isNaN(Number(blur) + Number(y))).toBe(false);
 				expect(Number(blur) + Number(y)).toBeLessThanOrEqual(FRAMELESS_SHADOW_GUTTER);
+			});
+		});
+
+		it('keeps the PROTRUDING TAB shadow inside its gutter too', () => {
+			// The bezel was budgeted first and this was missed, so the clipped grey band simply moved
+			// from the bezel to the tab — which has the LEAST room of anything on screen: 8px to the
+			// window's left edge, 22px below. Its layers are offset left AND down, so the x-offset
+			// spends the left budget and the y-offset the bottom one. The old `-16px 14px 34px`
+			// reached 50px left and 48px down: ~42px of it outside the window, guillotined into a
+			// hard-edged slab. Every outward layer in the frameless block is now checked, not one.
+			const tab = framelessTabShadowExtent();
+			expect(tab.left).toBeLessThanOrEqual(FRAMELESS_TAB_GUTTER.left);
+			expect(tab.bottom).toBeLessThanOrEqual(FRAMELESS_TAB_GUTTER.bottom);
+
+			// …and the emitted rule must use it. Parse the real declaration, so a hand-edited value
+			// that bypasses the constants still fails here.
+			const rule = /\.mc-desktop-frameless \.mc-rail-workspace \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+			const shadow = /box-shadow:([\s\S]*?);/.exec(rule)?.[1] ?? '';
+			const outward = shadow
+				.split(/,(?![^(]*\))/)
+				.map((l) => l.trim())
+				.filter((l) => l && !l.startsWith('inset'));
+			expect(outward.length).toBeGreaterThan(0);
+			outward.forEach((layer) => {
+				const [, x, y, blur] = /^-?(\d+)px (\d+)px (\d+)px/.exec(layer) ?? [];
+				expect(Number.isNaN(Number(blur))).toBe(false);
+				expect(Number(blur) + Number(x)).toBeLessThanOrEqual(FRAMELESS_TAB_GUTTER.left);
+				expect(Number(blur) + Number(y)).toBeLessThanOrEqual(FRAMELESS_TAB_GUTTER.bottom);
 			});
 		});
 
