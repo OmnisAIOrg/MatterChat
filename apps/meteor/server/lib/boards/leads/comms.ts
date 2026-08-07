@@ -2,8 +2,8 @@ import type { ICommTemplate, ICommunication, ILead, CommTemplateChannel } from '
 import { BoardsCommTemplates, BoardsCommunications, BoardsLeads } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../../app/settings/server';
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { settings } from '../../../settings';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 import { assertBoardRole } from '../permissions';
 import { logCommunication } from './service';
 

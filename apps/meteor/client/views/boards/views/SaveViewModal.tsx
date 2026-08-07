@@ -100,30 +100,30 @@ const SaveViewModal = ({ boardId, currentViewType, existing, onClose, onSaved }:
 				</FieldRow>
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={typeId}>{t('Boards_Views_Type', { defaultValue: 'View type' })}</FieldLabel>
 				<FieldRow>
 					<Select id={typeId} value={viewType} onChange={(v) => setViewType(v as SavedViewType)} options={typeOptions} />
 				</FieldRow>
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldRow>
 					<CheckBox checked={shared} onChange={() => setShared((v) => !v)} />
-					<FieldLabel mis={8}>{t('Boards_Views_Shared', { defaultValue: 'Share with the board' })}</FieldLabel>
+					<FieldLabel marginInlineStart={8}>{t('Boards_Views_Shared', { defaultValue: 'Share with the board' })}</FieldLabel>
 				</FieldRow>
 				<FieldHint>{t('Boards_Views_SharedHint', { defaultValue: 'Other board members can switch to this view.' })}</FieldHint>
 			</Field>
 
-			<Field mbs={8}>
+			<Field marginBlockStart={8}>
 				<FieldRow>
 					<CheckBox checked={isDefault} onChange={() => setIsDefault((v) => !v)} />
-					<FieldLabel mis={8}>{t('Boards_Views_Default', { defaultValue: 'Make default' })}</FieldLabel>
+					<FieldLabel marginInlineStart={8}>{t('Boards_Views_Default', { defaultValue: 'Make default' })}</FieldLabel>
 				</FieldRow>
 				<FieldHint>{t('Boards_Views_DefaultHint', { defaultValue: 'Opened automatically for this board.' })}</FieldHint>
 			</Field>
 
-			<Box mbs={12} fontScale='micro' color='hint'>
+			<Box marginBlockStart={12} fontScale='micro' color='hint'>
 				{t('Boards_Views_ConfigNote', {
 					defaultValue: 'Filters and grouping from the current view are preserved when you save.',
 				})}

@@ -58,9 +58,15 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 	return (
 		<MatterSection title={t('Boards_Matters_Report_Financial', { defaultValue: 'Financial' })} icon='card'>
 			{/* Warm ledger tint (the chat "own message" card color) + khaki hairline. */}
-			<Box bg='tint' p={10} borderRadius='x4' borderWidth='default' style={{ backgroundColor: LEDGER_CARD_TINT, borderColor: LEDGER_RULE }}>
+			<Box
+				backgroundColor='tint'
+				padding={10}
+				borderRadius='x4'
+				borderWidth='default'
+				style={{ backgroundColor: LEDGER_CARD_TINT, borderColor: LEDGER_RULE }}
+			>
 				{/* 🩺 Medical treatment — providers are the treatment representation. */}
-				<Box {...groupLabelProps} mbs={0}>
+				<Box {...groupLabelProps} marginBlockStart={0}>
 					{`🩺 ${t('Boards_Matters_Medical_Treatment', { defaultValue: 'Medical treatment' })}`}
 					{providerCount !== undefined ? ` (${providerCount})` : ''}
 				</Box>
@@ -68,7 +74,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 					// Array.from (not providers.map) so the call resolves against Array even when the
 					// snapshot's `providers` field is not yet in the resolved core-typings dist.
 					Array.from(providers, (provider: { name: string; type?: string }, index: number) => (
-						<Box key={`${provider.name}-${index}`} fontScale='p2' color='default' mbe={4}>
+						<Box key={`${provider.name}-${index}`} fontScale='p2' color='default' marginBlockEnd={4}>
 							{provider.name}
 							{provider.type ? (
 								<Box is='span' color='hint'>
@@ -78,7 +84,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 						</Box>
 					))
 				) : (
-					<Box fontScale='c1' color='hint' mbe={4}>
+					<Box fontScale='c1' color='hint' marginBlockEnd={4}>
 						{t('Boards_Matters_No_Providers', { defaultValue: 'No providers on file' })}
 					</Box>
 				)}
@@ -86,7 +92,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 				{/* 💵 Medical bills */}
 				{hasBills && (
 					<>
-						<Box {...groupLabelProps} mbs={10}>
+						<Box {...groupLabelProps} marginBlockStart={10}>
 							{`💵 ${t('Boards_Matters_Medical_Bills', { defaultValue: 'Medical bills' })}`}
 						</Box>
 						<MoneyRow label={t('Boards_Matters_Billed', { defaultValue: 'Billed' })} value={billed} />
@@ -97,7 +103,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 				{/* 📄 Expenses (case costs advanced) — $0 shown when zero. */}
 				{hasExpenses && (
 					<>
-						<Box {...groupLabelProps} mbs={10}>
+						<Box {...groupLabelProps} marginBlockStart={10}>
 							{`📄 ${t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })}`}
 						</Box>
 						<MoneyRow label={t('Boards_Matters_Expenses', { defaultValue: 'Expenses' })} value={expenses} />
@@ -107,7 +113,7 @@ const FinancialSummaryCard = ({ snapshot }: FinancialSummaryCardProps): ReactEle
 				{/* 🤝 Negotiation ladder (demand → top offer → settlement) */}
 				{hasNegotiation && (
 					<>
-						<Box {...groupLabelProps} mbs={10}>
+						<Box {...groupLabelProps} marginBlockStart={10}>
 							{`🤝 ${t('Boards_Matters_Negotiation', { defaultValue: 'Negotiation' })}`}
 						</Box>
 						<MoneyRow label={t('Boards_Matters_Demand', { defaultValue: 'Demand' })} value={demand} />

@@ -16,7 +16,9 @@ import LoginTerms from '../components/LoginTerms';
 import MatterChatWordmark from '../components/MatterChatWordmark';
 import { RegisterTitle } from '../components/RegisterTitle';
 
-const HorizontalTemplate = ({ children }: { children: ReactNode }) => {
+export type HorizontalTemplateProps = { children: ReactNode };
+
+const HorizontalTemplate = ({ children }: HorizontalTemplateProps) => {
 	const hideLogo = useSetting('Layout_Login_Hide_Logo', false);
 	const customLogo = useAssetWithDarkModePath('logo');
 	const customBackground = useAssetWithDarkModePath('background');
@@ -32,7 +34,7 @@ const HorizontalTemplate = ({ children }: { children: ReactNode }) => {
 					hideLogo ? (
 						<></>
 					) : (
-						(customLogo && <Box is='img' maxHeight='x40' mi='neg-x8' src={customLogo} alt='Logo' />) || <MatterChatWordmark />
+						(customLogo && <Box is='img' maxHeight='x40' marginInline='neg-x8' src={customLogo} alt='Logo' />) || <MatterChatWordmark />
 					)
 				}
 			>

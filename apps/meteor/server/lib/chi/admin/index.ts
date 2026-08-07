@@ -10,7 +10,7 @@
 import { Meteor } from 'meteor/meteor';
 
 import { registerChiAdminIntake } from './intake';
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 import { getChiBotUser } from '../bot';
 

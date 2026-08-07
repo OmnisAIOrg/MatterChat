@@ -212,9 +212,7 @@ const CaseloadRow = ({ row, label, theme }: CaseloadRowProps): ReactElement => {
 					>
 						–
 					</Box>
-					<Box style={{ fontSize: '13px', fontWeight: 600, color: theme.ink }}>
-						{label}
-					</Box>
+					<Box style={{ fontSize: '13px', fontWeight: 600, color: theme.ink }}>{label}</Box>
 				</Box>
 			</TableCell>
 			<TableCell align='end' style={{ fontSize: '13px', fontWeight: 600, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>
@@ -417,17 +415,17 @@ const Caseload = (): ReactElement => {
 			/>
 			<PageScrollableContentWithShadow>
 				<style dangerouslySetInnerHTML={{ __html: tableStyleCss }} />
-				<CaseProStubBanner mbe={16} />
+				<CaseProStubBanner marginBlockEnd={16} />
 
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}
 
 				{isError && !isLoading && (
 					<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-						<Button small mbs={8} onClick={() => refetch()}>
+						<Button small marginBlockStart={8} onClick={() => refetch()}>
 							{t('Reload_page')}
 						</Button>
 					</Callout>
@@ -436,7 +434,7 @@ const Caseload = (): ReactElement => {
 				{!isLoading && !isError && report && (
 					<Box style={{ maxWidth: '1000px', margin: '0 auto', padding: '22px 28px 60px' }}>
 						{/* Section label and count */}
-						<Box display='flex' alignItems='baseline' gap='10px' mbe={14}>
+						<Box display='flex' alignItems='baseline' gap='10px' marginBlockEnd={14}>
 							<Box
 								is='span'
 								style={{
@@ -479,9 +477,7 @@ const Caseload = (): ReactElement => {
 							<Table fixed style={{ width: '100%' }}>
 								<TableHead>
 									<TableRow>
-										<TableCell style={{ textAlign: 'left' }}>
-											{t('Boards_Matters_Assignee', { defaultValue: 'Assignee' })}
-										</TableCell>
+										<TableCell style={{ textAlign: 'left' }}>{t('Boards_Matters_Assignee', { defaultValue: 'Assignee' })}</TableCell>
 										<TableCell align='end'>{t('Boards_Matters_Open_Matters', { defaultValue: 'Open matters' })}</TableCell>
 										<TableCell>{t('Boards_Matters_Stage_Mix', { defaultValue: 'Stage mix' })}</TableCell>
 										<TableCell align='end'>{t('Boards_Matters_SOL_At_Risk', { defaultValue: 'SOL at risk' })}</TableCell>
@@ -521,7 +517,7 @@ const Caseload = (): ReactElement => {
 
 						{/* Legend */}
 						{getLegendData().length > 0 && (
-							<Box display='flex' gap='16px' flexWrap='wrap' padding='2px 4px' mbe={20}>
+							<Box display='flex' gap='16px' flexWrap='wrap' padding='2px 4px' marginBlockEnd={20}>
 								{getLegendData().map((item) => (
 									<LegendItem key={item.stage} {...item} theme={theme} />
 								))}

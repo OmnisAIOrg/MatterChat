@@ -8,7 +8,7 @@ import Preload from './Preload';
 import { useCustomScript } from './useCustomScript';
 import { ChiOrbMount } from '../../../omnis/widgets/ChiOrbMount';
 
-type MainLayoutProps = {
+export type MainLayoutProps = {
 	children?: ReactNode;
 };
 

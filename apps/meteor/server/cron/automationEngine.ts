@@ -2,7 +2,7 @@ import { cronJobs } from '@rocket.chat/cron';
 
 import { Automation } from '../services/automation/service';
 import { ensureAutomationTemplates } from '../startup/boards/automationTemplates';
-import { settings } from '../../app/settings/server';
+import { settings } from '../settings';
 import { SystemLogger } from '../lib/logger/system';
 
 /**

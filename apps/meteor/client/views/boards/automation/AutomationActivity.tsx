@@ -56,12 +56,12 @@ const RunCard = ({ run }: { run: Serialized<IAutomationRun> }): ReactElement => 
 	const actions = (run.actionsRun as RunActionResult[]) ?? [];
 
 	return (
-		<Box mbe={8} pb={8} pi={12} bg='tint' borderRadius='x4'>
+		<Box marginBlockEnd={8} paddingBlock={8} paddingInline={12} backgroundColor='tint' borderRadius='x4'>
 			<Box display='flex' alignItems='center' onClick={() => setOpen((v) => !v)} style={{ cursor: 'pointer' }}>
-				<Icon name={open ? 'chevron-down' : 'chevron-right'} size='x16' mie={8} color='hint' />
+				<Icon name={open ? 'chevron-down' : 'chevron-right'} size='x16' marginInlineEnd={8} color='hint' />
 				<Box flexGrow={1} display='flex' flexDirection='column'>
 					<Box display='flex' alignItems='center'>
-						<Box fontScale='p2b' color='default' mie={8} withTruncatedText>
+						<Box fontScale='p2b' color='default' marginInlineEnd={8} withTruncatedText>
 							{run.automationName ?? run.automationId}
 						</Box>
 						{runStatusTag(run.status, t)}
@@ -77,9 +77,9 @@ const RunCard = ({ run }: { run: Serialized<IAutomationRun> }): ReactElement => 
 			</Box>
 
 			{open && (
-				<Box mbs={8} pis={24}>
+				<Box marginBlockStart={8} paddingInlineStart={24}>
 					{run.error && (
-						<Callout type='danger' icon='warning' mbe={8}>
+						<Callout type='danger' icon='warning' marginBlockEnd={8}>
 							{run.error}
 						</Callout>
 					)}
@@ -89,8 +89,8 @@ const RunCard = ({ run }: { run: Serialized<IAutomationRun> }): ReactElement => 
 						</Box>
 					)}
 					{actions.map((a) => (
-						<Box key={a.index} display='flex' alignItems='flex-start' mbe={6}>
-							<Box mie={8} mbs={2}>
+						<Box key={a.index} display='flex' alignItems='flex-start' marginBlockEnd={6}>
+							<Box marginInlineEnd={8} marginBlockStart={2}>
 								{a.status === 'ok' && <Icon name='circle-check' size='x16' color='status-font-on-success' />}
 								{a.status === 'error' && <Icon name='circle-cross' size='x16' color='status-font-on-danger' />}
 								{a.status === 'skipped' && <Icon name='ban' size='x16' color='hint' />}
@@ -140,7 +140,7 @@ const AutomationActivity = ({ boardId, automationId, cardId, queryKey }: Automat
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -149,7 +149,7 @@ const AutomationActivity = ({ boardId, automationId, cardId, queryKey }: Automat
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -160,7 +160,7 @@ const AutomationActivity = ({ boardId, automationId, cardId, queryKey }: Automat
 
 	if (runs.length === 0) {
 		return (
-			<Box fontScale='c1' color='hint' p={8}>
+			<Box fontScale='c1' color='hint' padding={8}>
 				{t('Boards_Automation_NoRuns', { defaultValue: 'No automation runs yet.' })}
 			</Box>
 		);

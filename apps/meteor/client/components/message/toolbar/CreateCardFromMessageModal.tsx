@@ -112,7 +112,7 @@ const CreateCardFromMessageModal = ({ message, onClose }: CreateCardFromMessageM
 			confirmDisabled={!canSubmit}
 		>
 			{boardsLoading ? (
-				<Box display='flex' justifyContent='center' p={24}>
+				<Box display='flex' justifyContent='center' padding={24}>
 					<Throbber />
 				</Box>
 			) : (
@@ -123,7 +123,7 @@ const CreateCardFromMessageModal = ({ message, onClose }: CreateCardFromMessageM
 							<TextInput id={titleId} value={title} onChange={(e) => setTitle((e.currentTarget as HTMLInputElement).value)} />
 						</FieldRow>
 					</Field>
-					<Field mbs={12}>
+					<Field marginBlockStart={12}>
 						<FieldLabel htmlFor={boardFieldId}>{t('Board')}</FieldLabel>
 						<FieldRow>
 							<Select
@@ -135,7 +135,7 @@ const CreateCardFromMessageModal = ({ message, onClose }: CreateCardFromMessageM
 							/>
 						</FieldRow>
 					</Field>
-					<Field mbs={12}>
+					<Field marginBlockStart={12}>
 						<FieldLabel htmlFor={listFieldId}>{t('List')}</FieldLabel>
 						<FieldRow>
 							<Select

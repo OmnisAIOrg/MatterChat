@@ -14,7 +14,7 @@ const MoneyRow = ({ label, value, emphasis }: MoneyRowProps): ReactElement | nul
 		return null;
 	}
 	return (
-		<Box display='flex' justifyContent='space-between' alignItems='baseline' mbe={4} style={{ gap: '12px' }}>
+		<Box display='flex' justifyContent='space-between' alignItems='baseline' marginBlockEnd={4} style={{ gap: '12px' }}>
 			<Box fontScale='c1' color='hint' style={{ flexShrink: 0 }}>
 				{label}
 			</Box>

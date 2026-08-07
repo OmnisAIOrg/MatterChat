@@ -1,12 +1,14 @@
 import { getSubscriptionsForUser, pruneSubscription } from './subscriptions';
-import { settings } from '../../settings/server';
+import { settings } from '../../../server/settings';
 
 /**
  * MatterChat Web Push dispatch (VAPID).
  *
  * Sends a notification to all of a user's browser/PWA push subscriptions, signed
  * with the server VAPID keypair. This runs ALONGSIDE the native FCM/APN gateway
- * (app/push/server) — see wireWebPushDispatch() for the hook. See spec B.4.
+ * (server/lib/notifications/push), which calls sendWebPushToUser() directly after
+ * its own native fan-out — see the "MatterChat: fan the SAME notification out"
+ * block in server/lib/notifications/push/push.ts. See spec B.4.
  *
  * ───────────────────────────────────────────────────────────────────────────
  * SERVER TODO (the one remaining piece of full VAPID plumbing):

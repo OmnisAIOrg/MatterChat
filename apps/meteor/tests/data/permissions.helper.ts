@@ -1,10 +1,11 @@
 import type { ISetting } from '@rocket.chat/core-typings';
 
 import { api, credentials, request } from './api-data';
-import { permissions } from '../../app/authorization/server/constant/permissions';
+import { permissions } from '../../server/lib/authorization/constant/permissions';
+import { IS_EE } from '../e2e/config/constants';
+
 // MATTERCHAT: the EE tree is removed — there are no EE-only permissions to restore in tests.
 const omnichannelEEPermissions: string[] = [];
-import { IS_EE } from '../e2e/config/constants';
 
 export const updatePermission = (permission: string, roles: string[]): Promise<void | Error> =>
 	new Promise((resolve, reject) => {

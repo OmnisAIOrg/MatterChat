@@ -343,7 +343,7 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 	if (isLoading) {
 		return (
 			<PageScrollableContent>
-				<Box display='flex' justifyContent='center' p={24}>
+				<Box display='flex' justifyContent='center' padding={24}>
 					<Throbber />
 				</Box>
 			</PageScrollableContent>
@@ -388,9 +388,9 @@ const BoardView = ({ board, lists }: BoardViewProps) => {
 						<Box
 							minWidth='x280'
 							maxWidth='x280'
-							pi={12}
-							pb={12}
-							bg='tint'
+							paddingInline={12}
+							paddingBlock={12}
+							backgroundColor='tint'
 							borderRadius='x4'
 							fontScale='p2b'
 							color='default'

@@ -136,18 +136,25 @@ const SectionCard = ({
 }) => (
 	// MATTERCHAT: `mc-card` is plane 4 of the frame spec — it adds ONLY the shared elevation pair
 	// (contact + ambient). The card's fill and rule keep their existing ledger colors below.
-	<Box className='mc-card' borderRadius='x8' borderWidth='default' p={12} mbe={12} style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE }}>
-		<Box display='flex' alignItems='center' mbe={8}>
-			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x16' mie={6} color='hint' />
+	<Box
+		className='mc-card'
+		borderRadius='x8'
+		borderWidth='default'
+		padding={12}
+		marginBlockEnd={12}
+		style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE }}
+	>
+		<Box display='flex' alignItems='center' marginBlockEnd={8}>
+			<Icon name={icon as ComponentProps<typeof Icon>['name']} size='x16' marginInlineEnd={6} color='hint' />
 			<Box fontScale='p2b' color='default' style={LEDGER_CAPTION_STYLE}>
 				{title}
 			</Box>
 			{typeof count === 'number' && count > 0 && (
-				<Box mis={8} fontScale='micro' color='hint' style={LEDGER_NUMERIC_STYLE}>
+				<Box marginInlineStart={8} fontScale='micro' color='hint' style={LEDGER_NUMERIC_STYLE}>
 					{count}
 				</Box>
 			)}
-			{action && <Box mis='auto'>{action}</Box>}
+			{action && <Box marginInlineStart='auto'>{action}</Box>}
 		</Box>
 		{children}
 	</Box>
@@ -163,7 +170,7 @@ const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red
 		className='mc-card'
 		display='flex'
 		flexWrap='wrap'
-		mbe={12}
+		marginBlockEnd={12}
 		borderWidth='default'
 		borderRadius='x8'
 		style={{ backgroundColor: LEDGER_CARD, borderColor: LEDGER_RULE, overflow: 'hidden' }}
@@ -175,9 +182,9 @@ const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red
 					key={stat.label}
 					flexGrow={1}
 					flexBasis='0'
-					pi={12}
-					pbs={8}
-					pbe={8}
+					paddingInline={12}
+					paddingBlockStart={8}
+					paddingBlockEnd={8}
 					style={{
 						borderInlineStart: index > 0 ? `1px solid ${LEDGER_RULE}` : undefined,
 						boxShadow: accent ? `inset 3px 0 0 0 ${accent}` : undefined,
@@ -203,7 +210,7 @@ const StatBar = ({ stats }: { stats: { label: string; value: number; heat?: 'red
 );
 
 const EmptyLine = ({ children }: { children: ReactNode }) => (
-	<Box fontScale='c1' color='hint' pb={4}>
+	<Box fontScale='c1' color='hint' paddingBlock={4}>
 		{children}
 	</Box>
 );
@@ -345,14 +352,14 @@ const FirmFeedEditorModal = ({ kind, entry, onClose }: { kind: FirmFeedKind; ent
 				{errors.title && <FieldError>{errors.title.message}</FieldError>}
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={bodyId}>{t('Firm_Feed_Body')}</FieldLabel>
 				<FieldRow>
 					<TextAreaInput id={bodyId} rows={3} {...register('body')} placeholder={t('Firm_Feed_Body_Placeholder')} />
 				</FieldRow>
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={dateId}>{t('Firm_Feed_Date')}</FieldLabel>
 				<FieldRow>
 					<InputBox
@@ -365,10 +372,10 @@ const FirmFeedEditorModal = ({ kind, entry, onClose }: { kind: FirmFeedKind; ent
 				{errors.eventDate && <FieldError>{errors.eventDate.message}</FieldError>}
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldRow justifyContent='flex-start'>
 					<CheckBox id={pinId} {...register('pinned')} />
-					<FieldLabel htmlFor={pinId} mis={8} style={{ cursor: 'pointer' }}>
+					<FieldLabel htmlFor={pinId} marginInlineStart={8} style={{ cursor: 'pointer' }}>
 						{t('Firm_Feed_Pin')}
 					</FieldLabel>
 				</FieldRow>
@@ -395,8 +402,8 @@ const FeedEntryRow = ({
 	const isBirthday = kind === 'birthday';
 
 	return (
-		<Box display='flex' alignItems='flex-start' pb={10} style={{ gap: '8px' }}>
-			{entry.pinned && <Icon name='pin-filled' size='x14' color='hint' mbs={2} />}
+		<Box display='flex' alignItems='flex-start' paddingBlock={10} style={{ gap: '8px' }}>
+			{entry.pinned && <Icon name='pin-filled' size='x14' color='hint' marginBlockStart={2} />}
 			<Box flexGrow={1} style={{ minWidth: 0 }}>
 				<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '8px' }}>
 					<Box fontScale='p2b' color='default' withTruncatedText>
@@ -409,12 +416,12 @@ const FeedEntryRow = ({
 					)}
 				</Box>
 				{entry.body && (
-					<Box fontScale='c1' color='hint' mbs={2} style={{ whiteSpace: 'pre-wrap' }}>
+					<Box fontScale='c1' color='hint' marginBlockStart={2} style={{ whiteSpace: 'pre-wrap' }}>
 						{entry.body}
 					</Box>
 				)}
 				{!isBirthday && entry.eventDate && (
-					<Box fontScale='micro' color='hint' mbs={2}>
+					<Box fontScale='micro' color='hint' marginBlockStart={2}>
 						{dateLabel(entry.eventDate)}
 					</Box>
 				)}
@@ -471,7 +478,7 @@ const FeedSection = ({ kind, entries, canManage }: { kind: FeedSectionKind; entr
 
 	const addButton = canManage ? (
 		<Button small onClick={() => openEditor()} title={t(meta.newKey)}>
-			<Icon name='plus' size='x16' mie={4} />
+			<Icon name='plus' size='x16' marginInlineEnd={4} />
 			{t('Firm_Feed_Add')}
 		</Button>
 	) : undefined;
@@ -609,32 +616,39 @@ const MyDayHomePage = () => {
 	return (
 		<Page color='default' background='tint' style={{ backgroundColor: LEDGER_PAPER }}>
 			<PageScrollableContent>
-				<Box display='flex' alignItems='flex-end' justifyContent='space-between' flexWrap='wrap' mbe={16} style={{ gap: '12px' }}>
+				<Box
+					display='flex'
+					alignItems='flex-end'
+					justifyContent='space-between'
+					flexWrap='wrap'
+					marginBlockEnd={16}
+					style={{ gap: '12px' }}
+				>
 					<Box>
 						{/* Serif "case caption" greeting — the ledger heading voice. */}
 						<Box is='h1' fontScale='h1' color='default' style={LEDGER_CAPTION_STYLE}>
 							{timeGreeting()}
 							{displayName ? `, ${displayName}` : ''}
 						</Box>
-						<Box fontScale='p2' color='hint' mbs={4}>
+						<Box fontScale='p2' color='hint' marginBlockStart={4}>
 							{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
 							{derived.solRisk > 0 ? ` · ${derived.solRisk} matter${derived.solRisk === 1 ? '' : 's'} with a deadline within 30 days` : ''}
 						</Box>
 					</Box>
 					<Box display='flex' style={{ gap: '8px' }}>
 						<Button primary small onClick={goToBoards}>
-							<Icon name='plus' size='x16' mie={4} />
+							<Icon name='plus' size='x16' marginInlineEnd={4} />
 							New matter
 						</Button>
 						<Button small onClick={goToBoards}>
-							<Icon name='plus' size='x16' mie={4} />
+							<Icon name='plus' size='x16' marginInlineEnd={4} />
 							New lead
 						</Button>
 					</Box>
 				</Box>
 
 				{loading ? (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				) : (
@@ -660,7 +674,7 @@ const MyDayHomePage = () => {
 												key={c._id}
 												display='flex'
 												alignItems='center'
-												pb={8}
+												paddingBlock={8}
 												style={{ cursor: 'pointer', gap: '8px' }}
 												onClick={() => openCard(c._id)}
 											>
@@ -682,7 +696,7 @@ const MyDayHomePage = () => {
 												key={m.card._id}
 												display='flex'
 												alignItems='center'
-												pb={6}
+												paddingBlock={6}
 												style={{ cursor: 'pointer', gap: '8px' }}
 												onClick={() => openCard(m.card._id)}
 											>
@@ -726,7 +740,7 @@ const MyDayHomePage = () => {
 										key={m.card._id}
 										display='flex'
 										alignItems='center'
-										pb={6}
+										paddingBlock={6}
 										style={{ cursor: 'pointer', gap: '8px' }}
 										onClick={() => openCard(m.card._id)}
 									>
@@ -758,7 +772,7 @@ const MyDayHomePage = () => {
 
 				{/* MATTERCHAT: Firm Feed — admin-managed bulletin (announcements / birthdays / shout-outs) */}
 				{feedLoading ? (
-					<Box display='flex' justifyContent='center' p={16}>
+					<Box display='flex' justifyContent='center' padding={16}>
 						<Throbber />
 					</Box>
 				) : (
@@ -777,7 +791,7 @@ const MyDayHomePage = () => {
 
 				<SectionCard icon='team' title='Team' count={staff.length}>
 					{usersLoading ? (
-						<Box display='flex' justifyContent='center' p={8}>
+						<Box display='flex' justifyContent='center' padding={8}>
 							<Throbber />
 						</Box>
 					) : staff.length === 0 ? (
@@ -789,8 +803,8 @@ const MyDayHomePage = () => {
 									key={u._id}
 									display='flex'
 									alignItems='center'
-									pb={6}
-									pi={8}
+									paddingBlock={6}
+									paddingInline={8}
 									borderRadius='x8'
 									style={{ gap: '8px', cursor: 'pointer', width: '224px' }}
 									onClick={() => u.username && router.navigate({ name: 'direct', params: { rid: u.username } })}

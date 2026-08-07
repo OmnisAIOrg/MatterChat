@@ -10,10 +10,10 @@
 import type { IUser } from '@rocket.chat/core-typings';
 import { Rooms } from '@rocket.chat/models';
 
-import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
-import { createRoom } from '../../../../app/lib/server/functions/createRoom';
-import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
-import { settings } from '../../../../app/settings/server';
+import { hasRoleAsync } from '../../authorization/hasRole';
+import { createRoom } from '../../rooms/createRoom';
+import { sendMessage } from '../../messages/sendMessage';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 import { getChiBotUser } from '../bot';
 

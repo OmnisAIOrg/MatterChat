@@ -1,7 +1,7 @@
 import { cronJobs } from '@rocket.chat/cron';
 import { ReadReceipts, ReadReceiptsArchive } from '@rocket.chat/models';
 
-import { settings } from '../../app/settings/server';
+import { settings } from '../settings';
 import { SystemLogger } from '../lib/logger/system';
 
 /**

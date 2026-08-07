@@ -124,9 +124,16 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 	};
 
 	return (
-		<Box mbs={12}>
+		<Box marginBlockStart={12}>
 			{/* Compact small-caps section head + tabular rollup figures over a khaki rule. */}
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={6} pbe={2} style={ledgerRule(tone)}>
+			<Box
+				display='flex'
+				alignItems='center'
+				justifyContent='space-between'
+				marginBlockEnd={6}
+				paddingBlockEnd={2}
+				style={ledgerRule(tone)}
+			>
 				<Box style={ledgerHead(tone)}>{t('Boards_Time', { defaultValue: 'Time' })}</Box>
 				<Box fontScale='c1' color='hint' style={tabularFigures}>
 					{t('Boards_Time_Rollup', {
@@ -138,13 +145,13 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 			</Box>
 
 			{estimate > 0 && (
-				<Box mbe={6}>
+				<Box marginBlockEnd={6}>
 					<LedgerProgress percent={percent} tone={tone} />
 				</Box>
 			)}
 
 			{/* Estimate */}
-			<Box display='flex' alignItems='center' mbe={8} style={{ gap: '8px' }}>
+			<Box display='flex' alignItems='center' marginBlockEnd={8} style={{ gap: '8px' }}>
 				<Box fontScale='c1' color='hint' style={{ minWidth: 72 }}>
 					{t('Boards_Time_Estimate', { defaultValue: 'Estimate' })}
 				</Box>
@@ -165,7 +172,14 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 
 			{/* Logged entries — tabular time figures aligned in a column, khaki-ruled rows */}
 			{entries.map((entry) => (
-				<Box key={entry.id} display='flex' alignItems='center' mbe={2} pbe={2} style={{ gap: '8px', ...ledgerRule(tone) }}>
+				<Box
+					key={entry.id}
+					display='flex'
+					alignItems='center'
+					marginBlockEnd={2}
+					paddingBlockEnd={2}
+					style={{ gap: '8px', ...ledgerRule(tone) }}
+				>
 					<Box fontScale='p2' color='default' style={{ minWidth: 64, ...tabularFigures }}>
 						{fmtMinutes(entry.minutes)}
 					</Box>
@@ -178,7 +192,7 @@ const TimePanel = ({ boardId, cardId, estimateMinutes, entries }: TimePanelProps
 			))}
 
 			{/* Log time */}
-			<Box display='flex' alignItems='center' mbs={8} style={{ gap: '8px' }}>
+			<Box display='flex' alignItems='center' marginBlockStart={8} style={{ gap: '8px' }}>
 				<TextInput
 					value={logHours}
 					placeholder={t('Boards_Time_Hours', { defaultValue: 'Hours' })}

@@ -2,7 +2,7 @@ import type { IBoard, IBoardCard, IBoardList, IMatterSnapshot } from '@rocket.ch
 import { Boards, BoardsLists, BoardsCards, BoardsActivities, Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { createRoom } from '../../../../app/lib/server/functions/createRoom';
+import { createRoom } from '../../rooms/createRoom';
 import { createBoard, createList } from '../service';
 import { caseProClient } from './caseProClient';
 import type { CaseProStage } from './caseProClient';

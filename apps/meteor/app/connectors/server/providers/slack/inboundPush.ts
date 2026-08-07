@@ -14,7 +14,7 @@
  */
 import type { InboundPushTarget } from './inboundPushTargets';
 import { SystemLogger } from '../../../../../server/lib/logger/system';
-import notifications from '../../../../notifications/server/lib/Notifications';
+import notifications from '../../../../../server/lib/notifications/core/lib/Notifications';
 
 export { buildInboundPushTargets } from './inboundPushTargets';
 export type { InboundPushTarget } from './inboundPushTargets';

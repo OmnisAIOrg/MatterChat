@@ -19,7 +19,7 @@ const PremiumDeploymentCard = ({ serverInfo: { workspaceUrl, hashedWorkspaceUrl 
 
 	return (
 		<Box
-			bg='var(--surface)'
+			backgroundColor='var(--surface)'
 			borderRadius='14px'
 			border='1px solid var(--border)'
 			boxShadow='var(--shadow1)'
@@ -34,7 +34,14 @@ const PremiumDeploymentCard = ({ serverInfo: { workspaceUrl, hashedWorkspaceUrl 
 
 			<Box display='flex' flexDirection='column' gap='12px'>
 				{/* Version */}
-				<Box display='flex' flexDirection='column' gap='3px' paddingBlockEnd='8px' borderBottomWidth='1px' borderBottomColor='var(--border)'>
+				<Box
+					display='flex'
+					flexDirection='column'
+					gap='3px'
+					paddingBlockEnd='8px'
+					borderBottomWidth='1px'
+					borderBottomColor='var(--border)'
+				>
 					<Box fontFamily="'Geist Mono',monospace" fontSize='9.5px' letterSpacing='0.12em' color='var(--ink3)'>
 						VERSION
 					</Box>
@@ -45,7 +52,14 @@ const PremiumDeploymentCard = ({ serverInfo: { workspaceUrl, hashedWorkspaceUrl 
 
 				{/* Site URL */}
 				{workspaceUrl && (
-					<Box display='flex' flexDirection='column' gap='3px' paddingBlockEnd='8px' borderBottomWidth='1px' borderBottomColor='var(--border)'>
+					<Box
+						display='flex'
+						flexDirection='column'
+						gap='3px'
+						paddingBlockEnd='8px'
+						borderBottomWidth='1px'
+						borderBottomColor='var(--border)'
+					>
 						<Box fontFamily="'Geist Mono',monospace" fontSize='9.5px' letterSpacing='0.12em' color='var(--ink3)'>
 							SITE URL
 						</Box>

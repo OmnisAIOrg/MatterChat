@@ -30,15 +30,15 @@ const QuickAddCard = ({ isAdding, onAdd }: QuickAddCardProps) => {
 
 	if (!open) {
 		return (
-			<Button small secondary onClick={() => setOpen(true)} aria-label={t('Boards_Add_Card')} mbs={4}>
-				<Icon name='plus' size='x16' mie={4} />
+			<Button small secondary onClick={() => setOpen(true)} aria-label={t('Boards_Add_Card')} marginBlockStart={4}>
+				<Icon name='plus' size='x16' marginInlineEnd={4} />
 				{t('Boards_Add_Card')}
 			</Button>
 		);
 	}
 
 	return (
-		<Box mbs={4}>
+		<Box marginBlockStart={4}>
 			<TextAreaInput
 				rows={2}
 				value={title}
@@ -56,14 +56,14 @@ const QuickAddCard = ({ isAdding, onAdd }: QuickAddCardProps) => {
 				}}
 				autoFocus
 			/>
-			<Box display='flex' alignItems='center' mbs={4}>
+			<Box display='flex' alignItems='center' marginBlockStart={4}>
 				<Button small primary onClick={() => void submit()} disabled={isAdding || !title.trim()}>
 					{t('Add')}
 				</Button>
 				<Button
 					small
 					secondary
-					mis={4}
+					marginInlineStart={4}
 					onClick={() => {
 						setOpen(false);
 						setTitle('');

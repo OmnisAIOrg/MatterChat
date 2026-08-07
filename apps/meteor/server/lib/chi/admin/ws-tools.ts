@@ -22,8 +22,8 @@ import { Messages, Rooms, Subscriptions, Uploads, Users } from '@rocket.chat/mod
 import { emitClientAction } from './actions';
 import type { ChiTool } from './tools';
 import { getChiContext } from './turnctx';
-import { executeSetReaction } from '../../../../app/reactions/server/setReaction';
-import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
+import { executeSetReaction } from '../../messaging/reactions/setReaction';
+import { sendMessage } from '../../messages/sendMessage';
 import { readMessages } from '../../readMessages';
 import { completeCard, createCard } from '../../boards/service';
 import { getListsForBoard, getMyDayCards, listBoardsForUser, searchCards } from '../../boards/reads';

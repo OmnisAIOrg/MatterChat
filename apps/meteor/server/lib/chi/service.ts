@@ -6,9 +6,9 @@ import { getChiBotUser } from './bot';
 import { askChi } from './client';
 import { isChiConfigured } from './config';
 import { parseChiQuestion } from './context';
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
-import { sendMessage } from '../../../app/lib/server/functions/sendMessage';
-import { updateMessage } from '../../../app/lib/server/functions/updateMessage';
+import { hasPermissionAsync } from '../authorization/hasPermission';
+import { sendMessage } from '../messages/sendMessage';
+import { updateMessage } from '../messages/updateMessage';
 
 /**
  * CHI assistant — /chi orchestration.

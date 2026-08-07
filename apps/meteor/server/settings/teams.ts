@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 /**
  * Settings for the Microsoft Teams connector (the greenfield Microsoft Graph provider for the

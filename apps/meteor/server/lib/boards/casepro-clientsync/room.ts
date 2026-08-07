@@ -1,7 +1,7 @@
 import type { IRoom, IUser } from '@rocket.chat/core-typings';
 import { Rooms, Users } from '@rocket.chat/models';
 
-import { createRoom } from '../../../../app/lib/server/functions/createRoom';
+import { createRoom } from '../../rooms/createRoom';
 import { SystemLogger } from '../../logger/system';
 
 /**

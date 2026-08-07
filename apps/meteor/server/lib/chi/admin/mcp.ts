@@ -27,7 +27,7 @@ import crypto from 'crypto';
 import type { IUser } from '@rocket.chat/core-typings';
 
 import type { ToolDef } from './llm';
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 
 export type McpServer = { name: string; url: string; apiKey?: string; enabled?: boolean };

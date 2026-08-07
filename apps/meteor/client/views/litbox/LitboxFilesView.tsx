@@ -134,7 +134,7 @@ const LitboxFilesView = () => {
 			</PageHeader>
 			<PageScrollableContent>
 				{probeLoading && (
-					<Box display='flex' justifyContent='center' p={16}>
+					<Box display='flex' justifyContent='center' padding={16}>
 						<Throbber />
 					</Box>
 				)}
@@ -182,17 +182,17 @@ const LitboxFilesView = () => {
 					</Box>
 				)}
 				{!litboxNotConnected && scope === 'matter' && !matterId && (
-					<Box fontScale='p2' color='hint' p={16}>
+					<Box fontScale='p2' color='hint' padding={16}>
 						{t('Boards_Litbox_Pick_Matter_Hint', { defaultValue: 'Choose a matter to view its CasePro LitBox files.' })}
 					</Box>
 				)}
 				{!litboxNotConnected && scope === 'matter' && matterId && snapFetching && (
-					<Box display='flex' justifyContent='center' p={16}>
+					<Box display='flex' justifyContent='center' padding={16}>
 						<Throbber />
 					</Box>
 				)}
 				{!litboxNotConnected && scope === 'matter' && matterId && !snapFetching && !workspaceId && (
-					<Box fontScale='p2' color='hint' p={16}>
+					<Box fontScale='p2' color='hint' padding={16}>
 						{t('Boards_Litbox_No_Workspace', { defaultValue: 'This matter has no linked LitBox workspace yet.' })}
 					</Box>
 				)}

@@ -8,7 +8,7 @@ import type {
 import { Boards, BoardsAutomations, BoardsActivities, BoardsLists } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../lib/authorization/hasPermission';
 
 /**
  * Automation TEMPLATE catalog service (M7 — 05-automation-engine.md §9). The §9 seeds are

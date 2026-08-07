@@ -12,15 +12,15 @@ type BoardTemplateGalleryProps = {
 	isLoading?: boolean;
 };
 
-export const BoardTemplateGallery = ({
-	pipelineType,
-	onSelectTemplate,
-	isLoading = false,
-}: BoardTemplateGalleryProps): ReactElement => {
+export const BoardTemplateGallery = ({ pipelineType, onSelectTemplate, isLoading = false }: BoardTemplateGalleryProps): ReactElement => {
 	const { t } = useTranslation();
 	const listTemplates = useEndpoint('GET', '/v1/boards.templates.list');
 
-	const { data, isLoading: queryLoading, isError } = useQuery({
+	const {
+		data,
+		isLoading: queryLoading,
+		isError,
+	} = useQuery({
 		queryKey: ['boards', 'templates', { pipelineType }],
 		queryFn: () => listTemplates({ pipelineType }),
 	});
@@ -29,7 +29,7 @@ export const BoardTemplateGallery = ({
 
 	if (queryLoading || isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -45,7 +45,7 @@ export const BoardTemplateGallery = ({
 
 	if (templates.length === 0) {
 		return (
-			<Box fontScale='c1' color='hint' p={8}>
+			<Box fontScale='c1' color='hint' padding={8}>
 				{t('No_board_templates_available')}
 			</Box>
 		);
@@ -53,23 +53,19 @@ export const BoardTemplateGallery = ({
 
 	return (
 		<Box>
-			<Box fontScale='c1' color='hint' mbe={8}>
+			<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 				{t('Boards_Select_Template_Hint', {
 					defaultValue: 'Start with a pre-built template to save time.',
 				})}
 			</Box>
-			<Box
-				display='grid'
-				gridTemplateColumns='repeat(auto-fill, minmax(300px, 1fr))'
-				gap={12}
-			>
+			<Box display='grid' gridTemplateColumns='repeat(auto-fill, minmax(300px, 1fr))' gap={12}>
 				{templates.map((template) => (
 					<Box
 						key={template._id}
 						display='flex'
 						flexDirection='column'
-						p={12}
-						bg='tint'
+						padding={12}
+						backgroundColor='tint'
 						borderRadius='x4'
 						style={{
 							cursor: 'pointer',
@@ -83,34 +79,30 @@ export const BoardTemplateGallery = ({
 							e.currentTarget.style.borderColor = 'transparent';
 						}}
 					>
-						<Box display='flex' alignItems='center' mbe={4}>
+						<Box display='flex' alignItems='center' marginBlockEnd={4}>
 							<Box fontScale='p2b' color='default' withTruncatedText flexGrow={1}>
 								{template.name}
 							</Box>
 						</Box>
 
 						{template.description && (
-							<Box fontScale='c1' color='hint' mbe={8}>
+							<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 								{template.description}
 							</Box>
 						)}
 
-						<Box fontScale='c2' color='hint' mbe={8}>
+						<Box fontScale='c2' color='hint' marginBlockEnd={8}>
 							{t('Boards_Lists_Count', { count: template.lists?.length ?? 0 })}
 						</Box>
 
 						{template.usageCount ? (
-							<Box fontScale='c2' color='hint' mbe={12}>
+							<Box fontScale='c2' color='hint' marginBlockEnd={12}>
 								{t('Boards_Template_Used_Count', { defaultValue: 'Used {count} times', count: template.usageCount })}
 							</Box>
 						) : null}
 
-						<Button
-							primary
-							small
-							onClick={() => onSelectTemplate(template)}
-						>
-							<Icon name='plus' size='x16' mie={4} />
+						<Button primary small onClick={() => onSelectTemplate(template)}>
+							<Icon name='plus' size='x16' marginInlineEnd={4} />
 							{t('Use_Template')}
 						</Button>
 					</Box>

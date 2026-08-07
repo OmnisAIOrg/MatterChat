@@ -81,7 +81,7 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={24}>
+			<Box display='flex' justifyContent='center' padding={24}>
 				<Throbber />
 			</Box>
 		);
@@ -97,7 +97,7 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 	if (mode === 'gantt') {
 		return (
 			<Box display='flex' flexDirection='column' style={{ minWidth: 0, background: tones.paper, minHeight: '100%' }}>
-				<Box display='flex' alignItems='center' justifyContent='space-between' pi={24} style={{ gap: '12px', paddingBottom: 0 }}>
+				<Box display='flex' alignItems='center' justifyContent='space-between' paddingInline={24} style={{ gap: '12px', paddingBottom: 0 }}>
 					<Box style={monoLabel(tones)}>{t('Boards_Gantt_PlottedBy', { defaultValue: 'Plotted by start → due date' })}</Box>
 					<ButtonGroup small>
 						<Button small primary onClick={() => setMode('gantt')}>
@@ -114,10 +114,10 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 	}
 
 	return (
-		<Box pi={24} pb={16} style={{ background: tones.paper, minHeight: '100%' }}>
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={16} style={{ gap: '12px', maxWidth: 760 }}>
+		<Box paddingInline={24} paddingBlock={16} style={{ background: tones.paper, minHeight: '100%' }}>
+			<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={16} style={{ gap: '12px', maxWidth: 760 }}>
 				<Box style={monoLabel(tones)}>
-					<Icon name='clock' size='x14' mie={4} />
+					<Icon name='clock' size='x14' marginInlineEnd={4} />
 					{t('Boards_Views_Timeline_PlottedBy', { field: dateFieldLabel, defaultValue: 'Plotted by {{field}}' })}
 				</Box>
 				<ButtonGroup small>
@@ -138,11 +138,11 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 				)}
 
 				{months.map((month) => (
-					<Box key={month.key} mbe={20}>
-						<Box fontScale='h5' color='default' mbe={8} style={serifCaption}>
+					<Box key={month.key} marginBlockEnd={20}>
+						<Box fontScale='h5' color='default' marginBlockEnd={8} style={serifCaption}>
 							{month.label}
 						</Box>
-						<Box pis={8} style={{ borderInlineStart: `2px solid ${tones.stroke}` }}>
+						<Box paddingInlineStart={8} style={{ borderInlineStart: `2px solid ${tones.stroke}` }}>
 							{month.items.map(({ card, date }) => {
 								const overdue = isOverdue(date, card.dueComplete);
 								return (
@@ -158,9 +158,9 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 										}}
 										display='flex'
 										alignItems='center'
-										mbe={6}
-										pb={6}
-										pi={10}
+										marginBlockEnd={6}
+										paddingBlock={6}
+										paddingInline={10}
 										style={{
 											cursor: 'pointer',
 											gap: '10px',
@@ -195,11 +195,11 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 				))}
 
 				{undated.length > 0 && (
-					<Box mbe={20}>
-						<Box fontScale='h5' mbe={8} style={{ ...serifCaption, color: tones.inkMuted }}>
+					<Box marginBlockEnd={20}>
+						<Box fontScale='h5' marginBlockEnd={8} style={{ ...serifCaption, color: tones.inkMuted }}>
 							{t('Boards_Views_Timeline_Undated', { defaultValue: 'Undated' })}
 						</Box>
-						<Box pis={8} style={{ borderInlineStart: `2px solid ${tones.strokeSoft}` }}>
+						<Box paddingInlineStart={8} style={{ borderInlineStart: `2px solid ${tones.strokeSoft}` }}>
 							{undated.map((card) => (
 								<Box
 									key={card._id}
@@ -213,9 +213,9 @@ const TimelineView = ({ board, viewId }: TimelineViewProps): ReactElement => {
 									}}
 									display='flex'
 									alignItems='center'
-									mbe={6}
-									pb={6}
-									pi={10}
+									marginBlockEnd={6}
+									paddingBlock={6}
+									paddingInline={10}
 									style={{
 										cursor: 'pointer',
 										gap: '10px',

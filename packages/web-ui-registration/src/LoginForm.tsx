@@ -12,7 +12,7 @@ import {
 	Callout,
 	Box,
 } from '@rocket.chat/fuselage';
-import { Form, ActionLink } from '@rocket.chat/layout';
+import { Form, FormContainer, FormFooter, FormHeader, FormTitle, ActionLink } from '@rocket.chat/layout';
 import { useDocumentTitle } from '@rocket.chat/ui-client';
 import { useLoginWithPassword, useSetting } from '@rocket.chat/ui-contexts';
 import { useMutation } from '@tanstack/react-query';
@@ -55,7 +55,9 @@ export type LoginErrors = keyof typeof LOGIN_SUBMIT_ERRORS | 'totp-canceled' | s
 
 export type LoginErrorState = [error: LoginErrors, message?: string] | undefined;
 
-export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRouter }) => {
+export type LoginFormProps = { setLoginRoute: DispatchLoginRouter };
+
+export const LoginForm = ({ setLoginRoute }: LoginFormProps) => {
 	const {
 		register,
 		handleSubmit,
@@ -181,25 +183,25 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 			aria-describedby='welcomeTitle'
 			onSubmit={handleSubmit(async (data) => loginMutation.mutate(data))}
 		>
-			<Form.Header>
-				<Form.Title id={formLabelId}>{t('registration.component.login')}</Form.Title>
-			</Form.Header>
-			{/* ISSUE 2: OmnisAI button moved above the form when enabled, making it prominent.
+			<FormHeader>
+				<FormTitle id={formLabelId}>{t('registration.component.login')}</FormTitle>
+			</FormHeader>
+			{/* MATTERCHAT: OmnisAI SSO button sits above the password form when enabled, making it prominent.
 					When OmnisAI is available, it becomes primary; password login becomes secondary only if shown.
 					This improves UX for OmnisAI-mode workspaces where users have no password. */}
 			{omnisaiOidcEnabled && (
-				<Form.Container>
+				<FormContainer>
 					<ButtonGroup vertical stretch>
 						<Button loading={loginMutation.isPending} disabled={loginMutation.isPending} onClick={handleOmnisaiLogin} primary>
 							{omnisaiButtonLabel}
 						</Button>
 					</ButtonGroup>
-				</Form.Container>
+				</FormContainer>
 			)}
 			{showFormLogin && omnisaiOidcEnabled && (
-				<Box mbe='x16' display='flex' alignItems='center' gap='x8'>
+				<Box marginBlockEnd='x16' display='flex' alignItems='center' gap='x8'>
 					<Box style={{ flex: 1, height: '1px' }} backgroundColor='neutral-200' />
-					<Box mie='x0' mis='x0' fontSize='x12' color='neutral-700' fontWeight='600'>
+					<Box marginInlineEnd='x0' marginInlineStart='x0' fontSize='x12' color='neutral-700' fontWeight='600'>
 						{t('registration.page.login.or')}
 					</Box>
 					<Box style={{ flex: 1, height: '1px' }} backgroundColor='neutral-200' />
@@ -207,7 +209,7 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 			)}
 			{showFormLogin && (
 				<>
-					<Form.Container>
+					<FormContainer>
 						<FieldGroup disabled={loginMutation.isPending}>
 							<Field>
 								<FieldLabel required htmlFor={usernameId}>
@@ -268,8 +270,9 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 							</Field>
 						</FieldGroup>
 						{errorOnSubmit && <FieldGroup disabled={loginMutation.isPending}>{renderErrorOnSubmit(errorOnSubmit)}</FieldGroup>}
-					</Form.Container>
-					<Form.Footer>
+					</FormContainer>
+					<FormFooter>
+						{/* MATTERCHAT: password login de-emphasised (secondary) when OmnisAI SSO is the primary action. */}
 						<ButtonGroup vertical stretch>
 							<Button loading={loginMutation.isPending} type='submit' primary={!omnisaiOidcEnabled}>
 								{t('registration.component.login')}
@@ -280,7 +283,7 @@ export const LoginForm = ({ setLoginRoute }: { setLoginRoute: DispatchLoginRoute
 								New here? <ActionLink onClick={(): void => setLoginRoute('register')}>Create an account</ActionLink>
 							</Trans>
 						</p>
-					</Form.Footer>
+					</FormFooter>
 				</>
 			)}
 			<LoginServices disabled={loginMutation.isPending} setError={setErrorOnSubmit} />

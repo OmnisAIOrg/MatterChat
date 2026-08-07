@@ -206,16 +206,13 @@ const MattersBoardView = ({ board, lists }: MattersBoardViewProps) => {
 		},
 	});
 
-	const handleDragStart = useCallback(
-		(event: DragStartEvent) => {
-			const activeData = event.active.data.current as { type?: string; listId?: string } | undefined;
-			if (activeData?.type === 'list') {
-				return;
-			}
-			// Discard any active card on list drag
-		},
-		[],
-	);
+	const handleDragStart = useCallback((event: DragStartEvent) => {
+		const activeData = event.active.data.current as { type?: string; listId?: string } | undefined;
+		if (activeData?.type === 'list') {
+			return;
+		}
+		// Discard any active card on list drag
+	}, []);
 
 	const handleListDragEnd = useCallback(
 		(event: DragEndEvent) => {
@@ -282,7 +279,7 @@ const MattersBoardView = ({ board, lists }: MattersBoardViewProps) => {
 	if (isLoading) {
 		return (
 			<PageScrollableContent>
-				<Box display='flex' justifyContent='center' p={24}>
+				<Box display='flex' justifyContent='center' padding={24}>
 					<Throbber />
 				</Box>
 			</PageScrollableContent>
@@ -292,11 +289,7 @@ const MattersBoardView = ({ board, lists }: MattersBoardViewProps) => {
 	return (
 		<PageScrollableContent>
 			{selectedIdsList.length > 0 && (
-				<div
-					className='mc-matters-bulk-bar'
-					role='toolbar'
-					aria-label='Bulk action bar'
-				>
+				<div className='mc-matters-bulk-bar' role='toolbar' aria-label='Bulk action bar'>
 					<span className='mc-matters-bulk-bar-count'>{selectedIdsList.length} selected</span>
 					<span className='mc-matters-bulk-bar-divider' />
 					<span className='mc-matters-bulk-bar-action' onClick={() => {}}>
@@ -308,12 +301,7 @@ const MattersBoardView = ({ board, lists }: MattersBoardViewProps) => {
 					<span className='mc-matters-bulk-bar-action danger' onClick={() => {}}>
 						Archive
 					</span>
-					<span
-						className='mc-matters-bulk-bar-close'
-						onClick={clearSelection}
-						role='button'
-						tabIndex={0}
-					>
+					<span className='mc-matters-bulk-bar-close' onClick={clearSelection} role='button' tabIndex={0}>
 						✕
 					</span>
 				</div>
@@ -351,9 +339,7 @@ const MattersBoardView = ({ board, lists }: MattersBoardViewProps) => {
 						))}
 					</SortableContext>
 				</Box>
-				<DragOverlay>
-					{/* Overlay would render dragged card/column here */}
-				</DragOverlay>
+				<DragOverlay>{/* Overlay would render dragged card/column here */}</DragOverlay>
 			</DndContext>
 		</PageScrollableContent>
 	);

@@ -10,7 +10,7 @@
 import type { CalendarProvider } from '@rocket.chat/core-typings';
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 
 // ─── Google Calendar ─────────────────────────────────────────────────────────────────────────────
 

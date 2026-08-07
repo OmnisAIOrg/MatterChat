@@ -1,7 +1,7 @@
 import type { IAutomation, IBoardAutomationSchedule } from '@rocket.chat/core-typings';
 import { Boards, BoardsAutomations, BoardsCards, BoardsDeadlines, BoardsLeads, BoardsSequenceEnrollments } from '@rocket.chat/models';
 
-import { settings } from '../../../app/settings/server';
+import { settings } from '../../settings';
 import { advanceEnrollment } from '../../lib/boards/leads/sequences';
 import { SystemLogger } from '../../lib/logger/system';
 import type { AutomationContext, AutomationSubject } from './context';

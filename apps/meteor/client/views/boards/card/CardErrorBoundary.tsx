@@ -33,7 +33,7 @@ const CardErrorBoundary = ({ children }: CardErrorBoundaryProps): ReactElement =
 					onReset={reset}
 					fallbackRender={({ error, resetErrorBoundary }) => (
 						<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-							<Box mbe={8} fontScale='c1'>
+							<Box marginBlockEnd={8} fontScale='c1'>
 								{error instanceof Error ? error.message : String(error)}
 							</Box>
 							<Button small onClick={(): void => resetErrorBoundary()}>

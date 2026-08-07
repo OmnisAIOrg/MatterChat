@@ -26,13 +26,14 @@ const DefaultHomePage = () => {
 		<Page color='default' background='tint'>
 			<HomePageHeader />
 			<PageScrollableContent>
-				<Box is='h2' fontScale='h1' mb={20}>
+				<Box is='h2' fontScale='h1' marginBlock={20}>
+					{/* MATTERCHAT: white-label fallback — never surface the Rocket.Chat name. */}
 					{t('Welcome_to_workspace', { Site_Name: workspaceName || 'MatterChat' })}
 				</Box>
-				<Box is='h3' fontScale='h3' mb={16}>
+				<Box is='h3' fontScale='h3' marginBlock={16}>
 					{t('Some_ideas_to_get_you_started')}
 				</Box>
-				<Box mi='neg-x8'>
+				<Box marginInline='neg-x8'>
 					<CardGroup wrap stretch>
 						{canAddUsers && <AddUsersCard />}
 						{canCreateChannel && <CreateChannelsCard />}

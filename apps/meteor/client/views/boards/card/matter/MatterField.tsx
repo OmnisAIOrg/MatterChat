@@ -13,7 +13,7 @@ const MatterField = ({ label, children }: MatterFieldProps): ReactElement | null
 	}
 	return (
 		// Ledger-dense: tighter rows + tabular figures so dates/amounts align down the column.
-		<Box display='flex' justifyContent='space-between' alignItems='flex-start' mbe={4} style={{ gap: '12px' }}>
+		<Box display='flex' justifyContent='space-between' alignItems='flex-start' marginBlockEnd={4} style={{ gap: '12px' }}>
 			<Box fontScale='c1' color='hint' style={{ flexShrink: 0 }}>
 				{label}
 			</Box>

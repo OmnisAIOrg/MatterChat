@@ -3,18 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-	Box,
-	Button,
-	Callout,
-	Icon,
-	Margins,
-	Skeleton,
-	Tag,
-	TextInput,
-	Scrollable,
-	ActionButton,
-} from '@rocket.chat/fuselage';
+import { Box, Button, Callout, Icon, Margins, Skeleton, Tag, TextInput, Scrollable, IconButton } from '@rocket.chat/fuselage';
 import { useToastMessageDispatch, useTranslation } from '@rocket.chat/ui-contexts';
 import styles from './DocsPanel.module.css';
 
@@ -178,14 +167,14 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 
 	return (
 		<Box style={{ padding: '24px', maxHeight: '100vh', overflow: 'auto' }}>
-			<Box display="flex" justifyContent="space-between" alignItems="center" mb="x16">
+			<Box display='flex' justifyContent='space-between' alignItems='center' marginBlock='x16'>
 				<h2 style={{ fontSize: '19px', fontWeight: 650, fontFamily: 'Geist' }}>{t('Documentation')}</h2>
-				<Button onClick={handleCreateDoc} primary icon="pencil">
+				<Button onClick={handleCreateDoc} primary icon='pencil'>
 					{t('New-Page')}
 				</Button>
 			</Box>
 
-			<Box mb="x16">
+			<Box marginBlock='x16'>
 				<TextInput
 					placeholder={t('Search-docs')}
 					value={searchQuery}
@@ -193,21 +182,21 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 						setSearchQuery(e.currentTarget.value);
 						searchDocs(e.currentTarget.value);
 					}}
-					icon="magnifier"
+					icon='magnifier'
 				/>
 			</Box>
 
 			{docs.length === 0 ? (
-				<Callout type="info">{t('No-docs-yet')}</Callout>
+				<Callout type='info'>{t('No-docs-yet')}</Callout>
 			) : (
 				<Box>
 					{docs.map((doc) => (
 						<Box
 							key={doc._id}
 							onClick={() => setSelectedDocId(doc._id)}
-							padding="x12"
-							mb="x8"
-							borderRadius="x9"
+							padding='x12'
+							marginBlock='x8'
+							borderRadius='x9'
 							style={{
 								cursor: 'pointer',
 								backgroundColor: selectedDocId === doc._id ? 'var(--rcx-color-surface-tint)' : 'var(--rcx-color-surface-2)',
@@ -215,23 +204,23 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 								transition: 'all 150ms ease',
 							}}
 						>
-							<Box display="flex" justifyContent="space-between" alignItems="flex-start">
+							<Box display='flex' justifyContent='space-between' alignItems='flex-start'>
 								<Box flex={1}>
 									<h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px 0', fontFamily: 'Geist' }}>{doc.title}</h4>
 									{doc.description && (
 										<p style={{ fontSize: '12.5px', color: 'var(--rcx-color-text-secondary)', margin: '4px 0' }}>{doc.description}</p>
 									)}
 									{doc.tags && doc.tags.length > 0 && (
-										<Box display="flex" gap="x4" mt="x4" flexWrap="wrap">
+										<Box display='flex' gap='x4' mt='x4' flexWrap='wrap'>
 											{doc.tags.map((tag) => (
 												<Tag key={tag}>{tag}</Tag>
 											))}
 										</Box>
 									)}
 								</Box>
-								<Box display="flex" gap="x4">
-									<ActionButton
-										icon="pencil"
+								<Box display='flex' gap='x4'>
+									<IconButton
+										icon='pencil'
 										small
 										onClick={(e: any) => {
 											e.stopPropagation();
@@ -240,8 +229,8 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 										}}
 										title={t('Edit')}
 									/>
-									<ActionButton
-										icon="trash"
+									<IconButton
+										icon='trash'
 										small
 										onClick={(e: any) => {
 											e.stopPropagation();
@@ -251,7 +240,7 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 									/>
 								</Box>
 							</Box>
-							<Box mt="x4" display="flex" alignItems="center" gap="x4" fontSize="x10">
+							<Box mt='x4' display='flex' alignItems='center' gap='x4' fontSize='x10'>
 								<span style={{ color: 'var(--rcx-color-text-tertiary)' }}>
 									{t('Created')} {new Date(doc.createdAt).toLocaleDateString()}
 								</span>
@@ -280,16 +269,12 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 						overflow: 'auto',
 					}}
 				>
-					<Box display="flex" justifyContent="space-between" alignItems="center" mb="x16">
+					<Box display='flex' justifyContent='space-between' alignItems='center' marginBlock='x16'>
 						<h3 style={{ fontSize: '16px', fontWeight: 600, fontFamily: 'Geist' }}>{t('Edit-Page')}</h3>
-						<ActionButton
-							icon="cross"
-							onClick={() => setShowEditor(false)}
-							style={{ cursor: 'pointer' }}
-						/>
+						<IconButton icon='cross' onClick={() => setShowEditor(false)} style={{ cursor: 'pointer' }} />
 					</Box>
 
-					<Box mb="x16">
+					<Box marginBlock='x16'>
 						<label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('Title')}</label>
 						<TextInput
 							value={editingDoc.title || ''}
@@ -299,7 +284,7 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 						/>
 					</Box>
 
-					<Box mb="x16">
+					<Box marginBlock='x16'>
 						<label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('Description')}</label>
 						<textarea
 							value={editingDoc.description || ''}
@@ -318,7 +303,7 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 						/>
 					</Box>
 
-					<Box mb="x16">
+					<Box marginBlock='x16'>
 						<label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('Visibility')}</label>
 						<select
 							value={editingDoc.visibility || 'team'}
@@ -333,13 +318,13 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 								boxSizing: 'border-box',
 							}}
 						>
-							<option value="private">{t('Private')}</option>
-							<option value="team">{t('Team')}</option>
-							<option value="public">{t('Public')}</option>
+							<option value='private'>{t('Private')}</option>
+							<option value='team'>{t('Team')}</option>
+							<option value='public'>{t('Public')}</option>
 						</select>
 					</Box>
 
-					<Box mb="x16">
+					<Box marginBlock='x16'>
 						<label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('Content')}</label>
 						<textarea
 							value={editingDoc.content || ''}
@@ -358,7 +343,7 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 						/>
 					</Box>
 
-					<Box display="flex" justifyContent="flex-end" gap="x8">
+					<Box display='flex' justifyContent='flex-end' gap='x8'>
 						<Button onClick={() => setShowEditor(false)}>{t('Cancel')}</Button>
 						<Button onClick={handleSaveDoc} primary>
 							{t('Save')}
@@ -367,7 +352,12 @@ export const DocsPanel: React.FC<DocsPanelProps> = ({ workspaceId }) => {
 				</Box>
 			)}
 
-			{showEditor && <Box style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(8, 12, 10, 0.45)', zIndex: 999 }} onClick={() => setShowEditor(false)} />}
+			{showEditor && (
+				<Box
+					style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(8, 12, 10, 0.45)', zIndex: 999 }}
+					onClick={() => setShowEditor(false)}
+				/>
+			)}
 		</Box>
 	);
 };

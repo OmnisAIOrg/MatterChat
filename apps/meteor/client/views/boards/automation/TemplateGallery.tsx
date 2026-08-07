@@ -66,7 +66,7 @@ const TemplateGallery = ({ boardId, canManage, rulesQueryKey }: TemplateGalleryP
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -75,7 +75,7 @@ const TemplateGallery = ({ boardId, canManage, rulesQueryKey }: TemplateGalleryP
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -86,7 +86,7 @@ const TemplateGallery = ({ boardId, canManage, rulesQueryKey }: TemplateGalleryP
 
 	if (templates.length === 0) {
 		return (
-			<Box fontScale='c1' color='hint' p={8}>
+			<Box fontScale='c1' color='hint' padding={8}>
 				{t('No_results_found')}
 			</Box>
 		);
@@ -94,18 +94,18 @@ const TemplateGallery = ({ boardId, canManage, rulesQueryKey }: TemplateGalleryP
 
 	return (
 		<Box>
-			<Box fontScale='c1' color='hint' mbe={8}>
+			<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 				{t('Boards_Automation_Templates_Hint', { defaultValue: 'Prebuilt automations you can install onto this board.' })}
 			</Box>
 			{templates.map((template) => {
 				const installing = installMutation.isPending && installMutation.variables === template._id;
 				return (
-					<Box key={template._id} mbe={8} pb={12} pi={12} bg='tint' borderRadius='x4'>
+					<Box key={template._id} marginBlockEnd={8} paddingBlock={12} paddingInline={12} backgroundColor='tint' borderRadius='x4'>
 						<Box display='flex' alignItems='flex-start' justifyContent='space-between' style={{ gap: '12px' }}>
 							<Box flexGrow={1} minWidth={0}>
-								<Box display='flex' alignItems='center' mbe={2}>
-									{template.icon && <Icon name={template.icon as IconName} size='x16' mie={6} color='hint' />}
-									<Box fontScale='p2b' color='default' withTruncatedText mie={6}>
+								<Box display='flex' alignItems='center' marginBlockEnd={2}>
+									{template.icon && <Icon name={template.icon as IconName} size='x16' marginInlineEnd={6} color='hint' />}
+									<Box fontScale='p2b' color='default' withTruncatedText marginInlineEnd={6}>
 										{template.name}
 									</Box>
 									<Tag variant='secondary'>{t(KIND_LABEL[template.kind] as Parameters<typeof t>[0])}</Tag>
@@ -128,7 +128,7 @@ const TemplateGallery = ({ boardId, canManage, rulesQueryKey }: TemplateGalleryP
 										<Throbber inheritColor size='x12' />
 									) : (
 										<>
-											<Icon name='plus' size='x16' mie={4} />
+											<Icon name='plus' size='x16' marginInlineEnd={4} />
 											{t('Boards_Automation_Template_Install', { defaultValue: 'Install to this board' })}
 										</>
 									)}

@@ -35,10 +35,10 @@ import { extMessageId, isBridgeMessageId, isBridgeRoomImportId, roomImportId } f
 import { echoSuppression, reactionEcho, reactionEchoKey } from './echoSuppression';
 import { callbacks } from '../../../../server/lib/callbacks';
 import { SystemLogger } from '../../../../server/lib/logger/system';
-import { createRoom } from '../../../lib/server/functions/createRoom';
-import { sendMessage } from '../../../lib/server/functions/sendMessage';
-import { notifyOnSubscriptionChangedByRoomIdAndUserId } from '../../../lib/server/lib/notifyListener';
-import { settings } from '../../../settings/server';
+import { sendMessage } from '../../../../server/lib/messages/sendMessage';
+import { notifyOnSubscriptionChangedByRoomIdAndUserId } from '../../../../server/lib/notifyListener';
+import { createRoom } from '../../../../server/lib/rooms/createRoom';
+import { settings } from '../../../../server/settings';
 import type { IOutboundMessage, IProviderMessage } from '../ChatProvider';
 import { providerRegistry } from '../providerRegistry';
 import { toProviderConnection } from '../runtimeConnection';

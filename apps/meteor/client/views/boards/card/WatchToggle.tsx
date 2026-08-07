@@ -86,9 +86,11 @@ const WatchToggle = ({ cardId }: WatchToggleProps): ReactElement => {
 			{toggleMutation.isPending ? (
 				<Throbber inheritColor size='x12' />
 			) : (
-				<Icon name={watching ? 'bell' : 'bell-off'} size='x16' mie={4} />
+				<Icon name={watching ? 'bell' : 'bell-off'} size='x16' marginInlineEnd={4} />
 			)}
-			{watching ? t('Boards_Notifications_Watching', { defaultValue: 'Watching' }) : t('Boards_Notifications_Watch', { defaultValue: 'Watch' })}
+			{watching
+				? t('Boards_Notifications_Watching', { defaultValue: 'Watching' })
+				: t('Boards_Notifications_Watch', { defaultValue: 'Watch' })}
 		</Button>
 	);
 };

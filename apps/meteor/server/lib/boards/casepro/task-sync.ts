@@ -3,7 +3,7 @@ import { Boards, BoardsCards, BoardsActivities } from '@rocket.chat/models';
 
 import { SystemLogger } from '../../logger/system';
 import { enqueue } from '../../../services/automation/queue';
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import type { BoardEventName } from '../events';
 import { caseProClient } from './client';
 import { isLiveTransportConfigured } from './live';

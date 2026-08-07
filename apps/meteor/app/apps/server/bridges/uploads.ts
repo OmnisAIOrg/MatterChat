@@ -3,10 +3,11 @@ import { UploadBridge } from '@rocket.chat/apps/dist/server/bridges/UploadBridge
 import type { IUpload } from '@rocket.chat/apps-engine/definition/uploads';
 import type { IUploadDetails } from '@rocket.chat/apps-engine/definition/uploads/IUploadDetails';
 
+// MATTERCHAT: determineFileType lives in `lib/misc` (not `ee/lib/misc`) — the EE tree is stripped.
 import { determineFileType } from '../../../../lib/misc/determineFileType';
-import { FileUpload } from '../../../file-upload/server';
-import { sendFileMessage } from '../../../file-upload/server/methods/sendFileMessage';
-import { sendFileLivechatMessage } from '../../../livechat/server/methods/sendFileLivechatMessage';
+import { FileUpload } from '../../../../server/lib/media/file-upload';
+import { sendFileMessage } from '../../../../server/meteor-methods/messages/sendFileMessage';
+import { sendFileLivechatMessage } from '../../../../server/meteor-methods/omnichannel/sendFileLivechatMessage';
 
 const getUploadDetails = (details: IUploadDetails): Partial<IUploadDetails> => {
 	if (details.visitorToken) {

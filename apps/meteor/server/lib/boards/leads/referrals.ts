@@ -2,7 +2,7 @@ import type { IReferralOut, ReferralOutStatus, ReferralArrangement, IReferralOut
 import { BoardsReferralsOut, BoardsLeads, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 
 /**
  * Outbound / co-counsel referral management (M6 — intake-lead-management.md §8).

@@ -8,7 +8,9 @@ import LoggedOutBanner from '../../../components/deviceManagement/LoggedOutBanne
 import MatterChatLoginPage from './MatterChatLoginPage';
 import { useIframe } from '../hooks/useIframe';
 
-const LoginPage = ({ defaultRoute, children }: { defaultRoute?: LoginRoutes; children?: ReactNode }) => {
+export type LoginPageProps = { defaultRoute?: LoginRoutes; children?: ReactNode };
+
+const LoginPage = ({ defaultRoute, children }: LoginPageProps) => {
 	const { t } = useTranslation();
 	const showForcedLogoutBanner = useSession('forceLogout') as boolean | undefined;
 	const { iframeLoginUrl, tryLogin, enabled: iframeEnabled } = useIframe();

@@ -1,7 +1,7 @@
 import type { SettingValue } from '@rocket.chat/core-typings';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { resolveCaseProConfig } from '../casepro/config';
 
 /**

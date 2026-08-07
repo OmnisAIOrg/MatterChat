@@ -48,7 +48,7 @@ jest.mock('@rocket.chat/models', () => ({
 }));
 
 // Stub the transitive imports that would otherwise drag in Meteor server internals.
-jest.mock('../../../../app/lib/server/functions/createRoom', () => ({ createRoom: jest.fn() }));
+jest.mock('../../rooms/createRoom', () => ({ createRoom: jest.fn() }));
 jest.mock('../service', () => ({ createBoard: jest.fn(), createList: jest.fn() }));
 jest.mock('./deadlines', () => ({ ensureSolDeadlineForMatter: jest.fn() }));
 

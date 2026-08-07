@@ -18,7 +18,7 @@
  */
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../../settings/server';
+import { settings } from '../../../../../server/settings';
 
 /** Slack Web API base URL — the only Slack host the provider talks to. */
 export const SLACK_API_BASE = 'https://slack.com/api';

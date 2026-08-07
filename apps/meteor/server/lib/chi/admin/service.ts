@@ -33,10 +33,10 @@ import { isLocalProvider, resolveProvider } from './providers';
 import { isLocalTool, localConfirmSummary, localToolDefs, runLocalTool } from './localtools';
 import { isMcpTool, mcpConfirmSummary, mcpToolDefs, runMcpTool } from './mcp';
 import { describeToolCall, findTool, runTool, toolDefs } from './tools';
-import { hasRoleAsync } from '../../../../app/authorization/server/functions/hasRole';
-import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
-import { updateMessage } from '../../../../app/lib/server/functions/updateMessage';
-import { settings } from '../../../../app/settings/server';
+import { hasRoleAsync } from '../../authorization/hasRole';
+import { sendMessage } from '../../messages/sendMessage';
+import { updateMessage } from '../../messages/updateMessage';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 import { CHI_BOT_ID, getChiBotUser } from '../bot';
 

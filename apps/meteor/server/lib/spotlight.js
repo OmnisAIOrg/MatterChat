@@ -2,13 +2,13 @@ import { Team } from '@rocket.chat/core-services';
 import { Users, Subscriptions as SubscriptionsRaw, Rooms } from '@rocket.chat/models';
 import { escapeRegExp } from '@rocket.chat/string-helpers';
 
-import { canAccessRoomAsync, roomAccessAttributes } from '../../app/authorization/server';
-import { hasPermissionAsync, hasAllPermissionAsync } from '../../app/authorization/server/functions/hasPermission';
-import { settings } from '../../app/settings/server';
-import { trim } from '../../lib/utils/stringUtils';
-import { readSecondaryPreferred } from '../database/readSecondaryPreferred';
+import { canAccessRoomAsync, roomAccessAttributes } from './authorization';
+import { hasPermissionAsync, hasAllPermissionAsync } from './authorization/hasPermission';
 import { getFirmScopeExtraQuery, userMatchesFirmScope } from './firms/firmsService';
 import { roomCoordinator } from './rooms/roomCoordinator';
+import { trim } from '../../lib/utils/stringUtils';
+import { readSecondaryPreferred } from '../database/readSecondaryPreferred';
+import { settings } from '../settings';
 
 export class Spotlight {
 	async fetchRooms(userId, rooms) {
@@ -40,6 +40,7 @@ export class Spotlight {
 			sort: {
 				name: 1,
 			},
+			readPreference: readSecondaryPreferred(Rooms.col.s.db),
 		};
 
 		if (userId == null) {
@@ -56,12 +57,15 @@ export class Spotlight {
 
 		const searchableRoomTypeIds = roomCoordinator.searchableRoomTypes();
 
-		const roomIds = (
-			await SubscriptionsRaw.findByUserIdAndTypes(userId, searchableRoomTypeIds, {
+		const [subscriptions, exactRoom] = await Promise.all([
+			SubscriptionsRaw.findByUserIdAndTypes(userId, searchableRoomTypeIds, {
 				projection: { rid: 1 },
-			}).toArray()
-		).map((s) => s.rid);
-		const exactRoom = await Rooms.findOneByNameAndType(text, searchableRoomTypeIds, roomOptions, includeFederatedRooms);
+				readPreference: roomOptions.readPreference,
+			}).toArray(),
+			Rooms.findOneByNameAndType(text, searchableRoomTypeIds, roomOptions, includeFederatedRooms),
+		]);
+
+		const roomIds = subscriptions.map((s) => s.rid);
 		if (exactRoom) {
 			roomIds.push(exactRoom.rid);
 		}

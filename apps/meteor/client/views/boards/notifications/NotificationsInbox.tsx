@@ -96,8 +96,8 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 				display='flex'
 				alignItems='center'
 				justifyContent='space-between'
-				p={12}
-				pbe={8}
+				padding={12}
+				paddingBlockEnd={8}
 				style={{ borderBlockEnd: `1px solid ${tones.strokeSoft}` }}
 			>
 				<Box fontScale='h5' color='default' style={serifCaption}>
@@ -115,14 +115,14 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 
 			<Box display='flex' flexDirection='column' style={{ maxHeight: '60vh', overflowY: 'auto' }}>
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}
 
 				{!isLoading && notifications.length === 0 && (
-					<Box display='flex' flexDirection='column' alignItems='center' p={24} color='hint'>
-						<Icon name='bell-off' size='x32' mbe={8} />
+					<Box display='flex' flexDirection='column' alignItems='center' padding={24} color='hint'>
+						<Icon name='bell-off' size='x32' marginBlockEnd={8} />
 						<Box fontScale='p2'>{t('Boards_Notifications_Empty', { defaultValue: 'You are all caught up' })}</Box>
 					</Box>
 				)}
@@ -140,8 +140,8 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 						}}
 						display='flex'
 						alignItems='flex-start'
-						pi={12}
-						pb={8}
+						paddingInline={12}
+						paddingBlock={8}
 						style={{
 							cursor: 'pointer',
 							gap: '10px',
@@ -150,7 +150,7 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 						}}
 						className='rcx-box--animated'
 					>
-						<Box mbs={2} style={{ flexShrink: 0, color: notification.read ? tones.inkMuted : tones.green }}>
+						<Box marginBlockStart={2} style={{ flexShrink: 0, color: notification.read ? tones.inkMuted : tones.green }}>
 							<Icon name={notificationIcon(notification.kind)} size='x18' />
 						</Box>
 						<Box minWidth={0} flexGrow={1}>
@@ -163,13 +163,13 @@ const NotificationsInbox = ({ onNavigate }: NotificationsInboxProps): ReactEleme
 								</Box>
 							</Box>
 							{notification.body && (
-								<Box fontScale='c1' mbs={2} withTruncatedText style={{ color: tones.inkMuted }}>
+								<Box fontScale='c1' marginBlockStart={2} withTruncatedText style={{ color: tones.inkMuted }}>
 									{notification.body}
 								</Box>
 							)}
 						</Box>
 						{!notification.read && (
-							<Box mbs={6} style={{ flexShrink: 0 }}>
+							<Box marginBlockStart={6} style={{ flexShrink: 0 }}>
 								<Box width={8} height={8} borderRadius='full' style={{ background: tones.green }} />
 							</Box>
 						)}

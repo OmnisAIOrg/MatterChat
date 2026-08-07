@@ -128,11 +128,21 @@ const PremiumVersionCard = ({ serverInfo }: PremiumVersionCardProps) => {
 							}),
 			].filter(Boolean) as StatusItem[]
 		).sort((a) => (a.danger ? -1 : 1));
-	}, [isOverLimits, t, isAirgapped, versions, versionStatus?.label, versionStatus?.expiration, formatDate, canViewRegistrationStatus, isRegistered]);
+	}, [
+		isOverLimits,
+		t,
+		isAirgapped,
+		versions,
+		versionStatus?.label,
+		versionStatus?.expiration,
+		formatDate,
+		canViewRegistrationStatus,
+		isRegistered,
+	]);
 
 	return (
 		<Box
-			bg='var(--surface)'
+			backgroundColor='var(--surface)'
 			borderRadius='14px'
 			border='1px solid var(--border)'
 			padding='24px 26px'
@@ -148,7 +158,7 @@ const PremiumVersionCard = ({ serverInfo }: PremiumVersionCardProps) => {
 				width='280px'
 				height='280px'
 				borderRadius='9999px'
-				bg='linear-gradient(135deg, var(--greenSoft) 0%, transparent 100%)'
+				backgroundColor='linear-gradient(135deg, var(--greenSoft) 0%, transparent 100%)'
 				opacity='0.8'
 				pointerEvents='none'
 				style={{ zIndex: 0 }}
@@ -167,7 +177,7 @@ const PremiumVersionCard = ({ serverInfo }: PremiumVersionCardProps) => {
 							fontWeight='600'
 							padding='3px 10px'
 							borderRadius='9999px'
-							bg='var(--amberSoft)'
+							backgroundColor='var(--amberSoft)'
 							border='1px solid var(--amberLine)'
 							color='var(--amber)'
 						>
@@ -189,14 +199,23 @@ const PremiumVersionCard = ({ serverInfo }: PremiumVersionCardProps) => {
 								width='24px'
 								height='24px'
 								borderRadius='9999px'
-								bg={item.danger ? 'var(--redSoft)' : 'var(--greenSoft)'}
+								backgroundColor={item.danger ? 'var(--redSoft)' : 'var(--greenSoft)'}
 								border={`1px solid ${item.danger ? 'var(--redLine)' : 'var(--greenLine)'}`}
 								display='grid'
 								placeItems='center'
 								color={item.danger ? 'var(--red)' : 'var(--greenInk)'}
 							>
 								{item.icon === 'check' ? (
-									<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>
+									<svg
+										width='14'
+										height='14'
+										viewBox='0 0 24 24'
+										fill='none'
+										stroke='currentColor'
+										strokeWidth='2.2'
+										strokeLinecap='round'
+										strokeLinejoin='round'
+									>
 										<path d='m5 12.5 4.5 4.5L19 7.5' />
 									</svg>
 								) : (
@@ -221,7 +240,7 @@ const PremiumVersionCard = ({ serverInfo }: PremiumVersionCardProps) => {
 						padding='0 16px'
 						borderRadius='9px'
 						border='0'
-						bg='var(--green)'
+						backgroundColor='var(--green)'
 						color='var(--onGreen)'
 						fontFamily='inherit'
 						fontSize='13px'

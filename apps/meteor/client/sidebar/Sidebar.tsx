@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import SidebarRoomList from './RoomList';
 import SidebarFooter from './footer';
 import BannerSection from './sections/BannerSection';
+import NowPlayingSection from './sections/NowPlayingSection';
 import SlackWorkspaceBanner from './sections/SlackWorkspaceBanner';
 
 const Sidebar = () => {
@@ -21,8 +22,10 @@ const Sidebar = () => {
 				.join(' ')}
 		>
 			<BannerSection />
+			{/* MATTERCHAT: the org/workspace switcher banner sits directly under the banner slot. */}
 			<SlackWorkspaceBanner />
 			<SidebarRoomList />
+			<NowPlayingSection />
 			<SidebarFooter />
 		</SidebarV2>
 	);

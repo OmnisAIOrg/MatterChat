@@ -1,5 +1,5 @@
+import { settingsRegistry } from '.';
 import { MessageTypesValues } from '../../app/lib/lib/MessageTypes';
-import { settingsRegistry } from '../../app/settings/server';
 
 export const createMessageSettings = () =>
 	settingsRegistry.addGroup('Message', async function () {
@@ -310,6 +310,10 @@ export const createMessageSettings = () =>
 					key: 'microsoft-translate',
 					i18nLabel: 'AutoTranslate_Microsoft',
 				},
+				{
+					key: 'libre-translate',
+					i18nLabel: 'AutoTranslate_LibreTranslate',
+				},
 			],
 			enableQuery: [{ _id: 'AutoTranslate_Enabled', value: true }],
 			i18nLabel: 'AutoTranslate_ServiceProvider',
@@ -369,6 +373,44 @@ export const createMessageSettings = () =>
 				},
 			],
 		});
+
+		await this.add('AutoTranslate_LibreTranslateAPIURL', '', {
+			type: 'string',
+			group: 'Message',
+			section: 'AutoTranslate_LibreTranslate',
+			public: false,
+			i18nLabel: 'AutoTranslate_LibreTranslate_API_URL',
+			enableQuery: [
+				{
+					_id: 'AutoTranslate_Enabled',
+					value: true,
+				},
+				{
+					_id: 'AutoTranslate_ServiceProvider',
+					value: 'libre-translate',
+				},
+			],
+		});
+
+		await this.add('AutoTranslate_LibreTranslateAPIKey', '', {
+			type: 'string',
+			group: 'Message',
+			section: 'AutoTranslate_LibreTranslate',
+			public: false,
+			secret: true,
+			i18nLabel: 'AutoTranslate_APIKey',
+			enableQuery: [
+				{
+					_id: 'AutoTranslate_Enabled',
+					value: true,
+				},
+				{
+					_id: 'AutoTranslate_ServiceProvider',
+					value: 'libre-translate',
+				},
+			],
+		});
+
 		await this.add('HexColorPreview_Enabled', true, {
 			type: 'boolean',
 			i18nLabel: 'Enabled',

@@ -26,7 +26,7 @@ import crypto from 'crypto';
 
 import type { ToolDef } from './llm';
 import { mcpNeedsConfirm } from './mcp';
-import notifications from '../../../../app/notifications/server/lib/Notifications';
+import notifications from '../../notifications/core/lib/Notifications';
 import { SystemLogger } from '../../logger/system';
 
 const NAMESPACE = 'local_';

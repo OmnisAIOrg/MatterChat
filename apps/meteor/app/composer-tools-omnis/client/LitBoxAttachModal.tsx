@@ -59,8 +59,8 @@ const LitBoxAttachModal = ({ room, onInsert, onClose }: LitBoxAttachModalProps) 
 				<ModalClose aria-label='Close' onClick={onClose} />
 			</ModalHeader>
 			<ModalContent>
-				<Box display='flex' alignItems='center' mbe={12}>
-					<Icon name='file-document' size='x24' mie={8} />
+				<Box display='flex' alignItems='center' marginBlockEnd={12}>
+					<Icon name='file-document' size='x24' marginInlineEnd={8} />
 					<Box>
 						{matterLinked ? (
 							<>

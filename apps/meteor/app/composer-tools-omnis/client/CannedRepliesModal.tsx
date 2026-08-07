@@ -84,19 +84,14 @@ const CannedRepliesModal = ({ userId, actionLabel = 'Insert', onPick, onClose }:
 				<ModalClose aria-label='Close' onClick={onClose} />
 			</ModalHeader>
 			<ModalContent>
-				<Box mbe={12}>
-					<SearchInput
-						placeholder='Search templates'
-						value={search}
-						onChange={(e) => setSearch((e.target as HTMLInputElement).value)}
-						addon={undefined}
-					/>
+				<Box marginBlockEnd={12}>
+					<SearchInput placeholder='Search templates' value={search} onChange={(e) => setSearch((e.target as HTMLInputElement).value)} />
 				</Box>
 
 				<Scrollable vertical>
 					<Box maxHeight='x320' display='flex' flexDirection='column'>
 						{visible.length === 0 && (
-							<Box color='hint' pi={8} pb={16}>
+							<Box color='hint' paddingInline={8} paddingBlock={16}>
 								No templates match “{search}”.
 							</Box>
 						)}
@@ -106,12 +101,12 @@ const CannedRepliesModal = ({ userId, actionLabel = 'Insert', onPick, onClose }:
 								display='flex'
 								alignItems='flex-start'
 								justifyContent='space-between'
-								pb={12}
-								mbe={12}
+								paddingBlock={12}
+								marginBlockEnd={12}
 								style={{ borderBottom: '1px solid var(--rcx-color-stroke-extra-light, rgba(0,0,0,0.1))' }}
 							>
-								<Box flexGrow={1} mie={8} style={{ minWidth: 0 }}>
-									<Box fontWeight='600' mbe={2}>
+								<Box flexGrow={1} marginInlineEnd={8} style={{ minWidth: 0 }}>
+									<Box fontWeight='600' marginBlockEnd={2}>
 										{tpl.title}
 									</Box>
 									<Box
@@ -158,11 +153,11 @@ const CannedRepliesModal = ({ userId, actionLabel = 'Insert', onPick, onClose }:
 				)}
 
 				{showAdd && (
-					<Box display='flex' flexDirection='column' mbs={8}>
-						<Box mbe={8}>
+					<Box display='flex' flexDirection='column' marginBlockStart={8}>
+						<Box marginBlockEnd={8}>
 							<TextInput placeholder='Template name' value={newTitle} onChange={(e) => setNewTitle((e.target as HTMLInputElement).value)} />
 						</Box>
-						<Box mbe={8}>
+						<Box marginBlockEnd={8}>
 							<TextAreaInput
 								rows={4}
 								placeholder='Template text…'

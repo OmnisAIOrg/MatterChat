@@ -2,7 +2,7 @@ import { cronJobs } from '@rocket.chat/cron';
 
 import { runClientSyncSweep, isClientSyncEnabled } from '../lib/boards/casepro-clientsync/index';
 import { caseProClientMessagesClient } from '../lib/boards/casepro-clientsync/client';
-import { settings } from '../../app/settings/server';
+import { settings } from '../settings';
 import { SystemLogger } from '../lib/logger/system';
 
 /**

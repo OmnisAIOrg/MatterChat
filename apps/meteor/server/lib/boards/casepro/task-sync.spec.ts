@@ -1,7 +1,7 @@
 import type { IBoardCard } from '@rocket.chat/core-typings';
 import { Boards, BoardsCards, BoardsActivities } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { caseProClient } from './client';
 import { StubTransport } from './transport';
 import { syncCardEvent, setTaskSyncEnabled, isTaskSyncEnabledForBoard, __resetTaskSyncStateForTests } from './task-sync';
@@ -12,7 +12,7 @@ jest.mock('@rocket.chat/models', () => ({
 	BoardsActivities: { log: jest.fn() },
 }));
 
-jest.mock('../../../../app/settings/server', () => ({
+jest.mock('../../../settings', () => ({
 	settings: { get: jest.fn() },
 }));
 

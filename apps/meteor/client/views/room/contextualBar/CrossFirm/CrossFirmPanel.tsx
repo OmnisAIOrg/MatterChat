@@ -1,4 +1,11 @@
-import { ContextualbarDialog, ContextualbarHeader, ContextualbarIcon, ContextualbarTitle, ContextualbarClose, ContextualbarContent } from '@rocket.chat/ui-client';
+import {
+	ContextualbarDialog,
+	ContextualbarHeader,
+	ContextualbarIcon,
+	ContextualbarTitle,
+	ContextualbarClose,
+	ContextualbarContent,
+} from '@rocket.chat/ui-client';
 import type { ComponentProps } from 'react';
 
 import CrossFirmSection from '../../../cross-firm/CrossFirmSection';
@@ -12,7 +19,7 @@ const CrossFirmPanel = ({ rid, onClose }: CrossFirmPanelProps) => (
 			<ContextualbarTitle>Cross-firm · Opposing counsel</ContextualbarTitle>
 			<ContextualbarClose onClick={onClose} />
 		</ContextualbarHeader>
-		<ContextualbarContent p={0}>
+		<ContextualbarContent padding={0}>
 			<CrossFirmSection rid={rid} />
 		</ContextualbarContent>
 	</ContextualbarDialog>

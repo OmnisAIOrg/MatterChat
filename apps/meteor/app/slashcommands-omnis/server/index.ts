@@ -6,8 +6,8 @@ import { ensureMattersBoard, bindMatterCard } from '../../../server/lib/boards/m
 import { createCard } from '../../../server/lib/boards/service';
 import { handleChiQuestion } from '../../../server/lib/chi/service';
 import { handleAskQuestion } from '../../../server/lib/agents/ask-handler';
-import { setRoomFolderMethod } from '../../../server/methods/setRoomFolder';
-import { slashCommands } from '../../utils/server/slashCommand';
+import { setRoomFolderMethod } from '../../../server/meteor-methods/rooms/setRoomFolder';
+import { slashCommands } from '../../../server/lib/utils/slashCommand';
 
 /**
  * Omnis Boards slash commands — quick capture from any chat channel:

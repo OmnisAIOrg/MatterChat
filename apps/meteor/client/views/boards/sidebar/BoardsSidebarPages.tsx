@@ -46,7 +46,7 @@ const BoardsSidebarPages = ({ currentPath }: BoardsSidebarPagesProps) => {
 		group.items.some((item) => (typeof item.permissionGranted === 'function' ? item.permissionGranted() : true));
 
 	return (
-		<Box className='mc-boards-nav' display='flex' flexDirection='column' flexShrink={0} pb={8}>
+		<Box className='mc-boards-nav' display='flex' flexDirection='column' flexShrink={0} paddingBlock={8}>
 			{groups.map((group) => (
 				<Fragment key={group.labelKey}>
 					{isGroupVisible(group) && (

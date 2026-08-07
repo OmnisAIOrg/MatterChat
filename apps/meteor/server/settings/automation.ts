@@ -1,4 +1,4 @@
-import { settingsRegistry } from '../../app/settings/server';
+import { settingsRegistry } from '.';
 
 /**
  * Settings for the Boards AUTOMATION ENGINE (M7 — the Butler-equivalent).

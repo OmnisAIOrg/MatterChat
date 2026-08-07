@@ -58,22 +58,22 @@ const KeyDatesStrip = ({ snapshot }: KeyDatesStripProps): ReactElement | null =>
 	}
 
 	return (
-		<Box display='flex' flexWrap='wrap' alignItems='center' mbe={4} style={{ gap: '6px' }}>
+		<Box display='flex' flexWrap='wrap' alignItems='center' marginBlockEnd={4} style={{ gap: '6px' }}>
 			{doiLabel && (
 				<Tag variant='secondary' title={t('Boards_Matters_DOI', { defaultValue: 'Date of incident' })}>
-					<Icon name='calendar' size='x12' mie={4} />
+					<Icon name='calendar' size='x12' marginInlineEnd={4} />
 					{t('Boards_Matters_DOI', { defaultValue: 'Date of incident' })}: {doiLabel}
 				</Tag>
 			)}
 			{solLabel && (
 				<Tag variant={riskTagVariant(solVariant)} title={t('Boards_Matters_SOL', { defaultValue: 'SOL' })}>
-					<Icon name='clock' size='x12' mie={4} />
+					<Icon name='clock' size='x12' marginInlineEnd={4} />
 					{t('Boards_Matters_SOL', { defaultValue: 'SOL' })}: {solLabel}
 				</Tag>
 			)}
 			{demandLabel && (
 				<Tag variant={riskTagVariant(demandVariant)} title={t('Boards_Matters_Demand_Outstanding', { defaultValue: 'Demand outstanding' })}>
-					<Icon name='send' size='x12' mie={4} />
+					<Icon name='send' size='x12' marginInlineEnd={4} />
 					{t('Boards_Matters_Demand', { defaultValue: 'Demand' })}: {demandLabel}
 				</Tag>
 			)}

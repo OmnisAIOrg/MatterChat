@@ -16,6 +16,13 @@
  * - `shouldPreventAction()` → false: NEVER block an action (LDAP user conversion, omnichannel
  *   MAC checks) — community edition is unlimited here.
  * - `getGuestPermissions()` is only reachable behind `hasValidLicense()`, so its value is moot.
+ * - `hasOfflineLicense()` → false (added for RC 8.7.0, upstream PR #41148): 8.7.0 introduced an
+ *   air-gapped licence flag whose ~15 call sites all read "if the workspace holds an OFFLINE
+ *   licence, suppress this outbound Rocket.Chat/Gravatar/push-gateway call". `false` means "no
+ *   offline licence", so every guard falls through and cloud sync, the supported-versions fetch,
+ *   the usage report, push-gateway delivery and Gravatar suggestions behave EXACTLY as they did
+ *   before the merge. Returning `true` would silently disable them. A workspace that has no
+ *   licence at all cannot have an offline one, so `false` is the correct answer, not a stub.
  * - `getWorkspaceUrl()/getHashedWorkspaceUrl()` → undefined: cloud-registration concepts; the
  *   MIT call sites (getServerInfo, serverRunning banner) tolerate undefined.
  * - Listener registrars (`onValidateLicense`, `onValidFeature`, `onLimitReached`, ...) register
@@ -47,6 +54,16 @@ class LicenseService {
 
 	public getLicense(): undefined {
 		return undefined;
+	}
+
+	/**
+	 * No license is installed, so none can carry the air-gapped `information.offline` flag.
+	 * Upstream computes `getLicense()?.information.offline ?? false`; with `getLicense()`
+	 * permanently `undefined` that expression is `false` by construction, so this is the
+	 * faithful CE answer rather than a stub — see the header note on cloud egress.
+	 */
+	public hasOfflineLicense(): boolean {
+		return false;
 	}
 
 	/** Community edition never prevents an action for licensing reasons (unlimited seats/MAC). */

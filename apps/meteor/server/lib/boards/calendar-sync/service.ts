@@ -10,7 +10,7 @@
 import type { IBoardCalendarConnection, IBoardCard, ICardCalendarSync } from '@rocket.chat/core-typings';
 import { BoardCalendarConnections, BoardsCards, BoardsLists } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { SystemLogger } from '../../logger/system';
 import { createCard } from '../service';
 import { isCalendarSyncEnabled, isProviderConfigured } from './config';

@@ -1,6 +1,6 @@
 import { Rooms, ServerEvents, Users } from '@rocket.chat/models';
 
-import { permissions } from '../../../app/authorization/server/constant/permissions';
+import { permissions } from '../authorization/constant/permissions';
 import { clearRoomLegalHold, getLegalHoldState, isRoomUnderLegalHold, setRoomLegalHold } from './legalHold';
 
 jest.mock('@rocket.chat/models', () => ({

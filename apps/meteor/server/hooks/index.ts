@@ -5,3 +5,4 @@ import '../lib/caseProCommsLog';
 // CasePro auto-sync on login: trigger background matters+leads sync on user login.
 import '../lib/boards/casepro/loginSync';
 import './sauMonitorHooks';
+import './userLogoutCleanUp';

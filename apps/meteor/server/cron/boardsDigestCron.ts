@@ -3,9 +3,9 @@ import type { IBoardNotification, IUser } from '@rocket.chat/core-typings';
 import { BoardsNotifications, Users } from '@rocket.chat/models';
 import { escapeHTML } from '@rocket.chat/string-helpers';
 
-import * as Mailer from '../../app/mailer/server/api';
-import { isSMTPConfigured } from '../../app/utils/server/functions/isSMTPConfigured';
-import { settings } from '../../app/settings/server';
+import * as Mailer from '../lib/notifications/email/api';
+import { isSMTPConfigured } from '../lib/utils/functions/isSMTPConfigured';
+import { settings } from '../settings';
 import { SystemLogger } from '../lib/logger/system';
 
 /**

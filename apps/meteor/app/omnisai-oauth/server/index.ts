@@ -33,7 +33,7 @@ import {
 	isDesktopState,
 } from '../../connectors/server/desktopOAuth';
 import { SystemLogger } from '../../../server/lib/logger/system';
-import { settings } from '../../settings/server';
+import { settings } from '../../../server/settings';
 
 import './loginHandler';
 import './litboxProxy';

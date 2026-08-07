@@ -62,68 +62,130 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 
 	// Open a NEW conversation for this matter, linked to this channel (matterRef = rid).
 	const createRoom = useMutation({
-		mutationFn: () => request('/matter-rooms', { method: 'POST', body: { title: `Opposing counsel — ${rid}`, originatingAttorneyId: attorneyId, representsParty: newRepresents, matterRef: rid } }),
-		onSuccess: () => { setNewRepresents(''); refreshRooms(); dispatchToast({ type: 'success', message: 'Opposing-counsel conversation opened on this matter' }); },
+		mutationFn: () =>
+			request('/matter-rooms', {
+				method: 'POST',
+				body: { title: `Opposing counsel — ${rid}`, originatingAttorneyId: attorneyId, representsParty: newRepresents, matterRef: rid },
+			}),
+		onSuccess: () => {
+			setNewRepresents('');
+			refreshRooms();
+			dispatchToast({ type: 'success', message: 'Opposing-counsel conversation opened on this matter' });
+		},
 		onError: onErr,
 	});
 	// Accept an invitation AND attach it to this channel (matterRef = rid).
 	const acceptInvite = useMutation({
 		mutationFn: (roomId: string) => request(`/matter-rooms/${roomId}/accept`, { method: 'POST', body: { attorneyId, matterRef: rid } }),
-		onSuccess: () => { refreshRooms(); dispatchToast({ type: 'success', message: 'Invitation accepted on this matter — consent recorded' }); },
+		onSuccess: () => {
+			refreshRooms();
+			dispatchToast({ type: 'success', message: 'Invitation accepted on this matter — consent recorded' });
+		},
 		onError: onErr,
 	});
 	const send = useMutation({
 		mutationFn: () => request(`/matter-rooms/${room.id}/messages`, { method: 'POST', body: { senderAttorneyId: attorneyId, text: draft } }),
-		onSuccess: () => { setDraft(''); refreshMessages(); },
+		onSuccess: () => {
+			setDraft('');
+			refreshMessages();
+		},
 		onError: onErr,
 	});
 	const invite = useMutation({
-		mutationFn: (inviteeAttorneyId: string) => request(`/matter-rooms/${room.id}/invite`, { method: 'POST', body: { inviterAttorneyId: attorneyId, inviteeAttorneyId, representsParty: inviteRepresents } }),
-		onSuccess: () => { setDirQuery(''); setInviteRepresents(''); refreshRooms(); dispatchToast({ type: 'success', message: 'Opposing counsel invited' }); },
+		mutationFn: (inviteeAttorneyId: string) =>
+			request(`/matter-rooms/${room.id}/invite`, {
+				method: 'POST',
+				body: { inviterAttorneyId: attorneyId, inviteeAttorneyId, representsParty: inviteRepresents },
+			}),
+		onSuccess: () => {
+			setDirQuery('');
+			setInviteRepresents('');
+			refreshRooms();
+			dispatchToast({ type: 'success', message: 'Opposing counsel invited' });
+		},
 		onError: onErr,
 	});
 	const toggleHold = useMutation({
-		mutationFn: () => request(`/matter-rooms/${room.id}/hold${room?.holdActive ? '/release' : ''}`, { method: 'POST', body: room?.holdActive ? { releasedBy: attorneyId } : { reason: 'litigation hold', attachedBy: attorneyId } }),
-		onSuccess: () => { refreshRooms(); dispatchToast({ type: 'success', message: room?.holdActive ? 'Legal hold released' : 'Legal hold attached — deletion frozen' }); },
+		mutationFn: () =>
+			request(`/matter-rooms/${room.id}/hold${room?.holdActive ? '/release' : ''}`, {
+				method: 'POST',
+				body: room?.holdActive ? { releasedBy: attorneyId } : { reason: 'litigation hold', attachedBy: attorneyId },
+			}),
+		onSuccess: () => {
+			refreshRooms();
+			dispatchToast({ type: 'success', message: room?.holdActive ? 'Legal hold released' : 'Legal hold attached — deletion frozen' });
+		},
 		onError: onErr,
 	});
 	const setRetention = useMutation({
-		mutationFn: (days: number) => request(`/matter-rooms/${room.id}/retention`, { method: 'POST', body: { byAttorneyId: attorneyId, days } }),
-		onSuccess: () => { refreshRooms(); dispatchToast({ type: 'success', message: 'Retention policy set' }); },
+		mutationFn: (days: number) =>
+			request(`/matter-rooms/${room.id}/retention`, { method: 'POST', body: { byAttorneyId: attorneyId, days } }),
+		onSuccess: () => {
+			refreshRooms();
+			dispatchToast({ type: 'success', message: 'Retention policy set' });
+		},
 		onError: onErr,
 	});
 	const screen = useMutation({
 		mutationFn: ({ screenAttorneyId, unscreen }: { screenAttorneyId: string; unscreen?: boolean }) =>
-			request(`/matter-rooms/${room.id}/${unscreen ? 'unscreen' : 'screen'}`, { method: 'POST', body: { byAttorneyId: attorneyId, screenAttorneyId } }),
-		onSuccess: (_d: any, v: any) => { refreshRooms(); dispatchToast({ type: 'success', message: v.unscreen ? 'Attorney unscreened' : 'Attorney screened off this matter (ethical wall)' }); },
+			request(`/matter-rooms/${room.id}/${unscreen ? 'unscreen' : 'screen'}`, {
+				method: 'POST',
+				body: { byAttorneyId: attorneyId, screenAttorneyId },
+			}),
+		onSuccess: (_d: any, v: any) => {
+			refreshRooms();
+			dispatchToast({ type: 'success', message: v.unscreen ? 'Attorney unscreened' : 'Attorney screened off this matter (ethical wall)' });
+		},
 		onError: onErr,
 	});
 	const exportRoom = useMutation({
-		mutationFn: () => request(`/matter-rooms/${room.id}/export`, { method: 'POST', body: { requestingFirmId: firmId, requestingAttorneyId: attorneyId } }),
+		mutationFn: () =>
+			request(`/matter-rooms/${room.id}/export`, { method: 'POST', body: { requestingFirmId: firmId, requestingAttorneyId: attorneyId } }),
 		onSuccess: (d: any) => {
 			const blob = new Blob([JSON.stringify(d.export, null, 2)], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a'); a.href = url; a.download = `cross-firm-export-${room.id}.json`; a.click(); URL.revokeObjectURL(url);
-			dispatchToast({ type: 'success', message: `Defensible export: ${d.export?.messages?.length} msgs, integrity ${d.export?.integrity?.auditChainVerified ? 'OK' : 'FAILED'}` });
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `cross-firm-export-${room.id}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+			dispatchToast({
+				type: 'success',
+				message: `Defensible export: ${d.export?.messages?.length} msgs, integrity ${d.export?.integrity?.auditChainVerified ? 'OK' : 'FAILED'}`,
+			});
 		},
 		onError: onErr,
 	});
 
 	const Header = (
-		<Box display='flex' alignItems='center' mbe={8}>
-			<Icon name={'balance' as ComponentProps<typeof Icon>['name']} size='x20' mie={8} color='hint' />
-			<Box fontScale='h4' color='default'>Cross-firm · Opposing counsel</Box>
-			{room?.holdActive && <Badge variant='danger' {...({ mis: 8 } as unknown as ComponentProps<typeof Badge>)}>HOLD</Badge>}
+		<Box display='flex' alignItems='center' marginBlockEnd={8}>
+			<Icon name={'balance' as ComponentProps<typeof Icon>['name']} size='x20' marginInlineEnd={8} color='hint' />
+			<Box fontScale='h4' color='default'>
+				Cross-firm · Opposing counsel
+			</Box>
+			{room?.holdActive && (
+				<Badge variant='danger' {...({ mis: 8 } as unknown as ComponentProps<typeof Badge>)}>
+					HOLD
+				</Badge>
+			)}
 			{room?.retention && <Badge {...({ mis: 8 } as unknown as ComponentProps<typeof Badge>)}>{room.retention.days}d</Badge>}
 		</Box>
 	);
 
 	if (!cfEnabled) {
-		return <Box p={16}>{Header}<Callout type='warning' title='Cross-firm not enabled'>Turn on <b>CrossFirm_Enabled</b> in Admin → Settings → OmnisAI to enable opposing-counsel messaging on this matter. (Works without CasePro.)</Callout></Box>;
+		return (
+			<Box padding={16}>
+				{Header}
+				<Callout type='warning' title='Cross-firm not enabled'>
+					Turn on <b>CrossFirm_Enabled</b> in Admin → Settings → OmnisAI to enable opposing-counsel messaging on this matter. (Works without
+					CasePro.)
+				</Callout>
+			</Box>
+		);
 	}
 
 	return (
-		<Box p={16} display='flex' flexDirection='column' height='100%' style={{ overflowY: 'auto' }}>
+		<Box padding={16} display='flex' flexDirection='column' height='100%' style={{ overflowY: 'auto' }}>
 			{Header}
 			{(me.isLoading || rooms.isLoading) && <Throbber />}
 
@@ -131,19 +193,36 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 			{!room && !rooms.isLoading && (
 				<>
 					{pending.length > 0 && (
-						<Box mbe={12}>
-							<Box fontScale='c2' color='hint' mbe={4}>PENDING INVITATIONS</Box>
+						<Box marginBlockEnd={12}>
+							<Box fontScale='c2' color='hint' marginBlockEnd={4}>
+								PENDING INVITATIONS
+							</Box>
 							{pending.map((r) => (
-								<Box key={r.id} mbe={6}>
-									<Box fontScale='c1'>{r.title} · {r.members?.map((m: any) => m.firm).filter((v: any, i: number, a: any[]) => a.indexOf(v) === i).join(' ↔ ')}</Box>
-									<Button small mbs={2} disabled={acceptInvite.isPending} onClick={() => acceptInvite.mutate(r.id)}>Accept on this matter</Button>
+								<Box key={r.id} marginBlockEnd={6}>
+									<Box fontScale='c1'>
+										{r.title} ·{' '}
+										{r.members
+											?.map((m: any) => m.firm)
+											.filter((v: any, i: number, a: any[]) => a.indexOf(v) === i)
+											.join(' ↔ ')}
+									</Box>
+									<Button small marginBlockStart={2} disabled={acceptInvite.isPending} onClick={() => acceptInvite.mutate(r.id)}>
+										Accept on this matter
+									</Button>
 								</Box>
 							))}
 							<Divider />
 						</Box>
 					)}
-					<Box fontScale='c1' color='hint' mbe={8}>No opposing-counsel conversation on this matter yet.</Box>
-					<TextInput placeholder='I represent… (e.g. Plaintiff)' value={newRepresents} onChange={(e: any) => setNewRepresents(e.currentTarget.value)} mbe={8} />
+					<Box fontScale='c1' color='hint' marginBlockEnd={8}>
+						No opposing-counsel conversation on this matter yet.
+					</Box>
+					<TextInput
+						placeholder='I represent… (e.g. Plaintiff)'
+						value={newRepresents}
+						onChange={(e: any) => setNewRepresents(e.currentTarget.value)}
+						marginBlockEnd={8}
+					/>
 					<Button primary small disabled={createRoom.isPending} onClick={() => createRoom.mutate()}>
 						{createRoom.isPending ? <Throbber inheritColor size='x12' /> : 'Open conversation'}
 					</Button>
@@ -152,53 +231,107 @@ const CrossFirmSection = ({ rid }: { rid: string }) => {
 
 			{room && (
 				<>
-					<Box fontScale='c1' color='hint' display='flex' flexDirection='column' mbe={8}>
+					<Box fontScale='c1' color='hint' display='flex' flexDirection='column' marginBlockEnd={8}>
 						{room.members?.map((m: any) => (
-							<Box key={m.attorneyId} display='flex' alignItems='center' mbs={2}>
-								<Box withTruncatedText>{m.name} ({m.firm}{m.represents ? ` — ${m.represents}` : ''})</Box>
-								{m.state === 'screened' && <Badge variant='warning' {...({ mis: 4 } as unknown as ComponentProps<typeof Badge>)}>screened</Badge>}
+							<Box key={m.attorneyId} display='flex' alignItems='center' marginBlockStart={2}>
+								<Box withTruncatedText>
+									{m.name} ({m.firm}
+									{m.represents ? ` — ${m.represents}` : ''})
+								</Box>
+								{m.state === 'screened' && (
+									<Badge variant='warning' {...({ mis: 4 } as unknown as ComponentProps<typeof Badge>)}>
+										screened
+									</Badge>
+								)}
 								{m.firm === firmName && m.attorneyId !== attorneyId && m.state !== 'invited' && (
-									<Button mis={8} small onClick={() => screen.mutate({ screenAttorneyId: m.attorneyId, unscreen: m.state === 'screened' })}>{m.state === 'screened' ? 'Unscreen' : 'Screen'}</Button>
+									<Button
+										marginInlineStart={8}
+										small
+										onClick={() => screen.mutate({ screenAttorneyId: m.attorneyId, unscreen: m.state === 'screened' })}
+									>
+										{m.state === 'screened' ? 'Unscreen' : 'Screen'}
+									</Button>
 								)}
 							</Box>
 						))}
 					</Box>
-					<Box display='flex' flexWrap='wrap' mbe={8}>
-						<Button small mie={8} mbe={4} onClick={() => toggleHold.mutate()}>{room.holdActive ? 'Release hold' : 'Legal hold'}</Button>
-						<Button small mie={8} mbe={4} onClick={() => setRetention.mutate(2555)}>Set 7y retention</Button>
-						<Button small mbe={4} onClick={() => exportRoom.mutate()}><Icon name='download' size='x16' mie={4} />Export</Button>
+					<Box display='flex' flexWrap='wrap' marginBlockEnd={8}>
+						<Button small marginInlineEnd={8} marginBlockEnd={4} onClick={() => toggleHold.mutate()}>
+							{room.holdActive ? 'Release hold' : 'Legal hold'}
+						</Button>
+						<Button small marginInlineEnd={8} marginBlockEnd={4} onClick={() => setRetention.mutate(2555)}>
+							Set 7y retention
+						</Button>
+						<Button small marginBlockEnd={4} onClick={() => exportRoom.mutate()}>
+							<Icon name='download' size='x16' marginInlineEnd={4} />
+							Export
+						</Button>
 					</Box>
 
 					{myState === 'invited' ? (
 						<Box>
-							<Callout type='info' title='You have been invited'>Accepting records your consent to communicate on this matter (Rule 4.2 — attorney-to-attorney).</Callout>
-							<Button primary mbs={8} disabled={acceptInvite.isPending} onClick={() => acceptInvite.mutate(room.id)}>Accept invitation</Button>
+							<Callout type='info' title='You have been invited'>
+								Accepting records your consent to communicate on this matter (Rule 4.2 — attorney-to-attorney).
+							</Callout>
+							<Button primary marginBlockStart={8} disabled={acceptInvite.isPending} onClick={() => acceptInvite.mutate(room.id)}>
+								Accept invitation
+							</Button>
 						</Box>
 					) : (
 						<>
-							<Box flexGrow={1} style={{ overflowY: 'auto', minHeight: '120px' }} mbe={8}>
+							<Box flexGrow={1} style={{ overflowY: 'auto', minHeight: '120px' }} marginBlockEnd={8}>
 								{messages.isLoading && <Throbber />}
 								{(messages.data?.messages || []).map((m: any) => (
-									<Box key={m.id} mbe={10}>
-										<Box fontScale='c1' color='hint'>{m.senderName} · {m.senderFirm} · {new Date(m.ts).toLocaleString()}</Box>
+									<Box key={m.id} marginBlockEnd={10}>
+										<Box fontScale='c1' color='hint'>
+											{m.senderName} · {m.senderFirm} · {new Date(m.ts).toLocaleString()}
+										</Box>
 										<Box fontScale='p2'>{m.tombstone ? <i>[deleted — tombstone retained]</i> : m.text}</Box>
 									</Box>
 								))}
 							</Box>
 
-							<Box fontScale='c2' color='hint' mbe={4}>INVITE OPPOSING / CO-COUNSEL (verified attorneys only — Rule 4.2)</Box>
-							<TextInput placeholder='Search by name or bar #' value={dirQuery} onChange={(e: any) => setDirQuery(e.currentTarget.value)} mbe={6} />
-							<TextInput placeholder='They represent…' value={inviteRepresents} onChange={(e: any) => setInviteRepresents(e.currentTarget.value)} mbe={6} />
-							{(directory.data?.attorneys || []).filter((a: any) => a.id !== attorneyId).map((a: any) => (
-								<Box key={a.id} display='flex' alignItems='center' justifyContent='space-between' mbe={4}>
-									<Box fontScale='c1' withTruncatedText>{a.name} — {a.firm}</Box>
-									<Button small disabled={invite.isPending} onClick={() => invite.mutate(a.id)}>Invite</Button>
-								</Box>
-							))}
+							<Box fontScale='c2' color='hint' marginBlockEnd={4}>
+								INVITE OPPOSING / CO-COUNSEL (verified attorneys only — Rule 4.2)
+							</Box>
+							<TextInput
+								placeholder='Search by name or bar #'
+								value={dirQuery}
+								onChange={(e: any) => setDirQuery(e.currentTarget.value)}
+								marginBlockEnd={6}
+							/>
+							<TextInput
+								placeholder='They represent…'
+								value={inviteRepresents}
+								onChange={(e: any) => setInviteRepresents(e.currentTarget.value)}
+								marginBlockEnd={6}
+							/>
+							{(directory.data?.attorneys || [])
+								.filter((a: any) => a.id !== attorneyId)
+								.map((a: any) => (
+									<Box key={a.id} display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={4}>
+										<Box fontScale='c1' withTruncatedText>
+											{a.name} — {a.firm}
+										</Box>
+										<Button small disabled={invite.isPending} onClick={() => invite.mutate(a.id)}>
+											Invite
+										</Button>
+									</Box>
+								))}
 
-							<Box display='flex' mbs={8}>
-								<TextInput placeholder='Message opposing counsel…' value={draft} onChange={(e: any) => setDraft(e.currentTarget.value)} onKeyDown={(e: any) => { if (e.key === 'Enter' && draft.trim()) send.mutate(); }} mie={8} />
-								<Button primary disabled={!draft.trim() || send.isPending} onClick={() => send.mutate()}>{send.isPending ? <Throbber inheritColor size='x12' /> : <Icon name='send' size='x20' />}</Button>
+							<Box display='flex' marginBlockStart={8}>
+								<TextInput
+									placeholder='Message opposing counsel…'
+									value={draft}
+									onChange={(e: any) => setDraft(e.currentTarget.value)}
+									onKeyDown={(e: any) => {
+										if (e.key === 'Enter' && draft.trim()) send.mutate();
+									}}
+									marginInlineEnd={8}
+								/>
+								<Button primary disabled={!draft.trim() || send.isPending} onClick={() => send.mutate()}>
+									{send.isPending ? <Throbber inheritColor size='x12' /> : <Icon name='send' size='x20' />}
+								</Button>
 							</Box>
 						</>
 					)}

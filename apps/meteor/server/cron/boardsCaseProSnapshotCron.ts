@@ -1,7 +1,7 @@
 import { cronJobs } from '@rocket.chat/cron';
 import { Boards, BoardsCards } from '@rocket.chat/models';
 
-import { settings } from '../../app/settings/server';
+import { settings } from '../settings';
 import * as caseProLib from '../lib/boards/casepro';
 import { refreshMatterSnapshot } from '../lib/boards/matters/service';
 import { SystemLogger } from '../lib/logger/system';

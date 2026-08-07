@@ -6,9 +6,9 @@ import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
 import { FIRM_NAME_MAX, FIRM_NAME_MIN, MAX_INVITES_PER_CALL, normalizeFirmName, partitionEmails, slugifyFirmName } from './firmsHelpers';
-import { findOrCreateInvite } from '../../../app/invites/server/functions/findOrCreateInvite';
-import * as Mailer from '../../../app/mailer/server/api';
-import { settings } from '../../../app/settings/server';
+import { findOrCreateInvite } from '../rooms/invites/findOrCreateInvite';
+import * as Mailer from '../notifications/email/api';
+import { settings } from '../../settings';
 
 export { normalizeFirmName, slugifyFirmName, partitionEmails, userMatchesFirmScope } from './firmsHelpers';
 

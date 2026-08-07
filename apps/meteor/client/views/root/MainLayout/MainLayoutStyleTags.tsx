@@ -865,7 +865,7 @@ const buildPremiumDashboardCss = (theme: string): string => {
 };
 
 export const MainLayoutStyleTags = () => {
-	const [, , theme] = useThemeMode();
+	const theme = useThemeMode();
 
 	// Desktop app (Electron): tag <body> so the full-bleed frame + macOS traffic-light padding above
 	// activate. Inert on web/PWA (matterchatDesktop is only injected by the desktop wrapper's preload).

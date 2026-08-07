@@ -1,7 +1,7 @@
 import type { IMessage } from '@rocket.chat/core-typings';
 
 import type { CaseProClientAttachment } from './client';
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 
 /**
  * FILE (attachment) sync for the client↔firm bridge — the REFERENCE-SHARE path.

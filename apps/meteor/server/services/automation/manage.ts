@@ -3,7 +3,7 @@ import { BoardsAutomations, BoardsAutomationRuns, BoardsActivities } from '@rock
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
-import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { hasPermissionAsync } from '../../lib/authorization/hasPermission';
 
 /**
  * Automation management service (M7). The CRUD + run surface the REST routes call. Every

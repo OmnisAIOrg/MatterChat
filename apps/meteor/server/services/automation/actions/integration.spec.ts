@@ -1,8 +1,8 @@
 import type { IActionCaseproWriteback } from '@rocket.chat/core-typings';
 import { BoardsActivities } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { settings } from '../../../settings';
+import { hasPermissionAsync } from '../../../lib/authorization/hasPermission';
 import { caseProClient } from '../../../lib/boards/casepro/client';
 import { __forceLiveTransportForTests } from '../../../lib/boards/casepro/live';
 import { StubTransport } from '../../../lib/boards/casepro/transport';
@@ -17,11 +17,11 @@ jest.mock('@rocket.chat/models', () => ({
 	BoardsActivities: { log: jest.fn() },
 }));
 
-jest.mock('../../../../app/settings/server', () => ({
+jest.mock('../../../settings', () => ({
 	settings: { get: jest.fn() },
 }));
 
-jest.mock('../../../../app/authorization/server/functions/hasPermission', () => ({
+jest.mock('../../../lib/authorization/hasPermission', () => ({
 	hasPermissionAsync: jest.fn(),
 }));
 

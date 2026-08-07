@@ -7,8 +7,8 @@ import type {
 } from '@rocket.chat/core-typings';
 import { BoardsActivities, BoardsLeads } from '@rocket.chat/models';
 
-import { settings } from '../../../../app/settings/server';
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { settings } from '../../../settings';
+import { hasPermissionAsync } from '../../../lib/authorization/hasPermission';
 import { caseProClient, caseProMode, isLiveTransportConfigured } from '../../../lib/boards/casepro';
 import type { IntakePatchInput } from '../../../lib/boards/casepro';
 import { pushStage } from '../../../lib/boards/leads/caseproSync';

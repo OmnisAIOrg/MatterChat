@@ -27,7 +27,17 @@ type ColumnProps = {
 	onToggleSelect?: (cardId: string, event: MouseEvent) => void;
 };
 
-const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, onListUpdated, selectedIds, onToggleSelect }: ColumnProps) => {
+const Column = ({
+	list,
+	cards,
+	labelDefs,
+	isAddingCard,
+	onAddCard,
+	onOpenCard,
+	onListUpdated,
+	selectedIds,
+	onToggleSelect,
+}: ColumnProps) => {
 	// the column body is a droppable so an empty column (no sortable items) still accepts a drop
 	const { setNodeRef, isOver } = useDroppable({ id: list._id, data: { type: 'list', listId: list._id } });
 
@@ -66,22 +76,22 @@ const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, o
 			flexDirection='column'
 			minWidth='x280'
 			maxWidth='x280'
-			mie={12}
-			pi={12}
-			pb={12}
-			bg='tint'
+			marginInlineEnd={12}
+			paddingInline={12}
+			paddingBlock={12}
+			backgroundColor='tint'
 			borderRadius='x4'
 			flexShrink={0}
 			style={sortableStyle}
 		>
-			<Box display='flex' alignItems='center' mbe={8}>
+			<Box display='flex' alignItems='center' marginBlockEnd={8}>
 				{/* Drag handle — the ONLY list-drag affordance, so it can't fight card drag. */}
 				<Box
 					{...sortableListeners}
 					role='button'
 					tabIndex={0}
 					aria-label={`Reorder list ${list.title}`}
-					mie={4}
+					marginInlineEnd={4}
 					flexShrink={0}
 					display='flex'
 					alignItems='center'
@@ -91,13 +101,13 @@ const Column = ({ list, cards, labelDefs, isAddingCard, onAddCard, onOpenCard, o
 				</Box>
 				{/* small accent dot echoing the list color next to the title */}
 				{accent && (
-					<Box width='x10' height='x10' borderRadius='full' mie={6} flexShrink={0} style={{ backgroundColor: accent }} />
+					<Box width='x10' height='x10' borderRadius='full' marginInlineEnd={6} flexShrink={0} style={{ backgroundColor: accent }} />
 				)}
 				{/* Ledger column header: small-caps mono-ish label + tabular count. */}
 				<Box fontScale='p2b' color='default' withTruncatedText flexGrow={1} style={LEDGER_LABEL_STYLE}>
 					{list.title}
 				</Box>
-				<Box fontScale='c1' color='hint' mis={4} style={LEDGER_NUMERIC_STYLE}>
+				<Box fontScale='c1' color='hint' marginInlineStart={4} style={LEDGER_NUMERIC_STYLE}>
 					{cards.length}
 					{list.wipLimit ? `/${list.wipLimit}` : ''}
 				</Box>

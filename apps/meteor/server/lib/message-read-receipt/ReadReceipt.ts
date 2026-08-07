@@ -1,8 +1,8 @@
 import type { IMessage, IReadReceipt, IReadReceiptWithUser, IRoom, IUser } from '@rocket.chat/core-typings';
 import { Messages, ReadReceipts, Users } from '@rocket.chat/models';
 
-import { notifyOnMessageChange } from '../../../app/lib/server/lib/notifyListener';
-import { settings } from '../../../app/settings/server';
+import { notifyOnMessageChange } from '../notifyListener';
+import { settings } from '../../settings';
 
 const buildReceiptId = (messageId: IMessage['_id'], userId: IUser['_id']): string => `${messageId}-${userId}`;
 

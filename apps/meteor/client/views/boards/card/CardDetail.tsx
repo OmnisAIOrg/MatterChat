@@ -1,6 +1,18 @@
 import type { IBoardActivity, IBoardCard, Serialized } from '@rocket.chat/core-typings';
 import { css } from '@rocket.chat/css-in-js';
-import { Box, Button, ContextualbarV2, Divider, Icon, IconButton, Tabs, TextAreaInput, TextInput, Throbber } from '@rocket.chat/fuselage';
+import {
+	Box,
+	Button,
+	ContextualbarV2,
+	Divider,
+	Icon,
+	IconButton,
+	Tabs,
+	TabsItem,
+	TextAreaInput,
+	TextInput,
+	Throbber,
+} from '@rocket.chat/fuselage';
 import {
 	ContextualbarClose,
 	ContextualbarDialog,
@@ -52,8 +64,8 @@ const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 	const { t } = useTranslation();
 	const tone = useLedgerTone();
 	return (
-		<Box mbs={12}>
-			<Box mbe={6} pbe={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
+		<Box marginBlockStart={12}>
+			<Box marginBlockEnd={6} paddingBlockEnd={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
 				{t('Comment')}
 			</Box>
 			{(card.comments ?? []).length === 0 && (
@@ -64,13 +76,13 @@ const CommentsBlock = ({ card }: { card: Serialized<IBoardCard> }) => {
 			{(card.comments ?? []).map((comment) => (
 				<Box
 					key={comment.id}
-					mbe={6}
-					pb={8}
-					pi={8}
+					marginBlockEnd={6}
+					paddingBlock={8}
+					paddingInline={8}
 					borderRadius='x4'
 					style={{ backgroundColor: tone.card, boxShadow: `inset 0 0 0 1px ${tone.rule}` }}
 				>
-					<Box fontScale='micro' color='hint' mbe={2} style={tabularFigures}>
+					<Box fontScale='micro' color='hint' marginBlockEnd={2} style={tabularFigures}>
 						{comment.author} · {new Date(comment.ts).toLocaleString()}
 					</Box>
 					<Box fontScale='p2' color='default'>
@@ -93,7 +105,7 @@ const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string })
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -103,7 +115,7 @@ const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string })
 
 	if (activities.length === 0) {
 		return (
-			<Box fontScale='c1' color='hint' p={8}>
+			<Box fontScale='c1' color='hint' padding={8}>
 				{t('No_results_found')}
 			</Box>
 		);
@@ -112,8 +124,8 @@ const ActivityBlock = ({ boardId, cardId }: { boardId: string; cardId: string })
 	return (
 		<Box>
 			{activities.map((activity) => (
-				<Box key={activity._id} display='flex' alignItems='flex-start' mbe={6} pbe={4} style={ledgerRule(tone)}>
-					<Icon name='clock' size='x16' mie={8} mbs={2} color='hint' />
+				<Box key={activity._id} display='flex' alignItems='flex-start' marginBlockEnd={6} paddingBlockEnd={4} style={ledgerRule(tone)}>
+					<Icon name='clock' size='x16' marginInlineEnd={8} marginBlockStart={2} color='hint' />
 					<Box>
 						<Box fontScale='p2' color='default'>
 							{activity.verb}
@@ -216,7 +228,7 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 	const body: ReactNode = (
 		<>
 			<ContextualbarHeader>
-				{card && <Icon name={getCardTypeIcon(card.cardType)} size='x20' mie={4} />}
+				{card && <Icon name={getCardTypeIcon(card.cardType)} size='x20' marginInlineEnd={4} />}
 				{/* Serif "case caption" title — same treatment as the room-header caption. */}
 				<ContextualbarTitle>
 					<Box is='span' style={serifCaption}>
@@ -240,18 +252,18 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 			</ContextualbarHeader>
 
 			<Tabs>
-				<Tabs.Item selected={tab === 'detail'} onClick={() => setTab('detail')}>
+				<TabsItem selected={tab === 'detail'} onClick={() => setTab('detail')}>
 					{t('Board')}
-				</Tabs.Item>
-				<Tabs.Item selected={tab === 'activity'} onClick={() => setTab('activity')}>
+				</TabsItem>
+				<TabsItem selected={tab === 'activity'} onClick={() => setTab('activity')}>
 					{t('Boards_Card_Activity')}
-				</Tabs.Item>
+				</TabsItem>
 			</Tabs>
 
 			{/* Paper treatment: warm paper (light) / calm dense dark surface behind the card body. */}
 			<ContextualbarScrollableContent style={{ backgroundColor: tone.paper }}>
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}
@@ -261,28 +273,28 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 						{/* Typed panels render inside a local error boundary: a panel bug degrades to an
 						    inline callout with retry instead of white-screening the entire client. */}
 						{card.cardType === 'lead' && card.link?.kind === 'lead' && (
-							<Box mbe={16}>
+							<Box marginBlockEnd={16}>
 								<CardErrorBoundary>
 									<LeadPanel leadId={card.link.leadId} boardId={boardId} cardId={cardId} />
 								</CardErrorBoundary>
 							</Box>
 						)}
 						{card.cardType === 'matter' && (
-							<Box mbe={16}>
+							<Box marginBlockEnd={16}>
 								<CardErrorBoundary>
 									<MatterPanel card={card} />
 								</CardErrorBoundary>
 							</Box>
 						)}
-						<Box mbe={10}>
-							<Box mbe={4} style={ledgerHead(tone)}>
+						<Box marginBlockEnd={10}>
+							<Box marginBlockEnd={4} style={ledgerHead(tone)}>
 								{t('Title')}
 							</Box>
 							<TextInput value={title} onChange={(e) => setTitle((e.target as HTMLInputElement).value)} />
 						</Box>
 
-						<Box mbe={10}>
-							<Box mbe={4} style={ledgerHead(tone)}>
+						<Box marginBlockEnd={10}>
+							<Box marginBlockEnd={4} style={ledgerHead(tone)}>
 								{t('Description')}
 							</Box>
 							<TextAreaInput
@@ -294,7 +306,7 @@ const CardDetail = ({ boardId, cardId, onClose, defaultExpanded = false }: CardD
 						</Box>
 
 						{dirty && (
-							<Box mbe={8}>
+							<Box marginBlockEnd={8}>
 								<Button small primary onClick={handleSave} disabled={saveMutation.isPending}>
 									{t('Save')}
 								</Button>

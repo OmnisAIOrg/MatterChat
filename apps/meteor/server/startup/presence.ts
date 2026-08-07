@@ -7,7 +7,7 @@ import { InstanceStatus } from '@rocket.chat/instance-status';
 import { Accounts } from 'meteor/accounts-base';
 import { Meteor } from 'meteor/meteor';
 
-import type { ILoginAttempt } from '../../app/authentication/server/ILoginAttempt';
+import type { ILoginAttempt } from '../lib/auth/ILoginAttempt';
 
 // connections that completed a login on this instance: connection id -> user id
 const loggedConnections = new Map<string, string>();

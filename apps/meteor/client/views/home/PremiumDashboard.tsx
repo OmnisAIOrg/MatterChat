@@ -34,9 +34,9 @@ const formatDate = (): string => {
 // Stat tile component
 const StatTile = ({ label, value, accent }: { label: string; value: number; accent?: boolean }) => (
 	<Box
-		pi={12}
-		pbs={8}
-		pbe={8}
+		paddingInline={12}
+		paddingBlockStart={8}
+		paddingBlockEnd={8}
 		style={{
 			cursor: 'pointer',
 			transition: 'background 120ms',
@@ -73,9 +73,21 @@ const StatTile = ({ label, value, accent }: { label: string; value: number; acce
 );
 
 // Action card component
-const ActionCard = ({ icon, title, subtitle, action, link }: { icon: ReactNode; title: string; subtitle: ReactNode; action?: ReactNode; link?: boolean }) => (
+const ActionCard = ({
+	icon,
+	title,
+	subtitle,
+	action,
+	link,
+}: {
+	icon: ReactNode;
+	title: string;
+	subtitle: ReactNode;
+	action?: ReactNode;
+	link?: boolean;
+}) => (
 	<Box
-		p={12}
+		padding={12}
 		display='flex'
 		alignItems='center'
 		style={{
@@ -96,21 +108,42 @@ const ActionCard = ({ icon, title, subtitle, action, link }: { icon: ReactNode; 
 			e.currentTarget.style.transform = 'translateY(0)';
 		}}
 	>
-		<Box style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--premium-dashboard-green-soft)', border: '1px solid var(--premium-dashboard-border)' }}>
+		<Box
+			style={{
+				flexShrink: 0,
+				width: '36px',
+				height: '36px',
+				borderRadius: '10px',
+				display: 'flex',
+				alignItems: 'center',
+				justifyContent: 'center',
+				background: 'var(--premium-dashboard-green-soft)',
+				border: '1px solid var(--premium-dashboard-border)',
+			}}
+		>
 			{icon}
 		</Box>
 		<Box style={{ flex: 1, minWidth: 0 }}>
-			<Box style={{ fontSize: '14px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>
-				{title}
-			</Box>
+			<Box style={{ fontSize: '14px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>{title}</Box>
 			{link ? (
-				<Box is='a' href='#' style={{ marginTop: '2px', fontSize: '12.5px', fontWeight: 500, textDecoration: 'none', color: 'var(--premium-dashboard-green)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+				<Box
+					is='a'
+					href='#'
+					style={{
+						marginTop: '2px',
+						fontSize: '12.5px',
+						fontWeight: 500,
+						textDecoration: 'none',
+						color: 'var(--premium-dashboard-green)',
+						display: 'inline-flex',
+						alignItems: 'center',
+						gap: '4px',
+					}}
+				>
 					{subtitle} <span style={{ fontSize: '13px' }}>{'→'}</span>
 				</Box>
 			) : (
-				<Box style={{ marginTop: '2px', fontSize: '12.5px', color: 'var(--premium-dashboard-ink2)' }}>
-					{subtitle}
-				</Box>
+				<Box style={{ marginTop: '2px', fontSize: '12.5px', color: 'var(--premium-dashboard-ink2)' }}>{subtitle}</Box>
 			)}
 		</Box>
 		{action && <Box>{action}</Box>}
@@ -118,7 +151,19 @@ const ActionCard = ({ icon, title, subtitle, action, link }: { icon: ReactNode; 
 );
 
 // Card section wrapper
-const CardSection = ({ icon, title, count, action, children }: { icon: ReactNode; title: string; count?: number; action?: ReactNode; children: ReactNode }) => (
+const CardSection = ({
+	icon,
+	title,
+	count,
+	action,
+	children,
+}: {
+	icon: ReactNode;
+	title: string;
+	count?: number;
+	action?: ReactNode;
+	children: ReactNode;
+}) => (
 	<Box
 		style={{
 			marginTop: '16px',
@@ -131,9 +176,7 @@ const CardSection = ({ icon, title, count, action, children }: { icon: ReactNode
 	>
 		<Box display='flex' alignItems='center' style={{ padding: '14px 20px', gap: '10px' }}>
 			{icon}
-			<Box style={{ fontSize: '14px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>
-				{title}
-			</Box>
+			<Box style={{ fontSize: '14px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>{title}</Box>
 			{typeof count === 'number' && count > 0 && (
 				<Box
 					style={{
@@ -165,9 +208,9 @@ const DeadlineRow = ({ title, subtitle, date, badge }: { title: string; subtitle
 	<Box
 		display='flex'
 		alignItems='center'
-		pi={12}
-		pbs={8}
-		pbe={8}
+		paddingInline={12}
+		paddingBlockStart={8}
+		paddingBlockEnd={8}
 		style={{
 			padding: '11px 20px',
 			borderTop: '1px solid var(--premium-dashboard-border)',
@@ -187,16 +230,10 @@ const DeadlineRow = ({ title, subtitle, date, badge }: { title: string; subtitle
 				boxShadow: '0 0 0 3px rgba(207, 68, 56, 0.12)',
 			}}
 		/>
-		<Box style={{ fontSize: '13px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>
-			{title}
-		</Box>
-		<Box style={{ fontSize: '12.5px', color: 'var(--premium-dashboard-ink3)' }}>
-			{subtitle}
-		</Box>
+		<Box style={{ fontSize: '13px', fontWeight: 600, color: 'var(--premium-dashboard-ink)' }}>{title}</Box>
+		<Box style={{ fontSize: '12.5px', color: 'var(--premium-dashboard-ink3)' }}>{subtitle}</Box>
 		<Box style={{ flex: 1 }} />
-		<Box style={{ fontSize: '12px', color: 'var(--premium-dashboard-ink2)', fontVariantNumeric: 'tabular-nums' }}>
-			{date}
-		</Box>
+		<Box style={{ fontSize: '12px', color: 'var(--premium-dashboard-ink2)', fontVariantNumeric: 'tabular-nums' }}>{date}</Box>
 		<Box
 			style={{
 				fontFamily: "'Geist Mono', monospace",
@@ -215,13 +252,31 @@ const DeadlineRow = ({ title, subtitle, date, badge }: { title: string; subtitle
 );
 
 // Matter row
-const MatterRow = ({ name, type, date, stage, stageBg, stageColor, stageBorder, sol }: { name: string; type: string; date: string; stage: string; stageBg: string; stageColor: string; stageBorder: string; sol: string }) => (
+const MatterRow = ({
+	name,
+	type,
+	date,
+	stage,
+	stageBg,
+	stageColor,
+	stageBorder,
+	sol,
+}: {
+	name: string;
+	type: string;
+	date: string;
+	stage: string;
+	stageBg: string;
+	stageColor: string;
+	stageBorder: string;
+	sol: string;
+}) => (
 	<Box
 		display='flex'
 		alignItems='center'
-		pi={12}
-		pbs={8}
-		pbe={8}
+		paddingInline={12}
+		paddingBlockStart={8}
+		paddingBlockEnd={8}
 		style={{
 			padding: '10px 20px',
 			borderTop: '1px solid var(--premium-dashboard-border)',
@@ -251,12 +306,8 @@ const MatterRow = ({ name, type, date, stage, stageBg, stageColor, stageBorder, 
 				overflow: 'hidden',
 			}}
 		>
-			<Box style={{ fontSize: '13px', fontWeight: 600, color: 'var(--premium-dashboard-ink)', flexShrink: 0 }}>
-				{name}
-			</Box>
-			<Box style={{ fontSize: '12.5px', color: 'var(--premium-dashboard-ink3)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-				{type}
-			</Box>
+			<Box style={{ fontSize: '13px', fontWeight: 600, color: 'var(--premium-dashboard-ink)', flexShrink: 0 }}>{name}</Box>
+			<Box style={{ fontSize: '12.5px', color: 'var(--premium-dashboard-ink3)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{type}</Box>
 		</Box>
 		<Box style={{ fontSize: '12px', color: 'var(--premium-dashboard-ink2)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
 			{date}
@@ -291,9 +342,7 @@ const MatterRow = ({ name, type, date, stage, stageBg, stageColor, stageBorder, 
 		>
 			{sol}
 		</Box>
-		<Box style={{ fontSize: '14px', color: 'var(--premium-dashboard-ink3)', flexShrink: 0 }}>
-			{'→'}
-		</Box>
+		<Box style={{ fontSize: '14px', color: 'var(--premium-dashboard-ink3)', flexShrink: 0 }}>{'→'}</Box>
 	</Box>
 );
 
@@ -303,26 +352,89 @@ export const PremiumDashboard = () => {
 	const userName = user?.name || user?.username || 'there';
 
 	// Mock data for demonstration
-	const stats = useMemo(() => ({
-		activeMatters: 99,
-		dueToday: 0,
-		dueThisWeek: 0,
-		solLte30d: 2,
-	}), []);
+	const stats = useMemo(
+		() => ({
+			activeMatters: 99,
+			dueToday: 0,
+			dueThisWeek: 0,
+			solLte30d: 2,
+		}),
+		[],
+	);
 
-	const deadlines = useMemo(() => [
-		{ title: 'SOL — Test Test', sub: 'Motor Vehicle Accident', date: '02/03/2022', badge: '896D OVERDUE' },
-		{ title: 'SOL — Judit Ferrer', sub: 'Motor Vehicle Accident', date: '12/30/2024', badge: '535D OVERDUE' },
-	], []);
+	const deadlines = useMemo(
+		() => [
+			{ title: 'SOL — Test Test', sub: 'Motor Vehicle Accident', date: '02/03/2022', badge: '896D OVERDUE' },
+			{ title: 'SOL — Judit Ferrer', sub: 'Motor Vehicle Accident', date: '12/30/2024', badge: '535D OVERDUE' },
+		],
+		[],
+	);
 
-	const matters = useMemo(() => [
-		{ name: 'Chauncey Frank', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: 'var(--premium-dashboard-ink)', stageBorder: 'var(--premium-dashboard-border)' },
-		{ name: 'Candace Ann Moore', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Initial Review', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-amber-soft)', stageColor: 'var(--premium-dashboard-amber)', stageBorder: 'var(--premium-dashboard-border)' },
-		{ name: 'Knowledge Mims', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: 'var(--premium-dashboard-ink)', stageBorder: 'var(--premium-dashboard-border)' },
-		{ name: 'Mark Embrey', type: 'Motor Vehicle Accident', date: '06/18/2026', stage: 'Pre-Litigation', sol: 'SOL 23 MO', stageBg: 'var(--premium-dashboard-blue-soft)', stageColor: 'var(--premium-dashboard-blue)', stageBorder: 'var(--premium-dashboard-border)' },
-		{ name: 'Kailyn Moron', type: 'Motor Vehicle Accident', date: '02/20/2026', stage: 'Pre-Lit Settled', sol: 'SOL 19 MO', stageBg: 'var(--premium-dashboard-border)', stageColor: 'var(--premium-dashboard-ink2)', stageBorder: 'var(--premium-dashboard-border)' },
-		{ name: 'Mycal Mims', type: 'Motor Vehicle Accident', date: '07/11/2026', stage: 'Investigation', sol: 'SOL 24 MO', stageBg: 'var(--premium-dashboard-green-soft)', stageColor: 'var(--premium-dashboard-ink)', stageBorder: 'var(--premium-dashboard-border)' },
-	], []);
+	const matters = useMemo(
+		() => [
+			{
+				name: 'Chauncey Frank',
+				type: 'Motor Vehicle Accident',
+				date: '07/11/2026',
+				stage: 'Investigation',
+				sol: 'SOL 24 MO',
+				stageBg: 'var(--premium-dashboard-green-soft)',
+				stageColor: 'var(--premium-dashboard-ink)',
+				stageBorder: 'var(--premium-dashboard-border)',
+			},
+			{
+				name: 'Candace Ann Moore',
+				type: 'Motor Vehicle Accident',
+				date: '07/11/2026',
+				stage: 'Initial Review',
+				sol: 'SOL 24 MO',
+				stageBg: 'var(--premium-dashboard-amber-soft)',
+				stageColor: 'var(--premium-dashboard-amber)',
+				stageBorder: 'var(--premium-dashboard-border)',
+			},
+			{
+				name: 'Knowledge Mims',
+				type: 'Motor Vehicle Accident',
+				date: '07/11/2026',
+				stage: 'Investigation',
+				sol: 'SOL 24 MO',
+				stageBg: 'var(--premium-dashboard-green-soft)',
+				stageColor: 'var(--premium-dashboard-ink)',
+				stageBorder: 'var(--premium-dashboard-border)',
+			},
+			{
+				name: 'Mark Embrey',
+				type: 'Motor Vehicle Accident',
+				date: '06/18/2026',
+				stage: 'Pre-Litigation',
+				sol: 'SOL 23 MO',
+				stageBg: 'var(--premium-dashboard-blue-soft)',
+				stageColor: 'var(--premium-dashboard-blue)',
+				stageBorder: 'var(--premium-dashboard-border)',
+			},
+			{
+				name: 'Kailyn Moron',
+				type: 'Motor Vehicle Accident',
+				date: '02/20/2026',
+				stage: 'Pre-Lit Settled',
+				sol: 'SOL 19 MO',
+				stageBg: 'var(--premium-dashboard-border)',
+				stageColor: 'var(--premium-dashboard-ink2)',
+				stageBorder: 'var(--premium-dashboard-border)',
+			},
+			{
+				name: 'Mycal Mims',
+				type: 'Motor Vehicle Accident',
+				date: '07/11/2026',
+				stage: 'Investigation',
+				sol: 'SOL 24 MO',
+				stageBg: 'var(--premium-dashboard-green-soft)',
+				stageColor: 'var(--premium-dashboard-ink)',
+				stageBorder: 'var(--premium-dashboard-border)',
+			},
+		],
+		[],
+	);
 
 	return (
 		<Page>
@@ -339,7 +451,17 @@ export const PremiumDashboard = () => {
 						borderBottom: '1px solid var(--premium-dashboard-border)',
 					}}
 				>
-					<Box style={{ maxWidth: '1180px', margin: '0 auto', padding: '14px 36px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+					<Box
+						style={{
+							maxWidth: '1180px',
+							margin: '0 auto',
+							padding: '14px 36px',
+							display: 'flex',
+							alignItems: 'center',
+							gap: '16px',
+							flexWrap: 'wrap',
+						}}
+					>
 						<Box style={{ flex: 1, minWidth: '300px' }}>
 							<Box
 								is='h1'
@@ -362,16 +484,13 @@ export const PremiumDashboard = () => {
 									fontFamily: "'Geist', system-ui, sans-serif",
 								}}
 							>
-								{formatDate()} · <span style={{ color: 'var(--premium-dashboard-red)', fontWeight: 500 }}>{stats.solLte30d} matters</span> with a deadline within 30 days
+								{formatDate()} · <span style={{ color: 'var(--premium-dashboard-red)', fontWeight: 500 }}>{stats.solLte30d} matters</span>{' '}
+								with a deadline within 30 days
 							</Box>
 						</Box>
 						<Box style={{ display: 'flex', gap: '9px' }}>
-							<Button primary>
-								{'+ New matter'}
-							</Button>
-							<Button>
-								{'+ New lead'}
-							</Button>
+							<Button primary>{'+ New matter'}</Button>
+							<Button>{'+ New lead'}</Button>
 						</Box>
 					</Box>
 				</Box>
@@ -405,17 +524,8 @@ export const PremiumDashboard = () => {
 
 					{/* Due today + Activity */}
 					<Box style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 320px', gap: '16px' }}>
-						<ActionCard
-							icon={<CheckCircleIcon />}
-							title='Due today'
-							subtitle="Nothing due today — you're clear."
-						/>
-						<ActionCard
-							icon={<ActivityIcon />}
-							title='Activity'
-							subtitle='Open your activity inbox'
-							link
-						/>
+						<ActionCard icon={<CheckCircleIcon />} title='Due today' subtitle="Nothing due today — you're clear." />
+						<ActionCard icon={<ActivityIcon />} title='Activity' subtitle='Open your activity inbox' link />
 					</Box>
 
 					{/* Approaching deadlines */}
@@ -423,7 +533,15 @@ export const PremiumDashboard = () => {
 						icon={<ClockIcon />}
 						title='Approaching deadlines'
 						count={deadlines.length}
-						action={<Box is='a' href='#' style={{ fontSize: '12.5px', fontWeight: 500, textDecoration: 'none', color: 'var(--premium-dashboard-green)' }}>{'View all →'}</Box>}
+						action={
+							<Box
+								is='a'
+								href='#'
+								style={{ fontSize: '12.5px', fontWeight: 500, textDecoration: 'none', color: 'var(--premium-dashboard-green)' }}
+							>
+								{'View all →'}
+							</Box>
+						}
 					>
 						{deadlines.map((d) => (
 							<DeadlineRow key={d.title} title={d.title} subtitle={d.sub} date={d.date} badge={d.badge} />
@@ -435,7 +553,15 @@ export const PremiumDashboard = () => {
 						icon={<FolderIcon />}
 						title='My matters'
 						count={matters.length}
-						action={<Box is='a' href='#' style={{ fontSize: '12.5px', fontWeight: 500, textDecoration: 'none', color: 'var(--premium-dashboard-green)' }}>{'View all →'}</Box>}
+						action={
+							<Box
+								is='a'
+								href='#'
+								style={{ fontSize: '12.5px', fontWeight: 500, textDecoration: 'none', color: 'var(--premium-dashboard-green)' }}
+							>
+								{'View all →'}
+							</Box>
+						}
 					>
 						{matters.map((m) => (
 							<MatterRow key={m.name} {...m} />
@@ -449,27 +575,61 @@ export const PremiumDashboard = () => {
 
 // SVG Icon components
 const CheckCircleIcon = () => (
-	<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='#116240' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'>
+	<svg
+		width='17'
+		height='17'
+		viewBox='0 0 24 24'
+		fill='none'
+		stroke='#116240'
+		strokeWidth='1.8'
+		strokeLinecap='round'
+		strokeLinejoin='round'
+	>
 		<circle cx='12' cy='12' r='8.5' />
 		<path d='m8.5 12.4 2.4 2.4 4.8-5.2' />
 	</svg>
 );
 
 const ActivityIcon = () => (
-	<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='var(--premium-dashboard-ink2)' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'>
+	<svg
+		width='17'
+		height='17'
+		viewBox='0 0 24 24'
+		fill='none'
+		stroke='var(--premium-dashboard-ink2)'
+		strokeWidth='1.8'
+		strokeLinecap='round'
+		strokeLinejoin='round'
+	>
 		<path d='M6.3 9.2a5.7 5.7 0 0 1 11.4 0c0 4.4 1.9 5.6 1.9 5.6H4.4s1.9-1.2 1.9-5.6M10 18.8a2.1 2.1 0 0 0 4 0' />
 	</svg>
 );
 
 const ClockIcon = () => (
-	<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='var(--premium-dashboard-ink2)' strokeWidth='1.8' strokeLinecap='round'>
+	<svg
+		width='16'
+		height='16'
+		viewBox='0 0 24 24'
+		fill='none'
+		stroke='var(--premium-dashboard-ink2)'
+		strokeWidth='1.8'
+		strokeLinecap='round'
+	>
 		<circle cx='12' cy='12' r='8.5' />
 		<path d='M12 7.5V12l3 2' />
 	</svg>
 );
 
 const FolderIcon = () => (
-	<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='var(--premium-dashboard-ink2)' strokeWidth='1.8' strokeLinejoin='round'>
+	<svg
+		width='16'
+		height='16'
+		viewBox='0 0 24 24'
+		fill='none'
+		stroke='var(--premium-dashboard-ink2)'
+		strokeWidth='1.8'
+		strokeLinejoin='round'
+	>
 		<path d='M3.5 7a2 2 0 0 1 2-2h4.2l2 2.4h7.8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2z' />
 	</svg>
 );

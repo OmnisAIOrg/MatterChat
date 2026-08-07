@@ -152,8 +152,8 @@ const CardLabelsControl = ({ boardId, cardId, cardLabelIds }: CardLabelsControlP
 	};
 
 	return (
-		<Box mbs={16}>
-			<Box display='flex' alignItems='center' mbe={8}>
+		<Box marginBlockStart={16}>
+			<Box display='flex' alignItems='center' marginBlockEnd={8}>
 				<Box fontScale='p2b' color='default' flexGrow={1}>
 					{t('Boards_Labels', { defaultValue: 'Labels' })}
 				</Box>
@@ -176,21 +176,21 @@ const CardLabelsControl = ({ boardId, cardId, cardLabelIds }: CardLabelsControlP
 			)}
 
 			{expanded && (
-				<Box mbs={12} pb={12} pi={12} bg='tint' borderRadius='x4'>
+				<Box marginBlockStart={12} paddingBlock={12} paddingInline={12} backgroundColor='tint' borderRadius='x4'>
 					{isLoading ? (
-						<Box display='flex' justifyContent='center' p={8}>
+						<Box display='flex' justifyContent='center' padding={8}>
 							<Throbber size='x12' />
 						</Box>
 					) : (
 						<>
 							{/* Toggle / edit / delete each board label. */}
 							{labelDefs.length === 0 && (
-								<Box fontScale='c1' color='hint' mbe={8}>
+								<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 									{t('Boards_Labels_Empty', { defaultValue: 'No labels yet — create one below.' })}
 								</Box>
 							)}
 							{labelDefs.map((label) => (
-								<Box key={label.id} display='flex' alignItems='center' mbe={6} style={{ gap: '6px' }}>
+								<Box key={label.id} display='flex' alignItems='center' marginBlockEnd={6} style={{ gap: '6px' }}>
 									<CheckBox
 										checked={selected.has(label.id)}
 										disabled={anyPending}
@@ -233,11 +233,15 @@ const CardLabelsControl = ({ boardId, cardId, cardLabelIds }: CardLabelsControlP
 							))}
 
 							{/* Create a new board label: name + swatch picker. */}
-							<Box mbs={12} pbs={12} style={{ borderTop: '1px solid var(--rcx-color-stroke-extra-light, #eee)' }}>
-								<Box fontScale='c1' color='hint' mbe={4}>
+							<Box
+								marginBlockStart={12}
+								paddingBlockStart={12}
+								style={{ borderTop: '1px solid var(--rcx-color-stroke-extra-light, #eee)' }}
+							>
+								<Box fontScale='c1' color='hint' marginBlockEnd={4}>
 									{t('Boards_Label_New', { defaultValue: 'New label' })}
 								</Box>
-								<Box display='flex' alignItems='center' style={{ gap: '6px' }} mbe={6}>
+								<Box display='flex' alignItems='center' style={{ gap: '6px' }} marginBlockEnd={6}>
 									<TextInput value={newName} placeholder={t('Name')} onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
 									<Button small primary disabled={anyPending || !newName.trim()} onClick={handleCreate}>
 										{t('Create')}

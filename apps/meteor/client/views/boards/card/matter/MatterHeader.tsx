@@ -59,14 +59,14 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 	return (
 		<Box>
 			{/* Eyebrow: panel label + CasePro connection + Refresh */}
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbe={8}>
+			<Box display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={8}>
 				<Box display='flex' alignItems='center'>
-					<Icon name='bag' size='x16' mie={6} color='hint' />
+					<Icon name='bag' size='x16' marginInlineEnd={6} color='hint' />
 					{/* Small-caps eyebrow — the ledger section-label voice. */}
 					<Box fontScale='c1' color='hint' style={LEDGER_LABEL_STYLE}>
 						{t('Boards_Matters_Linked_Matter', { defaultValue: 'Linked Matter' })}
 					</Box>
-					<CaseProStatusChip mis={8} />
+					<CaseProStatusChip marginInlineStart={8} />
 				</Box>
 				<Button small square title={t('Refresh')} disabled={isRefreshing} onClick={onRefresh}>
 					{isRefreshing ? <Throbber inheritColor size='x12' /> : <Icon name='reload' size='x16' />}
@@ -75,19 +75,19 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 
 			{/* Identity — serif "case caption" matter name (the ledger heading voice). */}
 			{displayName && (
-				<Box fontScale='h4' color='default' withTruncatedText mbe={2} style={LEDGER_CAPTION_STYLE}>
+				<Box fontScale='h4' color='default' withTruncatedText marginBlockEnd={2} style={LEDGER_CAPTION_STYLE}>
 					{displayName}
 				</Box>
 			)}
 			{subtitleParts.length > 0 && (
-				<Box fontScale='c1' color='hint' mbe={8} withTruncatedText>
+				<Box fontScale='c1' color='hint' marginBlockEnd={8} withTruncatedText>
 					{subtitleParts.join(' · ')}
 				</Box>
 			)}
 
 			{/* Stage / practice / freshness chips */}
 			{(snapshot?.stageName || snapshot?.subStageName || snapshot?.practiceArea || showStale) && (
-				<Box display='flex' flexWrap='wrap' alignItems='center' mbe={8} style={{ gap: '6px' }}>
+				<Box display='flex' flexWrap='wrap' alignItems='center' marginBlockEnd={8} style={{ gap: '6px' }}>
 					{snapshot?.stageName && <Chip>{snapshot.stageName}</Chip>}
 					{snapshot?.subStageName && <Chip>{snapshot.subStageName}</Chip>}
 					{snapshot?.practiceArea && <Tag variant='secondary-info'>{snapshot.practiceArea}</Tag>}
@@ -97,7 +97,7 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 							medium
 							title={t('Boards_Matters_Stale_Hint', { defaultValue: 'This CasePro snapshot may be out of date — refresh to re-read it.' })}
 						>
-							<Icon name='warning' size='x12' mie={2} />
+							<Icon name='warning' size='x12' marginInlineEnd={2} />
 							{t('Boards_Matters_Stale', { defaultValue: 'Stale' })}
 						</Tag>
 					)}
@@ -106,16 +106,16 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 
 			{/* Actions */}
 			{(caseProHref || roomId) && (
-				<Box display='flex' flexWrap='wrap' mbe={4} style={{ gap: '8px' }}>
+				<Box display='flex' flexWrap='wrap' marginBlockEnd={4} style={{ gap: '8px' }}>
 					{caseProHref && (
 						<Button small is='a' href={caseProHref} target='_blank' rel='noopener noreferrer'>
-							<Icon name='new-window' size='x16' mie={4} />
+							<Icon name='new-window' size='x16' marginInlineEnd={4} />
 							{t('Boards_Matters_Open_In_CasePro', { defaultValue: 'Open in CasePro' })}
 						</Button>
 					)}
 					{roomId && (
 						<Button small onClick={jumpToChannel} disabled={!canJump}>
-							<Icon name='arrow-jump' size='x16' mie={4} />
+							<Icon name='arrow-jump' size='x16' marginInlineEnd={4} />
 							{t('Boards_Matters_Jump_To_Channel', { defaultValue: 'Jump to channel' })}
 						</Button>
 					)}
@@ -124,18 +124,18 @@ const MatterHeader = ({ matterId, cardTitle, snapshot, link, showStale, isRefres
 
 			{/* Freshness caption */}
 			{updatedLabel && (
-				<Box fontScale='micro' color='hint' mbe={4}>
+				<Box fontScale='micro' color='hint' marginBlockEnd={4}>
 					{t('Boards_Matters_Fetched_At', { date: updatedLabel, defaultValue: 'Updated {{date}}' })}
 				</Box>
 			)}
 
 			{/* Incident narrative — read-only CasePro matters.description (NOT the editable card Description). */}
 			{snapshot?.incidentDescription && (
-				<Box mbs={8}>
-					<Box fontScale='c1' color='hint' mbe={4}>
+				<Box marginBlockStart={8}>
+					<Box fontScale='c1' color='hint' marginBlockEnd={4}>
 						{t('Boards_Matters_Incident', { defaultValue: 'Incident' })}
 					</Box>
-					<Box fontScale='p2' color='default' bg='tint' p={8} borderRadius='x4' style={{ whiteSpace: 'pre-wrap' }}>
+					<Box fontScale='p2' color='default' backgroundColor='tint' padding={8} borderRadius='x4' style={{ whiteSpace: 'pre-wrap' }}>
 						{snapshot.incidentDescription}
 					</Box>
 				</Box>

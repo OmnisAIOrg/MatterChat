@@ -1,7 +1,7 @@
 import type { SettingValue } from '@rocket.chat/core-typings';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 
 /**
  * Boards AI provider seam (M8 — §B "AI", closes the M7 `ai.generate` stub).

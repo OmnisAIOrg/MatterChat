@@ -140,7 +140,7 @@ const MattersBoardRoute = () => {
 						className='mc-board-header'
 						title={
 							<Box display='flex' alignItems='center'>
-								<Icon name='bag' size='x24' mie={8} color='hint' />
+								<Icon name='bag' size='x24' marginInlineEnd={8} color='hint' />
 								<Box withTruncatedText>{board.title || t('Boards_Matters')}</Box>
 							</Box>
 						}
@@ -150,14 +150,14 @@ const MattersBoardRoute = () => {
 							onSync={handleSync}
 							isSyncing={seedMutation.isPending || Boolean(syncStatus?.syncing)}
 							lastSyncAt={syncStatus?.lastSyncFinishedAt ? new Date(syncStatus.lastSyncFinishedAt) : lastSyncAt}
-							mie={4}
+							marginInlineEnd={4}
 						/>
 						<ButtonGroup>
 							<BoardAutomationsButton boardId={board._id} small={false} />
 						</ButtonGroup>
 					</PageHeader>
 
-					<CaseProStubBanner pi={24} pbs={12} />
+					<CaseProStubBanner paddingInline={24} paddingBlockStart={12} />
 
 					<MattersBoardView board={board} lists={lists} />
 				</Page>

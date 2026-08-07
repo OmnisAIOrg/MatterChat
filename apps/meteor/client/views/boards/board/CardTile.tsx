@@ -129,8 +129,8 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 					onOpen(card._id);
 				}
 			}}
-			mbe={6}
-			bg='light'
+			marginBlockEnd={6}
+			backgroundColor='light'
 			borderRadius='x4'
 			borderWidth='default'
 			borderColor='extra-light'
@@ -142,9 +142,9 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 			)}
 
 			{/* Denser card body (founder demand: less chrome, more cards in view). */}
-			<Box pi={10} pbs={6} pbe={6}>
+			<Box paddingInline={10} paddingBlockStart={6} paddingBlockEnd={6}>
 				{cardLabels.length > 0 && (
-					<Box display='flex' alignItems='center' flexWrap='wrap' mbe={6} style={{ gap: '4px' }}>
+					<Box display='flex' alignItems='center' flexWrap='wrap' marginBlockEnd={6} style={{ gap: '4px' }}>
 						{/* Compact: show up to 3 chips (named -> pill, unnamed -> dot), then a +N overflow tag. */}
 						{cardLabels.slice(0, 3).map((l) =>
 							l.name ? (
@@ -168,11 +168,11 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 					</Box>
 				)}
 
-				<Box display='flex' alignItems='center' mbe={hasMeta ? 4 : 0}>
+				<Box display='flex' alignItems='center' marginBlockEnd={hasMeta ? 4 : 0}>
 					{selectable && (
 						<CheckBox
 							checked={Boolean(selected)}
-							mie={6}
+							marginInlineEnd={6}
 							aria-label={card.title}
 							// CheckBox sits inside the draggable tile; keep pointer/keyboard events from
 							// reaching the drag listeners or the tile's open-on-click handler.
@@ -182,7 +182,7 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 							onChange={() => undefined}
 						/>
 					)}
-					<Icon name={getCardTypeIcon(card.cardType)} size='x16' mie={4} color='hint' />
+					<Icon name={getCardTypeIcon(card.cardType)} size='x16' marginInlineEnd={4} color='hint' />
 					{/* Matter cards carry the serif "case caption" title; other card types stay sans. */}
 					<Box
 						fontScale='p2'
@@ -199,37 +199,37 @@ const CardTile = ({ card, labelDefs, onOpen, selected, onToggleSelect }: CardTil
 					<Box display='flex' alignItems='center' flexWrap='wrap' style={{ gap: '4px' }}>
 						{card.dueDate && (
 							<Tag variant={overdue ? 'danger' : undefined}>
-								<Icon name='clock' size='x12' mie={2} />
+								<Icon name='clock' size='x12' marginInlineEnd={2} />
 								{formatDue(card.dueDate)}
 							</Tag>
 						)}
 						{totalCount > 0 && (
 							<Tag>
-								<Icon name='circle-check' size='x12' mie={2} />
+								<Icon name='circle-check' size='x12' marginInlineEnd={2} />
 								{doneCount}/{totalCount}
 							</Tag>
 						)}
 						{childCount > 0 && (
 							<Tag>
-								<Icon name='squares' size='x12' mie={2} />
+								<Icon name='squares' size='x12' marginInlineEnd={2} />
 								{childCount}
 							</Tag>
 						)}
 						{(loggedMinutes > 0 || Boolean(card.timeEstimateMinutes)) && (
 							<Tag>
-								<Icon name='clock' size='x12' mie={2} />
+								<Icon name='clock' size='x12' marginInlineEnd={2} />
 								{Math.round((loggedMinutes / 60) * 10) / 10}h
 								{card.timeEstimateMinutes ? `/${Math.round((card.timeEstimateMinutes / 60) * 10) / 10}h` : ''}
 							</Tag>
 						)}
 						{card.assignees.length > 0 && (
 							<Tag>
-								<Icon name='user' size='x12' mie={2} />
+								<Icon name='user' size='x12' marginInlineEnd={2} />
 								{card.assignees.length}
 							</Tag>
 						)}
 						{card.cardNumber ? (
-							<Box fontScale='micro' color='hint' mis={4}>
+							<Box fontScale='micro' color='hint' marginInlineStart={4}>
 								#{card.cardNumber}
 							</Box>
 						) : null}

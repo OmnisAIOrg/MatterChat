@@ -5,8 +5,8 @@ import { caseProClientMessagesClient, type CaseProClientMessage } from './client
 import { clientSyncEcho, clientSyncMessageId, isClientSyncMessageId } from './echoSuppression';
 import { extractOutboundAttachments, mapInboundAttachments } from './fileSync';
 import { ensureClientRoom, findClientRoom, getClientSyncBot } from './room';
-import { settings } from '../../../../app/settings/server';
-import { sendMessage } from '../../../../app/lib/server/functions/sendMessage';
+import { settings } from '../../../settings';
+import { sendMessage } from '../../messages/sendMessage';
 import { SystemLogger } from '../../logger/system';
 
 /**

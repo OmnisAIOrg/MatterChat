@@ -169,9 +169,9 @@ const DeadlineCard = ({
 			display='flex'
 			alignItems='flex-start'
 			justifyContent='space-between'
-			pb={8}
-			pi={10}
-			mbe={6}
+			paddingBlock={8}
+			paddingInline={10}
+			marginBlockEnd={6}
 			style={{
 				gap: '12px',
 				background: tones.card,
@@ -206,7 +206,7 @@ const DeadlineCard = ({
 					{deadline.label || t(kindLabelKey(deadline.kind), { defaultValue: kindLabelDefault[deadline.kind] })}
 				</Box>
 				<Box fontScale='c1' style={{ ...tabularNums, color: tones.inkMuted }}>
-					<Icon name='calendar' size='x14' mie={4} />
+					<Icon name='calendar' size='x14' marginInlineEnd={4} />
 					{t('Boards_Matters_Deadline_Due', { defaultValue: 'Due' })}: {dueLabel ?? '—'}
 				</Box>
 				{deadline.notes && (
@@ -218,7 +218,7 @@ const DeadlineCard = ({
 
 			<Box display='flex' flexDirection='column' alignItems='flex-end' style={{ gap: '6px', flexShrink: 0 }}>
 				<Button small onClick={() => onOpenCard(deadline.cardId)}>
-					<Icon name='squares' size='x16' mie={4} />
+					<Icon name='squares' size='x16' marginInlineEnd={4} />
 					{t('Open')}
 				</Button>
 				{canAcknowledge && (
@@ -236,8 +236,8 @@ const DeadlineCard = ({
 };
 
 const BucketSection = ({ title, children }: { title: ReactNode; children: ReactNode }): ReactElement => (
-	<Box mbs={16}>
-		<Box fontScale='h4' color='default' mbe={6} style={serifCaption}>
+	<Box marginBlockStart={16}>
+		<Box fontScale='h4' color='default' marginBlockEnd={6} style={serifCaption}>
 			{title}
 		</Box>
 		{children}
@@ -321,7 +321,7 @@ const MattersCalendar = (): ReactElement => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='calendar' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='calendar' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Matters_Deadlines', { defaultValue: 'Deadlines' })}
 						</Box>
@@ -336,10 +336,10 @@ const MattersCalendar = (): ReactElement => {
 				)}
 			</PageHeader>
 			<PageScrollableContentWithShadow>
-				<CaseProStubBanner mbe={16} />
+				<CaseProStubBanner marginBlockEnd={16} />
 
 				{isLoading && (
-					<Box display='flex' justifyContent='center' p={24}>
+					<Box display='flex' justifyContent='center' padding={24}>
 						<Throbber />
 					</Box>
 				)}

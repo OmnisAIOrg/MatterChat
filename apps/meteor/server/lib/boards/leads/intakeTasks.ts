@@ -2,8 +2,8 @@ import type { IIntakeTask, IntakeTaskOrigin, ILead } from '@rocket.chat/core-typ
 import { BoardsIntakeTasks, BoardsLeads, BoardsActivities } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
-import { settings } from '../../../../app/settings/server';
-import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { settings } from '../../../settings';
+import { hasPermissionAsync } from '../../authorization/hasPermission';
 
 /**
  * Intake tasks: SLA / cold-lead / sequence follow-up ticklers (M6 —

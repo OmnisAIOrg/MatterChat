@@ -87,7 +87,7 @@ const fmtCurrency = (value?: number): string => {
 
 // Serif "case caption" section heads — ledger parity with the redesigned siblings.
 const SectionTitle = ({ children }: { children: ReactNode }): ReactElement => (
-	<Box fontScale='h4' color='default' mbs={20} mbe={10} style={serifCaption}>
+	<Box fontScale='h4' color='default' marginBlockStart={20} marginBlockEnd={10} style={serifCaption}>
 		{children}
 	</Box>
 );
@@ -182,8 +182,8 @@ const SourceEditorModal = ({ onClose, onSaved }: SourceEditorModalProps): ReactE
 				{errors.name && <FieldError>{errors.name.message}</FieldError>}
 			</Field>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel htmlFor={typeId}>{t('Type')}</FieldLabel>
 					<FieldRow>
 						<Controller
@@ -195,7 +195,7 @@ const SourceEditorModal = ({ onClose, onSaved }: SourceEditorModalProps): ReactE
 						/>
 					</FieldRow>
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel htmlFor={kindId}>{t('Kind', { defaultValue: 'Kind' })}</FieldLabel>
 					<FieldRow>
 						<Controller
@@ -209,21 +209,21 @@ const SourceEditorModal = ({ onClose, onSaved }: SourceEditorModalProps): ReactE
 				</Field>
 			</Box>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Boards_Leads_Referral_Out_Fee', { defaultValue: 'Referral fee' })} (%)</FieldLabel>
 				<FieldRow>
 					<TextInput {...register('defaultFeePct')} placeholder='33.3' />
 				</FieldRow>
 			</Field>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Phone')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('phone')} />
 					</FieldRow>
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Email')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('email')} />
@@ -231,7 +231,7 @@ const SourceEditorModal = ({ onClose, onSaved }: SourceEditorModalProps): ReactE
 				</Field>
 			</Box>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Notes', { defaultValue: 'Notes' })}</FieldLabel>
 				<FieldRow>
 					<TextAreaInput rows={2} {...register('notes')} />
@@ -399,12 +399,12 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 
 			{/* Existing outbound referrals for this lead (load on reopen — no silent dup on edit) */}
 			{leadId.length > 0 && (
-				<Box mbs={12}>
-					<Box fontScale='c1' color='hint' mbe={4}>
+				<Box marginBlockStart={12}>
+					<Box fontScale='c1' color='hint' marginBlockEnd={4}>
 						{t('Boards_Leads_Referrals_Out_Existing', { defaultValue: 'Existing outbound referrals' })}
 					</Box>
 					{existingLoading && (
-						<Box display='flex' justifyContent='center' p={8}>
+						<Box display='flex' justifyContent='center' padding={8}>
 							<Throbber />
 						</Box>
 					)}
@@ -455,7 +455,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 					{created && (
 						<Button
 							tiny
-							mbs={8}
+							marginBlockStart={8}
 							onClick={() => {
 								setCreated(null);
 								reset({
@@ -475,7 +475,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 				</Box>
 			)}
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Boards_Leads_Referral_Out_Firm', { defaultValue: 'Refer to firm' })}</FieldLabel>
 				<FieldRow>
 					<TextInput {...register('toFirmName', { required: t('Required_field', { field: t('Name') }) })} />
@@ -483,7 +483,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 				{errors.toFirmName && <FieldError>{errors.toFirmName.message}</FieldError>}
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel htmlFor={arrangementId}>{t('Boards_Leads_Referral_Out_Status', { defaultValue: 'Arrangement' })}</FieldLabel>
 				<FieldRow>
 					<Controller
@@ -501,14 +501,14 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 				</FieldRow>
 			</Field>
 
-			<Box display='flex' mbs={12} mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginBlockStart={12} marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Boards_Leads_Referral_Out_Fee', { defaultValue: 'Referral fee' })} (%)</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('agreedFeePct')} placeholder='33.3' />
 					</FieldRow>
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel>{t('Boards_Leads_Referral_Out_Expected_Fee', { defaultValue: 'Expected fee' })} ($)</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('expectedFee')} placeholder='0' />
@@ -516,14 +516,14 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 				</Field>
 			</Box>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Contact')}</FieldLabel>
 				<FieldRow>
 					<TextInput {...register('contactName')} />
 				</FieldRow>
 			</Field>
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Notes', { defaultValue: 'Notes' })}</FieldLabel>
 				<FieldRow>
 					<TextAreaInput rows={2} {...register('notes')} />
@@ -531,8 +531,8 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 			</Field>
 
 			{created && (
-				<Box mbs={16}>
-					<Callout type='success' icon='check' title={t('Saved')} mbe={12}>
+				<Box marginBlockStart={16}>
+					<Callout type='success' icon='check' title={t('Saved')} marginBlockEnd={12}>
 						{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referred out' })} — {created.toFirmName}
 					</Callout>
 					<Field>
@@ -541,7 +541,7 @@ const ReferOutModal = ({ onClose, onSaved }: ReferOutModalProps): ReactElement =
 							<Select id={statusId} value={status} onChange={(next) => setStatusValue(next as ReferralOutStatus)} options={statusOptions} />
 						</FieldRow>
 					</Field>
-					<Button small mbs={8} onClick={() => statusMutation.mutate()} disabled={statusMutation.isPending}>
+					<Button small marginBlockStart={8} onClick={() => statusMutation.mutate()} disabled={statusMutation.isPending}>
 						{t('Boards_Leads_Referral_Out_Status', { defaultValue: 'Update status' })}
 					</Button>
 				</Box>
@@ -583,7 +583,7 @@ const SourcesPanel = (): ReactElement => {
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={16}>
+			<Box display='flex' justifyContent='center' padding={16}>
 				<Throbber />
 			</Box>
 		);
@@ -592,7 +592,7 @@ const SourcesPanel = (): ReactElement => {
 	if (isError || !data) {
 		return (
 			<Callout type='danger' icon='warning' title={t('Something_went_wrong')}>
-				<Button small mbs={8} onClick={() => refetch()}>
+				<Button small marginBlockStart={8} onClick={() => refetch()}>
 					{t('Reload_page')}
 				</Button>
 			</Callout>
@@ -605,8 +605,8 @@ const SourcesPanel = (): ReactElement => {
 
 	return (
 		<Box>
-			<Box display='flex' justifyContent='flex-end' mbe={8}>
-				<Button small mie={8} onClick={openReferOut}>
+			<Box display='flex' justifyContent='flex-end' marginBlockEnd={8}>
+				<Button small marginInlineEnd={8} onClick={openReferOut}>
 					{t('Boards_Leads_Referral_Out_New', { defaultValue: 'Refer out' })}
 				</Button>
 				<Button small primary onClick={openSourceEditor}>
@@ -668,7 +668,7 @@ const ReferralsView = (): ReactElement => {
 			<PageHeader
 				title={
 					<Box display='flex' alignItems='center'>
-						<Icon name='user-plus' size='x24' mie={8} style={{ color: tones.green }} />
+						<Icon name='user-plus' size='x24' marginInlineEnd={8} style={{ color: tones.green }} />
 						<Box withTruncatedText style={serifCaption}>
 							{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referrals' })}
 						</Box>
@@ -678,7 +678,7 @@ const ReferralsView = (): ReactElement => {
 			<PageScrollableContentWithShadow>
 				{/* Static, theme-derived constant string — the shared ledger table/card skin. */}
 				<LedgerPageStyleTag />
-				<CaseProStubBanner mbe={16} />
+				<CaseProStubBanner marginBlockEnd={16} />
 
 				<SectionTitle>{t('Boards_Leads_Referrals_Out', { defaultValue: 'Referral sources' })}</SectionTitle>
 				<SourcesPanel />

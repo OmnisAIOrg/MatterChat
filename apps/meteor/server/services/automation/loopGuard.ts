@@ -1,6 +1,6 @@
 import { BoardsAutomationRuns } from '@rocket.chat/models';
 
-import { settings } from '../../../app/settings/server';
+import { settings } from '../../settings';
 import type { AutomationContext, LoopGuardState } from './context';
 
 /**

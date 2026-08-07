@@ -2,7 +2,7 @@ import type { IBoardForm, IBoardFormIntakeMapping, ILeadContact } from '@rocket.
 import { BoardsActivities } from '@rocket.chat/models';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 
-import { settings } from '../../../../app/settings/server';
+import { settings } from '../../../settings';
 import { createLead } from '../leads/service';
 
 /**

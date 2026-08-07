@@ -27,7 +27,16 @@ import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 
 import type { LedgerHeat } from './ledgerStyles';
-import { heatChipStyle, heatColor, heatDotStyle, ledgerHead, ledgerRule, serifCaption, tabularFigures, useLedgerTone } from './ledgerStyles';
+import {
+	heatChipStyle,
+	heatColor,
+	heatDotStyle,
+	ledgerHead,
+	ledgerRule,
+	serifCaption,
+	tabularFigures,
+	useLedgerTone,
+} from './ledgerStyles';
 
 /**
  * LEAD PANEL — the Intake face of a `cardType:'lead'` card. The integrator wires
@@ -64,8 +73,8 @@ const fmtDateTime = (d?: string | Date): string => (d ? new Date(d).toLocaleStri
 
 // Ledger-dense rows: figures/dates align via tabular-nums, ~15-20% tighter rhythm.
 const Row = ({ label, children }: { label: string; children: React.ReactNode }): ReactElement => (
-	<Box display='flex' justifyContent='space-between' alignItems='flex-start' mbe={4}>
-		<Box fontScale='c1' color='hint' mie={8} flexShrink={0}>
+	<Box display='flex' justifyContent='space-between' alignItems='flex-start' marginBlockEnd={4}>
+		<Box fontScale='c1' color='hint' marginInlineEnd={8} flexShrink={0}>
 			{label}
 		</Box>
 		<Box fontScale='p2' color='default' textAlign='end' withTruncatedText style={tabularFigures}>
@@ -78,7 +87,7 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }):
 const SectionTitle = ({ children }: { children: React.ReactNode }): ReactElement => {
 	const tone = useLedgerTone();
 	return (
-		<Box mbs={13} mbe={6} pbe={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
+		<Box marginBlockStart={13} marginBlockEnd={6} paddingBlockEnd={2} style={{ ...ledgerHead(tone), ...ledgerRule(tone) }}>
 			{children}
 		</Box>
 	);
@@ -168,8 +177,8 @@ const LogCommModal = ({ leadId, onClose, onSaved }: { leadId: string; onClose: (
 			onClose={onClose}
 			confirmDisabled={isSubmitting || logMutation.isPending}
 		>
-			<Box display='flex' mi='neg-x4'>
-				<Field mi={4}>
+			<Box display='flex' marginInline='neg-x4'>
+				<Field marginInline={4}>
 					<FieldLabel htmlFor={kindId}>{t('Type')}</FieldLabel>
 					<FieldRow>
 						<Controller
@@ -181,7 +190,7 @@ const LogCommModal = ({ leadId, onClose, onSaved }: { leadId: string; onClose: (
 						/>
 					</FieldRow>
 				</Field>
-				<Field mi={4}>
+				<Field marginInline={4}>
 					<FieldLabel htmlFor={dirId}>{t('Direction', { defaultValue: 'Direction' })}</FieldLabel>
 					<FieldRow>
 						<Controller
@@ -196,7 +205,7 @@ const LogCommModal = ({ leadId, onClose, onSaved }: { leadId: string; onClose: (
 			</Box>
 
 			{kind === 'email' && (
-				<Field mbs={12}>
+				<Field marginBlockStart={12}>
 					<FieldLabel>{t('Subject')}</FieldLabel>
 					<FieldRow>
 						<TextInput {...register('subject')} />
@@ -204,7 +213,7 @@ const LogCommModal = ({ leadId, onClose, onSaved }: { leadId: string; onClose: (
 				</Field>
 			)}
 
-			<Field mbs={12}>
+			<Field marginBlockStart={12}>
 				<FieldLabel>{t('Message')}</FieldLabel>
 				<FieldRow>
 					<TextAreaInput rows={3} {...register('body', { required: t('Required_field', { field: t('Message') }) })} />
@@ -267,27 +276,33 @@ const SendTemplateModal = ({ leadId, onClose, onSaved }: { leadId: string; onClo
 			confirmDisabled={!selected || sendMutation.isPending}
 		>
 			{isLoading && (
-				<Box display='flex' justifyContent='center' mbe={8}>
+				<Box display='flex' justifyContent='center' marginBlockEnd={8}>
 					<Throbber />
 				</Box>
 			)}
 			<Field>
 				<FieldLabel htmlFor={templateId}>{t('Boards_Leads_Templates', { defaultValue: 'Templates' })}</FieldLabel>
 				<FieldRow>
-					<Select id={templateId} value={selected} onChange={(next) => setSelected(next as string)} options={options} placeholder={t('Select_an_option')} />
+					<Select
+						id={templateId}
+						value={selected}
+						onChange={(next) => setSelected(next as string)}
+						options={options}
+						placeholder={t('Select_an_option')}
+					/>
 				</FieldRow>
 			</Field>
 			{selectedTemplate && (
-				<Box mbs={12} p={12} bg='tint' borderRadius='x4'>
+				<Box marginBlockStart={12} padding={12} backgroundColor='tint' borderRadius='x4'>
 					{selectedTemplate.subject && (
-						<Box fontScale='p2b' color='default' mbe={4}>
+						<Box fontScale='p2b' color='default' marginBlockEnd={4}>
 							{selectedTemplate.subject}
 						</Box>
 					)}
 					<Box fontScale='p2' color='default' withRichContent>
 						{selectedTemplate.body}
 					</Box>
-					<Box fontScale='micro' color='hint' mbs={4}>
+					<Box fontScale='micro' color='hint' marginBlockStart={4}>
 						{t('Boards_Leads_Template_PreviewNote', { defaultValue: 'Tokens are filled in when the message is sent.' })}
 					</Box>
 				</Box>
@@ -348,14 +363,20 @@ const EnrollSequenceModal = ({ leadId, onClose, onSaved }: { leadId: string; onC
 			confirmDisabled={!selected || enrollMutation.isPending}
 		>
 			{isLoading && (
-				<Box display='flex' justifyContent='center' mbe={8}>
+				<Box display='flex' justifyContent='center' marginBlockEnd={8}>
 					<Throbber />
 				</Box>
 			)}
 			<Field>
 				<FieldLabel htmlFor={seqId}>{t('Boards_Leads_Sequences', { defaultValue: 'Sequences' })}</FieldLabel>
 				<FieldRow>
-					<Select id={seqId} value={selected} onChange={(next) => setSelected(next as string)} options={options} placeholder={t('Select_an_option')} />
+					<Select
+						id={seqId}
+						value={selected}
+						onChange={(next) => setSelected(next as string)}
+						options={options}
+						placeholder={t('Select_an_option')}
+					/>
 				</FieldRow>
 			</Field>
 		</GenericModal>
@@ -386,12 +407,17 @@ const ConflictBanner = ({ leadId }: { leadId: string }): ReactElement | null => 
 		unknown: t('Boards_Leads_Conflict_Unknown', { defaultValue: 'Conflict check unavailable' }),
 	};
 
-	const type = data.verdict === 'conflict' ? 'danger' : data.verdict === 'review' ? 'warning' : data.verdict === 'clear' ? 'success' : 'info';
+	const type =
+		data.verdict === 'conflict' ? 'danger' : data.verdict === 'review' ? 'warning' : data.verdict === 'clear' ? 'success' : 'info';
 	const icon = data.verdict === 'clear' ? 'check' : data.verdict === 'unknown' ? 'info' : 'warning';
 
 	return (
-		<Box mbe={8}>
-			<Callout type={type} icon={icon} title={`${t('Boards_Leads_Conflict_Check', { defaultValue: 'Conflict check' })}: ${verdictLabel[data.verdict]}`}>
+		<Box marginBlockEnd={8}>
+			<Callout
+				type={type}
+				icon={icon}
+				title={`${t('Boards_Leads_Conflict_Check', { defaultValue: 'Conflict check' })}: ${verdictLabel[data.verdict]}`}
+			>
 				{data.matches.length > 0 && (
 					<Box>
 						{data.matches.slice(0, 4).map((m, i) => (
@@ -421,11 +447,11 @@ const DuplicateBanner = ({ leadId, onOpenLead }: { leadId: string; onOpenLead: (
 	}
 
 	return (
-		<Box mbe={8}>
+		<Box marginBlockEnd={8}>
 			<Callout type='warning' icon='copy' title={t('Boards_Leads_Duplicates', { defaultValue: 'Possible duplicates' })}>
 				{data.leadCandidates.map((c) => (
-					<Box key={c.leadId} display='flex' alignItems='center' justifyContent='space-between' mbe={2}>
-						<Box fontScale='c1' withTruncatedText mie={8}>
+					<Box key={c.leadId} display='flex' alignItems='center' justifyContent='space-between' marginBlockEnd={2}>
+						<Box fontScale='c1' withTruncatedText marginInlineEnd={8}>
 							{c.name || t('Unnamed')} {c.refNo ? `(#${c.refNo})` : ''} · {Math.round(c.confidence * 100)}%
 						</Box>
 						<Button tiny onClick={() => onOpenLead()}>
@@ -434,7 +460,7 @@ const DuplicateBanner = ({ leadId, onOpenLead }: { leadId: string; onOpenLead: (
 					</Box>
 				))}
 				{data.matterCandidates.map((c) => (
-					<Box key={c.matterId} fontScale='c1' mbe={2}>
+					<Box key={c.matterId} fontScale='c1' marginBlockEnd={2}>
 						{c.matterName || c.clientName || c.matterId} · {Math.round(c.confidence * 100)}%
 					</Box>
 				))}
@@ -557,7 +583,7 @@ const TasksSection = ({ leadId }: { leadId: string }): ReactElement => {
 		<>
 			<SectionTitle>{t('Boards_Leads_Tasks', { defaultValue: 'Tasks' })}</SectionTitle>
 			{isLoading && (
-				<Box display='flex' justifyContent='center' p={8}>
+				<Box display='flex' justifyContent='center' padding={8}>
 					<Throbber />
 				</Box>
 			)}
@@ -567,8 +593,8 @@ const TasksSection = ({ leadId }: { leadId: string }): ReactElement => {
 				</Box>
 			)}
 			{[...open, ...done].map((task) => (
-				<Box key={task._id} display='flex' alignItems='flex-start' mbe={6}>
-					<Box mie={8} mbs={2}>
+				<Box key={task._id} display='flex' alignItems='flex-start' marginBlockEnd={6}>
+					<Box marginInlineEnd={8} marginBlockStart={2}>
 						<CheckBox
 							checked={task.done}
 							disabled={task.done || completeMutation.isPending}
@@ -578,15 +604,25 @@ const TasksSection = ({ leadId }: { leadId: string }): ReactElement => {
 					</Box>
 					<Box minWidth={0} flexGrow={1}>
 						<Box display='flex' alignItems='center'>
-							<Box fontScale='p2' color={task.done ? 'hint' : 'default'} mie={4} withTruncatedText style={task.done ? { textDecoration: 'line-through' } : undefined}>
+							<Box
+								fontScale='p2'
+								color={task.done ? 'hint' : 'default'}
+								marginInlineEnd={4}
+								withTruncatedText
+								style={task.done ? { textDecoration: 'line-through' } : undefined}
+							>
 								{task.title}
 							</Box>
 							{isAutoOrigin(task.autoCreatedBy) && (
-								<Tag medium>{t(`Boards_Leads_Task_Origin_${task.autoCreatedBy}` as Parameters<typeof t>[0], { defaultValue: task.autoCreatedBy })}</Tag>
+								<Tag medium>
+									{t(`Boards_Leads_Task_Origin_${task.autoCreatedBy}` as Parameters<typeof t>[0], { defaultValue: task.autoCreatedBy })}
+								</Tag>
 							)}
 						</Box>
 						<Box fontScale='micro' color='hint' style={tabularFigures}>
-							{task.dueAt ? `${t('Boards_Leads_Task_Due', { defaultValue: 'Due' })}: ${fmtDateTime(task.dueAt)}` : t('Boards_Leads_Task_NoDue', { defaultValue: 'No due date' })}
+							{task.dueAt
+								? `${t('Boards_Leads_Task_Due', { defaultValue: 'Due' })}: ${fmtDateTime(task.dueAt)}`
+								: t('Boards_Leads_Task_NoDue', { defaultValue: 'No due date' })}
 							{task.done && task.doneAt ? ` · ${t('Boards_Leads_Task_DoneAt', { defaultValue: 'Done' })} ${fmtDateTime(task.doneAt)}` : ''}
 						</Box>
 					</Box>
@@ -658,8 +694,7 @@ const SignupPacketSection = ({
 	// the doc render is a LitBox/OnlyOffice concern; here Generate seeds a packet
 	// with a placeholder generated ref so the manual e-sign flow can proceed.
 	const generateMutation = useMutation({
-		mutationFn: () =>
-			generatePacket({ leadId, docTemplateId: 'default-retainer', generatedDocRef: `pending:${leadId}:${Date.now()}` }),
+		mutationFn: () => generatePacket({ leadId, docTemplateId: 'default-retainer', generatedDocRef: `pending:${leadId}:${Date.now()}` }),
 		onSuccess: () => {
 			dispatchToastMessage({ type: 'success', message: t('Boards_Leads_Signup_Generate', { defaultValue: 'Packet generated' }) });
 			refresh();
@@ -705,17 +740,17 @@ const SignupPacketSection = ({
 		<>
 			<SectionTitle>{t('Boards_Leads_Signup_Packet', { defaultValue: 'Sign-up packet' })}</SectionTitle>
 			{isLoading && (
-				<Box display='flex' justifyContent='center' p={8}>
+				<Box display='flex' justifyContent='center' padding={8}>
 					<Throbber />
 				</Box>
 			)}
 			{!isLoading && !packet && (
 				<>
-					<Box fontScale='c1' color='hint' mbe={8}>
+					<Box fontScale='c1' color='hint' marginBlockEnd={8}>
 						{t('Boards_Leads_Signup_None', { defaultValue: 'No sign-up packet yet. Generate a retainer packet to start the e-sign flow.' })}
 					</Box>
 					<Button small onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
-						<Icon name='file-document' size='x14' mie={4} />
+						<Icon name='file-document' size='x14' marginInlineEnd={4} />
 						{t('Boards_Leads_Signup_Generate', { defaultValue: 'Generate packet' })}
 					</Button>
 				</>
@@ -723,7 +758,7 @@ const SignupPacketSection = ({
 			{packet && (
 				<Box>
 					{/* status pill + state-machine breadcrumb */}
-					<Box display='flex' alignItems='center' flexWrap='wrap' mbe={8} style={{ gap: '6px' }}>
+					<Box display='flex' alignItems='center' flexWrap='wrap' marginBlockEnd={8} style={{ gap: '6px' }}>
 						<Tag variant={packetStatusVariant(packet.status)} medium>
 							{t(`Boards_Leads_Signup_Status_${packet.status}` as Parameters<typeof t>[0], { defaultValue: packet.status })}
 						</Tag>
@@ -734,17 +769,22 @@ const SignupPacketSection = ({
 						)}
 					</Box>
 					{armed && (
-						<Callout type='success' icon='check' mbe={8} title={t('Boards_Leads_Signup_Armed', { defaultValue: 'Signed — conversion is armed' })}>
+						<Callout
+							type='success'
+							icon='check'
+							marginBlockEnd={8}
+							title={t('Boards_Leads_Signup_Armed', { defaultValue: 'Signed — conversion is armed' })}
+						>
 							{t('Boards_Leads_Signup_ArmedHint', { defaultValue: 'The retainer is signed; convert this lead to a matter below.' })}
 						</Callout>
 					)}
 					<ButtonGroup>
 						<Button tiny onClick={() => sendMutation.mutate()} disabled={!canSend || sendMutation.isPending}>
-							<Icon name='send' size='x12' mie={4} />
+							<Icon name='send' size='x12' marginInlineEnd={4} />
 							{t('Boards_Leads_Signup_Send', { defaultValue: 'Send for signature' })}
 						</Button>
 						<Button tiny success onClick={() => markSignedMutation.mutate()} disabled={!canMarkSigned || markSignedMutation.isPending}>
-							<Icon name='check' size='x12' mie={4} />
+							<Icon name='check' size='x12' marginInlineEnd={4} />
 							{t('Boards_Leads_Signup_MarkSigned', { defaultValue: 'Mark signed' })}
 						</Button>
 					</ButtonGroup>
@@ -795,7 +835,9 @@ const DisqualifyModal = ({
 						rows={3}
 						value={reason}
 						onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
-						placeholder={t('Boards_Lead_DisqualifyReasonPlaceholder', { defaultValue: 'e.g. Outside SOL, no injuries, conflict of interest' })}
+						placeholder={t('Boards_Lead_DisqualifyReasonPlaceholder', {
+							defaultValue: 'e.g. Outside SOL, no injuries, conflict of interest',
+						})}
 					/>
 				</FieldRow>
 			</Field>
@@ -950,7 +992,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 
 	if (isLoading) {
 		return (
-			<Box display='flex' justifyContent='center' p={24}>
+			<Box display='flex' justifyContent='center' padding={24}>
 				<Throbber />
 			</Box>
 		);
@@ -958,7 +1000,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 
 	if (isError || !data?.lead) {
 		return (
-			<Box fontScale='c1' color='hint' p={8}>
+			<Box fontScale='c1' color='hint' padding={8}>
 				{t('Something_went_wrong')}
 			</Box>
 		);
@@ -984,15 +1026,15 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 	const canConvert = Boolean(lead.caseproIntakeId) && !converted;
 
 	return (
-		<Box pi={4}>
+		<Box paddingInline={4}>
 			{/* Serif "case caption" lead name (mirrors the room-header caption treatment). */}
-			<Box fontScale='h4' color='default' withTruncatedText mbe={2} style={serifCaption}>
+			<Box fontScale='h4' color='default' withTruncatedText marginBlockEnd={2} style={serifCaption}>
 				{fullName}
 			</Box>
 
 			{/* Dense single-strip identity row — ref · practice area · qualification ·
 			    recomputed score · SOL heat, all on one wrapped line (less chrome, more data). */}
-			<Box display='flex' alignItems='center' flexWrap='wrap' mbe={8} style={{ gap: '6px', rowGap: '4px' }}>
+			<Box display='flex' alignItems='center' flexWrap='wrap' marginBlockEnd={8} style={{ gap: '6px', rowGap: '4px' }}>
 				<Box is='span' fontScale='c1' color='hint' style={tabularFigures}>
 					#{lead.refNo}
 				</Box>
@@ -1016,7 +1058,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 
 			{/* Disqualify reason (item 1): show why a disqualified lead was declined. */}
 			{qualified === false && lead.qualification?.disqualifyReason && (
-				<Box mbe={8}>
+				<Box marginBlockEnd={8}>
 					<Callout type='warning' icon='ban' title={t('Boards_Lead_DisqualifyReason', { defaultValue: 'Reason for disqualifying' })}>
 						{lead.qualification.disqualifyReason}
 					</Callout>
@@ -1037,7 +1079,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 			<SectionTitle>{t('Status')}</SectionTitle>
 			<Row label={t('Status')}>{currentList?.title ?? lead.statusId}</Row>
 			{subStatusOptions.length > 0 ? (
-				<Field mbe={6}>
+				<Field marginBlockEnd={6}>
 					<FieldLabel>{t('Boards_SubStatus', { defaultValue: 'Sub-status' })}</FieldLabel>
 					<FieldRow>
 						<Select
@@ -1081,7 +1123,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 					<SectionTitle>{t('Tags')}</SectionTitle>
 					<Box display='flex' flexWrap='wrap'>
 						{lead.tags.map((tag) => (
-							<Tag key={tag} mie={4} mbe={4}>
+							<Tag key={tag} marginInlineEnd={4} marginBlockEnd={4}>
 								{tag}
 							</Tag>
 						))}
@@ -1096,15 +1138,23 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 			<SignupPacketSection leadId={leadId} onArmedChange={setPacketArmed} onInvalidateLead={invalidate} />
 
 			{/* Communications timeline + depth actions */}
-			<Box display='flex' alignItems='center' justifyContent='space-between' mbs={13} mbe={6} pbe={2} style={ledgerRule(tone)}>
+			<Box
+				display='flex'
+				alignItems='center'
+				justifyContent='space-between'
+				marginBlockStart={13}
+				marginBlockEnd={6}
+				paddingBlockEnd={2}
+				style={ledgerRule(tone)}
+			>
 				<Box style={ledgerHead(tone)}>{t('Boards_Leads_Timeline', { defaultValue: 'Communication timeline' })}</Box>
 				<ButtonGroup>
 					<Button tiny onClick={openLogComm}>
-						<Icon name='plus' size='x12' mie={4} />
+						<Icon name='plus' size='x12' marginInlineEnd={4} />
 						{t('Boards_Leads_Task_New', { defaultValue: 'Log' })}
 					</Button>
 					<Button tiny onClick={openSendTemplate}>
-						<Icon name='send' size='x12' mie={4} />
+						<Icon name='send' size='x12' marginInlineEnd={4} />
 						{t('Boards_Leads_Template_Send', { defaultValue: 'Send template' })}
 					</Button>
 				</ButtonGroup>
@@ -1115,11 +1165,11 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 				</Box>
 			)}
 			{communications.map((comm) => (
-				<Box key={comm._id} display='flex' alignItems='flex-start' mbe={6} pbe={4} style={ledgerRule(tone)}>
-					<Icon name={commIcon(comm.kind)} size='x16' mie={8} mbs={2} color='hint' />
+				<Box key={comm._id} display='flex' alignItems='flex-start' marginBlockEnd={6} paddingBlockEnd={4} style={ledgerRule(tone)}>
+					<Icon name={commIcon(comm.kind)} size='x16' marginInlineEnd={8} marginBlockStart={2} color='hint' />
 					<Box minWidth={0} flexGrow={1}>
 						<Box display='flex' alignItems='center'>
-							<Box fontScale='p2b' color='default' mie={4}>
+							<Box fontScale='p2b' color='default' marginInlineEnd={4}>
 								{comm.subject || t(`Boards_Comm_${comm.kind}` as Parameters<typeof t>[0], { defaultValue: comm.kind })}
 							</Box>
 							<Tag medium>{comm.direction}</Tag>
@@ -1138,13 +1188,13 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 				</Box>
 			))}
 
-			<Divider mbs={16} />
+			<Divider marginBlockStart={16} />
 
 			{/* Depth secondary actions: enroll in sequence + quick intake tasks */}
-			<Box mbe={8}>
+			<Box marginBlockEnd={8}>
 				<ButtonGroup stretch>
 					<Button small onClick={openEnrollSequence} disabled={converted}>
-						<Icon name='discover' size='x14' mie={4} />
+						<Icon name='discover' size='x14' marginInlineEnd={4} />
 						{t('Boards_Leads_Sequence_Enroll', { defaultValue: 'Enroll in sequence' })}
 					</Button>
 					<Button
@@ -1152,7 +1202,7 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 						onClick={() => taskMutation.mutate(t('Boards_Leads_Task_Speed_To_Lead', { defaultValue: 'First contact (SLA)' }))}
 						disabled={taskMutation.isPending || converted}
 					>
-						<Icon name='clock' size='x14' mie={4} />
+						<Icon name='clock' size='x14' marginInlineEnd={4} />
 						{t('Boards_Leads_Task_New', { defaultValue: 'New task' })}
 					</Button>
 				</ButtonGroup>
@@ -1174,25 +1224,19 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 					{t('Boards_Lead_Assign', { defaultValue: 'Assign' })}
 				</Button>
 			</ButtonGroup>
-			<Box mbs={8}>
-				<Button
-					small
-					primary
-					width='100%'
-					disabled={convertMutation.isPending || !canConvert}
-					onClick={() => convertMutation.mutate()}
-				>
+			<Box marginBlockStart={8}>
+				<Button small primary width='100%' disabled={convertMutation.isPending || !canConvert} onClick={() => convertMutation.mutate()}>
 					{convertMutation.isPending ? (
-						<Throbber inheritColor size='x12' mie={4} />
+						<Throbber inheritColor size='x12' marginInlineEnd={4} />
 					) : (
-						<Icon name='arrow-forward' size='x16' mie={4} />
+						<Icon name='arrow-forward' size='x16' marginInlineEnd={4} />
 					)}
 					{converted
 						? t('Boards_Lead_AlreadyConverted', { defaultValue: 'Converted to matter' })
 						: t('Boards_Lead_ConvertToMatter', { defaultValue: 'Convert to matter' })}
 				</Button>
 				{!converted && !lead.caseproIntakeId && (
-					<Box fontScale='micro' color='hint' mbs={4} textAlign='center'>
+					<Box fontScale='micro' color='hint' marginBlockStart={4} textAlign='center'>
 						{t('Boards_Lead_ConvertNeedsSync', {
 							defaultValue: 'Sync this lead to CasePro before converting to a matter.',
 						})}
@@ -1200,8 +1244,8 @@ const LeadPanel = ({ leadId, boardId, cardId }: LeadPanelProps): ReactElement =>
 				)}
 				{/* signed retainer arms conversion (intake §10/§11) — nudge the user to convert. */}
 				{!converted && canConvert && packetArmed && (
-					<Box fontScale='micro' color='status-font-on-success' mbs={4} textAlign='center'>
-						<Icon name='check' size='x12' mie={2} />
+					<Box fontScale='micro' color='status-font-on-success' marginBlockStart={4} textAlign='center'>
+						<Icon name='check' size='x12' marginInlineEnd={2} />
 						{t('Boards_Lead_ConvertArmed', { defaultValue: 'Retainer signed — ready to convert to a matter.' })}
 					</Box>
 				)}

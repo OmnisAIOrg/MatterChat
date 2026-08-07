@@ -264,14 +264,14 @@ const Section = ({
 			{open && (
 				<>
 					{isLoading && (
-						<Box display='flex' alignItems='center' justifyContent='center' pb={12}>
+						<Box display='flex' alignItems='center' justifyContent='center' paddingBlock={12}>
 							<Throbber size='x12' />
 						</Box>
 					)}
 
 					{!isLoading && error && (
-						<Box pi={12} pb={8}>
-							<Box fontSize={12} color='danger' mbe={4}>
+						<Box paddingInline={12} paddingBlock={8}>
+							<Box fontSize={12} color='danger' marginBlockEnd={4}>
 								{error.message}
 								{error.status ? ` (${error.status})` : ''}
 							</Box>

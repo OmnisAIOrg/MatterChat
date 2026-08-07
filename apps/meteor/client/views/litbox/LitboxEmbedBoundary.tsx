@@ -43,7 +43,7 @@ const LitboxEmbedBoundary = ({ children }: LitboxEmbedBoundaryProps): ReactEleme
 							icon='warning'
 							title={t('Boards_Litbox_Embed_Failed', { defaultValue: 'The file browser could not be loaded' })}
 						>
-							<Box mbe={8} fontScale='c1'>
+							<Box marginBlockEnd={8} fontScale='c1'>
 								{error instanceof Error ? error.message : String(error)}
 							</Box>
 							<Button small onClick={(): void => resetErrorBoundary()}>

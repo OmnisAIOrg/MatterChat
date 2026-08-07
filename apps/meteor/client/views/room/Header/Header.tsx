@@ -10,7 +10,7 @@ const RoomHeader = lazy(() => import('./RoomHeader'));
 // MATTERCHAT: phone-only back arrow in the header start slot (opens the room-list drawer).
 const MobileBackToChatsButton = lazy(() => import('./MobileBackToChatsButton'));
 
-type HeaderProps = {
+export type HeaderProps = {
 	room: IRoom;
 	subscription?: ISubscription;
 };
