@@ -1,7 +1,53 @@
 import { css } from '@rocket.chat/css-in-js';
 import { Box, Icon } from '@rocket.chat/fuselage';
 
-const DESKTOP_RELEASES_URL = 'https://github.com/OmnisAIOrg/MatterChat-Desktop-releases/releases/latest';
+const DESKTOP_LATEST = 'https://github.com/OmnisAIOrg/MatterChat-Desktop-releases/releases/latest';
+
+/**
+ * A DIRECT download of the installer for the visitor's own OS.
+ *
+ * This link used to open the GitHub releases PAGE, which lists a dozen assets — dmg, zip,
+ * exe, AppImage, deb, plus .blockmap and .yml files that mean nothing to anyone. Someone
+ * on Windows had to know to pick the .exe; someone on Mac had to choose between the .dmg
+ * and the .zip. One of them is for auto-update, not for humans.
+ *
+ * The filenames carry no version on purpose: the real artifacts are version-stamped
+ * (MatterChat-Setup-1.0.1.exe), so a fixed URL would rot on every release, and GitHub's
+ * /releases/latest/download/<name> takes no wildcard. The desktop CI publishes a
+ * stable-named copy of each installer beside the versioned originals, so these resolve to
+ * the newest release forever.
+ *
+ * Unknown platform falls back to the releases page — better a page with too many choices
+ * than a download that is silently wrong for the machine it lands on.
+ */
+const desktopDownloadUrl = (): string => {
+	if (typeof navigator === 'undefined') {
+		return DESKTOP_LATEST;
+	}
+	// userAgentData is the modern signal but is not in Safari/Firefox, so userAgent stays
+	// as the fallback rather than the other way round.
+	const platform = (
+		(navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ||
+		navigator.userAgent ||
+		''
+	).toLowerCase();
+
+	if (platform.includes('win')) {
+		return `${DESKTOP_LATEST}/download/MatterChat-windows.exe`;
+	}
+	// Order matters: an iPhone/iPad UA contains "mac" on iPadOS, but there is no desktop
+	// build for it — those fall through to the releases page.
+	if (/iphone|ipad|ipod|android/.test(platform)) {
+		return DESKTOP_LATEST;
+	}
+	if (platform.includes('mac') || platform.includes('darwin')) {
+		return `${DESKTOP_LATEST}/download/MatterChat-mac.dmg`;
+	}
+	if (platform.includes('linux') || platform.includes('x11')) {
+		return `${DESKTOP_LATEST}/download/MatterChat-linux.AppImage`;
+	}
+	return DESKTOP_LATEST;
+};
 
 // True only in a normal browser — the desktop app exposes window.matterchatDesktop, so it hides its
 // own "Get the desktop app" link.
@@ -87,7 +133,7 @@ export const SidebarFooterWatermark = () => {
 			{!inDesktopApp && (
 				<Box
 					is='a'
-					href={DESKTOP_RELEASES_URL}
+					href={desktopDownloadUrl()}
 					target='_blank'
 					rel='noopener noreferrer'
 					title='Download the MatterChat desktop app (macOS, Windows, Linux)'
