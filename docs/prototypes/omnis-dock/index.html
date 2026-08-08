@@ -1,0 +1,384 @@
+<meta charset="utf-8">
+<script src="../../../apps/meteor/public/enso/enso-loader.js"></script>
+<title>Omnis Dock — web/desktop</title>
+<style>
+/* =============================================================================
+   OMNIS DOCK — web/desktop port of Omnis-Mobile-UI src/ui/Dock.tsx
+   Values lifted from source, not eyeballed:
+     geometry   Dock.tsx          PAD_TOP 12, PAD_BOTTOM 14, ICON_SLOT 34,
+                                  LABEL_GAP 3, LABEL_H 14, BEZEL 4, raise 26
+     bezel      theme/skins.ts    skin "matterchat" — the reference implementation
+     glass      ui/Glass.tsx      RECIPES.dock
+     radius     theme/tokens.ts   radius.dock 34
+     colours    theme/tokens.ts   paper #FAF5EA, onSky #FFF, accent #175F35
+     enso       assets/enso-bristle.png — the dock set's own mark, 784x748
+   ========================================================================== */
+:root{
+  --accent:#175F35; --paper:#FAF5EA; --on-sky:#FFFFFF;
+  --bezel-top:#5FCB7A; --bezel-mid:#2BA14C; --bezel-bottom:#1B7A2E;
+  --bezel-edge-hi:rgba(255,255,255,0.45); --bezel-edge-shade:rgba(9,44,21,0.30);
+  --bezel-shadow:rgba(9,44,21,0.5);
+  --glass-from:rgba(14,34,21,0.74); --glass-to:rgba(5,16,10,0.84);
+  --glass-border:rgba(255,255,255,0.42); --glass-rim:rgba(255,255,255,0.34);
+  --glass-underlip:rgba(0,0,0,0.28); --glass-blur:46px;
+  --pad-top:12px; --pad-bottom:14px; --icon-slot:34px; --label-gap:3px;
+  --label-h:14px; --bez:4px; --radius-dock:34px; --centre:54px; --raise:26px;
+  --scale:1;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#0B0F15;color:#E6EAF0;
+  font-family:-apple-system,blinkmacsystemfont,'Segoe UI',roboto,'Helvetica Neue',arial,sans-serif;font-size:14px}
+.wrap{max-width:1060px;margin:0 auto;padding:22px 20px 40px}
+h1{font-size:20px;margin:0 0 5px}
+.sub{color:#95A1B2;font-size:13px;margin:0 0 14px;max-width:84ch;line-height:1.55}
+code{background:#1A212C;border:1px solid #2C3644;border-radius:3px;padding:1px 5px;font-size:11.5px;color:#B9C4D2}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+.tb{border:1px solid #2C3644;background:#1A212C;color:#95A1B2;padding:6px 12px;border-radius:8px;
+  font-size:12.5px;cursor:pointer;font-weight:600}
+.tb:hover{color:#E6EAF0}
+.note{color:#95A1B2;font-size:12px;margin:0 0 12px;min-height:30px;line-height:1.5;max-width:94ch}
+.note b{color:#E6EAF0}
+
+/* ---------- app window: the bezel RING, then the app inside it ---------- */
+.win{position:relative;height:430px;border-radius:22px;padding:10px;
+  background:linear-gradient(180deg,var(--bezel-top) 0%,var(--bezel-mid) 52%,var(--bezel-bottom) 100%);
+  box-shadow:0 18px 44px rgba(9,44,21,.55)}
+.app{position:relative;height:100%;border-radius:14px;overflow:hidden;
+  background:linear-gradient(180deg,#9CDCAE 0%,#57B377 32%,#27874E 62%,#0E5530 100%)}
+.sheet{position:absolute;left:14px;right:14px;top:14px;bottom:0;background:var(--paper);
+  border-radius:20px 20px 0 0;padding:14px 16px;color:#2C2A21;box-shadow:0 -2px 26px rgba(4,20,10,.42)}
+.sheet h3{margin:0 0 9px;font-size:13.5px}
+.ln{height:9px;background:#EFE9DA;border-radius:5px;margin-bottom:8px}
+.ln.s{width:42%} .ln.m{width:64%} .ln.l{width:84%}
+
+/* ---------- the dock ---------- */
+.dockwrap{position:absolute;z-index:8;transform-origin:bottom center;transform:scale(var(--scale))}
+.bezel{position:relative;padding:var(--bez);overflow:hidden;
+  border-radius:calc(var(--radius-dock) + var(--bez));
+  background:linear-gradient(180deg,var(--bezel-top) 0%,var(--bezel-mid) 52%,var(--bezel-bottom) 100%);
+  box-shadow:0 7px 16px var(--bezel-shadow)}
+.lip{position:absolute;left:0;right:0;height:1px;pointer-events:none;z-index:3}
+.lip.t{top:0;background:var(--bezel-edge-hi)}
+.lip.b{bottom:0;background:var(--bezel-edge-shade)}
+.glass{position:relative;display:flex;border-radius:var(--radius-dock);
+  padding:var(--pad-top) 10px var(--pad-bottom);
+  background:linear-gradient(180deg,var(--glass-from),var(--glass-to));
+  -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur));
+  border:1px solid var(--glass-border);overflow:hidden}
+.glass::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:var(--glass-rim)}
+.glass::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:var(--glass-underlip)}
+
+.grip{position:absolute;top:0;left:50%;transform:translateX(-50%);width:56px;height:15px;
+  cursor:grab;z-index:5;display:flex;align-items:center;justify-content:center}
+.grip::before{content:'';width:30px;height:3px;border-radius:3px;background:rgba(255,255,255,.45)}
+.grip:active{cursor:grabbing}
+
+.item{flex:1;display:flex;flex-direction:column;align-items:center;cursor:pointer;
+  background:none;border:0;padding:0;font:inherit;transition:transform .14s cubic-bezier(.2,1.4,.4,1)}
+.item:active{transform:scale(.9)}
+.item.inactive{opacity:.62}
+.slot{position:relative;width:54px;height:var(--icon-slot);display:flex;align-items:center;justify-content:center}
+.key{position:absolute;inset:0;border-radius:12px;background:rgba(255,255,255,0.18);
+  border:1px solid rgba(255,255,255,0.30);overflow:hidden;box-shadow:0 3px 6px rgba(3,19,10,.5)}
+.key::before{content:'';position:absolute;top:0;left:8px;right:8px;height:1px;background:rgba(255,255,255,0.55)}
+.glyph{position:relative;display:flex;line-height:0;filter:drop-shadow(0 2px 5px rgba(2,12,6,.55))}
+.lbl{margin-top:var(--label-gap);height:var(--label-h);font-size:11px;line-height:var(--label-h);
+  font-weight:600;color:var(--on-sky);white-space:nowrap}
+.item.on .lbl{font-weight:800}
+.badge{position:absolute;top:-3px;right:22px;min-width:17px;height:17px;border-radius:9px;padding:0 4px;
+  display:flex;align-items:center;justify-content:center;background:var(--paper);color:var(--accent);
+  font-size:10px;font-weight:800;letter-spacing:.6px}
+
+/* centre — SIBLING of the glass, so it breaks the pane's clip and casts past it */
+.centre{position:absolute;left:0;right:0;top:calc(var(--pad-top) - var(--raise) + var(--bez));
+  display:flex;justify-content:center;pointer-events:none;z-index:4}
+.centre button{pointer-events:auto;background:none;border:0;padding:0;cursor:pointer;
+  transition:transform .14s cubic-bezier(.2,1.4,.4,1)}
+.centre button:active{transform:scale(.9)}
+
+/* THE ENSO — assets/enso-bristle.png from the dock set, used as a MASK.
+   "The mark is never drawn as an image — it is drawn as light, in the shape of
+   the brush." Layers per EnsoLoader: ink base, accent charge .3 to 1,
+   #B8FFCF build 0 to .28, both on the 2.4s breath. */
+.enso{position:relative;display:block;width:var(--centre);height:calc(var(--centre) * 0.9541);
+  filter:drop-shadow(0 6px 14px rgba(4,20,10,.6))}
+.enso i{position:absolute;inset:0;display:block;
+  -webkit-mask-image:url(../../../apps/meteor/public/enso/enso-assets/omnis-enso-bristle.svg); mask-image:url(../../../apps/meteor/public/enso/enso-assets/omnis-enso-bristle.svg);
+  -webkit-mask-size:contain; mask-size:contain;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  -webkit-mask-position:center; mask-position:center}
+.enso .ink{background:#0B3D22}
+.enso .charge{background:var(--accent);animation:charge 2.4s ease-in-out infinite}
+.enso .build{background:#B8FFCF;animation:build 2.4s ease-in-out infinite}
+@keyframes charge{0%,100%{opacity:.30} 50%{opacity:1}}
+@keyframes build{0%,100%{opacity:0} 50%{opacity:.28}}
+.orbimg{width:var(--centre);height:var(--centre);display:block;object-fit:contain;
+  filter:drop-shadow(0 6px 14px rgba(4,20,10,.6))}
+
+/* resize from either bottom corner */
+.rz{position:absolute;bottom:-2px;width:18px;height:18px;z-index:5}
+.rz.l{left:-2px;cursor:nesw-resize;border-left:2px solid rgba(255,255,255,.5);
+  border-bottom:2px solid rgba(255,255,255,.5);border-bottom-left-radius:6px}
+.rz.r{right:-2px;cursor:nwse-resize;border-right:2px solid rgba(255,255,255,.5);
+  border-bottom:2px solid rgba(255,255,255,.5);border-bottom-right-radius:6px}
+
+/* .win hosts the collapsed tab so nothing is clipped by the app's edge */
+.win{overflow:visible}
+
+/* COLLAPSED — sunk into the bottom bezel ring, the move the left rail makes
+   into the left bezel: flush with the ring, square where it meets it, and its
+   own shadow dropped because nothing floating casts onto the frame it joins. */
+.dockwrap.collapsed{left:50% !important;right:auto !important;top:auto !important;
+  top:auto !important;bottom:0 !important;width:84px !important;transform:translateX(-50%)}
+.dockwrap.collapsed .bezel{border-radius:8px 8px 0 0;padding:2px 2px 0;box-shadow:none}
+.dockwrap.collapsed .glass{border-radius:7px 7px 0 0;padding:0;height:20px;align-items:center;justify-content:center}
+.dockwrap.collapsed .item,
+.dockwrap.collapsed .grip,.dockwrap.collapsed .rz,.dockwrap.collapsed .lip.b{display:none}
+
+/* Collapsed, the ensō still breaks the top edge — the raised centre is the
+   dock's signature and it survives the collapse. Same sibling-of-the-glass
+   trick, just a smaller mark over a shorter pill. */
+.dockwrap.collapsed{--centre:40px}
+.dockwrap.collapsed .centre{top:calc(var(--centre) * -0.80);z-index:6}
+.dockwrap.collapsed .clp .m{display:none}
+/* the count rides on the mark now, because the bar is too thin to hold it */
+.cn{display:none;position:absolute;top:-2px;right:-4px;min-width:16px;height:16px;padding:0 4px;
+  border-radius:8px;background:var(--paper);color:var(--accent);font-size:9.5px;font-weight:800;
+  align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(4,20,10,.5)}
+.dockwrap.collapsed .cn{display:flex}
+.centre button{position:relative}
+.dockwrap.collapsed .clp{display:none}
+.clp{display:none;align-items:center;gap:8px;cursor:pointer;width:100%}
+.dockwrap.collapsed .clp{display:flex}
+.clp .m{position:relative;width:17px;height:16px;flex:0 0 auto}
+.clp .m i{position:absolute;inset:0;background:var(--on-sky);
+  -webkit-mask-image:url(../../../apps/meteor/public/enso/enso-assets/omnis-enso-bristle.svg);mask-image:url(../../../apps/meteor/public/enso/enso-assets/omnis-enso-bristle.svg);
+  -webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center}
+.clp b{font-size:11px;font-weight:800;color:var(--on-sky)}
+.clp .n{margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--paper);
+  color:var(--accent);font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center}
+
+/* the widget panel the dock houses */
+.panel{position:absolute;z-index:7;border-radius:16px;overflow:hidden;border:1px solid var(--glass-border);
+  background:linear-gradient(180deg,var(--glass-from),var(--glass-to));
+  -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur));
+  box-shadow:0 10px 30px rgba(9,44,21,.5);max-height:180px;display:none;flex-direction:column}
+.panel.open{display:flex}
+.ph{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.14)}
+.ph b{font-size:12.5px;flex:1;color:#fff}
+.ph .x{color:rgba(255,255,255,.6);cursor:pointer;font-size:14px}
+.pill{font-size:9px;font-weight:800;letter-spacing:.4px;padding:2px 6px;border-radius:99px;
+  background:rgba(250,245,234,.16);color:var(--paper)}
+.prow{padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+.prow .n{font-size:12px;font-weight:650;color:#fff}
+.prow .m{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:1px}
+</style>
+
+<div class="wrap">
+  <h1>Omnis Dock — web/desktop</h1>
+  <p class="sub">Port of <code>Omnis-Mobile-UI/src/ui/Dock.tsx</code> on the <code>matterchat</code> skin, using the dock set's own <code>assets/enso-bristle.png</code> masked and lit rather than redrawn. <b>Drag the grip on top · resize from either bottom corner · click the ensō to collapse into the bezel ring.</b></p>
+
+  <div class="tabs">
+    <button class="tb" onclick="setApp('matterchat')">MatterChat — widgets</button>
+    <button class="tb" onclick="setApp('autodoc')">AutoDoc — app tabs</button>
+    <button class="tb" onclick="setApp('litdraft')">LitDraft — mixed</button>
+    <button class="tb" onclick="setCount(6)">6 — it expands</button>
+    <button class="tb" onclick="collapse(true)">Collapse into bezel</button>
+    <button class="tb" onclick="bump(0.15)">Bigger</button>
+    <button class="tb" onclick="bump(-0.15)">Smaller</button>
+    <button class="tb" onclick="toggleCentre()">Centre = Orb</button>
+    <button class="tb" onclick="reset()">Reset</button>
+  </div>
+  <p class="note" id="note"></p>
+
+  <div class="win">
+    <div class="app" id="app">
+      <div class="sheet">
+        <h3># alvarez-v-diaz</h3>
+        <div class="ln l"></div><div class="ln m"></div><div class="ln s"></div><div class="ln m"></div>
+      </div>
+      <div class="panel" id="panel"></div>
+      <div class="dockwrap" id="dock" style="left:70px; width:420px; bottom:12px;">
+        <div class="bezel">
+          <div class="lip t"></div><div class="lip b"></div>
+          <div class="glass" id="glass"></div>
+          <div class="clp" id="clp" onclick="collapse(false)">
+            <span class="n" id="clpn">5</span>
+          </div>
+        </div>
+        <div class="grip" id="grip"></div>
+        <div class="centre" id="centre"></div>
+        <div class="rz l" id="rzl"></div><div class="rz r" id="rzr"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var ICON = function(d){ return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#FFFFFF" '
+  + 'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="'+d+'"/></svg>'; };
+
+var ALL = [
+ {k:'docs', i:ICON('M6 2h8l6 6v14H6z M14 2v6h6'), l:'Docs', b:2, t:'Incoming documents', p:'AUTODOC',
+  r:[['Memorial_Hermann_Bill_04-18.pdf','Alvarez v. Diaz · 96% ready'],['scan_0042_unlabeled.pdf','No matter matched · 41%']]},
+ {k:'files',i:ICON('M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'), l:'Files', t:'Matter files', p:'LITBOX',
+  r:[['LOP_Alvarez_signed.pdf','2.1 MB · Renata · 2h ago'],['MemorialHermann_Records.pdf','18.4 MB · OCR running']]},
+ {k:'sign', i:ICON('M3 19c4-1 6-14 10-14s2 10 6 9 M3 21h18'), l:'Sign', b:2, t:'Signatures', p:'OMNISPROOF',
+  r:[['LOP — Maria Alvarez','Sent 2d ago · viewed twice'],['Fee Agreement — J. Castillo','Never opened · 9d']]},
+ {k:'notes',i:ICON('M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M5 11a7 7 0 0 0 14 0 M12 18v3'), l:'Notes', b:1, t:'Meetings & notes', p:'CASENOTES',
+  r:[['Client check-in — Alvarez','Today 09:00 · 24 min'],['Huddle — demand strategy','Transcribing…']]},
+ {k:'tasks',i:ICON('M4 12l5 5L20 6'), l:'Tasks', b:5, t:'Tasks', p:'BOARDS',
+  r:[['Request records — Patel Clinic','Due tomorrow'],['Send demand — Vo','Overdue 2d']]},
+ {k:'time', i:ICON('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 7v5l3 2'), l:'Time', t:'Time', p:'TIME',
+  r:[['Alvarez v. Diaz','1.8h today'],['Okonkwo v. Rivera','0.4h today']]}
+];
+
+var ENSO = '<span class="enso" id="ensoBox"></span>';
+var ORB  = '<img class="orbimg" src="enso-orb.png" alt="">';
+var HINT = 'Drag the grip on top · resize from either bottom corner · click the ensō to collapse into the bezel ring.';
+
+
+/* ---------------------------------------------------------------------------
+   The Dock does not care what its items MEAN. DockItem is {key,icon,label,
+   onPress,badge?} and onPress is opaque — so one app hands it widgets that open
+   panels, another hands it navigation tabs that change the view. Same component,
+   same chrome; only the array and what onPress does differ.
+   --------------------------------------------------------------------------- */
+var APPS = {
+  matterchat: { name:'MatterChat', mode:'widgets', items:['docs','files','sign','notes'] },
+  autodoc:    { name:'AutoDoc',    mode:'tabs',    items:['inbox','activity','add','you'] },
+  litdraft:   { name:'LitDraft',   mode:'mixed',   items:['drafts','files','sign','notes'] }
+};
+var TABS = {
+ inbox:   {k:'inbox',   i:ICON('M3 12h5l2 3h4l2-3h5 M3 12l3-7h12l3 7v7H3z'), l:'Inbox', b:12, view:'Inbox — 12 documents waiting'},
+ activity:{k:'activity',i:ICON('M12 3a7 7 0 0 0-7 7v4l-2 3h18l-2-3v-4a7 7 0 0 0-7-7z M10 21h4'), l:'Activity', b:3, view:'Activity — 3 unread'},
+ add:     {k:'add',     i:ICON('M12 5v14 M5 12h14'), l:'Add', view:'Capture — add a document'},
+ you:     {k:'you',     i:ICON('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0'), l:'You', view:'Settings'},
+ drafts:  {k:'drafts',  i:ICON('M4 20h16 M6 16l10-10 3 3-10 10H6z'), l:'Drafts', b:4, t:'Drafts', p:'LITDRAFT',
+           r:[['Alvarez — demand letter','Draft 3 · edited 12m ago'],['Vo — RFP responses','Draft 1 · today']], view:'Drafts'}
+};
+var app = 'matterchat';
+
+var count = 4, open = null, centreOrb = false, scale = 1, activeTab = null;
+var dock = document.getElementById('dock'), appEl = document.getElementById('app');
+
+function render(){
+  var cfg = APPS[app];
+  var items = cfg.items.map(function(k){
+    return ALL.filter(function(x){return x.k===k;})[0] || TABS[k];
+  }).filter(Boolean).slice(0, count);
+  var mid = Math.ceil(items.length/2);
+  var slots = items.slice(0,mid).concat([null], items.slice(mid));
+  document.getElementById('glass').innerHTML = slots.map(function(s){
+    if(!s) return '<div class="item" style="pointer-events:none"><div class="slot"></div>'
+      + '<div class="lbl" style="font-weight:800">'+(centreOrb?'Orb':'Chi')+'</div></div>';
+    var on = (APPS[app].mode==='tabs') ? (activeTab===s.k) : (open===s.k);
+    return '<button class="item '+(on?'on':'inactive')+'" onclick="pick(\''+s.k+'\')">'
+      + '<span class="slot">'+(on?'<span class="key"></span>':'')+'<span class="glyph">'+s.i+'</span>'
+      + (s.b?'<span class="badge">'+s.b+'</span>':'')+'</span><span class="lbl">'+s.l+'</span></button>';
+  }).join('');
+  document.getElementById('centre').innerHTML =
+    '<button aria-label="'+(centreOrb?'Orb':'Chi')+'" onclick="collapse(true)">'+(centreOrb?ORB:ENSO)
+      + '<span class="cn">'+ALL.slice(0,count).reduce(function(a,x){return a+(x.b||0);},0)+'</span></button>';
+  var eb = document.getElementById('ensoBox');
+  if(eb && window.EnsoLoader && window.EnsoLoader.mount){
+    // hold:true — the dock's mark breathes forever rather than igniting and burning away
+    window.EnsoLoader.mount(eb, {size:54, zIndex:1, assetBase:'../../../apps/meteor/public/enso/enso-assets/'});
+  }
+  document.getElementById('clpn').textContent = ALL.slice(0,count).reduce(function(a,x){return a+(x.b||0);},0);
+
+  var t = TABS[activeTab];
+  if(APPS[app].mode!=='widgets' && t && t.view){
+    document.querySelector('.sheet h3').textContent = t.view;
+  } else { document.querySelector('.sheet h3').textContent = '# alvarez-v-diaz'; }
+  var p = document.getElementById('panel'), it = ALL.filter(function(x){return x.k===open;})[0];
+  if(it && !dock.classList.contains('collapsed')){
+    var d = dock.getBoundingClientRect(), a = appEl.getBoundingClientRect();
+    p.className='panel open';
+    p.style.left=(d.left-a.left)+'px'; p.style.width=d.width+'px'; p.style.bottom=(a.bottom-d.top+10)+'px';
+    p.innerHTML='<div class="ph"><b>'+it.t+'</b><span class="pill">'+it.p+'</span>'
+      + '<span class="x" onclick="pick(null)">&#10005;</span></div><div style="overflow:auto">'
+      + it.r.map(function(r){return '<div class="prow"><div class="n">'+r[0]+'</div><div class="m">'+r[1]+'</div></div>';}).join('')+'</div>';
+  } else { p.className='panel'; p.innerHTML=''; }
+}
+function pick(k){
+  var cfg = APPS[app];
+  var it = ALL.filter(function(x){return x.k===k;})[0];
+  if(cfg.mode==='tabs' || (cfg.mode==='mixed' && !it)){ activeTab=k; open=null; }
+  else { open=(k && open===k)?null:k; }
+  render();
+}
+function setApp(a){ app=a; open=null; activeTab=APPS[a].items[0];
+  count=APPS[a].items.length; render();
+  document.getElementById('note').innerHTML = APPS[a].mode==='tabs'
+    ? '<b>'+APPS[a].name+'</b> hands the dock <b>app tabs</b>. Pressing one changes the view — no panel opens. This is what AutoDoc-Mobile does today.'
+    : (APPS[a].mode==='mixed'
+      ? '<b>'+APPS[a].name+'</b> mixes both: <b>Drafts</b> is an app tab, the rest are shared widgets. The dock treats them identically — only onPress differs.'
+      : '<b>'+APPS[a].name+'</b> hands the dock <b>widgets</b>. Pressing one opens its panel above the dock.');
+}
+function setCount(n){ count=n; render(); }
+function toggleCentre(){ centreOrb=!centreOrb; render(); }
+function bump(d){ scale=Math.max(0.7,Math.min(1.6,scale+d)); dock.style.setProperty('--scale',scale);
+  document.getElementById('note').innerHTML='Scale <b>'+Math.round(scale*100)+'%</b>. The dock scales from its bottom edge, so it grows upward and stays anchored where you put it.'; render(); }
+function collapse(v){
+  var win = document.querySelector('.win');
+  // collapsed it belongs to the frame; expanded it belongs to the content
+  if(v && dock.parentNode !== win){ win.appendChild(dock); }
+  if(!v && dock.parentNode !== appEl){ appEl.appendChild(dock); }
+  dock.classList.toggle('collapsed', v);
+  if(v){ open=null; }
+  document.getElementById('note').innerHTML = v
+    ? 'Collapsed — sunk into the <b>bottom bezel ring</b>: flush with the ring, square where it meets it, and its own shadow dropped, because nothing floating casts a shadow onto the frame it has just become part of. The unresolved count from every widget rides on it.'
+    : HINT;
+  render();
+}
+function reset(){ dock.classList.remove('collapsed'); dock.style.left='70px'; dock.style.top='auto';
+  dock.style.width='420px'; dock.style.bottom='12px'; scale=1; dock.style.setProperty('--scale',1);
+  open=null; document.getElementById('note').innerHTML=HINT; render(); }
+
+/* drag */
+(function(){
+  var g=document.getElementById('grip'), on=false, sx, sy, ol, ot;
+  g.addEventListener('mousedown', function(e){
+    if(dock.classList.contains('collapsed')) return;
+    var d=dock.getBoundingClientRect(), a=appEl.getBoundingClientRect();
+    on=true; sx=e.clientX; sy=e.clientY; ol=d.left-a.left; ot=d.top-a.top;
+    dock.style.bottom='auto'; dock.style.left=ol+'px'; dock.style.top=ot+'px';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!on) return;
+    var a=appEl.getBoundingClientRect(), w=dock.offsetWidth, h=dock.offsetHeight;
+    dock.style.left=Math.max(6,Math.min(ol+(e.clientX-sx), a.width-w-6))+'px';
+    dock.style.top =Math.max(6,Math.min(ot+(e.clientY-sy), a.height-h-6))+'px';
+    render();
+  });
+  document.addEventListener('mouseup', function(){ on=false; });
+})();
+
+/* resize from either bottom corner */
+function resizer(el, side){
+  var on=false, sx, ow, ol;
+  el.addEventListener('mousedown', function(e){
+    if(dock.classList.contains('collapsed')) return;
+    var d=dock.getBoundingClientRect(), a=appEl.getBoundingClientRect();
+    on=true; sx=e.clientX; ow=d.width; ol=d.left-a.left;
+    dock.style.width=ow+'px'; dock.style.left=ol+'px';
+    e.preventDefault(); e.stopPropagation();
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!on) return;
+    var dx=e.clientX-sx, a=appEl.getBoundingClientRect();
+    if(side==='r'){ dock.style.width=Math.max(250,Math.min(ow+dx, a.width-ol-6))+'px'; }
+    else { var nw=Math.max(250,Math.min(ow-dx, ol+ow-6)); dock.style.width=nw+'px'; dock.style.left=(ol+ow-nw)+'px'; }
+    render();
+  });
+  document.addEventListener('mouseup', function(){ on=false; });
+}
+resizer(document.getElementById('rzl'),'l');
+resizer(document.getElementById('rzr'),'r');
+
+document.getElementById('note').innerHTML = HINT;
+render();
+</script>
