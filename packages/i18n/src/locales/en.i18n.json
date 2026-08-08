@@ -4415,6 +4415,7 @@
   "Login_Logs_UserAgent": "Show UserAgent on failed login attempts logs",
   "Login_Logs_Username": "Show Username on failed login attempts logs",
   "Login_with": "Login with %s",
+  "Legal": "Legal",
   "Logistics": "Logistics",
   "Logout": "Logout",
   "Logout_Device": "Log out device",

@@ -87,6 +87,12 @@ export const createSetupWSettings = () =>
 						key: 'itSecurity',
 						i18nLabel: 'It_Security',
 					},
+					// MATTERCHAT: Legal. Upstream Rocket.Chat omits it, which is a poor look for
+					// a product built for law firms. Kept in the list's alphabetical order.
+					{
+						key: 'legal',
+						i18nLabel: 'Legal',
+					},
 					{
 						key: 'logistics',
 						i18nLabel: 'Logistics',
