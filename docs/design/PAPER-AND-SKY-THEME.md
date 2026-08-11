@@ -65,30 +65,36 @@ This is coherent, not a hack: **Paper & Sky has no light/dark variant.** Its fou
 The Electron shell contains no theme code, so it inherits the web app. Three shell facts, all verified against `MatterChat-Desktop` `main`:
 
 - **`backgroundColor: '#0b1220'`** (navy, `src/main/main.js:66`) is what paints before the page does. Left alone, every launch flashes navy before the sky arrives. Change it to the sky's deep tone.
-- **The window is standard chrome** — no `titleBarStyle`, no `frame: false`. The traffic-lights-inside-the-header look in the mockups needs `titleBarStyle: 'hiddenInset'`, which exists only on the **unmerged** `auto/redesign-titlebar` branch in `MatterChat-Desktop-redesign`. Stage 1 works without it (standard OS titlebar above a full-bleed sky); adopting it is a separate, deliberate call.
+- **The window is standard chrome** — no `titleBarStyle`, no `frame: false`. The traffic lights sitting *inside* the window's top-left, as the comps show, needs `titleBarStyle: 'hiddenInset'`, which exists only on the **unmerged** `auto/redesign-titlebar` branch in `MatterChat-Desktop-redesign`. Since the rounded window shape is being kept, this matters more than it would have otherwise: without it the desktop app gets an OS titlebar *above* the rounded window, which reads as a window inside a window. Landing that branch is a real Stage 1 dependency for desktop, not a nice-to-have.
 - **`NAVBAR_DRAG_REGION_CSS` stays but its comment is stale.** It asserts the desktop app "uses a hidden-inset titlebar", which `main` does not. The CSS is inert in a normal window, so it is harmless — but do not trust that comment when reasoning about the titlebar.
 
 ---
 
 ## The three layers
 
-### 0 · No outer bezel
+### 0 · The window — rounded shape kept, inner bezel removed
 
-**Paper & Sky is edge-to-edge. It does not inherit the floating rounded window frame.**
+**The floating rounded window stays. The band inside it goes.**
 
-Today's Variant B wraps the app in a bezel: `html` goes near-black `#0C0F14`, `body` becomes a green gradient card inset 8px with a 22px radius, and `#react-root` is a dark window pinned 14px inside that. `MATTERCHAT_FRAME_CSS` joins the `branded` gate and simply does not apply when `paper-sky` is active. The sky fills the viewport instead.
+Today's Variant B builds the frame in two layers, and only the inner one is the bezel:
 
-This is the low-risk direction, not the risky one, and the repo history says so:
+| Layer | Variant B today | Paper & Sky |
+|---|---|---|
+| `html` | `#0C0F14` near-black backdrop | unchanged in role |
+| `body` | green gradient card · `margin: 8px` · `border-radius: 22px` · drop shadow | **same geometry**; the sky is the surface, not a band |
+| `#react-root` | `inset: 14px` · `border-radius: 15px` · `#1A212C` | `inset: 0` · inherits the 22px radius · transparent |
 
-- The frame was merged as PR #30 and then **reverted** — the follow-up branch is named `auto/redesign-noframe` and its commit message is "green theme + two-rail green nav, **WITHOUT the layout-breaking frame**".
-- The frame's own source comment records an earlier attempt that "collapsed the entire shell to blank" by framing `#rocket-chat` instead of the mount point.
-- Edge-to-edge is **already exercised in production**: the frame CSS turns itself off below 767.98px, so every phone user is running the no-bezel layout today.
+That 14px inset is the bezel — a green band framing the app on all four sides. Paper & Sky removes it and keeps everything else about the shape: near-black backdrop, the same floating rounded window, the org rail outside it on the backdrop, traffic lights inside the top-left. The sky fills the window corner to corner.
 
-Three consequences to carry into Stage 1:
+Kept verbatim from the existing frame CSS, not re-derived: the mobile full-bleed branch below 767.98px, the drop shadow, and the `100vw`/`100vh` sizing that lets the window track the PWA and Electron frames.
 
-1. **The org tab loses its trick.** The G3 sheet describes it as an "opaque folder tab fused to the window edge… protruding over transparent desktop". With no bezel there is no desktop to protrude over. It becomes a tab fused to the viewport edge, against the sky.
-2. **The rail's backdrop changes.** In the mockups the rail sits on near-black outside the frame (~19:1). Full-bleed it sits on smoked glass over the sky — 5.7:1 at the worst state. Still AA body, but a real drop; do not assume rail labels have the headroom the mockups imply.
-3. **Less to go wrong.** No body-level clip, radius or gradient means one less source of the stacking and overflow bugs that took the frame down twice.
+> **Do not add `transform`, `filter` or `mix-blend-mode` to `body` or `#react-root`.** The existing comment explains why and it is load-bearing: `body` carries no transform, which is the only reason fixed-position modals, menus and toasts escape the body clip instead of being trapped inside the rounded window.
+
+Consequences for Stage 1:
+
+1. **The org rail stays outside the window**, on the near-black backdrop, exactly as the comps show. The G3 "folder tab fused to the window edge, protruding over the desktop" still works, and the rail keeps its ~19:1 backdrop.
+2. **The nav rail inside the window does not.** It sits on smoked glass over the sky — 5.7:1 at the worst state. Still AA body, but without the outside rail's headroom. Do not reason about the two rails together.
+3. **Treat this layer as fragile and change it minimally.** The frame was once merged as PR #30 and reverted — the follow-up branch is named `auto/redesign-noframe`, "WITHOUT the layout-breaking frame" — and the current CSS carries a comment about an earlier attempt that "collapsed the entire shell to blank" by framing `#rocket-chat` instead of the mount point. The outer geometry that ships today works; changing `#react-root`'s inset and radius is a two-property edit, and it should stay that small.
 
 ### 1 · Sky
 
@@ -217,7 +223,7 @@ Approved scope. Roughly 90% of the perceived change.
 - Composer (smoked card on desktop, clear pill on mobile)
 - Mobile/PWA tab bar — smoked, active white, inactive 55%, raised glass Chi orb
 - Sidebar widget — smoked card, 200-weight clock, gold word-of-day label
-- Full-bleed sky in place of the frame — `MATTERCHAT_FRAME_CSS` gated off; Electron `backgroundColor` changed off navy
+- Window: keep the rounded floating shape, drop `#react-root`'s 14px inset so the sky reaches the corners; Electron `backgroundColor` changed off navy
 - Primitives the shell needs: buttons (primary solid white / secondary glass / outline / danger glass / disabled), badges (white = unread, coral = mention), toggles (on = solid white track, deep-tone thumb), presence mint `#8FE3A5`, skeletons (white @22–30% on clear glass)
 - Icon-button hit target ≥ 44px everywhere
 
@@ -243,7 +249,8 @@ Each stage is independently shippable. An unfinished theme is safe — nobody is
 ## Verification
 
 - Theme switches live, both directions, with no reload and no flash of the wrong skin
-- Switching to `paper-sky` removes the bezel completely — no residual body margin, radius, gradient or `#react-root` inset; switching back to `light`/`dark` restores it intact
+- Switching to `paper-sky` removes the inner bezel band and nothing else — the rounded window, 8px margin, drop shadow and mobile full-bleed branch all survive; switching back to `light`/`dark` restores the green band intact
+- Modals, menus and toasts still render over the whole window, not clipped inside the rounded corners
 - Desktop launches without a navy flash before the sky paints
 - Preference survives logout, and follows the user from web to desktop
 - Every other theme (`light`, `dark`, `auto`, `high-contrast`) is byte-for-byte unaffected — high-contrast especially, which must stay stock for a11y
