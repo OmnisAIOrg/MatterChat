@@ -119,15 +119,15 @@ Three materials, from the spec sheet. Applied **only** to chrome: org rail, side
 
 #### The darkness budget — a hard rule
 
-Measured, white text against the effective backdrop at each sky's **brightest stop** (the worst case):
+White text against the effective backdrop at each sky's **brightest stop** — the worst case. Produced by [`paper-sky-contrast-check.mjs`](./paper-sky-contrast-check.mjs); re-run it after any ramp or material change rather than eyeballing it.
 
-| Material | Clear morning | Working day | Night / focus |
-|---|---|---|---|
-| Bare sky | 2.0:1 **fail** | 2.8:1 **fail** | 16.8:1 ✓ |
-| Clear glass | 1.8:1 **fail** | 2.4:1 **fail** | 12.5:1 ✓ |
-| Frosted | 2.8:1 **fail** | 3.8:1 large only | 17.6:1 ✓ |
-| Smoked | 6.2:1 ✓ | 7.8:1 ✓ | 19.1:1 ✓ |
-| **Ink on paper** | **13.2:1 ✓** | **13.2:1 ✓** | **13.2:1 ✓** |
+| Material | Clear morning | Working day | Deadline dusk | Night / focus |
+|---|---|---|---|---|
+| Bare sky | 1.8:1 **fail** | 2.2:1 **fail** | 3.3:1 large only | 16.2:1 ✓ |
+| Clear glass | 1.7:1 **fail** | 2.1:1 **fail** | 2.9:1 **fail** | 12.0:1 ✓ |
+| Frosted | 2.6:1 **fail** | 3.1:1 large only | 4.5:1 ✓ | 17.2:1 ✓ |
+| Smoked | 5.7:1 ✓ | 6.7:1 ✓ | 8.8:1 ✓ | 18.9:1 ✓ |
+| **Ink on paper** | **13.2:1 ✓** | **13.2:1 ✓** | **13.2:1 ✓** | **13.2:1 ✓** |
 
 Two consequences, both binding:
 
