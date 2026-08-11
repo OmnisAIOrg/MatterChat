@@ -87,9 +87,45 @@ for (const [material, alpha] of Object.entries(MATERIALS)) {
 	console.log();
 }
 
+// ---------------------------------------------------------------- stacked
+
+/**
+ * Chrome is not one layer. A sidebar room card is card-on-panel-on-sky, and the
+ * budget is CUMULATIVE — so a card may be lighter than smoked provided the panel
+ * beneath it carries the darkness. These are the Stage 1 room-card states from
+ * the G3 spec sheet, over a smoked sidebar panel.
+ */
+const SIDEBAR_PANEL = 0.52; // smoked, pinned to the DARK end of its .42-.52 range (see spec)
+const ROOM_CARDS = {
+	'unread (bright glass)': -0.12,
+	'read   (dim glass)': -0.04,
+	'muted  (clear @60%)': -0.06,
+	'hover': -0.16,
+};
+
+console.log('\nStacked — room cards on a smoked sidebar panel (white 13px preview text)\n');
+let marginal = 0;
+for (const [card, alpha] of Object.entries(ROOM_CARDS)) {
+	process.stdout.write(card.padEnd(24));
+	for (const ramp of Object.values(SKIES)) {
+		const bg = veil(veil(ramp[0], SIDEBAR_PANEL), alpha);
+		const r = contrast(WHITE, bg);
+		if (r < 4.5) marginal++;
+		process.stdout.write(`${r.toFixed(1).padStart(4)}:1 ${verdict(r)}`.padEnd(17));
+	}
+	console.log();
+}
+console.log('                        ' + Object.keys(SKIES).map((s) => s.padEnd(17)).join(''));
+
 const inkPaper = contrast(INK, PAPER);
 console.log(`\nInk on paper — ${INK} on ${PAPER}: ${inkPaper.toFixed(1)}:1 ${verdict(inkPaper)}`);
 console.log('  Constant in every sky state. This is why body copy is on paper.\n');
+
+if (marginal) {
+	console.log(`NOTE: ${marginal} room-card/sky combination(s) fall under AA body for 13px white text.`);
+	console.log('      Fix by darkening the sidebar panel, not by dimming the cards — the');
+	console.log('      card brightness IS the unread/read signal and must stay legible as such.\n');
+}
 
 if (failures) {
 	console.error(`FAIL: smoked glass dropped below AA in ${failures} sky state(s). White chrome text is unsafe.`);

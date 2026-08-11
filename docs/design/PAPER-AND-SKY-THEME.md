@@ -132,7 +132,20 @@ White text against the effective backdrop at each sky's **brightest stop** — t
 Two consequences, both binding:
 
 1. **White body text requires a cumulative backdrop darkening of ≥ ~45% over the sky** — i.e. smoked, or enough stacked glass to equal it. Clear glass is *worse than bare sky* on bright states, because it lightens. Layers stack, so a card inside an already-smoked sidebar can be lighter; what must be checked is the **cumulative** veil at the point the text sits, not the topmost material alone.
-2. **Room cards need attention in Stage 1.** The spec sheet calls unread rows "bright glass" and read rows "dim glass". Room name and preview text are body-size white, so on the clear-morning sky a bright-glass card over a lightly-veiled sidebar will fail. Either the sidebar panel carries the darkness budget for its children, or the cards do — decide once, in the shell, and hold it.
+2. **Room cards — resolved, with a number.** The spec sheet calls unread rows "bright glass" and read rows "dim glass", and that brightness *is* the unread signal, so it cannot be dimmed to buy contrast. Modelled as stacked layers (card on sidebar panel on sky), a smoked panel at the **`.42` end** of its gradient leaves two combinations short on the clear-morning sky — unread at 4.4:1 and hover at 4.1:1, both under AA body for 13px preview text.
+
+   **Pin the sidebar panel to `.52`** — the dark end of the smoked material's own `.42→.52` range. Everything clears (unread 5.0:1, hover 4.6:1) with no new material and no change to the design language. The cards stay exactly as drawn.
+
+   | Room card | Clear morning | Working day | Deadline dusk | Night / focus |
+   |---|---|---|---|---|
+   | Unread (bright) | 5.0:1 ✓ | 5.7:1 ✓ | 7.0:1 ✓ | 13.9:1 ✓ |
+   | Read (dim) | 6.1:1 ✓ | 6.9:1 ✓ | 8.8:1 ✓ | 17.6:1 ✓ |
+   | Muted (clear @60%) | 5.8:1 ✓ | 6.5:1 ✓ | 8.3:1 ✓ | 16.8:1 ✓ |
+   | Hover | 4.6:1 ✓ | 5.1:1 ✓ | 6.2:1 ✓ | 12.2:1 ✓ |
+
+   Hover on clear morning is the tightest point in the whole shell at 4.6:1. Treat it as the canary: if a later change moves the sidebar panel, the sky ramps, or the hover fill, re-run the checker before assuming it still holds.
+
+   The general lesson generalises to Stage 2: **when a surface is short, darken the container, not the element** — the element's brightness is usually carrying meaning.
 
 The `text-shadow: 0 1px 12px rgba(10,40,20,.35)` in the source spec helps perceptually on large type but **does not count toward WCAG contrast**. Treat it as polish, not as a fix.
 
