@@ -62,15 +62,37 @@ This is coherent, not a hack: **Paper & Sky has no light/dark variant.** Its fou
 
 ### Desktop
 
-The Electron shell contains no theme code, so it inherits the web app. Two shell touches only: the window background behind the rounded frame, and the existing titlebar drag region (`NAVBAR_DRAG_REGION_CSS`), which stays as-is.
+The Electron shell contains no theme code, so it inherits the web app. Three shell facts, all verified against `MatterChat-Desktop` `main`:
+
+- **`backgroundColor: '#0b1220'`** (navy, `src/main/main.js:66`) is what paints before the page does. Left alone, every launch flashes navy before the sky arrives. Change it to the sky's deep tone.
+- **The window is standard chrome** — no `titleBarStyle`, no `frame: false`. The traffic-lights-inside-the-header look in the mockups needs `titleBarStyle: 'hiddenInset'`, which exists only on the **unmerged** `auto/redesign-titlebar` branch in `MatterChat-Desktop-redesign`. Stage 1 works without it (standard OS titlebar above a full-bleed sky); adopting it is a separate, deliberate call.
+- **`NAVBAR_DRAG_REGION_CSS` stays but its comment is stale.** It asserts the desktop app "uses a hidden-inset titlebar", which `main` does not. The CSS is inert in a normal window, so it is harmless — but do not trust that comment when reasoning about the titlebar.
 
 ---
 
 ## The three layers
 
+### 0 · No outer bezel
+
+**Paper & Sky is edge-to-edge. It does not inherit the floating rounded window frame.**
+
+Today's Variant B wraps the app in a bezel: `html` goes near-black `#0C0F14`, `body` becomes a green gradient card inset 8px with a 22px radius, and `#react-root` is a dark window pinned 14px inside that. `MATTERCHAT_FRAME_CSS` joins the `branded` gate and simply does not apply when `paper-sky` is active. The sky fills the viewport instead.
+
+This is the low-risk direction, not the risky one, and the repo history says so:
+
+- The frame was merged as PR #30 and then **reverted** — the follow-up branch is named `auto/redesign-noframe` and its commit message is "green theme + two-rail green nav, **WITHOUT the layout-breaking frame**".
+- The frame's own source comment records an earlier attempt that "collapsed the entire shell to blank" by framing `#rocket-chat` instead of the mount point.
+- Edge-to-edge is **already exercised in production**: the frame CSS turns itself off below 767.98px, so every phone user is running the no-bezel layout today.
+
+Three consequences to carry into Stage 1:
+
+1. **The org tab loses its trick.** The G3 sheet describes it as an "opaque folder tab fused to the window edge… protruding over transparent desktop". With no bezel there is no desktop to protrude over. It becomes a tab fused to the viewport edge, against the sky.
+2. **The rail's backdrop changes.** In the mockups the rail sits on near-black outside the frame (~19:1). Full-bleed it sits on smoked glass over the sky — 5.7:1 at the worst state. Still AA body, but a real drop; do not assume rail labels have the headroom the mockups imply.
+3. **Less to go wrong.** No body-level clip, radius or gradient means one less source of the stacking and overflow bugs that took the frame down twice.
+
 ### 1 · Sky
 
-One `position: fixed` element behind everything, reusing the shipped `.ops-sky-*` structure (three stacked ramps, opacity cross-faded).
+One `position: fixed; inset: 0` element behind everything, reusing the shipped `.ops-sky-*` structure (three stacked ramps, opacity cross-faded). Full viewport — see above.
 
 **Deriving the green ramp.** The first attempt was to rotate the shipped blue ramp's hue in OKLCH while holding lightness and chroma, so the loader's already-validated contrast profile would carry over for free. It rotates cleanly — no gamut clipping, contrast within 0.4 of the blue original — but it lands on **sage**, not the vivid green in the mockups:
 
@@ -195,7 +217,7 @@ Approved scope. Roughly 90% of the perceived change.
 - Composer (smoked card on desktop, clear pill on mobile)
 - Mobile/PWA tab bar — smoked, active white, inactive 55%, raised glass Chi orb
 - Sidebar widget — smoked card, 200-weight clock, gold word-of-day label
-- Window frame + Electron background
+- Full-bleed sky in place of the frame — `MATTERCHAT_FRAME_CSS` gated off; Electron `backgroundColor` changed off navy
 - Primitives the shell needs: buttons (primary solid white / secondary glass / outline / danger glass / disabled), badges (white = unread, coral = mention), toggles (on = solid white track, deep-tone thumb), presence mint `#8FE3A5`, skeletons (white @22–30% on clear glass)
 - Icon-button hit target ≥ 44px everywhere
 
@@ -221,6 +243,8 @@ Each stage is independently shippable. An unfinished theme is safe — nobody is
 ## Verification
 
 - Theme switches live, both directions, with no reload and no flash of the wrong skin
+- Switching to `paper-sky` removes the bezel completely — no residual body margin, radius, gradient or `#react-root` inset; switching back to `light`/`dark` restores it intact
+- Desktop launches without a navy flash before the sky paints
 - Preference survives logout, and follows the user from web to desktop
 - Every other theme (`light`, `dark`, `auto`, `high-contrast`) is byte-for-byte unaffected — high-contrast especially, which must stay stock for a11y
 - All four sky states reachable and observed on real data; `prefers-reduced-motion` pins the sky
