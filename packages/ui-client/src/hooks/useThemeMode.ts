@@ -1,10 +1,33 @@
-import type { ThemePreference as ThemeMode, Themes } from '@rocket.chat/core-typings';
+import type { ThemePreference as ThemeMode, Themes, Skins } from '@rocket.chat/core-typings';
 import { useDarkMode } from '@rocket.chat/fuselage-hooks';
 import { useEndpoint, useUserPreference } from '@rocket.chat/ui-contexts';
 import { useCallback, useState } from 'react';
 
 /**
+ * MATTERCHAT — every Paper & Sky skin, in picker order. Green first, then the tint
+ * family. Adding a tint means adding it here, to `Skins` in core-typings, and to the
+ * sky ramps in `PaperSkyStyleTags` — no backend and no new preference key.
+ */
+export const SKINS: readonly Skins[] = [
+	'paper-sky',
+	'paper-sky-blue',
+	'paper-sky-indigo',
+	'paper-sky-amber',
+	'paper-sky-rose',
+	'paper-sky-graphite',
+] as const;
+
+export const isSkin = (value: ThemeMode): value is Skins => (SKINS as readonly string[]).includes(value);
+
+/**
  * Returns the current option set by the user, the theme mode resolved given the user configuration and OS (if applies) and a function to set it.
+ *
+ * MATTERCHAT: a Paper & Sky skin always resolves to `dark`. Fuselage's own `Themes`
+ * union is `light | dark | high-contrast`, so a skin value must never reach
+ * `PaletteStyleTag` — resolving to `dark` keeps every core component we have not
+ * re-skinned on a coherent palette instead of an unstyled one. Read the skin itself
+ * with `useSkin`.
+ *
  * @param defaultThemeMode The default theme mode to use if the user has not set any.
  * @returns [currentThemeMode, setThemeMode, resolvedThemeMode]
  */
@@ -17,19 +40,28 @@ export const useThemeMode = (): [
 
 	const saveUserPreferences = useEndpoint('POST', '/v1/users.setPreferences');
 
-	const [updaters] = useState(
-		(): Record<ThemeMode, () => ReturnType<typeof saveUserPreferences>> => ({
-			'light': () => saveUserPreferences({ data: { themeAppearence: 'light' } }),
-			'dark': () => saveUserPreferences({ data: { themeAppearence: 'dark' } }),
-			'auto': () => saveUserPreferences({ data: { themeAppearence: 'auto' } }),
-			'high-contrast': () => saveUserPreferences({ data: { themeAppearence: 'high-contrast' } }),
-		}),
-	);
+	const [updaters] = useState((): Record<ThemeMode, () => ReturnType<typeof saveUserPreferences>> => {
+		const set = (themeAppearence: ThemeMode) => () => saveUserPreferences({ data: { themeAppearence } });
+
+		return {
+			'light': set('light'),
+			'dark': set('dark'),
+			'auto': set('auto'),
+			'high-contrast': set('high-contrast'),
+			'paper-sky': set('paper-sky'),
+			'paper-sky-blue': set('paper-sky-blue'),
+			'paper-sky-indigo': set('paper-sky-indigo'),
+			'paper-sky-amber': set('paper-sky-amber'),
+			'paper-sky-rose': set('paper-sky-rose'),
+			'paper-sky-graphite': set('paper-sky-graphite'),
+		};
+	});
 
 	const setTheme = useCallback((value: ThemeMode): (() => void) => updaters[value], [updaters]);
 
 	const useTheme = () => {
-		if (useDarkMode(themeMode === 'auto' ? undefined : themeMode === 'dark')) {
+		// A skin forces dark. `useDarkMode` is still called unconditionally — it is a hook.
+		if (useDarkMode(themeMode === 'auto' ? undefined : themeMode === 'dark' || isSkin(themeMode))) {
 			return 'dark';
 		}
 		if (themeMode === 'high-contrast') {
@@ -39,4 +71,17 @@ export const useThemeMode = (): [
 	};
 
 	return [themeMode, setTheme, useTheme()];
+};
+
+/**
+ * MATTERCHAT — the active Paper & Sky skin, or `undefined` on a plain colour scheme.
+ *
+ * This is the switch every Paper & Sky style tag hangs off, and the gate that turns
+ * the Variant B skin off. Deliberately reads the preference directly rather than
+ * going through `useThemeMode`, so callers that only care about the skin do not pull
+ * in the endpoint and updater machinery.
+ */
+export const useSkin = (): Skins | undefined => {
+	const themeMode = useUserPreference<ThemeMode>('themeAppearence') || 'auto';
+	return isSkin(themeMode) ? themeMode : undefined;
 };

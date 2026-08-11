@@ -1,7 +1,7 @@
 import { mockAppRoot } from '@rocket.chat/mock-providers';
 import { renderHook, act } from '@testing-library/react';
 
-import { useThemeMode } from './useThemeMode';
+import { SKINS, useSkin, useThemeMode } from './useThemeMode';
 
 const mockUseDarkMode = jest.fn();
 
@@ -128,6 +128,64 @@ describe('useThemeMode', () => {
 				setTheme('high-contrast')();
 			});
 			expect(endpointHandler).toHaveBeenCalledWith({ data: { themeAppearence: 'high-contrast' } });
+
+			endpointHandler.mockClear();
+
+			await act(async () => {
+				setTheme('paper-sky-indigo')();
+			});
+			expect(endpointHandler).toHaveBeenCalledWith({ data: { themeAppearence: 'paper-sky-indigo' } });
+		});
+	});
+
+	// MATTERCHAT — Paper & Sky skins.
+	describe('skins', () => {
+		it.each(SKINS)('should resolve %s to "dark" so it never reaches Fuselage', (skin) => {
+			// A skin must force dark regardless of the OS preference: Fuselage's own Themes
+			// union is light|dark|high-contrast, so a skin value passed to PaletteStyleTag
+			// would leave core components unstyled.
+			mockUseDarkMode.mockImplementation((forced?: boolean) => forced === true);
+
+			const { result } = renderHook(() => useThemeMode(), {
+				wrapper: mockAppRoot().withUserPreference('themeAppearence', skin).build(),
+			});
+
+			expect(result.current[0]).toBe(skin);
+			expect(result.current[2]).toBe('dark');
+		});
+
+		it('should keep the skin out of the resolved theme even when the OS prefers light', () => {
+			mockUseDarkMode.mockImplementation((forced?: boolean) => forced === true);
+
+			const { result } = renderHook(() => useThemeMode(), {
+				wrapper: mockAppRoot().withUserPreference('themeAppearence', 'paper-sky').build(),
+			});
+
+			expect(result.current[2]).toBe('dark');
+		});
+	});
+
+	describe('useSkin', () => {
+		it.each(SKINS)('should report %s as the active skin', (skin) => {
+			const { result } = renderHook(() => useSkin(), {
+				wrapper: mockAppRoot().withUserPreference('themeAppearence', skin).build(),
+			});
+
+			expect(result.current).toBe(skin);
+		});
+
+		it.each(['light', 'dark', 'high-contrast', 'auto'] as const)('should report no skin on %s', (theme) => {
+			const { result } = renderHook(() => useSkin(), {
+				wrapper: mockAppRoot().withUserPreference('themeAppearence', theme).build(),
+			});
+
+			expect(result.current).toBeUndefined();
+		});
+
+		it('should report no skin when no preference is set', () => {
+			const { result } = renderHook(() => useSkin(), { wrapper: mockAppRoot().build() });
+
+			expect(result.current).toBeUndefined();
 		});
 	});
 });

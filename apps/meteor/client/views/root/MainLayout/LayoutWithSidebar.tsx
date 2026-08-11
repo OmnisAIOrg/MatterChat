@@ -1,5 +1,5 @@
 import { Box, Icon, Throbber } from '@rocket.chat/fuselage';
-import { FeaturePreview, FeaturePreviewOff, FeaturePreviewOn } from '@rocket.chat/ui-client';
+import { FeaturePreview, FeaturePreviewOff, FeaturePreviewOn, useSkin } from '@rocket.chat/ui-client';
 import type { IRouterPaths } from '@rocket.chat/ui-contexts';
 import { useLayout, useSetting, useCurrentRoutePath, useRouter } from '@rocket.chat/ui-contexts';
 import type { ReactElement, ReactNode } from 'react';
@@ -11,6 +11,7 @@ import AppLeftRail from './AppLeftRail';
 import ExternalErrorBoundary from './ExternalErrorBoundary';
 import MainContent from './MainContent';
 import { MainLayoutStyleTags } from './MainLayoutStyleTags';
+import { PaperSkyStyleTags } from './PaperSkyStyleTags';
 import { PremiumThemeStyleTags } from './PremiumThemeStyleTags';
 import MobileTabBar from './MobileTabBar';
 import { isExternalSelection, useOrgSwitcherSelection } from './OrgSwitcherContext';
@@ -197,6 +198,7 @@ const ShellBody = ({
 
 const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 	const { isEmbedded: embeddedLayout } = useLayout();
+	const skin = useSkin();
 
 	const currentRoutePath = useCurrentRoutePath();
 	const router = useRouter();
@@ -258,7 +260,11 @@ const LayoutWithSidebar = ({ children }: { children: ReactNode }) => {
 				id='rocket-chat'
 				className={[embeddedLayout ? 'embedded-view' : undefined, 'menu-nav'].filter(Boolean).join(' ')}
 			>
-				<PremiumThemeStyleTags />
+				{/* MATTERCHAT: Paper & Sky replaces the Variant B premium layer rather than stacking on
+				    it — the premium tags set Geist type and green tokens globally, and the skin brings
+				    its own. MainLayoutStyleTags stays mounted either way: it owns the desktop shell
+				    classes and the window frame, which Paper & Sky inherits and only adjusts. */}
+				{skin ? <PaperSkyStyleTags /> : <PremiumThemeStyleTags />}
 				<MainLayoutStyleTags />
 				<OrgSwitcherProvider>
 					<ShellBody removeSidenav={removeSidenav} currentRoutePath={currentRoutePath}>
