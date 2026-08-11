@@ -88,8 +88,7 @@ const SKY: Record<Skins, Record<SkyState, [string, string, string, string]>> = {
 
 const SKY_STATES: SkyState[] = ['morning', 'day', 'dusk', 'night'];
 
-const ramp = ([a, b, c, d]: [string, string, string, string]): string =>
-	`linear-gradient(180deg, ${a} 0%, ${b} 38%, ${c} 74%, ${d} 100%)`;
+const ramp = ([a, b, c, d]: [string, string, string, string]): string => `linear-gradient(180deg, ${a} 0%, ${b} 38%, ${c} 74%, ${d} 100%)`;
 
 /**
  * The living sky. The background is data, not decoration.
@@ -105,7 +104,9 @@ const ramp = ([a, b, c, d]: [string, string, string, string]): string =>
  */
 const useSkyState = (): SkyState => {
 	const user = useUser();
-	const doNotDisturb = user?.status === 'busy';
+	// String-compared rather than against UserStatus.BUSY: `status` is a loose union here,
+	// and importing the enum for one comparison drags a server-side typing into the client.
+	const doNotDisturb = String(user?.status) === 'busy';
 	const [hour, setHour] = useState(() => new Date().getHours());
 
 	useEffect(() => {

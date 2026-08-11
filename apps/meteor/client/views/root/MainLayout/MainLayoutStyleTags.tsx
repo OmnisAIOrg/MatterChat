@@ -936,7 +936,13 @@ export const MainLayoutStyleTags = () => {
 			{/* Ledger-dense brand accents on the chat surface — custom-palette precedent = codeBlock above. */}
 			{branded && <PaletteStyleTag selector='.rcx-content--main' palette={buildLedgerPalette(ledger)} tagId={`ledger-palette-${theme}`} />}
 			{/* Premium refresh tokens — wave3 chat design tokens. */}
-			{branded && <PaletteStyleTag selector='.rcx-content--main' palette={buildPremiumRefreshPalette(premium)} tagId={`premium-refresh-palette-${theme}`} />}
+			{branded && (
+				<PaletteStyleTag
+					selector='.rcx-content--main'
+					palette={buildPremiumRefreshPalette(premium)}
+					tagId={`premium-refresh-palette-${theme}`}
+				/>
+			)}
 			{/* Static, no user input — the drag-region rule is a constant string (mirrors RawText's pattern). */}
 			<style dangerouslySetInnerHTML={{ __html: NAVBAR_DRAG_REGION_CSS }} />
 			{/* Static, no user input — the frame rule is a constant string. */}
