@@ -4,6 +4,8 @@ import { useUser } from '@rocket.chat/ui-contexts';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { CHAT_CSS, OVERLAYS_CSS, SHELL_CSS, SURFACES_CSS } from './paperSkyCss';
+
 /**
  * PaperSkyStyleTags — MatterChat's Paper & Sky theme (Stage 1: the shell).
  * ============================================================================
@@ -120,166 +122,6 @@ const useSkyState = (): SkyState => {
 	return hour < 12 ? 'morning' : 'day';
 };
 
-// ============================================================================
-// MATERIALS + SHELL. Scoped under `body[data-skin]`, so nothing here can reach a
-// user on light, dark, high-contrast or auto.
-//
-// `-webkit-backdrop-filter` is written by hand beside every `backdrop-filter`.
-// These tags are injected at runtime and bypass PostCSS/autoprefixer entirely, so
-// the browser sees exactly this. (LandingPage's rule is the OPPOSITE — Lightning
-// CSS there collapses a hand-written pair down to the webkit form alone. Same
-// design system, different pipeline. Getting it backwards fails silently: the
-// background and border still paint, so it reads as a slightly-wrong tint.)
-// ============================================================================
-
-const SHELL_CSS = `
-body[data-skin] {
-	--ps-paper: #FAF5EA;
-	--ps-paper-bright: #FFFDF6;
-	--ps-rim: #FFFEFA;
-	--ps-hairline: #E4D9C0;
-	--ps-ink: #2C2A21;
-	--ps-ink-quiet: #4A463A;
-	--ps-ink-faint: #8A8471;
-	--ps-on-sky: #FFFFFF;
-	--ps-on-sky-2: rgba(255, 255, 255, 0.85);
-	--ps-on-sky-3: rgba(255, 255, 255, 0.70);
-	--ps-mint: #8FE3A5;
-	--ps-lift: 0 1px 12px rgba(10, 40, 20, 0.35);
-	--ps-radius: 22px;
-}
-
-/* THE WINDOW. The rounded floating shape is KEPT — near-black backdrop, 8px
-   margin, 22px radius, drop shadow, the org rail outside it. What is removed is
-   the inner bezel: Variant B pins #react-root 14px inside a green gradient card,
-   so a band frames the app on all four sides. Here the sky reaches the corners.
-
-   Everything else about the frame is inherited from MATTERCHAT_FRAME_CSS,
-   including the mobile full-bleed branch below 767.98px.
-
-   NEVER put transform, filter or mix-blend-mode on body or #react-root. body
-   carrying no transform is the only reason fixed-position modals, menus and
-   toasts escape the body clip instead of being trapped inside the rounded
-   window. */
-body[data-skin] {
-	background: #080D0A !important;
-}
-body[data-skin] #react-root {
-	inset: 0 !important;
-	border-radius: var(--ps-radius) !important;
-	background: transparent !important;
-	box-shadow: none !important;
-}
-@media (max-width: 767.98px) {
-	body[data-skin] #react-root {
-		border-radius: 0 !important;
-	}
-}
-
-/* The sky sits at the bottom of the window's stacking order; the app rides above
-   it on transparent ground. */
-body[data-skin] .ps-sky {
-	position: absolute;
-	inset: 0;
-	z-index: 0;
-	pointer-events: none;
-	opacity: 0;
-	transition: opacity 2s linear;
-}
-body[data-skin] .ps-sky[data-on='true'] {
-	opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-	body[data-skin] .ps-sky {
-		transition: none;
-	}
-}
-
-body[data-skin] #rocket-chat,
-body[data-skin] .rcx-content--main,
-body[data-skin] .rcx-sidebar,
-body[data-skin] .rcx-sidebar--main > *,
-body[data-skin] main {
-	background: transparent !important;
-}
-body[data-skin] #rocket-chat {
-	position: relative;
-	z-index: 1;
-}
-
-/* ---- MATERIALS ------------------------------------------------------------
-   Smoked is the only material white body text is safe on. Clear and frosted are
-   for icons, large type and surfaces that must stay legible-through. */
-
-body[data-skin] .rcx-navbar,
-body[data-skin] .rcx-sidebar--main,
-body[data-skin] .rcx-sidepanel,
-body[data-skin] .rcx-message-box {
-	-webkit-backdrop-filter: blur(50px) saturate(180%);
-	backdrop-filter: blur(50px) saturate(180%);
-	background: rgba(0, 0, 0, 0.52) !important;
-	border-color: rgba(255, 255, 255, 0.24) !important;
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
-}
-
-body[data-skin] .rcx-room-header {
-	-webkit-backdrop-filter: blur(44px) saturate(185%);
-	backdrop-filter: blur(44px) saturate(185%);
-	background: linear-gradient(
-		135deg,
-		rgba(255, 255, 255, 0.24),
-		rgba(255, 255, 255, 0.09) 52%,
-		rgba(255, 255, 255, 0.15)
-	) !important;
-	border-color: rgba(255, 255, 255, 0.34) !important;
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-/* ---- TYPE ON SKY ----------------------------------------------------------
-   White only. Hierarchy by weight and opacity, never by colour. */
-
-body[data-skin] .rcx-navbar,
-body[data-skin] .rcx-navbar *,
-body[data-skin] .rcx-sidebar--main,
-body[data-skin] .rcx-sidebar--main *,
-body[data-skin] .rcx-sidepanel,
-body[data-skin] .rcx-sidepanel *,
-body[data-skin] .rcx-room-header,
-body[data-skin] .rcx-room-header * {
-	color: var(--ps-on-sky) !important;
-	border-color: rgba(255, 255, 255, 0.18);
-}
-body[data-skin] .rcx-sidebar-item--clickable:hover {
-	background: rgba(255, 255, 255, 0.16) !important;
-}
-body[data-skin] .rcx-sidebar-item--selected {
-	background: rgba(255, 255, 255, 0.12) !important;
-}
-
-/* Room-list badges: white is unread, coral is a mention. */
-body[data-skin] .rcx-badge {
-	background: #ffffff !important;
-	color: #0a2216 !important;
-}
-body[data-skin] .rcx-badge--danger,
-body[data-skin] .rcx-badge--primary {
-	background: #f0997b !important;
-	color: #4a1b0c !important;
-}
-
-/* ---- PAPER ----------------------------------------------------------------
-   Everything you read. Opaque, so it costs no compositing and holds 13.2:1 in
-   every sky state. Stage 1 uses it for the surfaces the shell already owns;
-   message rows arrive in Stage 2. */
-
-body[data-skin] .ps-paper {
-	background: var(--ps-paper);
-	color: var(--ps-ink);
-	border-radius: 14px;
-	box-shadow: inset 0 1px 0 var(--ps-rim), 0 10px 26px -14px rgba(0, 0, 0, 0.55);
-}
-`;
-
 /**
  * Applies `data-skin` to <body> and renders the sky layers into #react-root.
  *
@@ -313,9 +155,13 @@ export const PaperSkyStyleTags = () => {
 
 	return (
 		<>
-			{/* Static, theme-derived constant string — mirrors the RawText pattern used
-			    by the other style tags in this directory. */}
+			{/* Static constant strings — mirrors the RawText pattern used by the other
+			    style tags in this directory. Order is the stage order, so a later stage
+			    can refine an earlier one without a specificity bump. */}
 			<style dangerouslySetInnerHTML={{ __html: SHELL_CSS }} />
+			<style dangerouslySetInnerHTML={{ __html: CHAT_CSS }} />
+			<style dangerouslySetInnerHTML={{ __html: SURFACES_CSS }} />
+			<style dangerouslySetInnerHTML={{ __html: OVERLAYS_CSS }} />
 			{root &&
 				createPortal(
 					<>
