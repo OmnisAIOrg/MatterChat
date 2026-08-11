@@ -1,5 +1,5 @@
 import { PaletteStyleTag } from '@rocket.chat/fuselage';
-import { useThemeMode } from '@rocket.chat/ui-client';
+import { useSkin, useThemeMode } from '@rocket.chat/ui-client';
 import { useEffect, useState } from 'react';
 
 import { DEPTH_FLAG_CLASS, DEPTH_FLAG_STORAGE_KEY, buildDepthCss } from './depthSkin';
@@ -867,6 +867,19 @@ const buildPremiumDashboardCss = (theme: string): string => {
 export const MainLayoutStyleTags = () => {
 	const [, , theme] = useThemeMode();
 
+	/**
+	 * MATTERCHAT — Paper & Sky is a SKIN, not a colour scheme, so it replaces this
+	 * whole Variant B layer rather than sitting on top of it.
+	 *
+	 * This gate is load-bearing. A skin resolves to `dark` (Fuselage's `Themes` union
+	 * has no room for it), so `branded` below would otherwise be true and every green
+	 * ledger, premium and depth rule would paint underneath Paper & Sky.
+	 *
+	 * The precedent is the line that already left high-contrast stock for a11y — same
+	 * idea, one more branch.
+	 */
+	const skin = useSkin();
+
 	// Desktop app (Electron): tag <body> so the full-bleed frame + macOS traffic-light padding above
 	// activate. Inert on web/PWA (matterchatDesktop is only injected by the desktop wrapper's preload).
 	useEffect(() => {
@@ -899,14 +912,19 @@ export const MainLayoutStyleTags = () => {
 		}
 	});
 
+	// A skin owns the frame and depth treatment itself, so the depth class must not be
+	// on <body> while Paper & Sky is active — its `body.mc-depth` rules are written to
+	// win over the flat frame and would win over the skin too.
+	const depthActive = depthOn && !skin;
+
 	useEffect(() => {
-		if (!depthOn) return undefined;
+		if (!depthActive) return undefined;
 		document.body.classList.add(DEPTH_FLAG_CLASS);
 		return () => document.body.classList.remove(DEPTH_FLAG_CLASS);
-	}, [depthOn]);
+	}, [depthActive]);
 
-	// Brand the light and dark themes; leave high-contrast (a11y) entirely stock.
-	const branded = theme === 'light' || theme === 'dark';
+	// Brand the light and dark themes; leave high-contrast (a11y) and any Paper & Sky skin entirely stock.
+	const branded = !skin && (theme === 'light' || theme === 'dark');
 	const ledger = theme === 'dark' ? DARK_LEDGER : LIGHT_LEDGER;
 	const premium = theme === 'dark' ? DARK_PREMIUM : LIGHT_PREMIUM;
 
@@ -918,7 +936,13 @@ export const MainLayoutStyleTags = () => {
 			{/* Ledger-dense brand accents on the chat surface — custom-palette precedent = codeBlock above. */}
 			{branded && <PaletteStyleTag selector='.rcx-content--main' palette={buildLedgerPalette(ledger)} tagId={`ledger-palette-${theme}`} />}
 			{/* Premium refresh tokens — wave3 chat design tokens. */}
-			{branded && <PaletteStyleTag selector='.rcx-content--main' palette={buildPremiumRefreshPalette(premium)} tagId={`premium-refresh-palette-${theme}`} />}
+			{branded && (
+				<PaletteStyleTag
+					selector='.rcx-content--main'
+					palette={buildPremiumRefreshPalette(premium)}
+					tagId={`premium-refresh-palette-${theme}`}
+				/>
+			)}
 			{/* Static, no user input — the drag-region rule is a constant string (mirrors RawText's pattern). */}
 			<style dangerouslySetInnerHTML={{ __html: NAVBAR_DRAG_REGION_CSS }} />
 			{/* Static, no user input — the frame rule is a constant string. */}
@@ -931,7 +955,7 @@ export const MainLayoutStyleTags = () => {
 			{branded && <style dangerouslySetInnerHTML={{ __html: buildPremiumDashboardCss(theme) }} />}
 			{/* Frame & depth pass — LAST so its scoped `body.mc-depth` rules win over the flat frame
 			    above without needing extra specificity. Static, theme-derived constant string. */}
-			{depthOn && <style dangerouslySetInnerHTML={{ __html: buildDepthCss(theme) }} />}
+			{depthActive && <style dangerouslySetInnerHTML={{ __html: buildDepthCss(theme) }} />}
 		</>
 	);
 };
