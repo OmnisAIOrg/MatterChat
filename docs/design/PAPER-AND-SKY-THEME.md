@@ -1,7 +1,8 @@
 # Paper & Sky — MatterChat theme
 
-**Status:** design approved 2026-08-11 · Stage 1 (shell) not yet built
+**Status:** Stage 1 (shell) built — [PR #186](https://github.com/OmnisAIOrg/MatterChat/pull/186), not yet visually verified in a running app
 **Branch:** `auto/paper-sky-theme` · **Base:** `staging`
+**Tools:** `node docs/design/paper-sky-contrast-check.mjs` (gate — exits non-zero below AA) · `node docs/design/paper-sky-tints.mjs` (regenerate the tint family)
 **Read first:** [`MATTERCHAT-UI-CUSTOMIZATION-GUIDE.md`](./MATTERCHAT-UI-CUSTOMIZATION-GUIDE.md) — the fork-discipline constitution. This spec obeys it: everything lands in our own files, token-driven, no in-place edits to Rocket.Chat core.
 
 ---
@@ -228,6 +229,27 @@ Approved scope. Roughly 90% of the perceived change.
 - Icon-button hit target ≥ 44px everywhere
 
 **Deferred:** Stage 2 chat surface (message rows as paper, mentions, attachments, Chi cards, receipts) · Stage 3 dashboard and settings · Stage 4 modals, admin, empty states, long tail.
+
+### Six tints, shipped with Stage 1
+
+Green is hand-tuned to the comps; the other five are that ramp hue-rotated in OKLCH holding lightness, so contrast is **inherited rather than re-audited**. All six clear AA on smoked glass in every sky state.
+
+| Tint | Gamut | Note |
+|---|---|---|
+| Green | clean | the default; `paper-sky` |
+| Graphite | clean | near-neutral, the quiet option |
+| Blue | clips in 2 of 4 states | matches the loader / CentralAuth sky |
+| Indigo | clips in 1 of 4 | |
+| Amber | clips in 3 of 4 | |
+| Rosé | clips in 1 of 4 | |
+
+Clipping does not mean rejected — it means the emitted hexes are no longer exactly what OKLCH asked for, so those four want a designer's eye before being treated as final. They are valid colours and they pass contrast.
+
+Adding a tint is data, not code: one entry in `Skins`, one in `SKINS`, one ramp set in `PaperSkyStyleTags`, one picker row. No backend, because the value rides the same free-form preference.
+
+### Not wired yet
+
+**`dusk` never fires.** The state, its ramps and its transition all exist, but the trigger belongs to the CasePro deadline signal (filing or SOL inside 24h) and that source is not connected. Deliberately *not* faked off the clock — a dusk sky has to mean a real deadline, or the whole living-sky idea is decoration. Wiring it is the first Stage 2 task.
 
 Each stage is independently shippable. An unfinished theme is safe — nobody is forced to pick it.
 
