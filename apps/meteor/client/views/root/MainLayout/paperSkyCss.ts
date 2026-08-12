@@ -32,11 +32,17 @@
  * a hand-written pair to the webkit form alone.)
  */
 
-/** Smoked — the only material white body text clears AA on, in every sky state. */
+/** Smoked — the only material white body text clears AA on, in every sky state.
+ *
+ * THE SMOKE IS GREEN, NOT BLACK (founder, 2026-08-12: "literally no dark grey —
+ * only green sky glass and warm paper"). Black smoke over the sky's dark stops
+ * composited to a neutral charcoal; a deep-green base keeps every glass surface
+ * unmistakably part of the sky. White on this over the brightest stop (#7AD397)
+ * still clears AA (~6:1 measured on the composite). */
 const SMOKED = `
 	-webkit-backdrop-filter: blur(50px) saturate(180%);
 	backdrop-filter: blur(50px) saturate(180%);
-	background: rgba(0, 0, 0, 0.52);
+	background: rgba(6, 40, 23, 0.60);
 	border-color: rgba(255, 255, 255, 0.24);
 `;
 
@@ -209,8 +215,8 @@ body[data-skin] .rcx-sidepanel,
 body[data-skin] .mc-rail-menu,
 body[data-skin] .mc-rail-workspace {
 	${SMOKED}
-	background: rgba(0, 0, 0, 0.52) !important;
-	background-color: rgba(0, 0, 0, 0.52) !important;
+	background: rgba(6, 40, 23, 0.60) !important;
+	background-color: rgba(6, 40, 23, 0.60) !important;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
@@ -223,7 +229,7 @@ body[data-skin] .mc-rail-workspace * {
 }
 /* The rail's own grooved chip carries its own fill. */
 body[data-skin] .mc-rail-menu .mc-groove {
-	background: rgba(0, 0, 0, 0.22) !important;
+	background: rgba(6, 40, 23, 0.30) !important;
 	border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
@@ -448,13 +454,17 @@ body[data-skin] .rcx-message pre {
 	border-radius: 7px;
 }
 
-/* Date divider is a pill ON the sky between sheets, so it stays glass. */
+/* Date divider is a pill ON the sky between sheets — green glass, never neutral.
+   The background carries !important for the same reason the buttons needed it:
+   the dark palette gives the bubble its own grey fill that otherwise wins. */
 body[data-skin] .rcx-message-divider {
 	background: transparent !important;
 }
 body[data-skin] .rcx-message-divider .rcx-bubble,
 body[data-skin] .rcx-message-divider .rcx-divider-bubble {
-	${CLEAR}
+	${SMOKED}
+	background: rgba(6, 40, 23, 0.60) !important;
+	background-color: rgba(6, 40, 23, 0.60) !important;
 	color: var(--ps-on-sky) !important;
 	text-shadow: var(--ps-lift);
 	border-radius: 20px;
@@ -479,44 +489,87 @@ body[data-skin] .rcx-message-read-status {
 	color: #17804D !important;
 }
 
-/* Composer is chrome, not content — it frames what you are about to write.
-   The !important here is load-bearing: the composer carries its own opaque ground, and
-   without it the material silently loses and the composer stays flat navy on the
-   sky. Same reason the rails needed it. */
+/* THE COMPOSER IS PAPER, NOT CHROME (founder, 2026-08-12). The first cut smoked
+   it, and it read as the one grey box on an all-green screen. By the theme's own
+   rule it was always a reading surface — you read what you are typing. The
+   !important is still load-bearing: the composer carries its own opaque ground. */
 body[data-skin] .rcx-message-composer,
 body[data-skin] .rcx-message-box,
 body[data-skin] .rc-message-box {
-	${SMOKED}
-	background: rgba(0, 0, 0, 0.52) !important;
-	background-color: rgba(0, 0, 0, 0.52) !important;
-	border-style: solid;
-	border-width: 1px;
+	background: var(--ps-paper-bright) !important;
+	background-color: var(--ps-paper-bright) !important;
+	border: 1px solid var(--ps-hairline) !important;
 	border-radius: 15px;
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+	box-shadow: var(--ps-card-shadow);
 }
-/* The composer's inner toolbar/footer strips carry their own fills. */
+/* The composer's inner strips each carry their own DARK-palette fill — the input
+   wrapper (.rcx-input-box__wrapper, rgb(38,41,49) measured) and an emotion-hashed
+   toolbar box. Clear every box inside the sheet; deliberate fills (icon hover,
+   send) re-assert themselves with !important below. */
 body[data-skin] .rcx-message-composer__toolbar,
 body[data-skin] .rcx-message-composer-toolbar,
-body[data-skin] .rcx-message-box__toolbar {
+body[data-skin] .rcx-message-box__toolbar,
+body[data-skin] .rcx-message-composer .rcx-input-box__wrapper,
+body[data-skin] .rcx-message-box .rcx-input-box__wrapper,
+body[data-skin] .rc-message-box .rcx-input-box__wrapper,
+body[data-skin] .rcx-message-composer .rcx-box,
+body[data-skin] .rcx-message-box .rcx-box,
+body[data-skin] .rc-message-box .rcx-box {
+	/* !important is required: Fuselage Box PROPS compile to emotion rules that are
+	   themselves !important, so a normal declaration loses at any specificity. The
+	   deliberate fills below (icon hover, send) also carry !important and win by
+	   coming later in this same sheet. */
 	background: transparent !important;
+	background-color: transparent !important;
 }
+body[data-skin] .rcx-message-composer,
 body[data-skin] .rcx-message-composer *,
 body[data-skin] .rcx-message-box *,
 body[data-skin] .rcx-message-composer .rcx-box--with-inline-elements {
-	color: var(--ps-on-sky) !important;
+	color: var(--ps-ink) !important;
 }
 body[data-skin] .rcx-message-composer textarea::placeholder {
-	color: var(--ps-on-sky-3) !important;
+	color: var(--ps-ink-faint) !important;
+}
+/* Composer action icons read as quiet ink on the sheet — and they must NOT get the
+   smoked chip treatment the on-sky buttons do (they are ON PAPER). */
+body[data-skin] .rcx-message-composer .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger),
+body[data-skin] .rcx-message-box .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger),
+body[data-skin] .rc-message-box .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger) {
+	background: transparent !important;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+	border: 1px solid transparent !important;
+	color: var(--ps-ink-quiet) !important;
+}
+body[data-skin] .rcx-message-composer .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger):hover,
+body[data-skin] .rcx-message-box .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger):hover,
+body[data-skin] .rc-message-box .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger):hover {
+	background: #F1EAD8 !important;
+	border-color: var(--ps-hairline) !important;
+}
+/* The send action stays the accent. */
+body[data-skin] .rcx-message-composer .rcx-button--primary,
+body[data-skin] .rcx-message-box .rcx-button--primary,
+body[data-skin] .rc-message-box .rcx-button--primary {
+	background: #17804D !important;
+	color: #ffffff !important;
+	border-color: #17804D !important;
+}
+/* Legacy-class composer text (the fork's footer is .rc-message-box). */
+body[data-skin] .rc-message-box,
+body[data-skin] .rc-message-box * {
+	color: var(--ps-ink);
 }
 /* Focus is the palette's mint, not the stock blue highlight — the one cold colour
    left on screen was the composer lighting up cornflower on every keystroke. */
 body[data-skin] .rcx-message-composer:focus-within,
 body[data-skin] .rcx-message-box:focus-within,
 body[data-skin] .rc-message-box:focus-within {
-	border-color: var(--ps-mint) !important;
+	border-color: #17804D !important;
 	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.22),
-		0 0 0 2px rgba(143, 227, 165, 0.30);
+		var(--ps-card-shadow),
+		0 0 0 2px rgba(23, 128, 77, 0.25);
 }
 `;
 
@@ -692,6 +745,23 @@ body[data-skin] .rcx-option--focus {
 	background: rgba(255, 255, 255, 0.16) !important;
 }
 
+/* Banners (update-available, announcements) span the very top of the window and
+   were the last stock-dark strip: they render OUTSIDE #rocket-chat and no earlier
+   rule reached them. They are read → paper. */
+body[data-skin] .rcx-banner,
+body[data-skin] .rcx-banner * {
+	background: var(--ps-paper) !important;
+	background-color: var(--ps-paper) !important;
+	color: var(--ps-ink) !important;
+}
+body[data-skin] .rcx-banner {
+	border-bottom: 1px solid var(--ps-hairline) !important;
+}
+body[data-skin] .rcx-banner a,
+body[data-skin] .rcx-banner .rcx-banner__link {
+	color: #116240 !important;
+}
+
 /* Toasts land on the sky, so glass keeps them legible over any state. */
 body[data-skin] .rcx-toastbar {
 	${SMOKED}
@@ -730,13 +800,13 @@ body[data-skin] .rcx-button--primary {
 }
 body[data-skin] .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger) {
 	${SMOKED}
-	background: rgba(0, 0, 0, 0.52) !important;
-	background-color: rgba(0, 0, 0, 0.52) !important;
+	background: rgba(6, 40, 23, 0.60) !important;
+	background-color: rgba(6, 40, 23, 0.60) !important;
 	border: 1px solid rgba(255, 255, 255, 0.28) !important;
 	color: var(--ps-on-sky) !important;
 }
 body[data-skin] .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger):hover {
-	background: rgba(0, 0, 0, 0.62) !important;
+	background: rgba(4, 30, 17, 0.72) !important;
 }
 /* ON PAPER the same variants must switch to ink-on-cream or they vanish into the
    sheet (glass) or blind it (white slab). Primary on paper becomes the accent —
