@@ -241,7 +241,6 @@ body[data-skin] .messages-container-wrapper,
 body[data-skin] .messages-list,
 body[data-skin] .rcx-room,
 body[data-skin] .mc-room-layout,
-body[data-skin] .mc-room-layout > .rcx-box,
 body[data-skin] .rcx-vertical-bar,
 body[data-skin] .rcx-contextual-bar {
 	background: transparent !important;
@@ -258,7 +257,9 @@ body[data-skin] [rcx-room-header] {
 	background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.09) 52%, rgba(255, 255, 255, 0.15)) !important;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
-body[data-skin] [rcx-room-header] > .rcx-box {
+body[data-skin] [rcx-room-header] > .rcx-box,
+body[data-skin] .rcx-room-header > .rcx-box,
+body[data-skin] header.rcx-room-header .rcx-box--full {
 	background: transparent !important;
 	background-color: transparent !important;
 }
