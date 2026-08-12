@@ -148,16 +148,56 @@ body[data-skin] #rocket-chat {
 	z-index: 1;
 }
 
-/* ---- CHROME: glass, and only glass ---- */
+/* ---- CHROME: glass, and only glass ----
+
+   MATTERCHAT'S OWN SHELL IS NOT ROCKET.CHAT'S. The nav rail and workspace rail are
+   custom components (AppLeftRail.tsx) setting background-color: #1A212C through
+   css-in-js, and the room column is a MatterChat template rather than a Fuselage
+   one. None of the .rcx-* selectors reach any of it — which is why an earlier pass
+   tinted the channel list and left the rails and the whole conversation area opaque
+   navy. When adding a surface, check whether it is OURS before reaching for an rcx
+   class. */
 body[data-skin] .rcx-navbar,
 body[data-skin] .rcx-sidebar--main,
-body[data-skin] .rcx-sidepanel {
+body[data-skin] .rcx-sidepanel,
+body[data-skin] .mc-rail-menu,
+body[data-skin] .mc-rail-workspace {
 	${SMOKED}
+	background: rgba(0, 0, 0, 0.52) !important;
+	background-color: rgba(0, 0, 0, 0.52) !important;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+body[data-skin] .mc-rail-menu,
+body[data-skin] .mc-rail-menu *,
+body[data-skin] .mc-rail-workspace,
+body[data-skin] .mc-rail-workspace * {
+	color: var(--ps-on-sky) !important;
+	border-color: rgba(255, 255, 255, 0.18);
+}
+/* The rail's own grooved chip carries its own fill. */
+body[data-skin] .mc-rail-menu .mc-groove {
+	background: rgba(0, 0, 0, 0.22) !important;
+	border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* THE ROOM COLUMN. Template classes, not Fuselage ones, each with an opaque
+   ground. Without these the sky stops at the channel list and the entire
+   conversation sits on flat navy. */
+body[data-skin] .messages-box,
+body[data-skin] .messages-container-main,
+body[data-skin] .messages-container-wrapper,
+body[data-skin] .messages-list,
+body[data-skin] .rcx-room,
+body[data-skin] .rcx-vertical-bar,
+body[data-skin] .rcx-contextual-bar {
+	background: transparent !important;
+	background-color: transparent !important;
 }
 
 body[data-skin] .rcx-room-header {
 	${FROSTED}
+	background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.09) 52%, rgba(255, 255, 255, 0.15)) !important;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
@@ -330,14 +370,26 @@ body[data-skin] .rcx-message-read-status {
 	color: #17804D !important;
 }
 
-/* Composer is chrome, not content — it frames what you are about to write. */
+/* Composer is chrome, not content — it frames what you are about to write.
+   The !important here is load-bearing: the composer carries its own opaque ground, and
+   without it the material silently loses and the composer stays flat navy on the
+   sky. Same reason the rails needed it. */
 body[data-skin] .rcx-message-composer,
-body[data-skin] .rcx-message-box {
+body[data-skin] .rcx-message-box,
+body[data-skin] .rc-message-box {
 	${SMOKED}
+	background: rgba(0, 0, 0, 0.52) !important;
+	background-color: rgba(0, 0, 0, 0.52) !important;
 	border-style: solid;
 	border-width: 1px;
 	border-radius: 15px;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+/* The composer's inner toolbar/footer strips carry their own fills. */
+body[data-skin] .rcx-message-composer__toolbar,
+body[data-skin] .rcx-message-composer-toolbar,
+body[data-skin] .rcx-message-box__toolbar {
+	background: transparent !important;
 }
 body[data-skin] .rcx-message-composer *,
 body[data-skin] .rcx-message-box *,
