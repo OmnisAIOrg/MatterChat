@@ -610,7 +610,10 @@ const MyDayHomePage = () => {
 		<Page color='default' background='tint' style={{ backgroundColor: LEDGER_PAPER }}>
 			<PageScrollableContent>
 				<Box display='flex' alignItems='flex-end' justifyContent='space-between' flexWrap='wrap' mbe={16} style={{ gap: '12px' }}>
-					<Box>
+					{/* mc-sky-header: under Paper & Sky this block sits directly on the sky and the skin
+					    recolours it per sky state — Fuselage's font tokens resolve to the dark palette
+					    here and wash out on bright skies. Inert under every other theme. */}
+					<Box className='mc-sky-header'>
 						{/* Serif "case caption" greeting — the ledger heading voice. */}
 						<Box is='h1' fontScale='h1' color='default' style={LEDGER_CAPTION_STYLE}>
 							{timeGreeting()}

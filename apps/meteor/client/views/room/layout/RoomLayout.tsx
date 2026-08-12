@@ -57,7 +57,10 @@ const RoomLayout = ({ header, body, footer, aside, ...props }: RoomLayoutProps) 
 				[layout, contextualbarPosition, contextualbarSize],
 			)}
 		>
-			<Box h='full' w='full' display='flex' flexDirection='column' bg='room' {...props} ref={ref}>
+			{/* MATTERCHAT: mc-room-layout is a stable styling hook — bg='room' compiles to an
+			    unstable emotion hash, and the Paper & Sky skin must clear this exact surface
+			    (it was the full-width opaque slab hiding the sky behind every conversation). */}
+			<Box h='full' w='full' display='flex' flexDirection='column' bg='room' className='mc-room-layout' {...props} ref={ref}>
 				<Suspense fallback={<HeaderSkeleton />}>{header}</Suspense>
 				<Box display='flex' flexGrow={1} overflow='hidden' height='full' position='relative'>
 					<Box display={hideBody ? 'none' : 'flex'} flexDirection='column' flexGrow={1} minWidth={0}>
