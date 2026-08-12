@@ -247,9 +247,23 @@ Clipping does not mean rejected — it means the emitted hexes are no longer exa
 
 Adding a tint is data, not code: one entry in `Skins`, one in `SKINS`, one ramp set in `PaperSkyStyleTags`, one picker row. No backend, because the value rides the same free-form preference.
 
-### Not wired yet
+### The sky bands — and the mistake that made the theme look broken
 
-**`dusk` never fires.** The state, its ramps and its transition all exist, but the trigger belongs to the CasePro deadline signal (filing or SOL inside 24h) and that source is not connected. Deliberately *not* faked off the clock — a dusk sky has to mean a real deadline, or the whole living-sky idea is decoration. Wiring it is the first Stage 2 task.
+| Band | State |
+|---|---|
+| 05–11 | morning |
+| 12–18 | day |
+| 19–21 | dusk |
+| 22–04, or Do Not Disturb at any hour | night |
+
+The first cut sent the sky to `night` from **19:00**, and `night` was `#12241A → #040705` — near-black. Anyone opening the app on an ordinary working evening got a black screen with cream cards on it and correctly concluded the theme had not loaded. It had; it was painting a black sky exactly as specified.
+
+Two lessons, both cheap to state and expensive to learn:
+
+1. **A theme whose default state is indistinguishable from "not applied" is a broken theme,** regardless of whether the code is correct. `paper-sky-contrast-check.mjs` now has a companion assertion that no ramp's top stop falls below 0.012 relative luminance.
+2. **Tune time bands to the actual users.** A law firm works past seven.
+
+`dusk` now fires on the clock, so all four states are reachable. When the CasePro deadline signal lands (filing or SOL inside 24h) it should **force** dusk regardless of hour — the state is shared on purpose, because "the light is going" and "time is running out" are the same feeling.
 
 Each stage is independently shippable. An unfinished theme is safe — nobody is forced to pick it.
 

@@ -13,8 +13,8 @@ type ThemeItem = {
  * palette. They share this one list because they share one preference — see
  * `Skins` in core-typings for why that needs no backend change.
  *
- * Only the first skin carries a full description; the tints are the same skin on a
- * different sky, so they read as a family rather than six unrelated themes.
+ * Each tint says what it is actually for. An earlier pass gave all five the same
+ * sentence, which read as filler and told a user nothing about which to pick.
  */
 export const themeItems: ThemeItem[] = [
 	{
@@ -45,26 +45,26 @@ export const themeItems: ThemeItem[] = [
 	{
 		id: 'paper-sky-blue',
 		title: 'Theme_paper_sky_blue',
-		description: 'Theme_paper_sky_tint_description',
+		description: 'Theme_paper_sky_blue_description',
 	},
 	{
 		id: 'paper-sky-indigo',
 		title: 'Theme_paper_sky_indigo',
-		description: 'Theme_paper_sky_tint_description',
+		description: 'Theme_paper_sky_indigo_description',
 	},
 	{
 		id: 'paper-sky-amber',
 		title: 'Theme_paper_sky_amber',
-		description: 'Theme_paper_sky_tint_description',
+		description: 'Theme_paper_sky_amber_description',
 	},
 	{
 		id: 'paper-sky-rose',
 		title: 'Theme_paper_sky_rose',
-		description: 'Theme_paper_sky_tint_description',
+		description: 'Theme_paper_sky_rose_description',
 	},
 	{
 		id: 'paper-sky-graphite',
 		title: 'Theme_paper_sky_graphite',
-		description: 'Theme_paper_sky_tint_description',
+		description: 'Theme_paper_sky_graphite_description',
 	},
 ];
