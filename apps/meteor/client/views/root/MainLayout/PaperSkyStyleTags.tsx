@@ -54,37 +54,37 @@ const SKY: Record<Skins, Record<SkyState, [string, string, string, string]>> = {
 		morning: ['#7AD397', '#2FA55E', '#14813F', '#0A5029'],
 		day: ['#5FC182', '#1E9350', '#0B6E33', '#07411F'],
 		dusk: ['#3E9E63', '#136B3B', '#0A4A26', '#052D16'],
-		night: ['#12241A', '#0C1912', '#070E09', '#040705'],
+		night: ['#2A5C40', '#1D4430', '#132F21', '#0B1D14'],
 	},
 	'paper-sky-blue': {
-		morning: ['#75C4FF', '#2593DF', '#0071B5', '#054670'],
-		day: ['#5AB1F6', '#1282CA', '#00609C', '#02385C'],
+		morning: ['#7FC3FD', '#2593DF', '#0F71B1', '#054670'],
+		day: ['#5AB1F6', '#1282CA', '#046098', '#02385C'],
 		dusk: ['#398FCF', '#0F5E93', '#064168', '#042740'],
-		night: ['#13212D', '#0D1720', '#070D12', '#040609'],
+		night: ['#2B5475', '#1F3E57', '#152B3C', '#0C1A26'],
 	},
 	'paper-sky-indigo': {
-		morning: ['#B4B1FF', '#847CE1', '#655DB7', '#3E3971'],
+		morning: ['#B5B2FF', '#847CE1', '#655DB7', '#3E3971'],
 		day: ['#A19CF8', '#756DCC', '#564E9E', '#322E5D'],
 		dusk: ['#817CD1', '#544F95', '#3A3569', '#221F41'],
-		night: ['#1E1D2E', '#141420', '#0B0B12', '#060609'],
+		night: ['#4C4A76', '#383658', '#26253D', '#171726'],
 	},
 	'paper-sky-amber': {
-		morning: ['#EAB05C', '#BF7C00', '#995D00', '#5E3900'],
-		day: ['#D99C3C', '#AC6C00', '#834E00', '#4D2E00'],
-		dusk: ['#B47B14', '#7D4E00', '#573500', '#361F00'],
-		night: ['#281D0E', '#1C1409', '#100B05', '#080603'],
+		morning: ['#EAB05C', '#BA7F12', '#8F610F', '#5A3B05'],
+		day: ['#D99C3C', '#A47012', '#7B5206', '#4A3002'],
+		dusk: ['#B47B14', '#795001', '#533706', '#342001'],
+		night: ['#674A1E', '#4C3615', '#35250E', '#211708'],
 	},
 	'paper-sky-rose': {
-		morning: ['#FF9BA3', '#D6616F', '#AC4452', '#6B2A32'],
+		morning: ['#FD9DA4', '#D6616F', '#AC4452', '#6B2A32'],
 		day: ['#F0858F', '#C15260', '#943844', '#582128'],
 		dusk: ['#C9656F', '#8D3C45', '#63272E', '#3D161B'],
-		night: ['#2D191B', '#1F1112', '#12090A', '#090505'],
+		night: ['#723F43', '#552E31', '#3B1F22', '#251314'],
 	},
 	'paper-sky-graphite': {
 		morning: ['#B5BDC3', '#848E94', '#656D73', '#3E4347'],
 		day: ['#A2ABB1', '#757D84', '#555D62', '#323639'],
 		dusk: ['#82898F', '#545B5F', '#393E42', '#222527'],
-		night: ['#1E2021', '#151617', '#0B0C0D', '#060606'],
+		night: ['#4D5154', '#383B3E', '#27292A', '#17191A'],
 	},
 };
 
@@ -95,14 +95,24 @@ const ramp = ([a, b, c, d]: [string, string, string, string]): string => `linear
 /**
  * The living sky. The background is data, not decoration.
  *
- * Stage 1 derives from what is always on hand and cheap: the local clock and the
- * user's own status. `dusk` is reserved for the CasePro deadline signal (filing or
- * SOL inside 24h) and is not wired yet — the state exists, its ramps are defined,
- * and the only missing piece is the deadline source. Deliberately NOT faked off
- * the clock, so a dusk sky always means a real deadline once it lands.
+ * THE BANDS ARE TUNED FOR A WORKING DAY, and getting this wrong is not cosmetic.
+ * The first cut sent the sky to `night` from 19:00, and `night` was near-black —
+ * so anyone opening the app on a normal working evening saw a black screen with
+ * cream cards on it and reasonably concluded the theme had not loaded. A law firm
+ * works past seven; the sky has to still look like a sky when they do.
  *
- * Polls on a 5-minute tick rather than a timer per state change: the transition is
- * a 2s cross-fade and nobody needs it to the second.
+ *   05–11  morning   06–11 in practice; the "caught up" end of the day
+ *   12–18  day       the default, and where most sessions live
+ *   19–21  dusk      actual dusk — the light going, not an alarm
+ *   22–04  night     genuinely late, or Do Not Disturb at any hour
+ *
+ * `dusk` therefore fires on the clock rather than never firing at all. When the
+ * CasePro deadline signal lands (filing or SOL inside 24h) it should FORCE dusk
+ * regardless of hour — the state is shared deliberately, because "the light is
+ * going" and "time is running out" are the same feeling.
+ *
+ * Polls on a 5-minute tick rather than a timer per boundary: the transition is a
+ * 2s cross-fade and nobody needs it to the second.
  */
 const useSkyState = (): SkyState => {
 	const user = useUser();
@@ -116,8 +126,11 @@ const useSkyState = (): SkyState => {
 		return () => clearInterval(id);
 	}, []);
 
-	if (doNotDisturb || hour < 7 || hour >= 19) {
+	if (doNotDisturb || hour >= 22 || hour < 5) {
 		return 'night';
+	}
+	if (hour >= 19) {
+		return 'dusk';
 	}
 	return hour < 12 ? 'morning' : 'day';
 };
