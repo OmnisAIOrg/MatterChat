@@ -1319,7 +1319,7 @@
 					'<span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;">' + icon + label + '</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span></div>';
 			};
 			var body = '';
-			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections', stt: 'Transcription', dict: 'Dictionary', modes: 'Modes', history: 'History', audio: 'Audio', whatsnew: 'What’s new' };
+			var titles = { main: 'Settings', models: 'Language models', caps: 'Capabilities', connections: 'Connections', stt: 'Transcription', dict: 'Dictionary', modes: 'Modes', history: 'History', audio: 'Audio', whatsnew: 'What’s new', workspace: 'Workspace theme' };
 			if (panel === 'main') {
 				body =
 					row('<span style="font-size:12px;opacity:.85;">Size</span>' +
@@ -1338,6 +1338,7 @@
 						'<span id="s-padknob" style="position:absolute;left:' + this._frameSat.toFixed(0) + '%;top:' + Math.min(100, Math.max(0, (1 - (this._frameLum - 6) / 88) * 100)).toFixed(0) + '%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:hsl(' + this._frameHue + ',' + this._frameSat + '%,' + this._frameLum + '%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none;"></span></span>', 'border-bottom:none;padding-bottom:4px;') +
 					row('<span id="s-hue" style="position:relative;flex:1;height:14px;border-radius:7px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg, hsl(0,72%,52%), hsl(60,72%,52%), hsl(120,72%,52%), hsl(180,72%,52%), hsl(240,72%,52%), hsl(300,72%,52%), hsl(360,72%,52%));box-shadow:inset 0 1px 3px rgba(0,0,0,.45);">' +
 						'<span id="s-hueknob" style="position:absolute;top:50%;left:' + (this._frameHue / 360 * 100).toFixed(1) + '%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:hsl(' + this._frameHue + ',72%,52%);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);pointer-events:none;"></span></span>') +
+				(self.uiThemes && self.uiThemes.length ? nav('Workspace theme', 'workspace', '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M13.5 2.5 c-4.5 .3 -8.3 3.4 -9.6 7.2 -.4 1.2 .2 2.2 1.3 2.6 1.1 .4 2.3 -.1 2.8 -1.2 1.6 -3.5 3.4 -6 5.9 -7.6 .5 -.4 .3 -1 -.4 -1 Z" stroke-linejoin="round"/><circle cx="4.2" cy="12.6" r=".5" fill="currentColor"/></svg>') : '') +
 					row('<span style="font-size:12px;opacity:.85;">Focus timer</span><span style="display:flex;gap:6px;">' + [15, 25, 45].map(function (mn) { return '<span class="fmin" data-min="' + mn + '" style="padding:3px 10px;border-radius:10px;cursor:pointer;font-size:10.5px;font-weight:700;background:rgba(59,155,255,.14);border:1px solid rgba(59,155,255,.35);color:#8fc2ff;">' + mn + 'm</span>'; }).join('') + '</span>') +
 					row('<span style="font-size:12px;opacity:.85;">Sounds</span>' + sw(localStorage.getItem('chi-orb-sound') !== '0', 's-sound')) +
 					row('<span style="font-size:12px;opacity:.85;">Route notifications to Chi</span>' + sw(localStorage.getItem('chi-notif-route') === '1', 's-route')) +
@@ -1352,6 +1353,40 @@
 					nav('Connections', 'connections', '<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="4.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 7 L9.6 4.8 M6.4 9 L9.6 11.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>') +
 					(this._hasPopout() ? row('<span style="font-size:12px;opacity:.85;">Pop out into its own window</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span>', 'cursor:pointer;" data-act="popout') : '') +
 					row('<span style="font-size:12px;opacity:.85;">Collapse to the ensō</span><span style="display:inline-flex;opacity:.6;">' + chev + '</span>', 'cursor:pointer;" data-act="collapse');
+			} else if (panel === 'workspace') {
+				/* WORKSPACE THEME — the tab that themes the MAIN product UI, not the orb.
+				 * Entirely HOST-DRIVEN so the widget stays product-agnostic: the host sets
+				 * `el.uiThemes = [{key, label, group, swatch?}]` + `el.uiThemeCurrent`, and a
+				 * pick dispatches `chi-ui-theme` (bubbles/composed) for the host to persist.
+				 * Groups with swatches render as a gradient grid (the Paper & Sky tints show
+				 * their real sky ramps); chip groups cover flat schemes (auto/light/dark). */
+				var uiThemes = self.uiThemes || [];
+				var uiCur = self.uiThemeCurrent || '';
+				var uiGroups = [];
+				uiThemes.forEach(function (th) {
+					var g = th.group || 'Theme';
+					var slot = null;
+					for (var gi = 0; gi < uiGroups.length; gi++) if (uiGroups[gi].name === g) slot = uiGroups[gi];
+					if (!slot) { slot = { name: g, items: [] }; uiGroups.push(slot); }
+					slot.items.push(th);
+				});
+				body = uiGroups.map(function (grp) {
+					var withSwatch = grp.items.some(function (th) { return th.swatch; });
+					if (!withSwatch) {
+						return row('<span style="font-size:12px;opacity:.85;">' + grp.name + '</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">' + grp.items.map(function (th) {
+							var sel = th.key === uiCur;
+							return '<span class="uitheme" data-uitheme="' + th.key + '" style="padding:4px 11px;border-radius:11px;cursor:pointer;font-size:10.5px;font-weight:700;border:1px solid ' + (sel ? GREEN : 'rgba(128,128,128,.35)') + ';' + (sel ? 'background:rgba(48,209,88,.16);color:' + GREEN + ';' : 'background:rgba(128,128,128,.12);') + '">' + th.label + '</span>';
+						}).join('') + '</span>');
+					}
+					return '<div data-drum-base="" style="padding:10px 2px;border-bottom:1px solid rgba(128,128,128,.16);">' +
+						'<div style="font-size:12px;opacity:.85;margin-bottom:8px;">' + grp.name + '</div>' +
+						'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">' + grp.items.map(function (th) {
+							var sel = th.key === uiCur;
+							return '<div class="uitheme" data-uitheme="' + th.key + '" style="cursor:pointer;text-align:center;">' +
+								'<div style="height:44px;border-radius:10px;background:' + (th.swatch || 'rgba(128,128,128,.2)') + ';box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 1px 4px rgba(0,0,0,.4)' + (sel ? ', 0 0 0 2px ' + GREEN : '') + ';"></div>' +
+								'<div style="font-size:10px;margin-top:4px;opacity:' + (sel ? '1' : '.65') + ';font-weight:' + (sel ? '800' : '600') + ';">' + th.label + '</div></div>';
+						}).join('') + '</div></div>';
+				}).join('');
 			} else if (panel === 'models') {
 				var cur = localStorage.getItem('chi-model') || 'anthropic';
 				var cloud = MODELS.filter(function (m) { return !m.local; });
@@ -1749,6 +1784,14 @@
 			var list = r.getElementById('slist');
 			if (list) {
 				list.addEventListener('click', function (e) {
+					var uiThemeEl = e.target.closest('[data-uitheme]');
+					if (uiThemeEl) {
+						var uiKey = uiThemeEl.getAttribute('data-uitheme');
+						self.uiThemeCurrent = uiKey;
+						self.dispatchEvent(new CustomEvent('chi-ui-theme', { detail: { key: uiKey }, bubbles: true, composed: true }));
+						var sl2 = r.getElementById('slist'); if (sl2) self._slistScrollKeep = sl2.scrollTop;
+						self._render(); return;
+					}
 					var navEl = e.target.closest('[data-nav]');
 					if (navEl) { self._settingsPanel = navEl.getAttribute('data-nav'); self._render(); return; }
 					// Standalone MatterChat row: Connect OmnisAI account (OAuth in the system browser) / Sign out.

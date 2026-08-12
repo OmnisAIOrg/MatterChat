@@ -86,6 +86,23 @@ body[data-skin] {
 	--mc-ledger-card-tint: #F2ECDC;
 	--mc-ledger-rule: var(--ps-hairline);
 	--mc-ledger-accent: #17804D;
+
+	/* TEXT DIRECTLY ON THE SKY cannot be one colour. White fails on the bright
+	   morning/day stops (measured ~1.9:1 on #7AD397) and deep ink fails on night.
+	   data-sky on <body> (set beside data-skin) flips these per state; every
+	   on-sky heading and empty state reads THESE, never a hard-coded white. */
+	--ps-header-ink: var(--ps-on-sky);
+	--ps-header-ink-2: var(--ps-on-sky-2);
+	--ps-header-lift: var(--ps-lift);
+}
+/* Bright skies (stop 0 ≥ ~#3E9E63): ink, no lift — a dark shadow under dark ink
+   reads as smudge. Night keeps the defaults above (white + lift). */
+body[data-skin][data-sky='morning'],
+body[data-skin][data-sky='day'],
+body[data-skin][data-sky='dusk'] {
+	--ps-header-ink: #0B3A22;
+	--ps-header-ink-2: rgba(11, 58, 34, 0.78);
+	--ps-header-lift: none;
 }
 
 /* THE WINDOW. The rounded floating shape is KEPT — near-black backdrop, 8px
@@ -119,11 +136,23 @@ body[data-skin] #react-root {
 	}
 }
 
-/* The sky sits at the bottom of the window's stacking order. */
+/* The sky sits at the bottom of the window's stacking order.
+
+   z-index MUST be negative and #react-root MUST isolate. The NavBar (and the
+   banner region) are STATIC siblings of #rocket-chat inside #react-root, and a
+   positioned element at z-index 0 paints ABOVE every static sibling — which put
+   the sky OVER the whole navbar. pointer-events:none made it a ghost: hit-testing
+   passed through to the navbar underneath, so search and every control kept
+   working while being fully invisible under the gradient. That was the "empty
+   band" across the top of staging. isolation:isolate keeps the negative layer
+   inside the window instead of slipping under <body>'s near-black backdrop. */
+body[data-skin] #react-root {
+	isolation: isolate;
+}
 body[data-skin] .ps-sky {
 	position: absolute;
 	inset: 0;
-	z-index: 0;
+	z-index: -1;
 	pointer-events: none;
 	opacity: 0;
 	transition: opacity 2s linear;
@@ -200,40 +229,88 @@ body[data-skin] .mc-rail-menu .mc-groove {
 
 /* THE ROOM COLUMN. Template classes, not Fuselage ones, each with an opaque
    ground. Without these the sky stops at the channel list and the entire
-   conversation sits on flat navy. */
+   conversation sits on flat navy.
+
+   .mc-room-layout is the stable hook added to RoomLayout.tsx: its Box carries
+   bg='room' — an unstable emotion hash resolving to the DARK palette's
+   surface-room — and it was the one full-width slab the earlier list never
+   reached, which kept every conversation opaque charcoal. */
 body[data-skin] .messages-box,
 body[data-skin] .messages-container-main,
 body[data-skin] .messages-container-wrapper,
 body[data-skin] .messages-list,
 body[data-skin] .rcx-room,
+body[data-skin] .mc-room-layout,
+body[data-skin] .mc-room-layout > .rcx-box,
 body[data-skin] .rcx-vertical-bar,
 body[data-skin] .rcx-contextual-bar {
 	background: transparent !important;
 	background-color: transparent !important;
 }
 
-body[data-skin] .rcx-room-header {
+/* THE ROOM HEADER RENDERS rcx-room-header AS AN ATTRIBUTE, NOT A CLASS —
+   ui-client's Header.tsx passes it as a Box prop, so every .rcx-room-header
+   CLASS selector in earlier passes matched nothing and the header stayed on the
+   dark palette. Match both spellings, and clear the inner bg='room' strip. */
+body[data-skin] .rcx-room-header,
+body[data-skin] [rcx-room-header] {
 	${FROSTED}
 	background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.09) 52%, rgba(255, 255, 255, 0.15)) !important;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
+body[data-skin] [rcx-room-header] > .rcx-box {
+	background: transparent !important;
+	background-color: transparent !important;
+}
 
-/* ---- TYPE ON SKY: white only, hierarchy by weight and opacity ---- */
+/* ---- TYPE ON GLASS: white on the SMOKED chrome (safe in every sky state);
+   the FROSTED room header instead follows the sky-state header ink, because
+   frosted glass goes light over the bright skies and white text drowns. ---- */
 body[data-skin] .rcx-navbar,
 body[data-skin] .rcx-navbar *,
 body[data-skin] .rcx-sidebar--main,
 body[data-skin] .rcx-sidebar--main *,
 body[data-skin] .rcx-sidepanel,
-body[data-skin] .rcx-sidepanel *,
-body[data-skin] .rcx-room-header,
-body[data-skin] .rcx-room-header * {
+body[data-skin] .rcx-sidepanel * {
 	color: var(--ps-on-sky) !important;
+	border-color: rgba(255, 255, 255, 0.18);
+}
+body[data-skin] .rcx-room-header,
+body[data-skin] .rcx-room-header *,
+body[data-skin] [rcx-room-header],
+body[data-skin] [rcx-room-header] * {
+	color: var(--ps-header-ink) !important;
 	border-color: rgba(255, 255, 255, 0.18);
 }
 body[data-skin] .rcx-sidebar-item--clickable:hover {
 	background: rgba(255, 255, 255, 0.16) !important;
 }
 body[data-skin] .rcx-sidebar-item--selected {
+	background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* THE ROOM LIST IS SIDEBAR V2, NOT V1. The two .rcx-sidebar-item rules above are
+   the v1 names and match nothing in this fork — Sidebar.tsx renders Fuselage's
+   <SidebarV2/>. Every v2 child re-declares its own opaque
+   --rcx-color-surface-sidebar fill (and the sidebar palette pins that to the DARK
+   theme), which is what painted the near-black "Channels"/"Direct messages" bars
+   and the banded navy rows over the smoked root. Clear the CHILDREN ONLY: the v2
+   ROOT is the same element as .rcx-sidebar--main (Sidebar.tsx stacks both classes),
+   and putting the root in this list silently un-smoked the whole column — bare
+   bright sky where the rail's dark glass should be (founder: "too green"). */
+body[data-skin] .rcx-sidebar-v2-collapse-group__bar,
+body[data-skin] .rcx-sidebar-v2-accordion-item__bar,
+body[data-skin] .rcx-sidebar-v2-footer,
+body[data-skin] .rcx-sidebar-v2-media,
+body[data-skin] .rcx-sidebar-v2-item {
+	background: transparent !important;
+	background-color: transparent !important;
+}
+body[data-skin] .rcx-sidebar-v2-item:hover,
+body[data-skin] .rcx-sidebar-v2-item--focus {
+	background: rgba(255, 255, 255, 0.16) !important;
+}
+body[data-skin] .rcx-sidebar-v2-item--selected {
 	background: rgba(255, 255, 255, 0.12) !important;
 }
 
@@ -281,10 +358,24 @@ body[data-skin] .rcx-message {
 	border: 1px solid transparent;
 }
 body[data-skin] .rcx-message--sequential {
-	margin-top: -2px;
-	border-top-left-radius: 6px;
-	border-top-right-radius: 6px;
+	margin-top: -1px;
+	padding-top: 2px;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
 	box-shadow: none;
+}
+/* A burst of replies fuses into ONE document: the sheet above a joined row gives
+   up its gap, bottom corners and downward shadow (which would paint a dark seam
+   across the join), and the LAST sheet of the burst carries the group's drop
+   shadow — without the inset rim, which would draw a cream hairline at the join. */
+body[data-skin] .rcx-message--sequential:not(:has(+ .rcx-message--sequential)) {
+	box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.55);
+}
+body[data-skin] .rcx-message:has(+ .rcx-message--sequential) {
+	margin-bottom: 0;
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+	box-shadow: inset 0 1px 0 var(--ps-rim);
 }
 body[data-skin] .rcx-message:hover {
 	background: var(--ps-paper-bright) !important;
@@ -416,6 +507,16 @@ body[data-skin] .rcx-message-composer .rcx-box--with-inline-elements {
 body[data-skin] .rcx-message-composer textarea::placeholder {
 	color: var(--ps-on-sky-3) !important;
 }
+/* Focus is the palette's mint, not the stock blue highlight — the one cold colour
+   left on screen was the composer lighting up cornflower on every keystroke. */
+body[data-skin] .rcx-message-composer:focus-within,
+body[data-skin] .rcx-message-box:focus-within,
+body[data-skin] .rc-message-box:focus-within {
+	border-color: var(--ps-mint) !important;
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.22),
+		0 0 0 2px rgba(143, 227, 165, 0.30);
+}
 `;
 
 // ============================================================================
@@ -458,14 +559,24 @@ body[data-skin] .rcx-card a {
 	color: #116240 !important;
 }
 
-/* Page headers sit ON the sky, above the paper — so they stay white. */
+/* Page headers sit ON the sky, above the paper. NOT hard-coded white: the header
+   ink flips with the sky state (ink on the bright skies, white on night) — see the
+   --ps-header-* tokens in SHELL_CSS. .mc-sky-header is MatterChat's own hook for
+   the My Day greeting block, which is a bare Fuselage h1 that otherwise inherits
+   the DARK palette's near-white font colour and washes out on a bright sky. */
 body[data-skin] .rcx-page-header,
 body[data-skin] .rcx-page-header *,
 body[data-skin] .mc-board-header,
-body[data-skin] .mc-board-header * {
-	color: var(--ps-on-sky) !important;
-	text-shadow: var(--ps-lift);
+body[data-skin] .mc-board-header *,
+body[data-skin] .mc-sky-header,
+body[data-skin] .mc-sky-header * {
+	color: var(--ps-header-ink) !important;
+	text-shadow: var(--ps-header-lift);
 	background: transparent !important;
+}
+/* The secondary line under an on-sky heading (the date, the deadline note). */
+body[data-skin] .mc-sky-header h1 ~ * {
+	color: var(--ps-header-ink-2) !important;
 }
 
 /* Tables are dense reading — paper, with the warm rule as the grid. */
@@ -595,37 +706,55 @@ body[data-skin] .rcx-skeleton {
 	border-radius: 8px;
 }
 
-/* Empty states sit on the sky and stay white; the sky is doing the work. */
+/* Empty states sit on the sky; their ink flips with the sky state like headers. */
 body[data-skin] .rcx-states,
 body[data-skin] .rcx-states * {
-	color: var(--ps-on-sky) !important;
-	text-shadow: var(--ps-lift);
+	color: var(--ps-header-ink) !important;
+	text-shadow: var(--ps-header-lift);
 	background: transparent !important;
 }
 
 /* Buttons. Primary is a solid white slab with a deep-tone label — the one thing on
-   screen that is not glass, paper or sky, which is what makes it read as the action. */
+   screen that is not glass, paper or sky, which is what makes it read as the action.
+
+   EVERY OTHER VARIANT — including the DEFAULT <Button> with no prop, which is what
+   "New lead" is — gets clear glass. The default variant was the gap that left black
+   dark-palette slabs sitting beside the white primary. The background here carries
+   !important because the dark palette's own button fill is what it must beat; the
+   bare \${CLEAR} background silently lost that fight. */
 body[data-skin] .rcx-button--primary {
 	background: #ffffff !important;
 	color: #0A2216 !important;
 	border-color: #ffffff !important;
 }
-body[data-skin] .rcx-button--secondary,
-body[data-skin] .rcx-button--ghost {
-	${CLEAR}
-	border-style: solid;
-	border-width: 1px;
+body[data-skin] .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger) {
+	${SMOKED}
+	background: rgba(0, 0, 0, 0.52) !important;
+	background-color: rgba(0, 0, 0, 0.52) !important;
+	border: 1px solid rgba(255, 255, 255, 0.28) !important;
 	color: var(--ps-on-sky) !important;
 }
-/* On paper, a ghost button must switch to ink or it disappears into the sheet. */
-body[data-skin] .rcx-tile .rcx-button--ghost,
-body[data-skin] .rcx-modal .rcx-button--ghost,
-body[data-skin] .mc-card .rcx-button--ghost {
+body[data-skin] .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger):hover {
+	background: rgba(0, 0, 0, 0.62) !important;
+}
+/* ON PAPER the same variants must switch to ink-on-cream or they vanish into the
+   sheet (glass) or blind it (white slab). Primary on paper becomes the accent —
+   a white slab on cream is no longer "the action", it is a hole. */
+body[data-skin] .rcx-tile .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger),
+body[data-skin] .rcx-modal .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger),
+body[data-skin] .mc-card .rcx-button:not(.rcx-button--primary):not(.rcx-button--danger) {
 	background: transparent !important;
 	-webkit-backdrop-filter: none;
 	backdrop-filter: none;
 	color: var(--ps-ink-quiet) !important;
 	border-color: var(--ps-hairline) !important;
+}
+body[data-skin] .rcx-tile .rcx-button--primary,
+body[data-skin] .rcx-modal .rcx-button--primary,
+body[data-skin] .mc-card .rcx-button--primary {
+	background: #17804D !important;
+	color: #ffffff !important;
+	border-color: #17804D !important;
 }
 body[data-skin] .rcx-button--danger {
 	background: #CF4438 !important;

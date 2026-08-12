@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
-import { useUserId } from '@rocket.chat/ui-contexts';
+import { SKINS } from '@rocket.chat/ui-client';
+import { useUserId, useUserPreference } from '@rocket.chat/ui-contexts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -10,6 +11,33 @@ import { insertIntoComposer, sendChiReply } from './chiNotifications';
 import { installDesktopFocusBridge } from './focusBridge';
 import { loadOmnisWidget, omnisWidgetSrc, OMNIS_WIDGET_ASSET_BASE } from './loadOmnisWidget';
 import { roomCoordinator } from '../../lib/rooms/roomCoordinator';
+import { SKY } from '../../views/root/MainLayout/PaperSkyStyleTags';
+
+/** The orb's "Workspace theme" tab — labels for the pickable main-UI themes. The skins carry
+ * their real sky ramps as swatches so the picker previews the actual gradients, and the flat
+ * schemes render as chips. Keys are exactly what `themeAppearence` stores. */
+const UI_THEME_SWATCH = ([a, b, c, d]: readonly [string, string, string, string]): string =>
+	`linear-gradient(180deg, ${a} 0%, ${b} 38%, ${c} 74%, ${d} 100%)`;
+const UI_SKIN_LABELS: Record<string, string> = {
+	'paper-sky': 'Green',
+	'paper-sky-blue': 'Blue',
+	'paper-sky-indigo': 'Indigo',
+	'paper-sky-amber': 'Amber',
+	'paper-sky-rose': 'Rose',
+	'paper-sky-graphite': 'Graphite',
+};
+const UI_THEMES = [
+	{ key: 'auto', label: 'Auto', group: 'Appearance' },
+	{ key: 'light', label: 'Light', group: 'Appearance' },
+	{ key: 'dark', label: 'Dark', group: 'Appearance' },
+	{ key: 'high-contrast', label: 'High contrast', group: 'Appearance' },
+	...SKINS.map((skin) => ({
+		key: skin as string,
+		label: UI_SKIN_LABELS[skin] ?? skin,
+		group: 'Paper & Sky',
+		swatch: UI_THEME_SWATCH(SKY[skin].day),
+	})),
+];
 
 /**
  * Desktop (Electron) bridge exposed by MatterChat-Desktop's preload. Present only in the desktop
@@ -77,6 +105,18 @@ export const ChiOrbMount = (): ReactElement => {
 	const orbElRef = useRef<HTMLElement | null>(null);
 	// last-known server prefs — merged before every write so partial toggles never wipe the rest
 	const prefsRef = useRef<{ model?: string; connectors?: Record<string, boolean> }>({});
+	// The main-UI theme preference, mirrored onto the orb's "Workspace theme" tab. The ref keeps
+	// the mount effect (deps []) reading the live value; the effect below pushes changes made
+	// ELSEWHERE (account Appearance page, another tab) into an already-mounted orb.
+	const themePref = useUserPreference<string>('themeAppearence') || 'auto';
+	const themePrefRef = useRef(themePref);
+	useEffect(() => {
+		themePrefRef.current = themePref;
+		const orb = orbElRef.current as (HTMLElement & { uiThemeCurrent?: string }) | null;
+		if (orb && orb.uiThemeCurrent !== themePref) {
+			orb.uiThemeCurrent = themePref;
+		}
+	}, [themePref]);
 	const pipWinRef = useRef<Window | null>(null);
 	// Initialize from shared localStorage so a remount/reload while Chi is already popped out never mounts
 	// a duplicate orb. On desktop we ALSO default to popped-out (unless the user docked it) so the in-app
@@ -369,6 +409,20 @@ export const ChiOrbMount = (): ReactElement => {
 				}
 				prefsRef.current = next;
 				void (sdk.rest.post as (e: string, p: unknown) => Promise<unknown>)('/v1/chi.prefs', next).catch(() => undefined);
+			}) as EventListener);
+			// WORKSPACE THEME TAB — the orb's settings gain a host-driven "Workspace theme" panel
+			// (the orb's own color editor, but for the MAIN UI). The widget renders exactly what we
+			// feed it and echoes picks back as `chi-ui-theme`; persistence is the SAME preference
+			// the account Appearance page writes, so the two surfaces can never disagree.
+			(el as HTMLElement & { uiThemes?: unknown }).uiThemes = UI_THEMES;
+			(el as HTMLElement & { uiThemeCurrent?: string }).uiThemeCurrent = themePrefRef.current;
+			el.addEventListener('chi-ui-theme', ((ev: Event): void => {
+				const key = (ev as CustomEvent<{ key?: string }>).detail?.key;
+				if (key) {
+					void (sdk.rest.post as (e: string, p: unknown) => Promise<unknown>)('/v1/users.setPreferences', {
+						data: { themeAppearence: key },
+					}).catch(() => undefined);
+				}
 			}) as EventListener);
 			// Flow dictation → the room composer (clipboard is the orb's own fallback).
 			el.addEventListener('chi-flow-insert', ((ev: Event): void => {

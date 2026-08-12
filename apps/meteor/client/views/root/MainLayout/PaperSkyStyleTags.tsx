@@ -49,7 +49,7 @@ import { CHAT_CSS, OVERLAYS_CSS, SHELL_CSS, SURFACES_CSS } from './paperSkyCss';
 
 type SkyState = 'morning' | 'day' | 'dusk' | 'night';
 
-const SKY: Record<Skins, Record<SkyState, [string, string, string, string]>> = {
+export const SKY: Record<Skins, Record<SkyState, [string, string, string, string]>> = {
 	'paper-sky': {
 		morning: ['#7AD397', '#2FA55E', '#14813F', '#0A5029'],
 		day: ['#5FC182', '#1E9350', '#0B6E33', '#07411F'],
@@ -157,6 +157,18 @@ export const PaperSkyStyleTags = () => {
 		document.body.setAttribute('data-skin', skin);
 		return () => document.body.removeAttribute('data-skin');
 	}, [skin]);
+
+	// The sky state is also a CSS hook: text that sits DIRECTLY on the sky (page
+	// headings, empty states) cannot be one colour — white washes out on the two
+	// bright states and ink drowns on night. `data-sky` lets the stylesheet flip
+	// `--ps-header-ink` per state instead of hard-coding white.
+	useEffect(() => {
+		if (!skin) {
+			return;
+		}
+		document.body.setAttribute('data-sky', state);
+		return () => document.body.removeAttribute('data-sky');
+	}, [skin, state]);
 
 	useEffect(() => setRoot(document.getElementById('react-root')), []);
 
