@@ -295,3 +295,33 @@ Each stage is independently shippable. An unfinished theme is safe — nobody is
 - Glass renders in Safari and in the Electron shell (the prefix check)
 - Modals, menus and toasts still render above everything, in the theme
 - Scroll and idle frame cost measured and recorded here before Stage 2 begins
+
+---
+
+## 2026-08-12 — the visual-perfection pass (PR #191)
+
+The founder called the first staging cut "disjointed". Every cause below was found and
+re-verified against a LIVE DOM (local dev + staging), not the source. Keep these five on
+any future skin work:
+
+| Symptom on staging | Root cause | Rule to remember |
+|---|---|---|
+| Empty sky band across the top; search "missing" | The sky layers were `z-index: 0` and **positioned** — they paint above STATIC siblings, and the NavBar is a static sibling of `#rocket-chat`, not a child. `pointer-events:none` kept it clickable while invisible. | The sky is `z-index: -1` and `#react-root` is `isolation: isolate`. Never raise the sky back to 0. |
+| Room list "too green" (bare sky), then earlier: black section bars | The fork renders **SidebarV2**; v1 `.rcx-sidebar-item` selectors match nothing. And the v2 root carries `.rcx-sidebar--main` on the SAME element — clearing the root strips the smoked glass. | Clear v2 CHILDREN (`collapse-group__bar`, `item`, `footer`, `media`) only; the root stays smoked. |
+| Conversation area = opaque charcoal slab | `RoomLayout`'s Box is `bg='room'` — an unstable emotion hash resolving to the dark palette. | Stable hook `mc-room-layout` added in the fork. The room header needs BOTH spellings: `.rcx-room-header` and `[rcx-room-header]`. |
+| "New lead"/"Add" as black slabs | The DEFAULT `<Button>` variant was never themed, and material backgrounds without `!important` lose to the dark palette (a skin resolves `theme='dark'` underneath). | Non-primary buttons are smoked chips; on paper they flip to ink outline; primary-on-paper is the accent green. |
+| Greeting/date washed out | On-sky text was single-colour white; the morning stop #7AD397 gives ~1.9:1. | `data-sky` on `<body>` + `--ps-header-ink`: ink on morning/day/dusk, white on night. All on-sky text reads the token, never a literal. |
+
+Also in the pass: sequential messages fuse into one sheet (the last row of a burst carries
+the drop shadow); composer focus ring is the palette mint; the word clock takes the mint
+accent under the skin.
+
+## The orb "Workspace theme" tab (same PR)
+
+The Chi orb settings gained a `workspace` panel that themes the MAIN UI — the orb's
+color-editor pattern applied to the app. Product-agnostic contract: the host sets
+`el.uiThemes` (`{key, label, group, swatch?}` — swatch groups render as a gradient grid)
+and `el.uiThemeCurrent`; the widget emits `chi-ui-theme` on pick. MatterChat's mount feeds
+the six tints with their real sky ramps and persists through `users.setPreferences`
+(`themeAppearence`) — the same preference the account Appearance page writes, so the two
+surfaces can never disagree. Bundle is v15 (`OMNIS_WIDGET_VERSION`).
