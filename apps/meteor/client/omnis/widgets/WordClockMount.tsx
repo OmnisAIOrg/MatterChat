@@ -21,9 +21,15 @@ export const WordClockMount = (): ReactElement => {
 			}
 			el = document.createElement('word-clock-widget');
 			el.setAttribute('format', '12');
-			// Under a Paper & Sky skin the clock keeps its night-stand face but takes the
-			// palette's mint accent; the stock amber is the one yellow on an all-green screen.
-			el.setAttribute('accent', document.body.hasAttribute('data-skin') ? '#8FE3A5' : '#ffd60a');
+			// Under a Paper & Sky skin the clock joins the palette: mint accent (the stock
+			// amber is the one yellow on an all-green screen) and a deep-green face — the
+			// night-stand black read as the last neutral-grey slab on the sky.
+			if (document.body.hasAttribute('data-skin')) {
+				el.setAttribute('accent', '#8FE3A5');
+				el.setAttribute('face', '#0B2417');
+			} else {
+				el.setAttribute('accent', '#ffd60a');
+			}
 			el.setAttribute('word-seconds', '9');
 			el.setAttribute('clock-seconds', '5');
 			el.words = omnisWordsForToday();

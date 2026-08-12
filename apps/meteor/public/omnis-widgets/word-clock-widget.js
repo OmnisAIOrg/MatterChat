@@ -73,6 +73,10 @@ class WordClockWidget extends HTMLElement {
   }
   _render() {
     const accent = this.getAttribute('accent') || '#ffd60a';
+    // face: the expanded card's ground. Hosts with a themed shell (MatterChat's
+    // Paper & Sky) pass a tinted deep colour so the clock never reads as a
+    // neutral-grey slab on their surface; default stays the night-stand black.
+    const face = this.getAttribute('face') || '#101014';
     const wp = this.getAttribute('wallpaper');
     const { t, ampm, d } = this._time();
     const w = this._words[this._idx];
@@ -80,7 +84,7 @@ class WordClockWidget extends HTMLElement {
       :host { display:block; font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; }
       * { box-sizing:border-box; }
       .expanded { position:relative; height:400px; border-radius:22px; overflow:hidden;
-        background:#101014 ${wp ? "url('" + wp + "') center/cover" : ''};
+        background:${face} ${wp ? "url('" + wp + "') center/cover" : ''};
         box-shadow:0 18px 44px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.10); }
       .scrim { position:absolute; inset:0; pointer-events:none;
         background:linear-gradient(180deg, rgba(8,9,12,.55) 0%, rgba(8,9,12,.10) 34%, rgba(8,9,12,.15) 62%, rgba(8,9,12,0) 100%); }
