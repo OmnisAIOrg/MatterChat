@@ -85,3 +85,23 @@ export const useSkin = (): Skins | undefined => {
 	const themeMode = useUserPreference<ThemeMode>('themeAppearence') || 'auto';
 	return isSkin(themeMode) ? themeMode : undefined;
 };
+
+/**
+ * MATTERCHAT — light/dark for SURFACE tokens, as opposed to for Fuselage.
+ *
+ * Use this anywhere a component picks between a light and a dark token set for
+ * things it paints itself (`theme === 'dark' ? DARK : LIGHT`). A Paper & Sky skin
+ * reports `dark` to `useThemeMode`, because Fuselage's `Themes` union cannot hold a
+ * skin — but Paper & Sky's surfaces are warm PAPER, not dark. Branching on the raw
+ * theme therefore renders charcoal cards on the green sky, which is precisely how
+ * the Matters, Reports and Caseload screens ended up looking untouched by the theme
+ * while being, technically, entirely correct.
+ *
+ * Rule of thumb: `useThemeMode` for anything handed to Fuselage; `useSurfaceMode`
+ * for anything you colour yourself.
+ */
+export const useSurfaceMode = (): Themes => {
+	const [, , theme] = useThemeMode();
+	const skin = useSkin();
+	return skin ? 'light' : theme;
+};

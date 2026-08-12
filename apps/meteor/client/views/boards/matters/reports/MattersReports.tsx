@@ -1,6 +1,6 @@
 import { Box, Button, Callout, Icon, Throbber } from '@rocket.chat/fuselage';
 import type { AgingReportDTO, FinancialReportDTO } from '@rocket.chat/rest-typings';
-import { Page, PageHeader, PageScrollableContentWithShadow, useThemeMode } from '@rocket.chat/ui-client';
+import { Page, PageHeader, PageScrollableContentWithShadow, useSurfaceMode } from '@rocket.chat/ui-client';
 import { useEndpoint } from '@rocket.chat/ui-contexts';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
@@ -383,10 +383,9 @@ const PremiumMetric = ({
 	</div>
 );
 
-
 const FinancialPanel = (): ReactElement => {
 	const { t } = useTranslation();
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 	const tokens = getPremiumTokens(theme);
 	const getFinancial = useEndpoint('GET', '/v1/boards.matters.reports.financial');
 
@@ -436,7 +435,7 @@ const FinancialPanel = (): ReactElement => {
 			<PremiumMetric
 				label={t('Boards_Matters_Projected_Fees', { defaultValue: 'PROJECTED FEES' })}
 				value={fmtCurrency(report.projectedFees)}
-				hint={fmtPct(report.feePct) + ' effective rate'}
+				hint={`${fmtPct(report.feePct)} effective rate`}
 				sparkData={sparkData}
 				tokens={tokens}
 			/>
@@ -461,7 +460,7 @@ const FinancialPanel = (): ReactElement => {
 
 const AgingPanel = (): ReactElement => {
 	const { t } = useTranslation();
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 	const tokens = getPremiumTokens(theme);
 	const getAging = useEndpoint('GET', '/v1/boards.matters.reports.aging');
 
@@ -572,7 +571,7 @@ const AgingPanel = (): ReactElement => {
 const MattersReports = (): ReactElement => {
 	const { t } = useTranslation();
 	const tones = useLedgerTones();
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 	const tokens = getPremiumTokens(theme);
 
 	return (
@@ -599,8 +598,22 @@ const MattersReports = (): ReactElement => {
 							{t('Boards_Matters_Reports', { defaultValue: 'Reports' })}
 						</Box>
 						<span style={{ flex: 1 }} />
-						<div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: tokens.ink2, padding: '4px 10px', borderRadius: 99, border: `1px solid ${tokens.border}`, background: tokens.surface }}>
-							<span style={{ width: 7, height: 7, borderRadius: 99, background: tokens.green, animation: 'pulse 2.6s ease-out infinite' }} />
+						<div
+							style={{
+								display: 'inline-flex',
+								alignItems: 'center',
+								gap: 6,
+								fontSize: 12,
+								color: tokens.ink2,
+								padding: '4px 10px',
+								borderRadius: 99,
+								border: `1px solid ${tokens.border}`,
+								background: tokens.surface,
+							}}
+						>
+							<span
+								style={{ width: 7, height: 7, borderRadius: 99, background: tokens.green, animation: 'pulse 2.6s ease-out infinite' }}
+							/>
 							CasePro synced
 						</div>
 						<button

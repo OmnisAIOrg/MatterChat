@@ -99,6 +99,14 @@ body[data-skin] {
 body[data-skin] {
 	background: #080D0A !important;
 }
+/* The backdrop OUTSIDE the rounded window. Variant B paints <html> #0C0F14, a
+   blue-black, and a rule scoped to body can never reach <html> — so the 8px rim
+   around the window stayed the old colour and read as a mismatched frame. Verified
+   in the DOM: html computed rgb(12,15,20) while the window was rgb(8,13,10).
+   The :has() form is already used for this exact purpose in depthSkin.ts. */
+html:has(body[data-skin]) {
+	background: #080D0A !important;
+}
 body[data-skin] #react-root {
 	inset: 0 !important;
 	border-radius: var(--ps-radius) !important;
@@ -130,16 +138,25 @@ body[data-skin] .ps-sky[data-on='true'] {
 }
 
 /* Clear the ground so the sky is visible through the app.
-   .rcx-page is here because MatterChat's own screens set an inline page
-   background — without it the home dashboard paints an opaque sheet over the sky
-   and the theme looks like it did nothing but tint the sidebar. */
+
+   main#main-content > section is THE one that mattered, and it was found by
+   reading the live DOM rather than the source. It is a Fuselage Box whose inline
+   style is already background-color: var(--mc-ledger-paper, #FAF7EE) — so the
+   ledger seam SHOULD have handled it, and the variable did resolve to
+   transparent on that element. It still computed rgb(31,35,41), a 1114x939 grey
+   slab over the whole main area. That grey was what made three rounds of fixes
+   look like nothing had happened.
+
+   .rcx-page is here for the same reason on MatterChat's own screens, which set an
+   inline page background. */
 body[data-skin] #rocket-chat,
 body[data-skin] .rcx-content--main,
 body[data-skin] .rcx-sidebar,
 body[data-skin] .rcx-sidebar--main > *,
 body[data-skin] .rcx-page,
 body[data-skin] .rcx-page-content,
-body[data-skin] main {
+body[data-skin] main,
+body[data-skin] main#main-content > section {
 	background: transparent !important;
 	background-color: transparent !important;
 }
@@ -419,9 +436,26 @@ body[data-skin] .rcx-card {
 	border-color: var(--ps-hairline) !important;
 	box-shadow: var(--ps-card-shadow);
 }
+/* INK MUST REACH DESCENDANTS, NOT JUST THE CONTAINER.
+   Setting color on the card alone is not enough: Fuselage's dark palette assigns
+   colours to the elements INSIDE, and those win over an inherited value. Measured
+   in the browser, that left white text on cream paper at 1.09:1 — invisible, not
+   merely low — across the search results, tiles and modals. The container rule
+   read as correct in the source the whole time. */
+body[data-skin] .rcx-tile,
 body[data-skin] .rcx-tile *,
-body[data-skin] .mc-card * {
+body[data-skin] .mc-card,
+body[data-skin] .mc-card *,
+body[data-skin] .rcx-card,
+body[data-skin] .rcx-card * {
+	color: var(--ps-ink) !important;
 	border-color: var(--ps-hairline);
+}
+/* Links keep the accent, or every link on paper reads as body copy. */
+body[data-skin] .rcx-tile a,
+body[data-skin] .mc-card a,
+body[data-skin] .rcx-card a {
+	color: #116240 !important;
 }
 
 /* Page headers sit ON the sky, above the paper — so they stay white. */
@@ -512,9 +546,14 @@ body[data-skin] .rcx-modal {
 	border-radius: 18px;
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 24px 60px -12px rgba(0, 0, 0, 0.55);
 }
+/* Same reason as the tiles: the container rule alone loses to Fuselage's per-element
+   dark-palette colours, leaving white-on-cream inside modals. */
 body[data-skin] .rcx-modal *,
 body[data-skin] .rcx-modal-title {
-	color: var(--ps-ink);
+	color: var(--ps-ink) !important;
+}
+body[data-skin] .rcx-modal a {
+	color: #116240 !important;
 }
 body[data-skin] .rcx-modal-backdrop {
 	background: rgba(6, 20, 12, 0.55) !important;

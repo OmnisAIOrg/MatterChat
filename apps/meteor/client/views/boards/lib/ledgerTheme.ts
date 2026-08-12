@@ -1,4 +1,4 @@
-import { useThemeMode } from '@rocket.chat/ui-client';
+import { useSkin, useThemeMode } from '@rocket.chat/ui-client';
 import type { CSSProperties } from 'react';
 
 import { HEAT_DARK, HEAT_LIGHT, HEAT_SOFT_DARK, HEAT_SOFT_LIGHT } from './heatScale';
@@ -87,9 +87,28 @@ export const DARK_LEDGER: LedgerTones = {
 	todayTint: '#24352A',
 };
 
-/** Resolve the active ledger tones from the user's theme (dark stays calm dark; high-contrast → paper). */
+/**
+ * Resolve the active ledger tones from the user's theme (dark stays calm dark;
+ * high-contrast → paper).
+ *
+ * MATTERCHAT — Paper & Sky also resolves to paper, and this single line is what
+ * carries the theme across EVERY depth screen: Caseload, Reports, Matters,
+ * Calendars, Table, Timeline, Gantt, Dashboard, Planner and Inbox.
+ *
+ * It matters because a skin deliberately reports `dark` to Fuselage (its own
+ * Themes union has no room for a skin), so without the check these screens all
+ * correctly picked DARK_LEDGER and rendered charcoal cards on the green sky —
+ * exactly the "this is supposed to be warm paper" screens. The fix belongs here
+ * rather than in CSS: overriding a dozen bespoke class names
+ * (`.stat-card`, `.mc-matters-column`, …) would be whack-a-mole against screens
+ * that already resolve their colours correctly from this one hook.
+ */
 export const useLedgerTones = (): LedgerTones => {
 	const [, , theme] = useThemeMode();
+	const skin = useSkin();
+	if (skin) {
+		return LIGHT_LEDGER;
+	}
 	return theme === 'dark' ? DARK_LEDGER : LIGHT_LEDGER;
 };
 

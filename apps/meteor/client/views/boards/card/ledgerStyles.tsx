@@ -1,5 +1,5 @@
 import { Box } from '@rocket.chat/fuselage';
-import { useThemeMode } from '@rocket.chat/ui-client';
+import { useSurfaceMode } from '@rocket.chat/ui-client';
 import type { CSSProperties, ReactElement } from 'react';
 
 import { HEAT_DARK, HEAT_LIGHT } from '../lib/heatScale';
@@ -72,7 +72,7 @@ const HIGH_CONTRAST_TONE: LedgerTone = {
 
 /** Theme-following ledger tone (light / dark; high-contrast ≈ stock surfaces). */
 export const useLedgerTone = (): LedgerTone => {
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 	if (theme === 'dark') {
 		return DARK_TONE;
 	}

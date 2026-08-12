@@ -1,4 +1,4 @@
-import { useThemeMode } from '@rocket.chat/ui-client';
+import { useSurfaceMode } from '@rocket.chat/ui-client';
 import type { ReactElement } from 'react';
 import { useMemo } from 'react';
 
@@ -10,7 +10,7 @@ import { MOBILE_PWA_PALETTE_DARK, MOBILE_PWA_PALETTE_LIGHT } from './mobilePwaSt
  * Bottom tab bar for navigation.
  */
 const PwaMobileHome = ({ onNavigate }: { onNavigate: (screen: string) => void }): ReactElement => {
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 	const isDark = theme === 'dark';
 	const p = isDark ? MOBILE_PWA_PALETTE_DARK : MOBILE_PWA_PALETTE_LIGHT;
 
