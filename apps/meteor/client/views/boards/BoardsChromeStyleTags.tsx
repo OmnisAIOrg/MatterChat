@@ -1,4 +1,4 @@
-import { useThemeMode } from '@rocket.chat/ui-client';
+import { useSurfaceMode } from '@rocket.chat/ui-client';
 
 import { HEAT_DARK, HEAT_LIGHT } from './lib/heatScale';
 
@@ -209,7 +209,7 @@ const buildBoardsChromeCss = (t: BoardsChromeTokens): string => `
  * MainLayoutStyleTags' frame/ledger tags.
  */
 const BoardsChromeStyleTags = () => {
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 
 	// Brand light + dark; leave high-contrast (a11y) entirely stock.
 	if (theme !== 'light' && theme !== 'dark') {

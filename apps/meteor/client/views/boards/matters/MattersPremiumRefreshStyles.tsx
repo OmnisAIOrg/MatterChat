@@ -1,4 +1,4 @@
-import { useThemeMode } from '@rocket.chat/ui-client';
+import { useSurfaceMode } from '@rocket.chat/ui-client';
 
 /**
  * ============================================================================
@@ -496,7 +496,7 @@ const buildMattersBoardCss = (t: PremiumTokens): string => `
 `;
 
 const MattersPremiumRefreshStyles = () => {
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 
 	// Only apply to branded light/dark themes, not high-contrast
 	if (theme !== 'light' && theme !== 'dark') {

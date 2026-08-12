@@ -1,7 +1,7 @@
 import type { IBoardDeadline, Serialized } from '@rocket.chat/core-typings';
 import { Box, States, StatesIcon, StatesTitle, StatesSubtitle, Throbber, Button, Icon } from '@rocket.chat/fuselage';
-import { Page, PageHeader, PageScrollableContentWithShadow } from '@rocket.chat/ui-client';
-import { useEndpoint, useRouter, useToastMessageDispatch, useThemeMode } from '@rocket.chat/ui-contexts';
+import { Page, PageHeader, PageScrollableContentWithShadow, useSurfaceMode } from '@rocket.chat/ui-client';
+import { useEndpoint, useRouter, useToastMessageDispatch } from '@rocket.chat/ui-contexts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { useMemo } from 'react';
@@ -314,7 +314,7 @@ const DeadlineCard = ({
 
 const DeadlinesView = (): ReactElement => {
 	const { t } = useTranslation();
-	const [, , theme] = useThemeMode();
+	const theme = useSurfaceMode();
 	const isDark = theme === 'dark';
 	const router = useRouter();
 	const queryClient = useQueryClient();
@@ -373,10 +373,13 @@ const DeadlinesView = (): ReactElement => {
 	const isError = boardQuery.isError || deadlinesQuery.isError;
 
 	const atRisk = useMemo(
-		() => deadlines.filter((d) => d.highRisk ?? HIGH_RISK_KINDS.includes(d.kind)).filter((d) => {
-			const days = daysUntil(d.dueDate);
-			return (days !== undefined && days < 30) || (days === undefined && !RESOLVED_STATUSES.includes(d.status));
-		}).length,
+		() =>
+			deadlines
+				.filter((d) => d.highRisk ?? HIGH_RISK_KINDS.includes(d.kind))
+				.filter((d) => {
+					const days = daysUntil(d.dueDate);
+					return (days !== undefined && days < 30) || (days === undefined && !RESOLVED_STATUSES.includes(d.status));
+				}).length,
 		[deadlines],
 	);
 
