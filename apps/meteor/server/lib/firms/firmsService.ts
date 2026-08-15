@@ -1,11 +1,20 @@
 import { Team } from '@rocket.chat/core-services';
 import type { IUser, IRoom, ITeam } from '@rocket.chat/core-typings';
 import { TeamType } from '@rocket.chat/core-typings';
-import { Rooms, Users } from '@rocket.chat/models';
+import { Invites, Rooms, Users } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
-import { FIRM_NAME_MAX, FIRM_NAME_MIN, MAX_INVITES_PER_CALL, normalizeFirmName, partitionEmails, slugifyFirmName } from './firmsHelpers';
+import {
+	FIRM_NAME_MAX,
+	FIRM_NAME_MIN,
+	MAX_INVITES_PER_CALL,
+	normalizeFirmName,
+	partitionEmails,
+	resolveFirmInviteUrl,
+	slugifyFirmName,
+	validateInviteOptions,
+} from './firmsHelpers';
 import type { ChannelSpec } from './firmTemplates';
 import { normalizePracticeAreas, resolveChannelPlan } from './firmTemplates';
 import { createRoom } from '../rooms/createRoom';
@@ -13,7 +22,15 @@ import { findOrCreateInvite } from '../rooms/invites/findOrCreateInvite';
 import * as Mailer from '../notifications/email/api';
 import { settings } from '../../settings';
 
-export { normalizeFirmName, slugifyFirmName, partitionEmails, userMatchesFirmScope } from './firmsHelpers';
+export {
+	normalizeFirmName,
+	slugifyFirmName,
+	partitionEmails,
+	userMatchesFirmScope,
+	validateInviteOptions,
+	INVITE_POSSIBLE_DAYS,
+	INVITE_POSSIBLE_USES,
+} from './firmsHelpers';
 
 /**
  * MATTERCHAT: Self-serve firms.
@@ -338,18 +355,52 @@ export const adoptUserIntoFirm = async (userId: string, teamId: string, firmName
 	}
 };
 
-export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ sent: string[]; invalid: string[]; inviteUrl: string }> => {
+/**
+ * Resolve the caller's firm and assert they may administer its invite links:
+ * the firm owner, or a workspace admin. Shared by invite create / list / revoke
+ * so the three cannot drift apart.
+ */
+const requireFirmInviteAdmin = async (userId: string, method: string): Promise<{ user: IUser; firm: FirmInfo }> => {
 	if (!isSelfServeFirmsEnabled()) {
-		throw new Meteor.Error('error-not-allowed', 'Self-serve firms are disabled', { method: 'firms.invite' });
+		throw new Meteor.Error('error-not-allowed', 'Self-serve firms are disabled', { method });
 	}
 	const user = await getUserOrThrow(userId);
 	const firm = await getFirmForUser(user);
 	if (!firm) {
-		throw new Meteor.Error('error-no-firm', 'You are not in a firm yet', { method: 'firms.invite' });
+		throw new Meteor.Error('error-no-firm', 'You are not in a firm yet', { method });
 	}
 	if (!firm.isOwner && !user.roles?.includes('admin')) {
-		throw new Meteor.Error('error-not-allowed', 'Only the firm owner can invite teammates', { method: 'firms.invite' });
+		throw new Meteor.Error('error-not-allowed', 'Only the firm owner can manage firm invites', { method });
 	}
+	return { user, firm };
+};
+
+export type InviteToFirmOptions = {
+	/** Days until the link expires. Must be one of INVITE_POSSIBLE_DAYS; 0 = never. */
+	days?: unknown;
+	/** How many times it may be redeemed. Must be one of INVITE_POSSIBLE_USES; 0 = unlimited. */
+	maxUses?: unknown;
+};
+
+export const inviteToFirm = async (
+	userId: string,
+	emails: unknown,
+	options: InviteToFirmOptions = {},
+): Promise<{ sent: string[]; invalid: string[]; inviteUrl: string; inviteId: string; days: number; maxUses: number }> => {
+	const { user, firm } = await requireFirmInviteAdmin(userId, 'firms.invite');
+
+	// Rejected outright rather than clamped to the nearest legal value: an
+	// invite link's lifetime and use count are exactly the sort of thing a
+	// caller must not be silently given more of than it asked for.
+	const inviteOptions = validateInviteOptions(options.days, options.maxUses);
+	if (!inviteOptions.ok) {
+		throw new Meteor.Error(
+			inviteOptions.field === 'days' ? 'error-invalid-invite-days' : 'error-invalid-invite-max-uses',
+			`Invalid ${inviteOptions.field}: must be one of ${inviteOptions.allowed.join(', ')}`,
+			{ method: 'firms.invite', field: inviteOptions.field },
+		);
+	}
+	const { days, maxUses } = inviteOptions;
 
 	const { valid, invalid } = partitionEmails(emails, Mailer.checkAddressFormat);
 	if (valid.length === 0) {
@@ -359,25 +410,29 @@ export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ s
 		throw new Meteor.Error('error-too-many-invites', `At most ${MAX_INVITES_PER_CALL} invites per request`, { method: 'firms.invite' });
 	}
 
-	// A 15-day, unlimited-use invite link into the firm team's main channel.
-	// Redeeming it registers the account, joins the team room, and (because the
-	// room is customFields.firmTeam) adopts the user into the firm.
-	const invite = await findOrCreateInvite(userId, { rid: firm.roomId, days: 15, maxUses: 0 });
+	// An invite link into the firm team's main channel. Redeeming it registers
+	// the account, joins the team room, and (because the room is
+	// customFields.firmTeam) adopts the user into the firm.
+	const invite = await findOrCreateInvite(userId, { rid: firm.roomId, days, maxUses });
 	if (!invite) {
 		throw new Meteor.Error('error-invite-failed', 'Could not create the firm invite link', { method: 'firms.invite' });
 	}
-	const siteUrl = settings.get<string>('Site_Url')?.replace(/\/+$/, '') ?? '';
-	const inviteUrl = `${siteUrl}/invite/${invite._id}`;
+	// `findOrCreateInvite` already stamps the canonical URL from its own
+	// getInviteUrl() (which honours Accounts_Registration_InviteUrlType and
+	// DeepLink_Url), so we use that instead of hand-building one — with the
+	// stock-rocket.chat-proxy fallback explained in resolveFirmInviteUrl.
+	const inviteUrl = resolveFirmInviteUrl(invite.url, settings.get<string>('Site_Url'), invite._id);
 
 	const fromEmail = settings.get<string>('From_Email');
 	const siteName = settings.get<string>('Site_Name') || 'MatterChat';
 	const inviterName = user.name || user.username || 'A teammate';
 	const subject = `${inviterName} invited you to ${firm.name} on ${siteName}`;
+	const expiryLine = days > 0 ? `<p>This invitation link expires in ${days} ${days === 1 ? 'day' : 'days'}.</p>` : '';
 	const html =
 		`<p>${inviterName} invited you to join <strong>${firm.name}</strong> on ${siteName} — secure messaging built for law firms.</p>` +
 		`<p><a href="${inviteUrl}">Accept the invitation</a> to create your account and join the team.</p>` +
 		`<p>If the button doesn't work, paste this link into your browser:<br/>${inviteUrl}</p>` +
-		`<p>This invitation link expires in 15 days.</p>`;
+		`${expiryLine}`;
 
 	const sent: string[] = [];
 	for (const email of valid) {
@@ -390,7 +445,76 @@ export const inviteToFirm = async (userId: string, emails: unknown): Promise<{ s
 		}
 	}
 
-	return { sent, invalid, inviteUrl };
+	return { sent, invalid, inviteUrl, inviteId: invite._id, days, maxUses };
+};
+
+export type FirmInviteDTO = {
+	_id: string;
+	url: string;
+	days: number;
+	maxUses: number;
+	uses: number;
+	createdAt: string;
+	expires: string | null;
+	createdBy: string;
+};
+
+/**
+ * The firm's live invite links.
+ *
+ * Scoped to the firm's team main room — that is the only room firm invites are
+ * ever created against — and filtered to links that can still be redeemed, so
+ * the list answers "who can walk in right now", which is the question an owner
+ * revoking a link is actually asking. Expired and exhausted links are omitted
+ * rather than shown as inert clutter.
+ */
+export const listFirmInvites = async (userId: string): Promise<FirmInviteDTO[]> => {
+	const { firm } = await requireFirmInviteAdmin(userId, 'firms.invites.list');
+
+	const now = new Date();
+	const invites = await Invites.find(
+		{
+			rid: firm.roomId,
+			$and: [
+				{ $or: [{ expires: null }, { expires: { $exists: false } }, { expires: { $gt: now } }] },
+				{ $or: [{ maxUses: 0 }, { $expr: { $lt: ['$uses', '$maxUses'] } }] },
+			],
+		},
+		{ sort: { createdAt: -1 } },
+	).toArray();
+
+	const siteUrl = settings.get<string>('Site_Url');
+	return invites.map((invite) => ({
+		_id: invite._id,
+		url: resolveFirmInviteUrl(invite.url, siteUrl, invite._id),
+		days: invite.days,
+		maxUses: invite.maxUses,
+		uses: invite.uses,
+		createdAt: invite.createdAt instanceof Date ? invite.createdAt.toISOString() : String(invite.createdAt),
+		expires: invite.expires instanceof Date ? invite.expires.toISOString() : null,
+		createdBy: invite.userId,
+	}));
+};
+
+/**
+ * Revoke an invite link — delete the invite document, so the token stops
+ * resolving (validateInviteToken 404s) and anyone holding the link is out.
+ *
+ * The delete is scoped by `rid` to the firm's own team room, so an id belonging
+ * to another firm's (or any other) invite is a not-found, never a cross-firm
+ * delete. Note this only closes the door: people who already redeemed the link
+ * remain members, which is the correct and expected behaviour.
+ */
+export const revokeFirmInvite = async (userId: string, rawInviteId: unknown): Promise<{ revoked: boolean }> => {
+	const { firm } = await requireFirmInviteAdmin(userId, 'firms.invites.revoke');
+	if (typeof rawInviteId !== 'string' || !rawInviteId.trim()) {
+		throw new Meteor.Error('error-invalid-params', 'An invite id is required', { method: 'firms.invites.revoke' });
+	}
+	const result = await Invites.deleteOne({ _id: rawInviteId.trim(), rid: firm.roomId });
+	if (!result.deletedCount) {
+		throw new Meteor.Error('error-invite-not-found', 'No such invite link for your firm', { method: 'firms.invites.revoke' });
+	}
+	return { revoked: true };
 };
 
 /**

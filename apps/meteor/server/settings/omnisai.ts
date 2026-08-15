@@ -100,4 +100,20 @@ export const createOmnisAIOAuthSettings = () =>
 			i18nLabel: 'Firms_Scoped_Directory',
 			i18nDescription: 'Firms_Scoped_Directory_Description',
 		});
+
+		// Email-domain auto-join: a firm owner claims their domain (verified by an
+		// email round-trip to an address AT that domain), and anyone signing up
+		// with a matching address joins the firm on their next login.
+		//
+		// Off by default and separate from Firms_SelfServe_Enabled on purpose: it
+		// is the only firms feature that grants private-team membership with no
+		// per-person action, so it is an explicit opt-in on top of self-serve
+		// rather than something that arrives with it.
+		await this.add('Firms_Domain_AutoJoin_Enabled', false, {
+			type: 'boolean',
+			public: true,
+			enableQuery: { _id: 'Firms_SelfServe_Enabled', value: true },
+			i18nLabel: 'Firms_Domain_AutoJoin_Enabled',
+			i18nDescription: 'Firms_Domain_AutoJoin_Enabled_Description',
+		});
 	});
