@@ -9,6 +9,7 @@ import { boardsCalendarSyncCron } from './boardsCalendarSyncCron';
 import { boardsMattersCron } from './boardsMattersCron';
 import { caseproClientSyncCron } from './caseproClientSyncCron';
 import { chiMorningBriefCron } from './chiMorningBriefCron';
+import { chiRemindersCron } from './chiRemindersCron';
 // MATTERCHAT: MIT port of the read-receipts archive job (was EE-only upstream).
 import { readReceiptsArchiveCron } from './readReceiptsArchive';
 
@@ -30,6 +31,10 @@ export const startCron = async () => {
 	// links. Gated by Chi_Morning_Brief_Enabled AND a per-user opt-in
 	// (settings.chi.morningBrief); schedule from Chi_Morning_Brief_Schedule.
 	await chiMorningBriefCron();
+	// Chi reminders: per-minute delivery of due reminders and follow-ups.
+	// Conditional ("if nobody replies") reminders re-check at delivery time and
+	// stay silent when the reply arrived.
+	await chiRemindersCron();
 	// CasePro live wire: periodic leads pull from CasePro intake (gated on
 	// CasePro_Enabled + a LIVE transport) + the boot-time misconfig warning.
 	await boardsCaseProSyncCron();
