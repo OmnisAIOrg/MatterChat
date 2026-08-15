@@ -75,6 +75,54 @@ export const createPushSettings = () =>
 			},
 		});
 		await this.section('Certificates_and_Keys', async function () {
+			// MatterChat: token-based (.p8) APNs auth for self-hosted push. Apple's current provider
+			// auth mechanism is a `.p8` ES256 key + Key ID + Team ID instead of a cert/key pair.
+			// `certificate` is the default so existing deployments keep today's behaviour, and the
+			// PUSH_APN_* env vars take precedence over these settings at read time
+			// (see server/configuration/pushNotification.ts).
+			await this.add('Push_APN_Auth_Type', 'certificate', {
+				type: 'select',
+				values: [
+					{ key: 'certificate', i18nLabel: 'Push_APN_Auth_Type_Certificate' },
+					{ key: 'token', i18nLabel: 'Push_APN_Auth_Type_Token' },
+				],
+				i18nLabel: 'Push_APN_Auth_Type',
+				i18nDescription: 'Push_APN_Auth_Type_Description',
+				alert: 'Push_Setting_Requires_Restart_Alert',
+				enableQuery: pushEnabledWithoutGateway,
+			});
+			await this.add('Push_APN_Token_Key', '', {
+				type: 'string',
+				multiline: true,
+				secret: true,
+				i18nLabel: 'Push_APN_Token_Key',
+				i18nDescription: 'Push_APN_Token_Key_Description',
+				alert: 'Push_Setting_Requires_Restart_Alert',
+				enableQuery: [...pushEnabledWithoutGateway, { _id: 'Push_APN_Auth_Type', value: 'token' }],
+			});
+			await this.add('Push_APN_Token_Key_ID', '', {
+				type: 'string',
+				secret: true,
+				i18nLabel: 'Push_APN_Token_Key_ID',
+				i18nDescription: 'Push_APN_Token_Key_ID_Description',
+				alert: 'Push_Setting_Requires_Restart_Alert',
+				enableQuery: [...pushEnabledWithoutGateway, { _id: 'Push_APN_Auth_Type', value: 'token' }],
+			});
+			await this.add('Push_APN_Team_ID', '', {
+				type: 'string',
+				secret: true,
+				i18nLabel: 'Push_APN_Team_ID',
+				i18nDescription: 'Push_APN_Team_ID_Description',
+				alert: 'Push_Setting_Requires_Restart_Alert',
+				enableQuery: [...pushEnabledWithoutGateway, { _id: 'Push_APN_Auth_Type', value: 'token' }],
+			});
+			await this.add('Push_APN_Bundle_ID', '', {
+				type: 'string',
+				i18nLabel: 'Push_APN_Bundle_ID',
+				i18nDescription: 'Push_APN_Bundle_ID_Description',
+				alert: 'Push_Setting_Requires_Restart_Alert',
+				enableQuery: pushEnabledWithoutGateway,
+			});
 			await this.add('Push_apn_passphrase', '', {
 				type: 'string',
 				enableQuery: [],

@@ -1,13 +1,11 @@
+import type { ApnCertificateAuthConfig, ApnTokenAuthConfig } from './apnConfig';
+
 export type PushOptions = {
 	sendTimeout?: number;
 	production?: boolean;
-	apn?: {
-		passphrase: string;
-		key: string;
-		cert: string;
-
-		gateway?: string;
-	};
+	// MATTERCHAT: `apn` used to be certificate-only ({ passphrase, key, cert, gateway }); it is now
+	// a union so token (.p8) auth can be configured too. See ./apnConfig.ts.
+	apn?: ApnCertificateAuthConfig | ApnTokenAuthConfig;
 	gcm?: {
 		apiKey: string;
 		projectNumber: string;

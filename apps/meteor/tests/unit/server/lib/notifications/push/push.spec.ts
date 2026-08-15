@@ -25,6 +25,9 @@ const { Push } = proxyquire.noCallThru().load('../../../../../../server/lib/noti
 			absoluteUrl: sinon.stub().returns('http://localhost'),
 		},
 	},
+	// MATTERCHAT: push.ts fans out to Web Push; that module reaches meteor/mongo at import time,
+	// which does not exist outside a Meteor runtime and made this spec fail to load.
+	'../../../../app/web-push/server/send': { sendWebPushToUser: sinon.stub().resolves() },
 });
 
 describe('Push Notifications [PushClass]', () => {

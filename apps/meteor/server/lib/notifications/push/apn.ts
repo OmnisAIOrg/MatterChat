@@ -2,10 +2,14 @@ import apn from '@parse/node-apn';
 import type { RequiredField } from '@rocket.chat/core-typings';
 import EJSON from 'ejson';
 
+// MATTERCHAT: token (.p8) auth support — see ./apnConfig.ts
+import { resolveApnTopic } from './apnConfig';
 import type { PushOptions, PendingPushNotification } from './definition';
 import { logger } from './logger';
 
 let apnConnection: apn.Provider | undefined;
+// MATTERCHAT: admin-configured APNs topic (iOS bundle id), if any. Set by initAPN.
+let configuredBundleId: string | undefined;
 
 declare module '@parse/node-apn' {
 	// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -81,7 +85,13 @@ export const sendAPN = ({
 	}
 	note.priority = priority;
 
-	note.topic = notification.topic;
+	// MATTERCHAT: an explicitly configured bundle id wins over the client-reported appName,
+	// because token auth rejects a topic that is not one of the team's bundle ids.
+	note.topic = resolveApnTopic({
+		topic: notification.topic,
+		useVoipToken: notification.useVoipToken,
+		configuredBundleId,
+	});
 	note.mutableContent = true;
 
 	void apnConnection.send(note, userToken).then((response) => {
@@ -106,6 +116,7 @@ export const sendAPN = ({
 export const shutdownAPN = async () => {
 	const connection = apnConnection;
 	apnConnection = undefined;
+	configuredBundleId = undefined;
 
 	try {
 		await connection?.shutdown();
@@ -150,20 +161,35 @@ export const initAPN = ({ options, absoluteUrl }: { options: RequiredField<PushO
 		logger.warn('WARNING: Push APN is in development mode');
 	}
 
-	// Check certificate data
-	if (!options.apn.cert?.length) {
-		logger.error('ERROR: Push server could not find cert');
-	}
+	// MATTERCHAT: `topic` is ours, not a node-apn ProviderOptions field — keep it out of the Provider.
+	const { topic, ...providerOptions } = options.apn;
+	configuredBundleId = topic;
 
-	// Check key data
-	if (!options.apn.key?.length) {
-		logger.error('ERROR: Push server could not find key');
+	if ('token' in providerOptions) {
+		// MATTERCHAT: token (.p8) auth. node-apn treats a key string that does not look like PEM as a
+		// FILE PATH and throws from readFileSync, so warn loudly rather than let it fail obscurely.
+		if (!/-----BEGIN ([A-Z\s*]+)-----/.test(providerOptions.token.key)) {
+			logger.warn('WARNING: Push APN token key does not look like a PEM/.p8 block - it will be treated as a file path');
+		}
+		if (!topic) {
+			logger.warn('WARNING: Push APN token auth is enabled but no bundle id (topic) is configured');
+		}
+	} else {
+		// Check certificate data
+		if (!providerOptions.cert?.length) {
+			logger.error('ERROR: Push server could not find cert');
+		}
+
+		// Check key data
+		if (!providerOptions.key?.length) {
+			logger.error('ERROR: Push server could not find key');
+		}
 	}
 
 	// Rig apn connection
 	try {
 		apnConnection = new apn.Provider({
-			...options.apn,
+			...providerOptions,
 			production: options.production,
 		});
 	} catch (err) {
