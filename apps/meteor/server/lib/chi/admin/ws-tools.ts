@@ -20,6 +20,7 @@ import type { IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
 import { Messages, Rooms, Subscriptions, Uploads, Users } from '@rocket.chat/models';
 
 import { emitClientAction } from './actions';
+import { CHI_FIRM_ADMIN_TOOLS } from './firm-admin-tools';
 import { CHI_NOTIFY_TOOLS } from './notify-tools';
 import { CHI_REMINDER_TOOLS } from './reminder-tools';
 import type { ChiTool } from './tools';
@@ -610,4 +611,7 @@ export const CHI_WS_TOOLS: ChiTool[] = [
 	...CHI_REMINDER_TOOLS,
 	// notification triage rules (own module — see notify-tools.ts)
 	...CHI_NOTIFY_TOOLS,
+	// firm administration for firm OWNERS, who are not workspace admins
+	// (own module — see firm-admin-tools.ts)
+	...CHI_FIRM_ADMIN_TOOLS,
 ];
