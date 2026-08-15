@@ -17,6 +17,7 @@ import {
 } from './firmsHelpers';
 import type { ChannelSpec } from './firmTemplates';
 import { normalizePracticeAreas, resolveChannelPlan } from './firmTemplates';
+import { postFirmWelcome } from './firmWelcome';
 import { createRoom } from '../rooms/createRoom';
 import { findOrCreateInvite } from '../rooms/invites/findOrCreateInvite';
 import * as Mailer from '../notifications/email/api';
@@ -161,7 +162,12 @@ export const createFirm = async (userId: string, rawName: unknown, options: Crea
 		},
 	);
 
-	await seedStarterChannels(userId, team, name, resolveChannelPlan(practiceAreas));
+	const plan = resolveChannelPlan(practiceAreas);
+	await seedStarterChannels(userId, team, name, plan);
+
+	// Close the loop: say what was built, in the room they are about to land in.
+	// Best-effort — the firm is already usable if this fails.
+	await postFirmWelcome(team, name, plan, user);
 
 	return { firmId: team._id, name, roomId: team.roomId, isOwner: true };
 };

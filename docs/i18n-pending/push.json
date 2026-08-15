@@ -1,0 +1,14 @@
+{
+	"Push_APN_Auth_Type": "APNs Authentication Type",
+	"Push_APN_Auth_Type_Description": "How this server authenticates to Apple Push Notification service. `Certificate` uses the legacy .p12/PEM key and certificate pair. `Token` uses Apple's current mechanism: a .p8 private key with its Key ID and your Apple Team ID. Only used when the push gateway is disabled. Can be overridden with the PUSH_APN_AUTH_TYPE environment variable.",
+	"Push_APN_Auth_Type_Certificate": "Certificate (.p12 / PEM)",
+	"Push_APN_Auth_Type_Token": "Token (.p8)",
+	"Push_APN_Token_Key": "APNs Token Key (.p8)",
+	"Push_APN_Token_Key_Description": "The full contents of the .p8 private key downloaded from the Apple Developer portal, including the BEGIN and END lines. Can be overridden with the PUSH_APN_TOKEN_KEY environment variable.",
+	"Push_APN_Token_Key_ID": "APNs Key ID",
+	"Push_APN_Token_Key_ID_Description": "The 10-character Key ID that Apple issued alongside the .p8 key. Can be overridden with the PUSH_APN_TOKEN_KEY_ID environment variable.",
+	"Push_APN_Team_ID": "Apple Team ID",
+	"Push_APN_Team_ID_Description": "The 10-character Apple Developer Team ID that owns the .p8 key. Can be overridden with the PUSH_APN_TEAM_ID environment variable.",
+	"Push_APN_Bundle_ID": "APNs Bundle ID (Topic)",
+	"Push_APN_Bundle_ID_Description": "The iOS app bundle id used as the APNs topic, for example com.omnisai.matterchat. Token authentication requires a topic that matches one of your team's bundle ids. When set, this overrides the app name reported by the mobile client at push-token registration (the `.voip` suffix is still appended for VoIP pushes). Leave blank to keep using the client-reported app name. Can be overridden with the PUSH_APN_BUNDLE_ID environment variable."
+}
