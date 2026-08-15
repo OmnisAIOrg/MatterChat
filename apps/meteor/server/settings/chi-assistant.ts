@@ -181,4 +181,22 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Realtime_Voice',
 			i18nDescription: 'Chi_Realtime_Voice_Description',
 		});
+
+		// ── Morning brief ────────────────────────────────────────────────────
+		// Workspace availability only. A user still opts in individually
+		// (settings.chi.morningBrief) — see server/cron/chiMorningBriefCron.ts
+		// for why this is deliberately two switches and not one.
+		await this.add('Chi_Morning_Brief_Enabled', false, {
+			type: 'boolean',
+			public: true, // the client shows the opt-in row only where the feature exists
+			i18nLabel: 'Chi_Morning_Brief_Enabled',
+			i18nDescription: 'Chi_Morning_Brief_Enabled_Description',
+		});
+		await this.add('Chi_Morning_Brief_Schedule', '0 7 * * 1-5', {
+			type: 'string',
+			public: false,
+			enableQuery: { _id: 'Chi_Morning_Brief_Enabled', value: true },
+			i18nLabel: 'Chi_Morning_Brief_Schedule',
+			i18nDescription: 'Chi_Morning_Brief_Schedule_Description',
+		});
 	});

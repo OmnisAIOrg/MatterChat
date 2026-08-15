@@ -8,6 +8,7 @@ import { boardsDigestCron } from './boardsDigestCron';
 import { boardsCalendarSyncCron } from './boardsCalendarSyncCron';
 import { boardsMattersCron } from './boardsMattersCron';
 import { caseproClientSyncCron } from './caseproClientSyncCron';
+import { chiMorningBriefCron } from './chiMorningBriefCron';
 // MATTERCHAT: MIT port of the read-receipts archive job (was EE-only upstream).
 import { readReceiptsArchiveCron } from './readReceiptsArchive';
 
@@ -25,6 +26,10 @@ export const startCron = async () => {
 	// Boards Notifications (M8): email digest of unread board notifications — gated by
 	// Boards_Email_Digest_Enabled + SMTP, schedule from Boards_Email_Digest_Schedule.
 	await boardsDigestCron();
+	// Chi morning brief: a daily DM of what each opted-in user missed, with jump
+	// links. Gated by Chi_Morning_Brief_Enabled AND a per-user opt-in
+	// (settings.chi.morningBrief); schedule from Chi_Morning_Brief_Schedule.
+	await chiMorningBriefCron();
 	// CasePro live wire: periodic leads pull from CasePro intake (gated on
 	// CasePro_Enabled + a LIVE transport) + the boot-time misconfig warning.
 	await boardsCaseProSyncCron();

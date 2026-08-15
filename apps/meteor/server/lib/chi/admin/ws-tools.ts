@@ -22,6 +22,9 @@ import { Messages, Rooms, Subscriptions, Uploads, Users } from '@rocket.chat/mod
 import { emitClientAction } from './actions';
 import type { ChiTool } from './tools';
 import { getChiContext } from './turnctx';
+import { MAX_DIGEST_CHANNELS, MAX_MESSAGES_PER_CHANNEL } from '../digest/digestHelpers';
+import { gatherUnreadDigest } from '../digest/unreadDigest';
+import { settings } from '../../../settings';
 import { executeSetReaction } from '../../messaging/reactions/setReaction';
 import { sendMessage } from '../../messages/sendMessage';
 import { readMessages } from '../../readMessages';
@@ -328,6 +331,55 @@ const catchMeUp: ChiTool = {
 	},
 };
 
+const unreadDigest: ChiTool = {
+	def: {
+		name: 'unread_digest',
+		description:
+			'Read the ACTUAL unread messages waiting for the user, grouped by conversation, each with a jump link. Use this — not catch_me_up — whenever they want to know WHAT they missed rather than how much ("catch me up", "what did I miss", "summarize my morning", "anything I need to reply to"). catch_me_up returns counts only; this returns content. Summarize it for them and KEEP the [jump](…) links in your summary so they can click straight to the message.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				channelLimit: { type: 'number', description: 'How many conversations to cover (default 8).' },
+				messageLimit: { type: 'number', description: 'How many messages per conversation (default 15).' },
+			},
+		},
+	},
+	access: 'user',
+	async execute(input, actor) {
+		const { text } = await gatherUnreadDigest(actor._id, {
+			channelLimit: Math.min(num(input.channelLimit, MAX_DIGEST_CHANNELS), 15),
+			messageLimit: Math.min(num(input.messageLimit, MAX_MESSAGES_PER_CHANNEL), 40),
+		});
+		return text;
+	},
+};
+
+const setMorningBrief: ChiTool = {
+	def: {
+		name: 'set_morning_brief',
+		description:
+			'Turn the user\'s daily morning brief on or off — a DM from Chi each morning summarizing what they missed. Use for "send me a daily summary", "brief me every morning", "stop the daily brief". This only changes the CALLER\'s own preference.',
+		inputSchema: {
+			type: 'object',
+			properties: { enabled: { type: 'boolean', description: 'true to receive the brief, false to stop it.' } },
+			required: ['enabled'],
+		},
+	},
+	access: 'user',
+	async execute(input, actor) {
+		if (settings.get('Chi_Morning_Brief_Enabled') !== true) {
+			return 'The morning brief is not switched on for this workspace — an admin enables it under Admin → Settings → Chi Assistant.';
+		}
+		const enabled = input.enabled !== false;
+		// A targeted $set on the sub-field, so this cannot clobber the user's
+		// model override or connector toggles the way a whole-object write would.
+		await Users.updateOne({ _id: actor._id }, { $set: { 'settings.chi.morningBrief': enabled } });
+		return enabled
+			? "You'll get a morning brief from me each weekday with what you missed. Say \"stop the daily brief\" any time."
+			: "I've stopped your morning brief.";
+	},
+};
+
 /* ─────────────────────────── NOTIFICATIONS ─────────────────────────── */
 
 const markChannelRead: ChiTool = {
@@ -537,6 +589,8 @@ export const CHI_WS_TOOLS: ChiTool[] = [
 	// conversation intelligence
 	readRecentMessages,
 	catchMeUp,
+	unreadDigest,
+	setMorningBrief,
 	// notifications
 	markChannelRead,
 	markAllRead,
