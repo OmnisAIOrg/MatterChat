@@ -267,3 +267,36 @@
 ### 2026-07-21 — Teams/GChat inbound via ONE shared record+push module, not per-provider copies
 **Chose:** `bridge/inboundBrowse.ts` (recordAndPushInbound) called from the Teams webhook (owner+sharers, gated on anyInserted so Graph redeliveries stay silent) and from backfillBridge (inserted && since && fresh-window — Google's only inbound lane, everyone's missed-window recovery). Echo rule = the author's own connection never gets pushed its own message (matched by external user id, works for native-client sends too).
 **Rejected:** (a) duplicating Slack's eventProcessing block into teams/webhook.ts and google (three copies of unread-critical logic); (b) pushing from backfill unconditionally (activation seed = 200-notification storm; webhook+poll double-push); (c) tenant-wide Graph subscriptions for non-bridged chats (real parity, but a separate feature — noted in KNOWN-ISSUES).
+
+### 2026-08-14 — "Easiest org comms": tenancy assumption, and where new capability lives
+**Chose:** build the nine-feature programme against the HARDENED SHARED WORKSPACE, not per-firm instances. Every feature keys off `customFields.firmId` rather than assuming a global workspace, so nothing here blocks the Path B factory later; but nothing waits on it either. Consequence accepted: firm scoping is described in-repo as "a privacy measure, not an isolation guarantee", and onboarding whole firms raises the stakes on that — so isolation fixes ship as acceptance criteria inside the features, not as follow-ups.
+**Chose:** new capability is a **Chi tool before it is a screen**. A tool added to the registry is instantly reachable from the orb, the DM, mobile and desktop with no client work; a screen has to be built four times. Screens are added only where a tool is a poor fit (the setup wizard, the Firm Console).
+**Chose:** each feature's tools live in their OWN module (`notify-tools.ts`, `reminder-tools.ts`, `firm-admin-tools.ts`, `search-tools.ts`) exporting an array that `ws-tools.ts` spreads in. `ws-tools.ts` was already 550+ lines and became a contention point the moment more than one workstream touched it.
+**Chose:** every feature's decidable logic goes in a PURE module with no meteor/model/settings/clock imports, and the stateful half imports it. This is the only way specs run here — importing anything Meteor-coupled drags in the whole server graph and the spec dies at load. Cost of ignoring it was paid once this session (firmWelcome had to be split into firmWelcomeText + firmWelcome after the spec would not load).
+
+### 2026-08-14 — Firm ownership is per-firm, and that is what fixes the second-org dead-end
+**Chose:** `ensureFirmForOrg` now stamps `customFields.firmRole: 'owner'` on whoever brings the firm into existence, and roster mirroring is authorized by **ownership of the firm representing THIS org**, not the workspace-admin role.
+**Why:** only the first user on a workspace is ever auto-promoted to admin, so org #2's owner could never trigger their roster mirror — `maybeAutoProvisionOrg` simply `return`ed, silently, forever. The audit called this structural; it was two lines. Ownership scales past one org and cannot be used to provision somebody else's roster because the org id must match the firm the caller owns.
+**Rejected:** granting the workspace-admin role to each firm's owner (would hand every firm owner the whole workspace).
+
+### 2026-08-14 — Notification triage biases toward interrupting
+**Chose:** with no rules, a direct mention or DM ALWAYS interrupts. A broad `digest` rule is ignored for mentions unless the user explicitly opts in; a narrow `silence` rule is honoured. Precedence is rule SPECIFICITY first, not authoring order, so "nothing after 7pm" + "unless it's from a partner" works either way round.
+**Why:** digest rules get written ambiently ("quiet hours", "#random is noisy") without thinking about mentions. Letting one swallow "@you the hearing moved to 9am" is the single failure that ends trust in triage permanently, and it is not recoverable by fixing the bug later.
+**Not done:** the engine is NOT yet hooked into message delivery. Recommended hook is `server/hooks/messages/sendNotificationsOnMessage.ts` inside the per-receiver `sendNotification`, before the desktop/mobile/email branches — it is the one place with every field the evaluator needs and one early return covers all three channels. Cost: widening a hot per-message aggregation projection, and sender roles are not currently projected.
+
+### 2026-08-14 — chi.prefs must not replace the settings.chi object
+**Chose:** targeted `$set` per owned key; the route returns what is actually stored rather than its own echo.
+**Why:** it was a whole-object `$set: { 'settings.chi': prefs }`. That namespace now also holds the morning-brief opt-in and the notification rules, so saving a model override from the orb silently un-enrolled the user from both. Nothing would have surfaced the loss.
+
+### 2026-08-14 — Invite links must not route a law firm through go.rocket.chat
+**Chose:** prefer Rocket.Chat's canonical invite URL, but fall back to a direct `${Site_Url}/invite/:id` when the canonical one resolves to the stock `go.rocket.chat` deep-link default.
+**Why:** `Accounts_Registration_InviteUrlType` defaults to `proxy` and `DeepLink_Url` to `https://go.rocket.chat`, so "use the canonical helper" — which reads like the correct fix — is a de-branding regression that sends a firm's invitees through rocket.chat. An operator who configures their own deep link still gets the canonical URL.
+
+### 2026-08-14 — Domain auto-join verifies by email, and blocks provider subdomains
+**Chose:** verification is an email loop to an address AT the domain, not a DNS record; adoption hooks `afterValidateLogin`, not `afterCreateUser`; public providers and **their subdomains** are permanently unclaimable.
+**Why:** the person who owns this problem is an office manager, not a sysadmin. A domain is usually claimed AFTER the first few people signed up, so a creation-time hook would strand exactly the cohort the feature exists to rescue, and at creation the address is not yet verified. Subdomains of a provider are under the provider's control, so nobody can prove ownership; accepted cost is that a firm genuinely living at `smithlaw.mail.com` must use invite links.
+
+### 2026-08-14 — APNs token auth, and the topic that is not a setting
+**Chose:** add `.p8` token auth alongside certificate auth, defaulting to certificate so existing behavior is unchanged; `Push_APN_Bundle_ID` OVERRIDES the topic when set and preserves today's behavior when unset.
+**Why:** the direct-send path survived the EE strip intact but only spoke legacy certificate auth, so self-hosted push was configurable and still could not deliver to iOS. The topic is currently whatever the mobile client posted as `appName`; certificate auth can infer a topic, token auth cannot and rejects a mismatch outright.
+**Known and NOT fixed (pre-existing):** incomplete APNs credentials disable iOS push silently, and invalid ones log once at boot then fail every send at debug level. New settings carry a restart-required alert because `Push.configure()` cannot be called twice.

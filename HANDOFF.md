@@ -1,3 +1,52 @@
+# HANDOFF — 2026-08-14 (Easiest-org-comms programme: 9 features, Phases 1–3)
+
+Branch `feature/omnis-widgets`. Spec: `docs/superpowers/specs/2026-08-14-matterchat-easiest-org-comms-design.md`.
+Read that first — it states the tenancy assumption every feature is built on.
+
+**Local toolchain now works, which it did not before.** Previous sessions could not
+install dependencies. The blocker was the `~/.npmrc` token lacking `read:packages`; the
+`gh` CLI token has it. Setup lives in `~/Desktop/matterchat-work/`: `env.sh` (node
+**exactly 22.22.3** — the yarn engines plugin rejects anything else — plus `NPM_TOKEN=$(gh
+auth token)`), `t.sh` (isolated mocha; the repo `.mocharc.js` otherwise loads every spec
+in the repo and dies), `j.sh` (client jest), `tc.sh` (typecheck).
+Also needed: `deno` on PATH (the `@rocket.chat/apps` build shells out to it), and
+`--experimental-require-module` in NODE_OPTIONS for jest to load its ESM preset.
+
+**Typecheck baseline is 741 pre-existing errors** — measured AFTER `yarn turbo run build`
+for the workspace packages. Without that build it reads ~10,400, almost all "cannot find
+module @rocket.chat/models", which is not real debt. `tc.sh` refuses to print a count if
+tsc OOMs, because **an OOM otherwise looks exactly like "0 errors"** — that false green
+cost time this session. tsc needs ~7 GB; do not run several at once on a 16 GB machine.
+
+**What shipped (all committed, none pushed):**
+- **F1 setup concierge** — practice-area channel templates (`firmTemplates.ts`, data not
+  code), a 3-step wizard, and Chi posting what it built. Plus the two structural fixes
+  from the July audit: `ensureFirmForOrg` now stamps `firmRole`, and roster mirroring is
+  authorized by firm ownership rather than the workspace-admin role, which is what
+  unblocks every org after the first.
+- **F2 zero-friction join** — email-verified domain auto-join, invite expiry/caps/
+  revocation, and the `go.rocket.chat` de-branding fix.
+- **F3 push** — token-based (.p8) APNs alongside certificate auth.
+- **F4 Catch Me Up** — `unread_digest` returns message CONTENT with jump links (the
+  existing `catch_me_up` returns counts only); opt-in morning-brief DM cron.
+- **F5 notification triage** — rules engine + storage + tools. **NOT hooked into message
+  delivery yet** — that is the one deliberate gap; hook point is in DECISIONS.md.
+- **F6 reminders** — including follow-ups that cancel themselves when someone replies.
+- **F7 firm administration** — for owners, who are not workspace admins.
+- **F8 Firm Console / F9 Ask Anything** — see the session tail; landing at time of writing.
+
+**Verification actually performed:** ~340 unit specs (mocha for server-pure logic, jest +
+testing-library driving real DOM controls for the wizard), typecheck at or below the 741
+baseline with zero errors in touched files. **A full Meteor boot was NOT part of the
+green** — no end-to-end run against a live server, no staging deploy. Treat the cron jobs,
+the Mongo-backed stores (`chi_reminders`, `matterchat_firm_domains`, the search index) and
+every REST route as compiled-and-unit-tested but not yet exercised against a database.
+
+**Two live footguns found and fixed** (both would have been silent): `chi.prefs` replaced
+the whole `settings.chi` object, wiping the morning-brief opt-in and all notification
+rules whenever the orb saved a model override; and the "canonical" invite URL routes a
+firm's invitees through rocket.chat under stock defaults.
+
 # HANDOFF — 2026-07-30 (Onboarding emails + org-readiness audit + firm-leak closures + PURE-MIT EE REMOVAL)
 
 Four workstreams, all merged to `staging` today. Read this top-to-bottom before touching anything — the EE removal changes the fork's foundations.
