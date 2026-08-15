@@ -285,21 +285,44 @@ API.v1.addRoute(
 			return API.v1.success({ prefs: user?.settings?.chi || {} });
 		},
 		async post() {
-			const body = (this.bodyParams || {}) as ChiPrefs;
-			const prefs: ChiPrefs = {};
+			// This route is not declared in rest-typings, so `this` types as
+			// Operations<never> — same cast idiom as chi.ask above.
+			const { userId, bodyParams } = this as unknown as { userId: string; bodyParams: ChiPrefs };
+			const body = (bodyParams || {}) as ChiPrefs;
+
+			// MATTERCHAT: write only the sub-fields this route owns.
+			//
+			// This used to `$set: { 'settings.chi': prefs }` — a whole-object replace
+			// — which silently destroyed everything else stored under settings.chi
+			// the moment the orb saved a model override. That namespace now also
+			// holds the morning-brief opt-in and the notification triage rules,
+			// neither of which this route knows about, so a replace would quietly
+			// un-enrol the user from both. A targeted $set per owned key cannot.
+			const updates: Record<string, unknown> = {};
+
 			if (typeof body.model === 'string') {
-				prefs.model = body.model.trim().slice(0, 60);
+				updates['settings.chi.model'] = body.model.trim().slice(0, 60);
 			}
 			if (body.connectors && typeof body.connectors === 'object') {
-				prefs.connectors = {};
+				const connectors: Record<string, boolean> = {};
 				for (const [k, v] of Object.entries(body.connectors).slice(0, 40)) {
 					if (/^[a-z0-9-]{1,32}$/.test(k)) {
-						prefs.connectors[k] = v !== false;
+						connectors[k] = v !== false;
 					}
 				}
+				updates['settings.chi.connectors'] = connectors;
 			}
-			await Users.updateOne({ _id: this.userId }, { $set: { 'settings.chi': prefs } });
-			return API.v1.success({ prefs });
+
+			if (Object.keys(updates).length) {
+				await Users.updateOne({ _id: userId }, { $set: updates });
+			}
+
+			// Return what is actually stored, including sub-fields this route does
+			// not manage, so the client sees the real state rather than its own echo.
+			const user = await Users.findOneById<{ _id: string; settings?: { chi?: ChiPrefs } }>(userId, {
+				projection: { 'settings.chi': 1 },
+			});
+			return API.v1.success({ prefs: user?.settings?.chi || {} });
 		},
 	},
 );

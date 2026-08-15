@@ -20,6 +20,7 @@ import type { IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
 import { Messages, Rooms, Subscriptions, Uploads, Users } from '@rocket.chat/models';
 
 import { emitClientAction } from './actions';
+import { CHI_NOTIFY_TOOLS } from './notify-tools';
 import { CHI_REMINDER_TOOLS } from './reminder-tools';
 import type { ChiTool } from './tools';
 import { getChiContext } from './turnctx';
@@ -607,4 +608,6 @@ export const CHI_WS_TOOLS: ChiTool[] = [
 	upcomingDeadlines,
 	// reminders & follow-ups (own module — see reminder-tools.ts)
 	...CHI_REMINDER_TOOLS,
+	// notification triage rules (own module — see notify-tools.ts)
+	...CHI_NOTIFY_TOOLS,
 ];
