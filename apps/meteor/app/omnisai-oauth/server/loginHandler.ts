@@ -159,14 +159,29 @@ async function maybeAutoProvisionOrg(userId: string, profile: OmnisAIProfile): P
 		}
 		const user = await Users.findOne(
 			{ _id: userId },
-			{ projection: { roles: 1, 'services.omnisai.provisionedOrgId': 1 } },
+			{ projection: { roles: 1, customFields: 1, 'services.omnisai.provisionedOrgId': 1 } },
 		);
 		if (!user) {
 			return;
 		}
-		const isAdmin = Array.isArray((user as any).roles) && (user as any).roles.includes('admin');
-		if (!isAdmin) {
-			return; // only an org admin bulk-provisions the team
+
+		// Who may mirror an org roster?
+		//
+		// This used to require the workspace ADMIN role, which quietly made the
+		// feature single-tenant: a workspace only auto-promotes its very first
+		// user to admin, so the owner of the second org to sign up was never an
+		// admin and their roster never mirrored — with no error anywhere, because
+		// the guard simply returned. Every org after the first was stuck.
+		//
+		// The right authority is ownership of the firm that represents THIS org:
+		// it is the same person the admin check was reaching for, it scales past
+		// one org, and it cannot be used to provision somebody else's roster
+		// because the org id must match the firm the caller owns.
+		const customFields = (user as { customFields?: Record<string, unknown> }).customFields;
+		const isWorkspaceAdmin = Array.isArray((user as any).roles) && (user as any).roles.includes('admin');
+		const ownsThisOrgsFirm = customFields?.firmRole === 'owner' && customFields?.omnisOrgId === profile.orgId;
+		if (!isWorkspaceAdmin && !ownsThisOrgsFirm) {
+			return; // only a workspace admin, or this org's own firm owner, bulk-provisions
 		}
 		if ((user as any)?.services?.omnisai?.provisionedOrgId === profile.orgId) {
 			return; // this admin already provisioned this org

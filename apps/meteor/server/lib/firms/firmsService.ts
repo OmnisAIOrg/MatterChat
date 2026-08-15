@@ -6,6 +6,8 @@ import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
 import { FIRM_NAME_MAX, FIRM_NAME_MIN, MAX_INVITES_PER_CALL, normalizeFirmName, partitionEmails, slugifyFirmName } from './firmsHelpers';
+import type { ChannelSpec } from './firmTemplates';
+import { normalizePracticeAreas, resolveChannelPlan } from './firmTemplates';
 import { createRoom } from '../rooms/createRoom';
 import { findOrCreateInvite } from '../rooms/invites/findOrCreateInvite';
 import * as Mailer from '../notifications/email/api';
@@ -62,21 +64,16 @@ export const getFirmForUser = async (user: IUser): Promise<FirmInfo | null> => {
 	};
 };
 
-/**
- * Starter channels seeded inside a brand-new firm.
- *
- * A firm with a single empty team room reads as "nothing happened" — which is
- * precisely the complaint that prompted this rework. Three channels named for
- * how a PI firm actually works give the workspace an obvious shape on first
- * load, and they are ordinary channels the firm can rename or delete.
- */
-const STARTER_CHANNELS: { slug: string; display: string; topic: string }[] = [
-	{ slug: 'general', display: 'General', topic: 'Firm-wide announcements and everything that has no better home.' },
-	{ slug: 'intake', display: 'Intake', topic: 'New enquiries and prospective clients, before a matter exists.' },
-	{ slug: 'referrals', display: 'Referrals', topic: 'Referrals in and out, and the relationships behind them.' },
-];
+export type CreateFirmOptions = {
+	/**
+	 * Practice-area ids from the onboarding concierge. Unknown or malformed
+	 * values are ignored (see resolveChannelPlan) — a stale client must not be
+	 * able to fail a signup.
+	 */
+	practiceAreas?: unknown;
+};
 
-export const createFirm = async (userId: string, rawName: unknown): Promise<FirmInfo> => {
+export const createFirm = async (userId: string, rawName: unknown, options: CreateFirmOptions = {}): Promise<FirmInfo> => {
 	if (!isSelfServeFirmsEnabled()) {
 		throw new Meteor.Error('error-not-allowed', 'Self-serve firms are disabled', { method: 'firms.create' });
 	}
@@ -123,9 +120,20 @@ export const createFirm = async (userId: string, rawName: unknown): Promise<Firm
 	// `smith-associates` — the user typed "Smith & Associates" and got what
 	// looks like a channel someone else made. Setting fname is what makes the
 	// firm read as the firm.
+	// Record the practice areas we actually seeded from (normalized, so what is
+	// stored is what happened — not what the client claimed). The Firm Console
+	// reads this back to show and re-run the selection.
+	const practiceAreas = normalizePracticeAreas(options.practiceAreas);
 	await Rooms.updateOne(
 		{ _id: team.roomId },
-		{ $set: { 'fname': name, 'customFields.firmTeam': true, 'customFields.firmName': name } },
+		{
+			$set: {
+				'fname': name,
+				'customFields.firmTeam': true,
+				'customFields.firmName': name,
+				'customFields.firmPracticeAreas': practiceAreas,
+			},
+		},
 	);
 	await Users.updateOne(
 		{ _id: userId },
@@ -136,7 +144,7 @@ export const createFirm = async (userId: string, rawName: unknown): Promise<Firm
 		},
 	);
 
-	await seedStarterChannels(userId, team, name);
+	await seedStarterChannels(userId, team, name, resolveChannelPlan(practiceAreas));
 
 	return { firmId: team._id, name, roomId: team.roomId, isOwner: true };
 };
@@ -148,13 +156,13 @@ export const createFirm = async (userId: string, rawName: unknown): Promise<Firm
  * channel that fails to create must not fail the signup the user is standing
  * in front of. Each is logged and skipped.
  */
-async function seedStarterChannels(userId: string, team: ITeam, firmName: string): Promise<void> {
+async function seedStarterChannels(userId: string, team: ITeam, firmName: string, channels: ChannelSpec[]): Promise<void> {
 	const owner = await Users.findOneById(userId);
 	if (!owner) {
 		return;
 	}
 
-	for (const channel of STARTER_CHANNELS) {
+	for (const channel of channels) {
 		try {
 			// Private, like the team itself — a law firm's channels should not be
 			// discoverable by anyone who happens to be on the workspace.
@@ -211,6 +219,8 @@ export const ensureFirmForOrg = async (userId: string, orgId: string, orgName?: 
 
 		let teamId = existingRoom?.teamId;
 		let firmName = (existingRoom?.customFields as Record<string, unknown> | undefined)?.firmName as string | undefined;
+		// Whether THIS call created the firm, which decides ownership below.
+		let createdHere = false;
 
 		if (!teamId) {
 			// First member of this org to sign in creates the firm. A concurrent
@@ -249,13 +259,14 @@ export const ensureFirmForOrg = async (userId: string, orgId: string, orgName?: 
 				// the first sign-in of every org. The channels appear a moment later;
 				// the firm link, which is what gates the UI, is already committed.
 				setImmediate(() => {
-					void seedStarterChannels(userId, team as ITeam, name).catch((err) =>
+					void seedStarterChannels(userId, team as ITeam, name, resolveChannelPlan([])).catch((err) =>
 						console.warn('[firms] background starter-channel seeding failed', err),
 					);
 				});
 
 				teamId = team._id;
 				firmName = name;
+				createdHere = true;
 			}
 		}
 
@@ -263,8 +274,6 @@ export const ensureFirmForOrg = async (userId: string, orgId: string, orgName?: 
 			return null;
 		}
 
-		// Adopt. The role is `member` unless they are the creator — org-level
-		// ownership belongs to CentralAuth, not to whoever logged in first.
 		await Users.updateOne(
 			{ _id: userId },
 			{
@@ -272,10 +281,31 @@ export const ensureFirmForOrg = async (userId: string, orgId: string, orgName?: 
 					'customFields.firmId': teamId,
 					...(firmName ? { 'customFields.firmName': firmName } : {}),
 					'customFields.omnisOrgId': orgId,
+					// The user who brought the firm into existence owns it.
+					//
+					// This used to set no role at all, which looked harmless and was
+					// not: firm ownership is what authorizes inviting teammates and
+					// mirroring the CasePro roster, and a workspace only ever
+					// auto-promotes its very FIRST user to workspace-admin. So the
+					// second org to sign up had a firm nobody owned and nobody could
+					// administer — a structural dead-end that no amount of retrying
+					// could clear. Ownership here is per-firm, so org number two
+					// onboards exactly like org number one.
+					...(createdHere ? { 'customFields.firmRole': 'owner' } : {}),
 				},
 				$unset: { 'customFields.needsFirmSetup': '' },
 			},
 		);
+
+		// Everyone else defaults to member — but only if they have no role yet, so
+		// re-linking an existing owner (or someone promoted later) never demotes
+		// them on their next sign-in.
+		if (!createdHere) {
+			await Users.updateOne(
+				{ '_id': userId, 'customFields.firmRole': { $exists: false } },
+				{ $set: { 'customFields.firmRole': 'member' } },
+			);
+		}
 
 		const user = await Users.findOneById(userId);
 		return user ? getFirmForUser(user) : null;

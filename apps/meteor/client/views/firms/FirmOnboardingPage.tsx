@@ -18,6 +18,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { ChangeEvent, ReactElement } from 'react';
 import { useId, useState } from 'react';
 
+import PracticeAreaPicker from './PracticeAreaPicker';
+
 /**
  * MATTERCHAT: firm setup for a brand-new account.
  *
@@ -37,10 +39,19 @@ import { useId, useState } from 'react';
  *
  * ## What creating a firm actually produces
  *
- * A private team named with the firm's REAL name (not its slug) plus three
- * starter channels. The old flow created a slug-named team room and nothing
- * else, which is why it read as "it just made me a channel". The copy below
- * states what will be created, so the result is not a surprise.
+ * A private team named with the firm's REAL name (not its slug) plus a set of
+ * starter channels chosen from the firm's practice areas. The old flow created
+ * a slug-named team room and nothing else, which is why it read as "it just
+ * made me a channel". The copy below states what will be created, so the result
+ * is not a surprise.
+ *
+ * ## Why practice areas are their own step
+ *
+ * Asking for the name and the shape of the workspace on one screen made a form
+ * long enough to skim past. Split, each screen asks one thing, and the areas
+ * step is skippable in substance (selecting nothing is valid) without being
+ * skippable in form — there is no "skip" button to read as "this doesn't
+ * matter", just a Create button that works either way.
  */
 const FirmOnboardingPage = (): ReactElement => {
 	const t = useTranslation();
@@ -53,8 +64,9 @@ const FirmOnboardingPage = (): ReactElement => {
 	const createFirm = useEndpoint('POST', '/v1/firms.create');
 	const inviteToFirm = useEndpoint('POST', '/v1/firms.invite');
 
-	const [step, setStep] = useState<'name' | 'invite'>('name');
+	const [step, setStep] = useState<'name' | 'areas' | 'invite'>('name');
 	const [firmName, setFirmName] = useState('');
+	const [practiceAreas, setPracticeAreas] = useState<string[]>([]);
 	const [emailsRaw, setEmailsRaw] = useState('');
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -69,16 +81,28 @@ const FirmOnboardingPage = (): ReactElement => {
 		await queryClient.invalidateQueries({ queryKey: ['users.info'] });
 	};
 
+	/** Name step → practice areas. Validated here so the next screen is reachable only with a usable name. */
+	const handleContinueToAreas = (): void => {
+		if (firmName.trim().length < 2) {
+			setError(t('Firm_name_too_short'));
+			return;
+		}
+		setError(null);
+		setStep('areas');
+	};
+
 	const handleCreate = async (): Promise<void> => {
 		const name = firmName.trim();
 		if (name.length < 2) {
+			// Reachable if someone edits the name back down after stepping forward.
 			setError(t('Firm_name_too_short'));
+			setStep('name');
 			return;
 		}
 		setBusy(true);
 		setError(null);
 		try {
-			const { firm } = await createFirm({ name });
+			const { firm } = await createFirm({ name, practiceAreas });
 			setCreatedFirmName(firm.name);
 			setStep('invite');
 		} catch (e: unknown) {
@@ -154,8 +178,8 @@ const FirmOnboardingPage = (): ReactElement => {
 						</FormContainer>
 						<FormFooter>
 							<ButtonGroup stretch vertical>
-								<Button primary loading={busy} onClick={() => void handleCreate()}>
-									{t('Firm_create_action')}
+								<Button primary disabled={busy} onClick={handleContinueToAreas}>
+									{t('Firm_onboarding_continue')}
 								</Button>
 								{/* No "continue without a firm": there is no such mode. Sign out
 								    stays, so a wrong-account landing is not a trap. */}
@@ -165,7 +189,40 @@ const FirmOnboardingPage = (): ReactElement => {
 							</ButtonGroup>
 						</FormFooter>
 					</>
-				) : (
+				) : null}
+
+				{step === 'areas' ? (
+					<>
+						<FormHeader>
+							<FormTitle>{t('Firm_areas_title')}</FormTitle>
+							<FormSubtitle>{t('Firm_areas_subtitle')}</FormSubtitle>
+						</FormHeader>
+						<FormContainer>
+							<PracticeAreaPicker selected={practiceAreas} onChange={setPracticeAreas} disabled={busy} />
+							<Box marginBlockStart={16} fontScale='c1' color='hint'>
+								{t('Firm_areas_hint')}
+							</Box>
+							{error && (
+								<Box marginBlockStart={8}>
+									<Callout type='danger'>{error}</Callout>
+								</Box>
+							)}
+						</FormContainer>
+						<FormFooter>
+							<ButtonGroup stretch vertical>
+								<Button primary loading={busy} onClick={() => void handleCreate()}>
+									{t('Firm_create_action')}
+								</Button>
+								{/* Going back must not lose the typed name — it is still in state. */}
+								<Button secondary disabled={busy} onClick={() => setStep('name')}>
+									{t('Firm_onboarding_back')}
+								</Button>
+							</ButtonGroup>
+						</FormFooter>
+					</>
+				) : null}
+
+				{step === 'invite' ? (
 					<>
 						<FormHeader>
 							<FormTitle>{t('Firm_invite_title', { firmName: createdFirmName })}</FormTitle>
@@ -205,7 +262,7 @@ const FirmOnboardingPage = (): ReactElement => {
 							</ButtonGroup>
 						</FormFooter>
 					</>
-				)}
+				) : null}
 			</Form>
 		</VerticalWizardLayout>
 	);

@@ -1,14 +1,16 @@
 import { Users } from '@rocket.chat/models';
 
+import { listPracticeAreas } from '../../lib/firms/firmTemplates';
 import { createFirm, getFirmForUser, inviteToFirm, isSelfServeFirmsEnabled } from '../../lib/firms/firmsService';
 import { API } from '../api';
 
 /**
  * MATTERCHAT: Self-serve firms REST surface.
  *
- *  POST firms.create — create your firm (private team) during onboarding.
- *  GET  firms.mine   — the caller's firm (or firm: null when none / feature off).
- *  POST firms.invite — email teammates an invite link into the firm team.
+ *  POST firms.create    — create your firm (private team) during onboarding.
+ *  GET  firms.mine      — the caller's firm (or firm: null when none / feature off).
+ *  POST firms.invite    — email teammates an invite link into the firm team.
+ *  GET  firms.templates — practice areas the setup concierge can offer.
  *
  * Boards REST idioms: `this.userId` (never Meteor.userId() — unavailable in
  * this REST context), authorization enforced HERE in the service layer (the
@@ -21,9 +23,22 @@ API.v1.addRoute(
 	{ authRequired: true },
 	{
 		async post() {
-			const { name } = this.bodyParams as { name?: unknown };
-			const firm = await createFirm(this.userId, name);
+			const { name, practiceAreas } = this.bodyParams as { name?: unknown; practiceAreas?: unknown };
+			const firm = await createFirm(this.userId, name, { practiceAreas });
 			return API.v1.success({ firm });
+		},
+	},
+);
+
+API.v1.addRoute(
+	'firms.templates',
+	{ authRequired: true },
+	{
+		async get() {
+			// Static data, but authenticated: the practice-area list is a hint about
+			// what this product is for, and there is no reason to serve it to
+			// anonymous callers.
+			return API.v1.success({ practiceAreas: listPracticeAreas() });
 		},
 	},
 );

@@ -14,14 +14,23 @@ export type FirmInfoDTO = {
 	isOwner: boolean;
 };
 
+/** A practice area offered by the setup concierge. Channel layout stays server-side. */
+export type PracticeAreaDTO = {
+	id: string;
+	label: string;
+};
+
 export type FirmsEndpoints = {
 	'/v1/firms.create': {
-		POST: (params: { name: string }) => { firm: FirmInfoDTO };
+		POST: (params: { name: string; practiceAreas?: string[] }) => { firm: FirmInfoDTO };
 	};
 	'/v1/firms.mine': {
 		GET: () => { enabled: boolean; firm: FirmInfoDTO | null };
 	};
 	'/v1/firms.invite': {
 		POST: (params: { emails: string[] }) => { sent: string[]; invalid: string[]; inviteUrl: string };
+	};
+	'/v1/firms.templates': {
+		GET: () => { practiceAreas: PracticeAreaDTO[] };
 	};
 };
