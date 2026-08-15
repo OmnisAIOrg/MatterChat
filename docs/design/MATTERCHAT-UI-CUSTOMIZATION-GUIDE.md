@@ -97,6 +97,8 @@ rest is upstream.
 | Connectors | `app/connectors/server/**` | Slack + Teams two-way bridges, desktop OAuth |
 | PWA | `client/serviceWorker.ts`, `client/views/pwa/**` | update prompt, web push, install |
 | Error isolation | `client/views/boards/card/CardErrorBoundary.tsx` | keep panel bugs from white-screening the app |
+| Self-serve firms (client) | `client/views/firms/**` | firm onboarding wizard, Firm Console, domain-verify landing page |
+| Firms routes | `client/views/firms/routes.tsx` | `/firm-console` + `/firm-domain/verify/:token`, registered from `client/main.ts` |
 | Settings (ours) | `server/settings/boards-casepro.ts` (+ our edits marked in shared settings files) | env-first, graceful-degrade |
 | Branding assets | `public/images/pwa/**`, `public/images/logo/**`, `public/favicon.ico`, `public/images/manifest.json` | see Branding |
 

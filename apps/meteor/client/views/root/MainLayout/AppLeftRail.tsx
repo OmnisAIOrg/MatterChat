@@ -22,6 +22,8 @@ import { UNREAD_PULSE_BADGE_CLASS } from '../../../components/unreadPulseBadge';
 import { useGoToRoom } from '../../room/hooks/useGoToRoom';
 import { NOTIFICATIONS_UNREAD_KEY } from '../../boards/notifications/NotificationsInbox';
 import { getUnseenUpdates } from '../../../updates/updatesFeed';
+// MATTERCHAT: the Firm Console rail entry (F8).
+import { useMyFirm } from '../../firms/useMyFirm';
 
 /**
  * AppLeftRail — the GREEN "Variant B" primary NAVIGATION rail (was the single Slack-style rail).
@@ -318,6 +320,11 @@ const AppLeftRail = () => {
 	const chatActive = !currentRoute?.includes('/boards') && Boolean(currentRoute?.includes('/home') || currentRoute?.includes('/channel'));
 	const adminActive = Boolean(currentRoute?.includes('/admin'));
 	const updatesActive = Boolean(currentRoute?.includes('/updates'));
+	// MATTERCHAT: the Firm Console (F8). Shown to anyone who is IN a firm, not
+	// just its owner — a member gets the read-only half of the screen, which is
+	// still the fastest answer to "who else is in my firm".
+	const { firm } = useMyFirm();
+	const firmConsoleActive = Boolean(currentRoute?.includes('/firm-console'));
 
 	const handleChat = useStableCallback(() => {
 		router.navigate('/home');
@@ -337,6 +344,11 @@ const AppLeftRail = () => {
 
 	const handleAdmin = useStableCallback(() => {
 		router.navigate('/admin');
+	});
+
+	// MATTERCHAT: the Firm Console — the firm-sized alternative to /admin.
+	const handleFirmConsole = useStableCallback(() => {
+		router.navigate('/firm-console');
 	});
 
 	const handleDocs = useStableCallback(() => {
@@ -496,6 +508,9 @@ const AppLeftRail = () => {
 				    you're in any workspace, so it must always be reachable. */}
 				{renderItem('ai', t('Find_Chi', { defaultValue: 'Find Chi' }), handleFindChi, false)}
 				{!inExternalMode && renderItem('megaphone', t('Updates'), handleUpdates, updatesActive, 0, hasUnseenUpdates)}
+				{/* MATTERCHAT: Firm Console (F8) — only for users who are actually in a firm, and
+				    MatterChat-native, so hidden in external-workspace mode like Admin below. */}
+				{!inExternalMode && firm && renderItem('team', t('Firm_Console'), handleFirmConsole, firmConsoleActive)}
 				{!inExternalMode && isAdmin && renderItem('cog', t('Admin', { defaultValue: 'Admin' }), handleAdmin, adminActive)}
 			</Box>
 			{/* Ambient ensō loop anchors the rail bottom — the living brand mark, replacing the avatar

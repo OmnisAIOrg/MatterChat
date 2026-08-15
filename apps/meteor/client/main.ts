@@ -14,5 +14,7 @@ import('./meteor/login')
 			import('./views/account'),
 			import('./views/boards'),
 			import('./views/litbox'),
+			// MATTERCHAT: registers /firm-console and /firm-domain/verify/:token.
+			import('./views/firms'),
 		]),
 	);
