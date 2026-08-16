@@ -208,24 +208,34 @@ export const createLayoutSettings = () =>
 			});
 		});
 		await this.section('Custom CSS', async function () {
-			// MatterChat — OmnisAI house brand. Recolor Rocket.Chat's primary accent
+			// MatterChat - OmnisAI house brand. Recolor Rocket.Chat's primary accent
 			// (default pink/red) to brand green #1B7A2E (hover #156323).
+			//
+			// MATTERCHAT: two rules about what may go in here, both learned from one outage.
+			//
+			// 1. ASCII ONLY. This string is served as UTF-8 with a Content-Length taken from
+			//    its byte length (server/lib/ui-master/textResponse.ts). That is correct now,
+			//    but an em dash in this comment is what exposed the bug when it was not — the
+			//    stylesheet died with a protocol error over HTTP/2 and every browser stalled on
+			//    a render-blocking <link>. Keeping this pure ASCII costs nothing.
+			// 2. NO GLOBAL ELEMENT SELECTORS. A previous default carried
+			//    `img[alt="MatterChat"] { transform: scale(2.5) }`, commented "on auth/login
+			//    screens" but scoped to nothing — so it inflated the logo everywhere, in every
+			//    workspace, as soon as the stylesheet started loading. The login page already
+			//    sizes its own lockup (.mclg-lockup-icon / .mclg-lockup-word in
+			//    MatterChatLoginPage.tsx), so the rule was never needed. Anything that must
+			//    target one screen belongs in that screen's own CSS, not in a workspace setting
+			//    nobody reviews.
 			await this.add(
 				'theme-custom-css',
 				[
-					'/* MatterChat — OmnisAI house brand (GREEN) */',
+					'/* MatterChat - OmnisAI house brand (GREEN) */',
 					':root {',
 					'  --rcx-color-button-primary-background: #1B7A2E;',
 					'  --rcx-color-button-primary-hover-background: #156323;',
 					'  --rcx-color-button-primary-press-background: #114E1C;',
 					'  --rcx-color-button-primary-focus-background: #1B7A2E;',
 					'  --rcx-color-button-primary-focus-shadow: 0 0 0 2px rgba(27, 122, 46, 0.5);',
-					'}',
-					'/* MatterChat logo 2.5x bigger on auth/login/wizard screens */',
-					'img[alt="MatterChat"] {',
-					'  transform: scale(2.5);',
-					'  transform-origin: center;',
-					'  margin: 1.6em 0;',
 					'}',
 				].join('\n'),
 				{
