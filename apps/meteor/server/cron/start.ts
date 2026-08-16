@@ -10,6 +10,7 @@ import { boardsMattersCron } from './boardsMattersCron';
 import { caseproClientSyncCron } from './caseproClientSyncCron';
 import { chiMorningBriefCron } from './chiMorningBriefCron';
 import { chiRemindersCron } from './chiRemindersCron';
+import { chiSearchIndexCron } from './chiSearchIndexCron';
 // MATTERCHAT: MIT port of the read-receipts archive job (was EE-only upstream).
 import { readReceiptsArchiveCron } from './readReceiptsArchive';
 
@@ -35,6 +36,10 @@ export const startCron = async () => {
 	// Conditional ("if nobody replies") reminders re-check at delivery time and
 	// stay silent when the reply arrived.
 	await chiRemindersCron();
+	// Chi "Ask Anything" backfill: bounded periodic indexing of history the
+	// afterSaveMessage hook never saw — gated by Chi_Search_Backfill_Enabled AND a
+	// configured embedding provider, schedule from Chi_Search_Backfill_Schedule.
+	await chiSearchIndexCron();
 	// CasePro live wire: periodic leads pull from CasePro intake (gated on
 	// CasePro_Enabled + a LIVE transport) + the boot-time misconfig warning.
 	await boardsCaseProSyncCron();

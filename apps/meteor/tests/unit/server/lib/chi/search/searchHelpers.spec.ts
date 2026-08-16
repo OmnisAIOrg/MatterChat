@@ -11,6 +11,7 @@ import {
 	chunkMessages,
 	citationLabel,
 	cosineSimilarity,
+	describeAttachments,
 	formatCitations,
 	keywordScore,
 	matchesAccessFilter,
@@ -617,5 +618,46 @@ describe('chi/search/searchHelpers', () => {
 			];
 			expect(corpus.filter((doc) => matchesAccessFilter(firmAScope, doc)).map((doc) => doc.id)).to.deep.equal(['ok']);
 		});
+	});
+});
+
+describe('describeAttachments', () => {
+	it('is empty when nothing was shared, so empty messages stay skippable', () => {
+		expect(describeAttachments(undefined)).to.equal('');
+		expect(describeAttachments(null)).to.equal('');
+		expect(describeAttachments({})).to.equal('');
+		expect(describeAttachments({ files: [], attachments: [] })).to.equal('');
+	});
+
+	it('names a single file', () => {
+		expect(describeAttachments({ file: { name: 'deposition.pdf' } })).to.equal('shared deposition.pdf');
+	});
+
+	it('names every file in a multi-file upload', () => {
+		expect(describeAttachments({ files: [{ name: 'a.pdf' }, { name: 'b.pdf' }] })).to.equal('shared a.pdf, b.pdf');
+	});
+
+	it('does not repeat the same name from file, files and the attachment title', () => {
+		expect(
+			describeAttachments({
+				file: { name: 'deposition.pdf' },
+				files: [{ name: 'deposition.pdf' }],
+				attachments: [{ title: 'deposition.pdf' }],
+			}),
+		).to.equal('shared deposition.pdf');
+	});
+
+	it('keeps a genuine description alongside the name', () => {
+		expect(
+			describeAttachments({ file: { name: 'deposition.pdf' }, attachments: [{ title: 'deposition.pdf', description: 'Volume II' }] }),
+		).to.equal('shared deposition.pdf — Volume II');
+	});
+
+	it('says something even when the name is missing', () => {
+		expect(describeAttachments({ attachments: [{ description: 'the signed release' }] })).to.equal('shared a file — the signed release');
+	});
+
+	it('ignores null rows rather than throwing on them', () => {
+		expect(describeAttachments({ files: [null, { name: 'a.pdf' }], attachments: [null] })).to.equal('shared a.pdf');
 	});
 });

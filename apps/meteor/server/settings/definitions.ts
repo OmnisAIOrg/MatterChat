@@ -41,6 +41,8 @@ import { createSmarshSettings } from './smarsh';
 import { createGoogleSettings } from './google';
 // MATTERCHAT: Chi Admin Assistant (in-app AI ops bot) settings group.
 import { createChiAssistantSettings } from './chi-assistant';
+// MATTERCHAT: Chi "Ask Anything" (F9) — embeddings for grounded retrieval.
+import { createChiSearchSettings } from './chi-search';
 // MATTERCHAT: new-user onboarding (welcome) email settings.
 import { createMatterChatEmailSettings } from './matterchat-email';
 // MATTERCHAT: Omnis product widgets — AutoDoc intake, LitBox upload links,
@@ -100,6 +102,7 @@ await Promise.all([
 	createSmarshSettings(),
 	createGoogleSettings(),
 	createChiAssistantSettings(),
+	createChiSearchSettings(),
 	createMatterChatEmailSettings(),
 	// MATTERCHAT: Omnis product widgets.
 	createAutoDocSettings(),

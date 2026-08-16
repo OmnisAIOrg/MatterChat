@@ -9,6 +9,8 @@ import { SystemLogger } from '../../lib/logger/system';
 import { postAuditEntry } from '../../lib/chi/admin/audit';
 import { registerLocalServers, resolveLocalCall } from '../../lib/chi/admin/localtools';
 import { runChiOrbTurn } from '../../lib/chi/admin/service';
+import { buildPermalink } from '../../lib/chi/digest/digestHelpers';
+import { gatherUnreadDigest } from '../../lib/chi/digest/unreadDigest';
 import type { ChiOrbHistory, ChiOrbContext } from '../../lib/chi/admin/service';
 import {
 	EXCHANGE_TOKEN_LIFETIME_MS,
@@ -527,6 +529,64 @@ API.v1.addRoute(
 			}
 			const accepted = resolveLocalCall(userId, callId, bodyParams?.ok !== false, typeof bodyParams?.content === 'string' ? bodyParams.content : '');
 			return API.v1.success({ accepted });
+		},
+	},
+);
+
+/**
+ * MATTERCHAT: "Catch me up" for ONE conversation (F4) — the data behind the channel-header panel.
+ *
+ * Deliberately NOT an LLM call. The orb already offers the prose version; this is the other half
+ * of what the spec asks for — "a navigation surface rather than a wall of text" — and it has to
+ * work on a workspace with no model configured, which is most of them on day one. So it returns
+ * the unread messages themselves, each with the permalink that jumps to it, and lets the client
+ * render them as a list.
+ *
+ * Authority: `gatherUnreadDigest` reads through the caller's OWN subscriptions and the `rid` here
+ * narrows that same subscription query, so asking about a room you are not in returns nothing —
+ * there is no second permission check to get wrong.
+ */
+API.v1.addRoute(
+	'chi.catchup',
+	{ authRequired: true, rateLimiterOptions: { numRequestsAllowed: 60, intervalTimeInMS: 60000 } },
+	{
+		async get() {
+			const { userId, queryParams } = this as unknown as { userId: string; queryParams: Record<string, string | undefined> };
+			const rid = typeof queryParams?.rid === 'string' ? queryParams.rid.trim() : '';
+			if (!rid) {
+				return API.v1.failure('rid is required');
+			}
+
+			const siteUrl = (() => {
+				try {
+					return settings.get<string>('Site_Url') || '';
+				} catch {
+					return '';
+				}
+			})();
+
+			const digest = await gatherUnreadDigest(userId, { rid, channelLimit: 1 });
+			const channel = digest.channels[0];
+			if (!channel) {
+				// Nothing unread, not in the room, or every unread message is silenced by one of
+				// the caller's own rules. All three are the same answer to the user: nothing to see.
+				return API.v1.success({ rid, unread: 0, mentions: 0, omitted: 0, messages: [] });
+			}
+
+			return API.v1.success({
+				rid: channel.rid,
+				label: channel.label,
+				unread: channel.unread,
+				mentions: channel.mentions,
+				omitted: channel.omitted,
+				messages: channel.messages.map((message) => ({
+					id: message.id,
+					username: message.username,
+					text: message.text,
+					ts: message.ts,
+					link: buildPermalink(siteUrl, { name: channel.name, t: channel.roomType }, message.id),
+				})),
+			});
 		},
 	},
 );

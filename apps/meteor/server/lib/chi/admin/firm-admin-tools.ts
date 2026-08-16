@@ -1,9 +1,9 @@
 /**
  * Chi Firm-Admin Copilot (F7) — run YOUR firm in plain English.
  *
- * The five things a firm owner actually does — see the roster, put someone into the right
- * channels, find who has gone quiet, promote/demote, and switch an account off — exposed as Chi
- * tools.
+ * The six things a firm owner actually does — see the roster, put someone into the right
+ * channels, find who has gone quiet, promote/demote, switch an account off, and take a copy of a
+ * channel for the file — exposed as Chi tools.
  *
  * ## Why these are all `access: 'user'`
  *
@@ -42,16 +42,20 @@ import {
 	authorizeFirmAction,
 	channelLabel,
 	checkFirmOwnerFloor,
+	formatChannelExport,
 	formatFirmActivityReport,
 	formatFirmMemberList,
 	formatMembershipChange,
 	formatRoleChange,
 	matchesChannelQuery,
 	outOfFirmMessage,
+	parseExportFormat,
 	parseFirmRole,
 	parseSinceCutoff,
 	summarizeChannelAddition,
+	summarizeChannelExport,
 } from '../firmadmin/firmAdminHelpers';
+import { exportChannelToFile } from '../firmadmin/channelExport';
 
 /** Hard cap on one roster read — a firm is a law firm, not a workspace. */
 const FIRM_ROSTER_MAX = 500;
@@ -464,10 +468,84 @@ const deactivateFirmMember: ChiTool = {
 	},
 };
 
+const exportFirmChannel: ChiTool = {
+	def: {
+		name: 'export_channel',
+		description:
+			'Export one of your firm\'s channels to a downloadable archive — every message, plus the files that were shared in it — and reply with a link. Use for "export #hernandez", "give me a copy of the settlements channel", "archive #intake for the file", "I need this channel for discovery". Firm owners only, only channels inside your own firm, and it always asks for confirmation first.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				channel: { type: 'string', description: "The channel name, e.g. \"hernandez-v-state\"." },
+				format: { type: 'string', description: '"html" (default — readable in a browser) or "json" (structured, for another system).' },
+				since: {
+					type: 'string',
+					description: 'Optional: only messages from the last "30 days", "6 weeks", "this month". Omit for the channel\'s whole history.',
+				},
+				firm: { type: 'string', description: 'Workspace admins only: act inside another firm.' },
+			},
+			required: ['channel'],
+		},
+	},
+	access: 'user',
+	needsConfirm(input) {
+		const channel = str(input.channel);
+		if (!channel) {
+			return undefined; // let execute() ask for the channel, without a confirm dance
+		}
+		const cutoff = str(input.since) ? parseSinceCutoff(input.since, new Date()) : null;
+		return summarizeChannelExport(`#${channel.replace(/^#/, '')}`, cutoff?.ok ? cutoff.label : undefined);
+	},
+	async execute(input, actor) {
+		const ctx = await firmContext(actor);
+		// 'administer', not a read: an export lifts a channel's entire contents out of the
+		// workspace's access controls into a file, so it is owner-only even though a member can
+		// read the same messages one at a time inside the app.
+		const { firmId, firmName } = await resolveScope(ctx, input, 'administer');
+
+		const wanted = str(input.channel).replace(/^#/, '').toLowerCase();
+		if (!wanted) {
+			return 'Which channel should I export?';
+		}
+		// Same discipline as add_member_to_channels: only this firm's team rooms are ever
+		// fetched, so a name that collides with another firm's channel is unreachable.
+		const teamRooms = await Rooms.findByTeamId(firmId, { projection: { _id: 1, name: 1, fname: 1, topic: 1 } }).toArray();
+		const room =
+			teamRooms.find((r) => (r.name || '').toLowerCase() === wanted || (r.fname || '').toLowerCase() === wanted) ||
+			teamRooms.find((r) => (r.name || '').toLowerCase().startsWith(wanted) || (r.fname || '').toLowerCase().startsWith(wanted)) ||
+			teamRooms.find((r) => (r.name || '').toLowerCase().includes(wanted) || (r.fname || '').toLowerCase().includes(wanted));
+		if (!room) {
+			return `There's no channel called "${str(input.channel)}" in **${firmName}**.`;
+		}
+
+		let dateFrom: Date | undefined;
+		let rangeLabel: string | undefined;
+		if (str(input.since)) {
+			const cutoff = parseSinceCutoff(input.since, new Date());
+			if (!cutoff.ok) {
+				return cutoff.error;
+			}
+			dateFrom = cutoff.cutoff;
+			rangeLabel = cutoff.label;
+		}
+
+		const format = parseExportFormat(input.format);
+		const result = await exportChannelToFile({ rid: room._id, format, dateFrom }, actor);
+		return formatChannelExport({
+			channel: channelLabel(room),
+			firmName,
+			url: result.url,
+			messages: result.messages,
+			format,
+			rangeLabel,
+		});
+	},
+};
+
 /* ── registry ──────────────────────────────────────────────────────────────────────── */
 
 /**
- * All five are `access: 'user'` on purpose — the scope check that matters is "same firm", which
+ * All six are `access: 'user'` on purpose — the scope check that matters is "same firm", which
  * `runTool`'s admin-role gate cannot express and which would lock firm owners out entirely.
  */
 export const CHI_FIRM_ADMIN_TOOLS: ChiTool[] = [
@@ -476,4 +554,5 @@ export const CHI_FIRM_ADMIN_TOOLS: ChiTool[] = [
 	firmActivityReport,
 	setFirmMemberRole,
 	deactivateFirmMember,
+	exportFirmChannel,
 ];

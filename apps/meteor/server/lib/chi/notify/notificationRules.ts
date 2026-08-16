@@ -61,6 +61,18 @@ export type NotificationRule = {
 	keyword?: string;
 	/** Time-of-day window; may cross midnight (19:00 → 08:00). */
 	window?: TimeWindow;
+	/**
+	 * "Applies to every message." The one condition that constrains nothing.
+	 *
+	 * It exists because the delivery overlay only ever acts on a rule that MATCHED (see
+	 * ./triageDecision), so "only interrupt me for the Hernandez matter" needs a way to say
+	 * out loud that everything else is digest material. Its specificity is zero, so any rule
+	 * with a real condition beats it — which is exactly the behaviour that sentence describes.
+	 *
+	 * Deliberately explicit rather than "a rule with no conditions": an empty rule is
+	 * something you arrive at by accident, and this is only ever something you meant.
+	 */
+	everything?: boolean;
 	/** Let a `digest` rule also cover direct mentions / DMs. Only set on explicit user intent. */
 	includeMentions?: boolean;
 	createdAt?: number;
@@ -251,7 +263,12 @@ export function isValidRule(rule: unknown): rule is NotificationRule {
 	if (r.includeMentions !== undefined && typeof r.includeMentions !== 'boolean') {
 		return false;
 	}
-	return CONDITION_KEYS.some((k) => r[k] !== undefined);
+	if (r.everything !== undefined && typeof r.everything !== 'boolean') {
+		return false;
+	}
+	// A rule must say what it applies to. `everything: true` is a valid answer to that; an
+	// absence of conditions is not, because that is what a half-built rule looks like.
+	return r.everything === true || CONDITION_KEYS.some((k) => r[k] !== undefined);
 }
 
 /** How many conditions a rule declares — the primary precedence key. */
@@ -271,6 +288,7 @@ export type RuleDraft = {
 	keyword?: unknown;
 	from?: unknown;
 	to?: unknown;
+	everything?: unknown;
 	includeMentions?: unknown;
 	createdAt?: number;
 };
@@ -359,6 +377,12 @@ export function buildRule(draft: RuleDraft): BuildResult {
 		rule.window = { from, to };
 	}
 
+	if (draft.everything !== undefined && typeof draft.everything !== 'boolean') {
+		return { ok: false, error: 'everything must be true or false.' };
+	}
+	if (draft.everything === true) {
+		rule.everything = true;
+	}
 	if (draft.includeMentions !== undefined && typeof draft.includeMentions !== 'boolean') {
 		return { ok: false, error: 'include_mentions must be true or false.' };
 	}
@@ -372,7 +396,8 @@ export function buildRule(draft: RuleDraft): BuildResult {
 	if (!isValidRule(rule)) {
 		return {
 			ok: false,
-			error: 'A rule needs at least one condition: a channel, a sender, a sender role, a keyword/phrase, or a time window.',
+			error:
+				'A rule needs at least one condition: a channel, a sender, a sender role, a keyword/phrase, a time window — or "everything", if it really is meant to cover every message.',
 		};
 	}
 	return { ok: true, rule };
@@ -388,6 +413,7 @@ const signature = (r: NotificationRule): string =>
 		str(r.senderRole).toLowerCase(),
 		str(r.keyword).toLowerCase(),
 		r.window ? `${r.window.from}-${r.window.to}` : '',
+		r.everything ? 'all' : '',
 		r.includeMentions ? 'm' : '',
 	].join('|');
 
@@ -558,6 +584,9 @@ export function describeRule(rule: unknown): string {
 		return 'Unreadable rule (ignored).';
 	}
 	const parts: string[] = [];
+	if (rule.everything) {
+		parts.push('every message');
+	}
 	if (rule.channel) {
 		parts.push(`in #${normName(rule.channel)}`);
 	}

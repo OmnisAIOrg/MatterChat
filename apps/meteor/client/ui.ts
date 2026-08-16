@@ -12,6 +12,7 @@ import { useCallsRoomAction } from './hooks/roomActions/useCallsRoomAction';
 import { useChannelSettingsRoomAction } from './hooks/roomActions/useChannelSettingsRoomAction';
 import { useCleanHistoryRoomAction } from './hooks/roomActions/useCleanHistoryRoomAction';
 import { useCrossFirmRoomAction } from './hooks/roomActions/useCrossFirmRoomAction';
+import { useCatchMeUpRoomAction } from './hooks/roomActions/useCatchMeUpRoomAction';
 import { useDiscussionsRoomAction } from './hooks/roomActions/useDiscussionsRoomAction';
 import { useE2EERoomAction } from './hooks/roomActions/useE2EERoomAction';
 import { useExportMessagesRoomAction } from './hooks/roomActions/useExportMessagesRoomAction';
@@ -70,6 +71,7 @@ export const roomActionHooks = [
 	useHuddleRoomAction,
 	useMediaCallRoomAction,
 	useCrossFirmRoomAction,
+	useCatchMeUpRoomAction,
 ] satisfies (() => RoomToolboxActionConfig | undefined)[];
 
 export const quickActionHooks = [

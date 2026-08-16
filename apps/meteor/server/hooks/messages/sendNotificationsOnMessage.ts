@@ -14,6 +14,8 @@ import type { RootFilterOperators } from 'mongodb';
 import { getMentions } from './notifyUsersOnMessage';
 import { shortnameToUnicode } from '../../../app/emoji-native/lib/shortnameToUnicode';
 import { hasPermissionAsync } from '../../lib/authorization/hasPermission';
+// MATTERCHAT: Chi notification triage (F5).
+import { chiTriageSuppresses } from '../../lib/chi/notify/triage';
 import { callbacks } from '../../lib/callbacks';
 import { parseMessageTextPerUser, replaceMentionedUsernamesWithFullNames } from '../../lib/notifications/message';
 import { notifyDesktopUser, shouldNotifyDesktop } from '../../lib/notifications/message/desktop';
@@ -94,6 +96,9 @@ export const sendNotification = async ({
 					'statusConnection': 1,
 					'username': 1,
 					'settings.preferences.enableMobileRinging': 1,
+					// MATTERCHAT: see the aggregation projection below — Chi triage (F5).
+					'settings.chi.notificationRules': 1,
+					'utcOffset': 1,
 				},
 			}),
 		];
@@ -108,6 +113,24 @@ export const sendNotification = async ({
 	const roomType = room.t;
 	// If the user doesn't have permission to view direct messages, don't send notification of direct messages.
 	if (roomType === 'd' && !(await hasPermissionAsync(subscription.u._id, 'view-d-room'))) {
+		return;
+	}
+
+	// MATTERCHAT: Chi notification triage (F5). One early return covers desktop, push and email
+	// — the three branches below are the only delivery this function does. Subtractive by
+	// construction: a receiver with no matching rule of their own is never affected, and any
+	// failure inside returns false. See server/lib/chi/notify/triage.ts.
+	if (
+		await chiTriageSuppresses({
+			receiver,
+			sender,
+			room,
+			message,
+			hasMentionToUser,
+			hasMentionToAll,
+			hasMentionToHere,
+		})
+	) {
 		return;
 	}
 
@@ -255,6 +278,10 @@ const project = {
 		'receiver.statusConnection': 1,
 		'receiver.username': 1,
 		'receiver.settings.preferences.enableMobileRinging': 1,
+		// MATTERCHAT: Chi notification triage (F5) reads the receiver's own rules and clock off
+		// the document this lookup already loaded, rather than issuing a query per receiver.
+		'receiver.settings.chi.notificationRules': 1,
+		'receiver.utcOffset': 1,
 		'audioNotificationValue': 1,
 	},
 } as const;

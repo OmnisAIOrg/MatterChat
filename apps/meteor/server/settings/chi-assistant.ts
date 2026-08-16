@@ -199,4 +199,16 @@ export const createChiAssistantSettings = () =>
 			i18nLabel: 'Chi_Morning_Brief_Schedule',
 			i18nDescription: 'Chi_Morning_Brief_Schedule_Description',
 		});
+
+		// ── Notification triage ──────────────────────────────────────────────
+		// An ADMIN KILL SWITCH, not the feature's opt-in — which is why it is the one
+		// Chi setting that defaults ON. Triage only ever acts on rules a user wrote for
+		// themselves, so with this on and no rules written, nothing changes for anyone.
+		// See server/lib/chi/notify/triage.ts.
+		await this.add('Chi_Notification_Triage_Enabled', true, {
+			type: 'boolean',
+			public: true, // the client hides the rules UI where the feature is switched off
+			i18nLabel: 'Chi_Notification_Triage_Enabled',
+			i18nDescription: 'Chi_Notification_Triage_Enabled_Description',
+		});
 	});

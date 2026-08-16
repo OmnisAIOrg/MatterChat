@@ -19,18 +19,23 @@ const templates = {
 	],
 };
 
-const buildRoot = (overrides?: { create?: jest.Mock; invite?: jest.Mock; templates?: jest.Mock }) => {
+const buildRoot = (overrides?: { create?: jest.Mock; invite?: jest.Mock; templates?: jest.Mock; listInvites?: jest.Mock }) => {
 	const create = overrides?.create ?? jest.fn().mockResolvedValue({ firm: { firmId: 'f1', name: 'Smith & Co', roomId: 'r1', isOwner: true } });
 	const invite = overrides?.invite ?? jest.fn().mockResolvedValue({ sent: ['a@b.com'], invalid: [], inviteUrl: 'https://x/invite/abc' });
 	const listTemplates = overrides?.templates ?? jest.fn().mockResolvedValue(templates);
+	// The handoff card reads the firm's live invite links to build its QR.
+	const listInvites =
+		overrides?.listInvites ??
+		jest.fn().mockResolvedValue({ invites: [{ _id: 'i1', url: 'https://x/invite/abc', expires: null, uses: 0, maxUses: 10 }] });
 
 	const root = mockAppRoot()
 		.withEndpoint('GET', '/v1/firms.templates', listTemplates)
 		.withEndpoint('POST', '/v1/firms.create', create)
 		.withEndpoint('POST', '/v1/firms.invite', invite)
+		.withEndpoint('GET', '/v1/firms.invites.list', listInvites)
 		.build();
 
-	return { root, create, invite, listTemplates };
+	return { root, create, invite, listTemplates, listInvites };
 };
 
 describe('FirmOnboardingPage', () => {
@@ -137,6 +142,35 @@ describe('FirmOnboardingPage', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Firm_invite_send_action' }));
 
 		await waitFor(() => expect(invite).toHaveBeenCalledWith({ emails: ['jane@firm.com', 'john@firm.com'] }));
+	});
+
+	it('finishes on the QR handoff card, not by dropping straight into the workspace', async () => {
+		const { root } = buildRoot();
+		render(<FirmOnboardingPage />, { wrapper: root });
+
+		await userEvent.type(screen.getByRole('textbox'), 'Smith & Co');
+		await userEvent.click(screen.getByRole('button', { name: 'Firm_onboarding_continue' }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Firm_create_action' }));
+
+		await userEvent.type(await screen.findByRole('textbox'), 'jane@firm.com');
+		await userEvent.click(screen.getByRole('button', { name: 'Firm_invite_send_action' }));
+
+		expect(await screen.findByText('Firm_handoff_title')).toBeInTheDocument();
+		// The QR itself, drawn from the live invite link.
+		expect(await screen.findByRole('img', { name: 'Firm_QR_Alt' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Firm_handoff_done_action' })).toBeInTheDocument();
+	});
+
+	it('skipping invites does not park the user on a QR card with nothing to encode', async () => {
+		const { root } = buildRoot();
+		render(<FirmOnboardingPage />, { wrapper: root });
+
+		await userEvent.type(screen.getByRole('textbox'), 'Smith & Co');
+		await userEvent.click(screen.getByRole('button', { name: 'Firm_onboarding_continue' }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Firm_create_action' }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Firm_invite_skip_action' }));
+
+		await waitFor(() => expect(screen.queryByText('Firm_handoff_title')).not.toBeInTheDocument());
 	});
 
 	it('does not call the invite endpoint when no addresses are entered', async () => {

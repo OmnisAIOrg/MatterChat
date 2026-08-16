@@ -23,6 +23,7 @@ import { emitClientAction } from './actions';
 import { CHI_FIRM_ADMIN_TOOLS } from './firm-admin-tools';
 import { CHI_NOTIFY_TOOLS } from './notify-tools';
 import { CHI_REMINDER_TOOLS } from './reminder-tools';
+import { CHI_SEARCH_TOOLS } from './search-tools';
 import type { ChiTool } from './tools';
 import { getChiContext } from './turnctx';
 import { MAX_DIGEST_CHANNELS, MAX_MESSAGES_PER_CHANNEL } from '../digest/digestHelpers';
@@ -614,4 +615,6 @@ export const CHI_WS_TOOLS: ChiTool[] = [
 	// firm administration for firm OWNERS, who are not workspace admins
 	// (own module — see firm-admin-tools.ts)
 	...CHI_FIRM_ADMIN_TOOLS,
+	// "Ask Anything" grounded retrieval with citations (own module — see search-tools.ts)
+	...CHI_SEARCH_TOOLS,
 ];

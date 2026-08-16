@@ -58,6 +58,8 @@ const INDEXES: IndexDescription[] = [
 	{ key: { rid: 1, endTs: -1 } },
 	// Housekeeping: re-embed / prune sweeps.
 	{ key: { updatedAt: -1 } },
+	// Unindexing a deleted message: find the passage(s) that quoted it.
+	{ key: { messageIds: 1 } },
 ];
 
 const collection: Collection<IChiSearchIndexEntry> = db.collection<IChiSearchIndexEntry>(COLLECTION_NAME);
@@ -163,6 +165,18 @@ export const ChiSearchIndex = {
 	/** Drop a room's passages — used when a room is deleted or is re-indexed from scratch. */
 	async removeRoom(rid: string): Promise<number> {
 		const result = await collection.deleteMany({ rid });
+		return result.deletedCount || 0;
+	},
+
+	/**
+	 * Drop every passage a message contributed to — called when a message is deleted.
+	 *
+	 * Passages bundle several consecutive messages, so this takes the neighbours with it. That
+	 * over-deletion is intentional: the alternative is re-chunking the passage without the
+	 * deleted text, and until that runs Chi could cite a message that no longer exists.
+	 */
+	async removeByMessageId(messageId: string): Promise<number> {
+		const result = await collection.deleteMany({ messageIds: messageId });
 		return result.deletedCount || 0;
 	},
 };

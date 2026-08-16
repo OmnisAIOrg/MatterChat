@@ -442,3 +442,50 @@ export function formatRoleChange(firmName: string, username: string, from: FirmR
 	const verb = to === 'owner' ? 'promoted to OWNER of' : 'set back to MEMBER of';
 	return `${who} is now ${verb} **${firmName}** (was ${from ?? 'unset'}).`;
 }
+
+/* ── channel export (F7) ─────────────────────────────────────────────────────────────── */
+
+export type ChannelExportFormatChoice = 'html' | 'json';
+
+/**
+ * Which archive format the user asked for.
+ *
+ * HTML is the default because the person asking is a paralegal or an office manager who wants
+ * to open the thing and read it, not parse it. JSON is offered because "export" in a legal
+ * context sometimes means "hand it to the e-discovery vendor". Anything unrecognised falls back
+ * to HTML rather than erroring — a wrong word must not cost the user the export.
+ */
+export function parseExportFormat(input: unknown): ChannelExportFormatChoice {
+	const raw = typeof input === 'string' ? input.trim().toLowerCase() : '';
+	if (raw === 'json' || raw === 'data' || raw === 'raw') {
+		return 'json';
+	}
+	return 'html';
+}
+
+export type ChannelExportSummary = {
+	channel: string;
+	firmName: string;
+	url: string;
+	messages: number;
+	format: ChannelExportFormatChoice;
+	/** Human label for the range covered, when the export was limited to one. */
+	rangeLabel?: string;
+};
+
+/** What Chi says once the archive exists. The link is the point, so it leads. */
+export function formatChannelExport(summary: ChannelExportSummary): string {
+	const range = summary.rangeLabel ? ` from the last ${summary.rangeLabel}` : '';
+	const count = summary.messages === 1 ? '1 message' : `${summary.messages} messages`;
+	return [
+		`**${summary.channel}** in **${summary.firmName}** is exported — [download the archive](${summary.url}).`,
+		`${count}${range}, as ${summary.format === 'json' ? 'JSON' : 'HTML'}, with any files that were shared in the channel.`,
+		'The link needs a MatterChat login, so it is safe to pass to someone else in the firm and useless to anyone outside it.',
+	].join('\n');
+}
+
+/** The confirm-gate line shown before an export runs. */
+export function summarizeChannelExport(channel: string, rangeLabel?: string): string {
+	const range = rangeLabel ? ` covering the last ${rangeLabel}` : ' covering its whole history';
+	return `Export ${channel}${range}, including files shared in it, and produce a download link.`;
+}

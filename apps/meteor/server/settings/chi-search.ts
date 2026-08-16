@@ -63,4 +63,29 @@ export const createChiSearchSettings = () =>
 			i18nLabel: 'Chi_Search_Include_Shared_Rooms',
 			i18nDescription: 'Chi_Search_Include_Shared_Rooms_Description',
 		});
+		// The backfill (server/cron/chiSearchIndexCron.ts). The live hook only ever sees NEW
+		// messages, so without this the day semantic search is switched on the index is empty
+		// and stays that way for whichever rooms nobody happens to post in. Off by default
+		// because it is the one switch here that spends money on its own schedule.
+		await this.add('Chi_Search_Backfill_Enabled', false, {
+			type: 'boolean',
+			public: false,
+			enableQuery: { _id: 'Chi_Search_Embeddings_Enabled', value: true },
+			i18nLabel: 'Chi_Search_Backfill_Enabled',
+			i18nDescription: 'Chi_Search_Backfill_Enabled_Description',
+		});
+		await this.add('Chi_Search_Backfill_Schedule', '*/30 * * * *', {
+			type: 'string',
+			public: false,
+			enableQuery: { _id: 'Chi_Search_Backfill_Enabled', value: true },
+			i18nLabel: 'Chi_Search_Backfill_Schedule',
+			i18nDescription: 'Chi_Search_Backfill_Schedule_Description',
+		});
+		await this.add('Chi_Search_Backfill_Rooms', 25, {
+			type: 'int',
+			public: false,
+			enableQuery: { _id: 'Chi_Search_Backfill_Enabled', value: true },
+			i18nLabel: 'Chi_Search_Backfill_Rooms',
+			i18nDescription: 'Chi_Search_Backfill_Rooms_Description',
+		});
 	});

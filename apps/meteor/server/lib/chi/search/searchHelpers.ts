@@ -566,3 +566,58 @@ export function matchesAccessFilter(filter: AccessFilter, doc: { firmId?: string
 	}
 	return clause === docFirmId;
 }
+
+/* ── attachments ─────────────────────────────────────────────────────────────────────── */
+
+/** The parts of a message the file describer looks at. Structural subset of IMessage. */
+export type AttachedFileRef = {
+	file?: { name?: string } | null;
+	files?: ({ name?: string } | null)[] | null;
+	attachments?: ({ title?: string; description?: string; title_link?: string } | null)[] | null;
+};
+
+/**
+ * A one-line description of what was SHARED in a message, for the search index.
+ *
+ * The spec asks for search across "messages and files". Reading inside a PDF is the OCR
+ * pipeline's job and is not attempted here; what this does is make the fact of the file
+ * findable — "did anyone ever send the Hernandez deposition transcript?" is a question about a
+ * filename, and today a message whose only content is an upload has no text at all and is
+ * therefore invisible to retrieval.
+ *
+ * Returns an empty string when there is nothing shared, so the caller can keep skipping
+ * genuinely empty messages.
+ */
+export function describeAttachments(message: AttachedFileRef | null | undefined): string {
+	if (!message) {
+		return '';
+	}
+	const names: string[] = [];
+	const push = (value: unknown): void => {
+		const name = typeof value === 'string' ? value.trim() : '';
+		// De-duplicate: `file` and `files[0]` are the same upload on a single-file message, and
+		// an attachment usually repeats the filename as its title.
+		if (name && !names.includes(name)) {
+			names.push(name);
+		}
+	};
+
+	push(message.file?.name);
+	(message.files || []).forEach((file) => push(file?.name));
+	const descriptions: string[] = [];
+	(message.attachments || []).forEach((attachment) => {
+		push(attachment?.title);
+		const description = typeof attachment?.description === 'string' ? attachment.description.trim() : '';
+		if (description && !descriptions.includes(description)) {
+			descriptions.push(description);
+		}
+	});
+
+	if (!names.length && !descriptions.length) {
+		return '';
+	}
+	// "shared" is deliberately in the text: it is what someone types when searching for one
+	// ("who shared the settlement statement"), and it separates a file from a mention of it.
+	const shared = names.length ? `shared ${names.join(', ')}` : 'shared a file';
+	return descriptions.length ? `${shared} — ${descriptions.join(' ')}` : shared;
+}

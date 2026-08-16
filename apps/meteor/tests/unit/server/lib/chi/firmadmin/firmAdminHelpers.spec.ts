@@ -9,6 +9,7 @@ import {
 	channelLabel,
 	checkFirmOwnerFloor,
 	daysSince,
+	formatChannelExport,
 	formatFirmActivityReport,
 	formatFirmMemberList,
 	formatLastLogin,
@@ -16,10 +17,12 @@ import {
 	formatRoleChange,
 	matchesChannelQuery,
 	outOfFirmMessage,
+	parseExportFormat,
 	parseFirmRole,
 	parseSinceCutoff,
 	previewList,
 	summarizeChannelAddition,
+	summarizeChannelExport,
 } from '../../../../../../server/lib/chi/firmadmin/firmAdminHelpers';
 
 const FIRM_A = 'firmA';
@@ -589,6 +592,75 @@ describe('chi firm-admin helpers', () => {
 		});
 		it('reports an unset previous role honestly', () => {
 			expect(formatRoleChange('Acme Law', 'bob', null, 'owner')).to.contain('(was unset)');
+		});
+	});
+});
+
+describe('channel export (F7)', () => {
+	describe('parseExportFormat', () => {
+		it('defaults to html — the person asking wants to read it', () => {
+			expect(parseExportFormat(undefined)).to.equal('html');
+			expect(parseExportFormat('')).to.equal('html');
+			expect(parseExportFormat('html')).to.equal('html');
+			expect(parseExportFormat('HTML')).to.equal('html');
+		});
+
+		it('accepts the words people use for a machine-readable copy', () => {
+			expect(parseExportFormat('json')).to.equal('json');
+			expect(parseExportFormat(' JSON ')).to.equal('json');
+			expect(parseExportFormat('data')).to.equal('json');
+			expect(parseExportFormat('raw')).to.equal('json');
+		});
+
+		it('falls back rather than erroring on a word it does not know', () => {
+			expect(parseExportFormat('pdf')).to.equal('html');
+			expect(parseExportFormat(42)).to.equal('html');
+			expect(parseExportFormat(null)).to.equal('html');
+		});
+	});
+
+	describe('formatChannelExport', () => {
+		const base = { channel: '#hernandez', firmName: 'Smith Law', url: 'https://mc.example/data-export/abc', format: 'html' as const };
+
+		it('leads with the link', () => {
+			const text = formatChannelExport({ ...base, messages: 412 });
+			expect(text).to.include('[download the archive](https://mc.example/data-export/abc)');
+			expect(text).to.include('#hernandez');
+			expect(text).to.include('Smith Law');
+			expect(text).to.include('412 messages');
+		});
+
+		it('says the link is login-gated, because that is what makes it safe to share', () => {
+			expect(formatChannelExport({ ...base, messages: 1 })).to.include('needs a MatterChat login');
+		});
+
+		it('gets the singular right', () => {
+			expect(formatChannelExport({ ...base, messages: 1 })).to.include('1 message,');
+		});
+
+		it('names the range only when there is one', () => {
+			expect(formatChannelExport({ ...base, messages: 5 })).to.not.include('from the last');
+			expect(formatChannelExport({ ...base, messages: 5, rangeLabel: '30 days' })).to.include('from the last 30 days');
+		});
+
+		it('names the format', () => {
+			expect(formatChannelExport({ ...base, messages: 5 })).to.include('as HTML');
+			expect(formatChannelExport({ ...base, messages: 5, format: 'json' })).to.include('as JSON');
+		});
+	});
+
+	describe('summarizeChannelExport', () => {
+		it('states the whole history when no range is given, so confirming is informed', () => {
+			expect(summarizeChannelExport('#intake')).to.include('whole history');
+			expect(summarizeChannelExport('#intake')).to.include('#intake');
+		});
+
+		it('states the range when there is one', () => {
+			expect(summarizeChannelExport('#intake', '30 days')).to.include('covering the last 30 days');
+		});
+
+		it('warns that files come too', () => {
+			expect(summarizeChannelExport('#intake')).to.include('including files shared in it');
 		});
 	});
 });

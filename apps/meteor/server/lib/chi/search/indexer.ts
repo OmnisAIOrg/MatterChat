@@ -14,11 +14,15 @@
  * they are BOTH a member of and in-firm for. Both the semantic path and the keyword fallback
  * go through it, so there is exactly one definition of "what this person may retrieve".
  *
- * ## Not hooked into message save
+ * ## Who calls this
  *
- * Nothing here subscribes to anything. Hooking the indexer into the message-save path means
- * editing Rocket.Chat core, so the functions are exported and the hook point is documented
- * for a deliberate, reviewed wiring — see the F9 notes in the PR description.
+ * Nothing here subscribes to anything itself — it is all pull. Three callers drive it, and all
+ * three are additive, in our own files:
+ *  - `server/lib/chi/search/startup.ts` — the afterSaveMessage hook, via a dirty-room queue, so
+ *    new traffic is indexed within about a minute.
+ *  - `server/cron/chiSearchIndexCron.ts` — a bounded periodic backfill that reaches history the
+ *    hook never saw (and rooms the queue dropped at its ceiling).
+ *  - `rebuild_search_index` — the admin Chi tool, for an explicit rebuild.
  */
 import type { IMessage, IRoom, IUser } from '@rocket.chat/core-typings';
 import { Messages, Rooms, Subscriptions, Users } from '@rocket.chat/models';
@@ -26,7 +30,7 @@ import { Messages, Rooms, Subscriptions, Users } from '@rocket.chat/models';
 import type { EmbeddingConfig, EmbeddingFetch } from './embeddings';
 import { embedTexts, getEmbeddingConfig } from './embeddings';
 import type { ChunkMessage } from './searchHelpers';
-import { chunkMessages } from './searchHelpers';
+import { chunkMessages, describeAttachments } from './searchHelpers';
 import { ChiSearchIndex } from '../../../models/ChiSearchIndex';
 import type { ChiSearchIndexUpsert } from '../../../models/ChiSearchIndex';
 import { settings } from '../../../settings';
@@ -215,29 +219,52 @@ export async function indexRoom(rid: string, options: IndexRoomOptions = {}): Pr
 	}
 	const since = options.rebuild ? undefined : (options.since ?? (await ChiSearchIndex.latestIndexedTs(rid)));
 
-	const query: Record<string, unknown> = { rid, t: { $exists: false }, msg: { $exists: true, $ne: '' } };
+	// `_hidden` is how a deleted-but-retained message is tombstoned. Indexing one would let Chi
+	// quote, with a citation, something somebody deleted.
+	//
+	// A message qualifies on EITHER text or an attachment: an upload posted with no caption has
+	// an empty `msg`, and excluding those is what would make "did anyone send the deposition
+	// transcript?" — a question about a filename — unanswerable.
+	const query: Record<string, unknown> = {
+		rid,
+		t: { $exists: false },
+		_hidden: { $ne: true },
+		$or: [{ msg: { $exists: true, $ne: '' } }, { file: { $exists: true } }, { files: { $exists: true, $ne: [] } }],
+	};
 	if (since) {
 		// `$gt`, not `$gte`: re-reading the boundary message would re-chunk it into a passage
 		// with a different composition and a different anchor, i.e. a near-duplicate row.
 		query.ts = { $gt: since };
 	}
 
-	const messages = await Messages.find<Pick<IMessage, '_id' | 'msg' | 'u' | 'ts'>>(query, {
+	const messages = await Messages.find<Pick<IMessage, '_id' | 'msg' | 'u' | 'ts' | 'file' | 'files' | 'attachments'>>(query, {
 		sort: { ts: 1 },
 		limit: Math.max(1, Math.min(options.messageLimit ?? MAX_MESSAGES_PER_PASS, MAX_MESSAGES_PER_PASS)),
-		projection: { msg: 1, u: 1, ts: 1 },
+		projection: { msg: 1, u: 1, ts: 1, file: 1, files: 1, attachments: 1 },
 	}).toArray();
 
 	if (!messages.length) {
 		return { rid, indexed: 0, messages: 0, firmId, skipped: 'no-messages' };
 	}
 
-	const chunkable: ChunkMessage[] = messages.map((message) => ({
-		id: message._id,
-		username: message.u?.username,
-		text: message.msg || '',
-		ts: message.ts,
-	}));
+	const chunkable: ChunkMessage[] = messages
+		.map((message) => {
+			const shared = describeAttachments(message);
+			const body = (message.msg || '').trim();
+			// The caption and the filename both go in, in that order, so a captioned upload is
+			// findable by either. `chunkMessages` drops anything that ends up empty.
+			return {
+				id: message._id,
+				username: message.u?.username,
+				text: [body, shared].filter(Boolean).join(' — '),
+				ts: message.ts,
+			};
+		})
+		.filter((message) => message.text.length > 0);
+
+	if (!chunkable.length) {
+		return { rid, indexed: 0, messages: messages.length, firmId, skipped: 'no-messages' };
+	}
 	const passages = chunkMessages(chunkable);
 	if (!passages.length) {
 		return { rid, indexed: 0, messages: messages.length, firmId, skipped: 'no-messages' };

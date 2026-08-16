@@ -24,8 +24,8 @@ const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
 /** The two lines every rules answer ends with, so the user always knows the defaults in play. */
 const DEFAULTS_NOTE = [
-	'_Defaults: a direct mention or a DM always interrupts you (only an explicit "silence" rule can stop that);',
-	'everything else with no matching rule collects into your digest._',
+	'_Defaults: your notifications work exactly as they do now until a rule of yours matches — rules only ever quieten things,',
+	'never add them. A direct mention or a DM is never quietened by a "digest" rule unless you ask for that explicitly._',
 ].join(' ');
 
 const addNotificationRuleTool: ChiTool = {
@@ -35,17 +35,17 @@ const addNotificationRuleTool: ChiTool = {
 			"Add ONE smart-notification rule for the CALLER, deciding what is allowed to interrupt them. The user says it as a sentence — you translate it into these structured fields (there is no free-text field; never pass the raw sentence).",
 			'',
 			'action: "interrupt" = notify immediately · "digest" = collect it for their periodic digest instead of interrupting · "silence" = never surface it at all.',
-			'Conditions AND together, and at least one is required: channel, sender, sender_role, keyword, or a from/to time window.',
+			'Conditions AND together, and at least one is required: channel, sender, sender_role, keyword, a from/to time window, or everything:true.',
 			'',
 			'Mapping examples:',
-			'• "only interrupt me for the Hernandez matter" → {action:"interrupt", channel:"hernandez"}',
+			'• "only interrupt me for the Hernandez matter" → TWO calls: {action:"digest", everything:true} then {action:"interrupt", channel:"hernandez"} — the first is what makes "only" true; without it nothing else changes.',
 			'• "don\'t ping me about #random, just collect it" → {action:"digest", channel:"random"}',
 			'• "nothing after 7pm unless it\'s from a partner" → TWO calls: {action:"digest", from:"19:00", to:"08:00"} then {action:"interrupt", from:"19:00", to:"08:00", sender_role:"partner"}',
 			'• "tell me right away if anyone says settlement offer" → {action:"interrupt", keyword:"settlement offer"}',
 			'• "never notify me about the Wilson case, even if I\'m tagged" → {action:"silence", keyword:"Wilson"}',
 			'• "mute Dana in #ops" → {action:"digest", channel:"ops", sender:"dana"}',
 			'',
-			'You usually only need the EXCEPTIONS: a direct mention or DM already always interrupts, and anything with no matching rule already goes to the digest. A "digest" rule will NOT downgrade a message that mentions the user directly unless include_mentions is true — set that only when they explicitly say "even if I\'m mentioned". A "silence" rule always applies, mentions included, so use it only when the user really means never.',
+			'IMPORTANT: rules only ever take notifications AWAY — a message matching NO rule is delivered exactly as it is today. So "quiet by default" has to be said out loud with an {everything:true} digest rule, which narrower rules then beat. A "digest" rule will NOT downgrade a message that mentions the user directly unless include_mentions is true — set that only when they explicitly say "even if I\'m mentioned". A "silence" rule always applies, mentions included, and is filtered out of the digest and morning brief too, so use it only when the user really means never.',
 			'When several rules match, the more specific one wins. If the request does not fit these fields, say so instead of guessing.',
 		].join('\n'),
 		inputSchema: {
@@ -58,6 +58,11 @@ const addNotificationRuleTool: ChiTool = {
 				keyword: { type: 'string', description: 'A word or phrase in the message. Whole-word, case-insensitive ("SOL" will not match "solution").' },
 				from: { type: 'string', description: 'Start of a time-of-day window on the user\'s clock, 24-hour "HH:MM" (also accepts "7pm").' },
 				to: { type: 'string', description: 'End of the window, exclusive. May be earlier than "from" to cross midnight, e.g. from 19:00 to 08:00.' },
+				everything: {
+					type: 'boolean',
+					description:
+						'Apply to every message. Use ONLY for an explicit "quiet by default" instruction ("only interrupt me for X", "hold everything unless I am mentioned"), paired with narrower rules for the exceptions. Any rule with a real condition beats it.',
+				},
 				include_mentions: { type: 'boolean', description: 'Only for action="digest": let it apply even when the user is mentioned directly. Default false.' },
 			},
 			required: ['action'],
@@ -73,6 +78,7 @@ const addNotificationRuleTool: ChiTool = {
 			keyword: input.keyword,
 			from: input.from,
 			to: input.to,
+			everything: input.everything,
 			includeMentions: input.include_mentions,
 		});
 		return [

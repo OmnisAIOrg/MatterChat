@@ -19,6 +19,8 @@ import type { ChangeEvent, ReactElement } from 'react';
 import { useId, useState } from 'react';
 
 import PracticeAreaPicker from './PracticeAreaPicker';
+import FirmQrHandoffSection from './console/FirmQrHandoffSection';
+import { firmInvitesQueryKey } from './console/firmConsole';
 
 /**
  * MATTERCHAT: firm setup for a brand-new account.
@@ -52,6 +54,14 @@ import PracticeAreaPicker from './PracticeAreaPicker';
  * step is skippable in substance (selecting nothing is valid) without being
  * skippable in form — there is no "skip" button to read as "this doesn't
  * matter", just a Create button that works either way.
+ *
+ * ## Why there is a fourth card after the invites are sent
+ *
+ * Because the people being onboarded are usually in the room. Emailing invites
+ * handles the ones who are not; the QR handles the partner standing next to you
+ * holding a phone, who would otherwise have to be told a server URL to type. It
+ * only appears once an invite link actually exists — skipping invites goes
+ * straight to the workspace, since there would be nothing to encode.
  */
 const FirmOnboardingPage = (): ReactElement => {
 	const t = useTranslation();
@@ -64,7 +74,7 @@ const FirmOnboardingPage = (): ReactElement => {
 	const createFirm = useEndpoint('POST', '/v1/firms.create');
 	const inviteToFirm = useEndpoint('POST', '/v1/firms.invite');
 
-	const [step, setStep] = useState<'name' | 'areas' | 'invite'>('name');
+	const [step, setStep] = useState<'name' | 'areas' | 'invite' | 'handoff'>('name');
 	const [firmName, setFirmName] = useState('');
 	const [practiceAreas, setPracticeAreas] = useState<string[]>([]);
 	const [emailsRaw, setEmailsRaw] = useState('');
@@ -131,7 +141,10 @@ const FirmOnboardingPage = (): ReactElement => {
 			if (invalid.length > 0) {
 				dispatchToastMessage({ type: 'warning', message: t('Firm_invites_failed', { emails: invalid.join(', ') }) });
 			}
-			await finish();
+			// Sending invites created the link the QR encodes, so refresh the list the
+			// handoff card reads and show it rather than dropping straight into the app.
+			await queryClient.invalidateQueries({ queryKey: firmInvitesQueryKey });
+			setStep('handoff');
 		} catch (e: unknown) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -258,6 +271,27 @@ const FirmOnboardingPage = (): ReactElement => {
 								{/* Skipping INVITES is fine — the firm already exists. */}
 								<Button secondary disabled={busy} onClick={() => void finish()}>
 									{t('Firm_invite_skip_action')}
+								</Button>
+							</ButtonGroup>
+						</FormFooter>
+					</>
+				) : null}
+
+				{step === 'handoff' ? (
+					<>
+						<FormHeader>
+							<FormTitle>{t('Firm_handoff_title')}</FormTitle>
+							<FormSubtitle>{t('Firm_handoff_subtitle')}</FormSubtitle>
+						</FormHeader>
+						<FormContainer>
+							<Box display='flex' flexDirection='column' alignItems='center'>
+								<FirmQrHandoffSection />
+							</Box>
+						</FormContainer>
+						<FormFooter>
+							<ButtonGroup stretch vertical>
+								<Button primary onClick={() => void finish()}>
+									{t('Firm_handoff_done_action')}
 								</Button>
 							</ButtonGroup>
 						</FormFooter>
