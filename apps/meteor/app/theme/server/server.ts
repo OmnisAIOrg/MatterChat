@@ -6,6 +6,7 @@ import { WebApp } from 'meteor/webapp';
 
 import { settings } from '../../settings/server';
 import { addStyle } from '../../ui-master/server/inject';
+import { textResponse } from '../../ui-master/server/textResponse';
 
 settings.watch('theme-custom-css', (value) => {
 	if (!value || typeof value !== 'string') {
@@ -36,8 +37,11 @@ WebApp.rawConnectHandlers.use((req, res, next) => {
 		throw new Error('Invalid theme-custom-css setting');
 	}
 
+	// MATTERCHAT: Content-Length must be the BYTE count, not the string length —
+	// see app/ui-master/server/textResponse.ts for what this cost in production.
+	const { body, contentLength } = textResponse(style);
 	res.setHeader('Content-Type', 'text/css; charset=UTF-8');
-	res.setHeader('Content-Length', style.length);
+	res.setHeader('Content-Length', contentLength);
 	res.setHeader('ETag', `"${crypto.createHash('sha1').update(style).digest('hex')}"`);
-	res.end(style, 'utf-8');
+	res.end(body);
 });

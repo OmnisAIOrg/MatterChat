@@ -42,6 +42,7 @@ export default {
 				'<rootDir>/ee/server/cron/**/*.spec.ts',
 				'<rootDir>/app/cloud/server/functions/supportedVersionsToken/**.spec.ts',
 				'<rootDir>/app/utils/lib/**.spec.ts',
+				'<rootDir>/app/ui-master/server/**.spec.ts',
 				'<rootDir>/server/lib/auditServerEvents/**.spec.ts',
 				'<rootDir>/server/lib/rooms/**.spec.ts',
 				'<rootDir>/server/lib/caseProCommsLog/**.spec.ts',

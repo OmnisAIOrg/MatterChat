@@ -6,6 +6,7 @@ import { ReactiveDict } from 'meteor/reactive-dict';
 import { WebApp } from 'meteor/webapp';
 import parseRequest from 'parseurl';
 
+import { textResponse } from './textResponse';
 import { getURL } from '../../utils/server/getURL';
 
 type Injection =
@@ -42,12 +43,15 @@ const callback: NextHandleFunction = (req, res, next) => {
 		const serve =
 			(contentType: string) =>
 			(content: string, cacheControl = 'public, max-age=31536000'): void => {
+				// MATTERCHAT: Content-Length must be the BYTE count, not the string length —
+				// see ./textResponse.ts for what this cost in production.
+				const { body, contentLength } = textResponse(content);
 				res.writeHead(200, {
 					'Content-type': contentType,
 					'cache-control': cacheControl,
-					'Content-Length': content.length,
+					'Content-Length': contentLength,
 				});
-				res.write(content);
+				res.write(body);
 				res.end();
 			};
 
