@@ -101,6 +101,25 @@ export const ChiReminders = {
 		await collection.updateOne({ _id: id, resolvedAt: { $exists: false } }, { $set: { resolvedAt: new Date(), resolution } });
 	},
 
+	/**
+	 * Correct the resolution of a reminder THIS worker just claimed.
+	 *
+	 * `claimDue` stamps `resolution: 'fired'` as part of the atomic claim — that is what makes
+	 * the claim safe across pods, and what leaves a truthful record if the process dies between
+	 * claiming and delivering. But a conditional follow-up decides whether it fires only AFTER
+	 * it has been claimed, and by then `resolve` cannot help: it guards on
+	 * `resolvedAt: { $exists: false }`, which the claim has already filled in. The reminder
+	 * therefore stayed recorded as "fired" even when the cron correctly said nothing — the
+	 * behaviour was right and the audit trail was a lie.
+	 *
+	 * Only a claim can be reclassified (`resolution: 'fired'` is the claim's own marker), so this
+	 * cannot rewrite a reminder that was genuinely delivered in an earlier tick and then resolved.
+	 */
+	async reclassify(id: string, resolution: IChiReminder['resolution']): Promise<boolean> {
+		const result = await collection.updateOne({ _id: id, resolution: 'fired' }, { $set: { resolution } });
+		return result.modifiedCount > 0;
+	},
+
 	async cancel(userId: string, id: string): Promise<boolean> {
 		const result = await collection.updateOne(
 			{ _id: id, userId, resolvedAt: { $exists: false } },

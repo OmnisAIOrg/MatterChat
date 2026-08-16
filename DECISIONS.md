@@ -1,3 +1,59 @@
+### 2026-08-16 — Content-Length is a BYTE count, and the bug class it belongs to
+**Chose:** one shared `textResponse()` helper for every generated text body, rather than fixing
+`content.length` -> `Buffer.byteLength` inline at the two call sites.
+**Why:** the two sites had already drifted into the same mistake independently, and the mistake
+has three properties that guarantee it comes back: it is CORRECT for ASCII, it cannot reproduce
+against a local dev server (HTTP/1.1 tolerates a short Content-Length; HTTP/2 resets the
+stream), and `curl` hides it unless you pass `--http2`. A rule with those properties does not
+survive as a code-review convention; it has to be a function with tests around it.
+**Consequence accepted:** two upstream Rocket.Chat files carry a `// MATTERCHAT:` marker and a
+fork-owned import. Kept to one line each.
+
+### 2026-08-16 — Notification triage only ever SUBTRACTS, and only on a real match
+**Chose:** the delivery overlay returns "no opinion" unless a rule actually matched, even
+though the engine's own baseline says `digest` for ordinary channel traffic.
+**Why:** shipping the engine's baseline as the delivery decision would mean the first person to
+write one narrow rule ("silence #random") silently stops getting desktop notifications
+everywhere else. A triage system gets exactly one chance to be trusted, and that failure is not
+recoverable by fixing the bug later. Subtractive-on-match means turning the feature on changes
+nothing for anybody until they write a rule, and then only ever takes notifications away.
+**Chose:** an explicit `everything: true` condition so "only interrupt me for the Hernandez
+matter" is still expressible — its specificity is 0, so any real condition beats it.
+**Rejected:** allowing a rule with NO conditions to mean "everything". An empty rule is what a
+half-built rule looks like; "everything" is only ever something you meant.
+
+### 2026-08-16 — `silence` had to be made true
+**Chose:** filter `silence` matches out of Catch Me Up and the morning brief, not just out of
+interrupts.
+**Why:** the rules UI already promised "never surface it, even if I am mentioned". Suppressing
+only the notification and then re-raising the message in tomorrow's brief makes that a lie, and
+at the delivery hook `digest` and `silence` are otherwise indistinguishable. Cost is one extra
+projection on a user document the digest already reads, and a batched roles query only when a
+rule actually names a role.
+
+### 2026-08-16 — Catch Me Up in the channel header does NOT go through the model
+**Chose:** a new `chi.catchup` REST route returning unread messages with jump links, rather
+than having the header button call `chi.ask`.
+**Why:** the spec asks for "a navigation surface rather than a wall of text", which is exactly
+what a list of jump links is — and it works on a workspace with no LLM configured, which is
+every workspace on day one. The orb still gives the prose summary for anyone who wants it.
+
+### 2026-08-16 — Channel export returns a link, not an email
+**Chose:** reuse core's own export building blocks (`exportRoomMessagesToFile`, `makeZipFile`,
+`uploadZipFile`) in a fork-owned module that returns the download URL, instead of calling
+`dataExport.sendFile`.
+**Why:** `sendFile` builds the zip, uploads it, and then EMAILS the link. Staging has no SMTP
+and a self-hosted firm may have none, so the export would succeed and the user would never hear
+about it. Chi is a chat; the answer belongs in the conversation.
+
+### 2026-08-16 — Two agents, one checkout
+**Learned the hard way:** a second Claude session was editing this working tree concurrently,
+switching branches and running `git reset`. It reverted edits mid-session and made `ls` and
+`git status` disagree, which cost real time to diagnose.
+**Rule going forward:** check `ps aux | grep claude` and `git reflog` at the start of a session.
+If the checkout is shared, use a `git worktree` — and expect to link four sets of untracked
+build artifacts before Meteor will boot in it (listed in HANDOFF.md).
+
 # DECISIONS.md — why we built it this way
 > Append‑only. One dated entry per meaningful decision: what we chose, what we rejected, and **why** (the trade‑off). Never rewrite past entries. **No secrets** (no keys, passwords, tokens) — reasoning only. The "checkpoint matterchat" command appends here.
 

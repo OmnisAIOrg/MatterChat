@@ -65,14 +65,16 @@ export async function runRemindersSweep(now: Date = new Date()): Promise<{ fired
 			// A conditional follow-up asks its question again at delivery time.
 			if (reminder.kind === 'no-reply' && reminder.rid) {
 				if (!(await roomStillExists(reminder.rid))) {
-					await ChiReminders.resolve(reminder._id, 'cancelled');
+					// reclassify, not resolve: claimDue already stamped this one 'fired'.
+					await ChiReminders.reclassify(reminder._id, 'cancelled');
 					skipped += 1;
 					continue;
 				}
 				const since = reminder.watchSince ?? reminder.createdAt;
 				if (await hasSomeoneReplied(reminder.rid, since, reminder.userId)) {
-					// The thing they were waiting for happened. Say nothing.
-					await ChiReminders.resolve(reminder._id, 'condition-met');
+					// The thing they were waiting for happened. Say nothing — and RECORD that,
+					// rather than leaving the claim's provisional 'fired' in place.
+					await ChiReminders.reclassify(reminder._id, 'condition-met');
 					skipped += 1;
 					continue;
 				}
@@ -101,10 +103,25 @@ export async function runRemindersSweep(now: Date = new Date()): Promise<{ fired
 	return { fired, skipped };
 }
 
-/** Register the reminders cron. Called from cron/start.ts. */
+/**
+ * Register the reminders cron. Called from cron/start.ts.
+ *
+ * MUST re-add on every boot, and the early return that used to be here was a real outage.
+ *
+ * `cronJobs.has()` asks Agenda, whose job records live in MONGO and therefore survive a
+ * restart. `cronJobs.add()` is what calls `define()` — which registers the callback IN THIS
+ * PROCESS, because a closure cannot be persisted. So "the job already exists, nothing to do"
+ * is exactly wrong: it leaves a scheduled job with no handler attached to the running pod.
+ * The symptom is that reminders fire after the first ever boot of a fresh database and then
+ * never again, silently, for the life of the deployment.
+ *
+ * Remove-then-add is what the morning brief already does (via its schedule-change sync), which
+ * is why that one kept working. Verified live: without this, a due reminder sits unresolved
+ * through every tick after a restart; with it, it fires within the minute.
+ */
 export async function chiRemindersCron(): Promise<void> {
 	if (await cronJobs.has(REMINDER_JOB)) {
-		return;
+		await cronJobs.remove(REMINDER_JOB);
 	}
 	await cronJobs.add(REMINDER_JOB, SCHEDULE, async () => {
 		await runRemindersSweep();

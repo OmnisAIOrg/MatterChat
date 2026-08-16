@@ -1,3 +1,129 @@
+# HANDOFF — 2026-08-16 (Programme wired live + a production HTTP/2 incident)
+
+Branch `feature/omnis-widgets`, commit `9e2f28492a` on top of the eleven from 08-14/15.
+Nothing pushed. Spec: `docs/superpowers/specs/2026-08-14-matterchat-easiest-org-comms-design.md`.
+
+## ⚠️ TWO CLAUDE SESSIONS WERE EDITING THIS CHECKOUT AT ONCE
+
+At 14:35 today another session switched this working tree off `feature/omnis-widgets`,
+created `hotfix/http2-content-length`, committed `82005d2ee3`, and ran `git reset` twice —
+which silently reverted two of this session's edits mid-flight and made `ls`/`find` disagree
+with `git status`. Nothing was lost (82005d2ee3's content is inside `9e2f28492a`), but the
+lesson is cheap to state and expensive to relearn:
+
+**Before a long session, check `ps aux | grep claude` and `git reflog`. If another agent has
+this checkout, work in a `git worktree`, not in the shared tree.**
+
+A dangling `82005d2ee3` and the branch `hotfix/http2-content-length` are leftovers from that
+session; both are superseded and safe to delete.
+
+## PRODUCTION INCIDENT — the theme stylesheet never delivered over HTTP/2
+
+**Symptom:** MatterChat intermittently hangs on the loading splash. The site is *up* —
+`/api/info` healthy, every bundle 200 — but `css-theme_<hash>.css` returns **0 bytes and hangs
+for the full timeout over HTTP/2**, while HTTP/1.1 serves its 512 bytes instantly. It is a
+render-blocking `<link>` in `<head>`, so the browser stalls on a stylesheet that never comes.
+
+**Cause:** `Content-Length: content.length` — UTF-16 code units — with the body written as
+UTF-8. The brand CSS opens `/* MatterChat — OmnisAI house brand (GREEN) */`; that em dash is
+1 character and 3 bytes, so the response declared 510 and sent 512. HTTP/1.1 tolerates the
+mismatch, HTTP/2 enforces it and resets the stream.
+
+**Why it survived review:** it is *correct for pure ASCII*, it **cannot reproduce against a
+local dev server** (HTTP/1.1 only), and `curl` hides it unless you pass `--http2`.
+
+**Reproduction** (kept at `scratchpad/repro-h2.mjs`; serves the real production bytes over a
+real HTTP/2 connection):
+
+    BROKEN (content.length)      declared=510  ->  STREAM ERROR after 0 bytes
+    FIXED  (Buffer.byteLength)   declared=512  ->  delivered 512 bytes
+
+**Fixed** in PR #194 → `staging`, MERGED as `42a2b91b`. Both affected handlers now go through
+one tested helper, `textResponse()`. NOTE THE PATHS DIFFER BY BRANCH: on `staging` they are
+`app/ui-master/server/inject.ts` + `app/theme/server/server.ts`; on `feature/omnis-widgets`
+they are `server/lib/ui-master/inject.ts` + `server/settings/theme/server.ts`. The feature
+branch carries its own copy of the fix, so the two will not conflict.
+
+**Verify after any deploy** — this is the whole test, and it must be `--http2`:
+
+    curl -sS --http2 -o /dev/null -w "%{size_download}\n" --max-time 20 \
+      https://matterchat.stg-omnisai.io/css-theme_a4ea65289607c99271e96a51cdd478eb50fb63b8.css
+
+Pre-fix that printed `0` after a 20 s hang on BOTH staging and production. Post-fix it must
+print the full byte count promptly.
+
+## What shipped in `9e2f28492a`
+
+- **F9 is live.** `CHI_SEARCH_TOOLS` spread into `ws-tools.ts`; `createChiSearchSettings()`
+  registered; a new `afterSaveMessage` hook (`server/lib/chi/search/startup.ts`) keeps the
+  index current through a dirty-room queue — O(1) on the hot path, ticker-flushed, bounded per
+  tick, fair-ordered oldest-dirty-first, backed off on failure, and capped so a busy workspace
+  cannot grow the map without limit. A bounded cron (`chiSearchIndexCron.ts`) backfills history
+  the hook can never see; without it the index is empty on the day search is switched on.
+- **F9 also indexes files** by filename/description, so "did anyone send the deposition
+  transcript?" is answerable; deleted and `_hidden` messages are unindexed, because a legal
+  retrieval system must not quote something somebody deleted.
+- **F5 is hooked into delivery** — one early return in `sendNotification` covering desktop,
+  push and email, plus two projected fields. It is deliberately NARROWER than the engine's
+  baseline: the overlay only acts when a rule ACTUALLY matched, so a user with no rules is
+  unaffected and one narrow rule cannot cost them notifications everywhere else. Quiet-by-
+  default is expressible via the new `everything` condition, which any real condition beats.
+  `silence` is now filtered out of Catch Me Up and the morning brief too.
+- **Spec gaps closed:** F4's channel-header entry point (new `chi.catchup` route, needs no LLM
+  configured); F7 channel export (reuses core's export machinery but returns a link, because
+  staging has no SMTP and Chi is a chat); F2's QR now ends the setup concierge.
+
+~150 new specs. Typecheck **739**, two below the 741 baseline, zero errors in touched files.
+Client jest: the same five pre-existing suites fail, nothing new.
+
+## VERIFIED AGAINST A LIVE SERVER — and it found two real bugs
+
+A dev server was booted from a worktree at `9e2f28492a` and driven through
+`scratchpad/verify.mjs` + `verify2.mjs`. **Green:** boot; all 7 new settings registered with
+correct defaults; all three fork-owned collections created their indexes (including the new
+`messageIds_1`); `firms.create` with practice areas seeding 7 channels; owner stamped with BOTH
+`customFields.firmId` and `firmRole=owner`; invite create/list/revoke; the invite URL on our own
+host rather than `go.rocket.chat`; gmail.com refused as a public provider; domain claim written
+with a token, listed, and `/firm-domain/verify/:token` responding; `chi.catchup` returning real
+content with working `?msg=` jump links and refusing a room the caller is not in; and the
+reminders cron firing a DM plus staying silent on a follow-up whose condition was met.
+
+**Two bugs that only a live run could have found, both now fixed:**
+
+1. **Chi reminders stopped firing after any restart.** `cronJobs.has()` asks Agenda, whose job
+   records live in MONGO and survive restarts; `cronJobs.add()` is what calls `define()`, which
+   registers the callback IN THIS PROCESS. `chiRemindersCron` did `if (has) return`, so after
+   the first ever boot every later pod had a scheduled job with no handler attached. Reminders
+   fired once on a fresh database and then never again, silently. Now remove-then-add. It was
+   the ONLY cron with that shape — the morning brief already re-added via its schedule sync.
+2. **Conditional follow-ups recorded the wrong outcome.** `claimDue` stamps `resolution:'fired'`
+   as part of its atomic claim, and `resolve()` guards on `resolvedAt: {$exists:false}` — which
+   the claim has just filled in. So a `no-reply` reminder that correctly stayed silent was still
+   recorded as "fired". Behaviour was right, the audit trail lied. New `ChiReminders.reclassify`
+   corrects a just-claimed row and cannot touch one genuinely delivered earlier.
+
+**Still not exercised live:** the F5 triage suppression could not be proven either way — with
+`Troubleshoot_Disable_Notifications` off and a receiver set to `all`, the notification queue
+stayed empty in every case including the controls, so "suppressed" and "never queued" are
+indistinguishable in that harness. The unit specs cover the decision; the delivery wiring needs
+a better probe (watch the DDP stream, or assert on `sendNotification` directly). Also unexercised:
+the embedding/search index end to end (needs a provider), and APNs (needs a device).
+
+## HARNESS NOTES (both traps cost time)
+
+This remains the programme's open risk, unchanged from 08-14. The crons, the three Mongo-backed
+stores and every REST route are compiled and unit-tested but have never touched a database.
+`ChiReminders.claimDue` matches `resolvedAt: { $exists: false }` — inserting a fixture with an
+explicit `resolvedAt: null` means it is NEVER claimed. That cost a false "the cron is broken".
+
+**Running a dev server from a git worktree needs four things linked from the main checkout**,
+because they are build artifacts that git does not track and Meteor dies on each in turn:
+
+    node_modules (root, apps/meteor, packages/*/)
+    apps/meteor/packages/rocketchat-i18n/i18n
+    packages/*/dist                       (54 of them)
+    apps/meteor/public/livechat           (careful: `ln -sfn` into an existing dir nests it)
+
 # HANDOFF — 2026-08-14 (Easiest-org-comms programme: 9 features, Phases 1–3)
 
 Branch `feature/omnis-widgets`. Spec: `docs/superpowers/specs/2026-08-14-matterchat-easiest-org-comms-design.md`.
