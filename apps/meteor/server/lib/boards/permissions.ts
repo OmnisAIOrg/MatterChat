@@ -3,6 +3,7 @@ import { Boards } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermissionAsync } from '../../../app/authorization/server/functions/hasPermission';
+import { isBoardInCallerFirm } from './firmScope';
 
 /**
  * Board ACL roles in increasing privilege. `observer` may read + comment;
@@ -39,11 +40,19 @@ export async function getBoardForUser(boardId: string, uid: string, method: stri
 		throw new Meteor.Error('error-board-not-found', 'Board not found', { method });
 	}
 
+	const isMember = board.members.some((m) => m.userId === uid);
+
+	// `boards-admin` is held by `partner` as well as `admin`, and a partner belongs
+	// to a firm — so the membership bypass has to stay inside that firm or a partner
+	// at one firm can open another firm's board by id. In a single-firm workspace
+	// every board is in the caller's firm, so the bypass behaves exactly as before.
 	if (await hasPermissionAsync(uid, 'boards-admin')) {
-		return board;
+		if (isMember || (await isBoardInCallerFirm(board, uid, method))) {
+			return board;
+		}
+		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method });
 	}
 
-	const isMember = board.members.some((m) => m.userId === uid);
 	if (!isMember) {
 		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method });
 	}

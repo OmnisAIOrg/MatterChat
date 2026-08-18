@@ -458,7 +458,7 @@ API.v1.get(
 			return API.v1.unauthorized();
 		}
 		const lead = await requireLead(this.queryParams.leadId);
-		const result = await checkDuplicates(lead);
+		const result = await checkDuplicates(userId, lead);
 		return API.v1.success(result);
 	},
 );
