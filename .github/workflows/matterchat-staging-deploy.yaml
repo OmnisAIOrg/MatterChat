@@ -1,18 +1,35 @@
 name: MatterChat — Staging Deploy
 
-# BUILD-ONLY (+ a safe pod restart). MatterChat staging is owned by ArgoCD — app
-# `matterchat-staging`, synced from the OmnisAIOrg/MatterChat-New repo (kubernetes/staging/),
-# with automated prune + selfHeal. ArgoCD owns the Deployment / Service(s) / Ingress.
+# Build the image, then roll it the way every other OmnisAI staging pipeline rolls one:
+# `kubectl rollout restart` + `kubectl rollout status`. MatterChat staging is owned by the
+# ArgoCD app `matterchat-staging`, synced from OmnisAIOrg/MatterChat-New (kubernetes/staging/)
+# with automated prune + selfHeal, and the app carries the same `ignoreDifferences` on
+# /spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt that autodoc, casepro,
+# casenotes and the rest carry, so the restart annotation is not treated as drift.
 #
-# Therefore this pipeline must NOT `kubectl apply` the manifests under kubernetes/staging/ (a
-# stale, divergent copy) nor `kubectl set image` — both FIGHT ArgoCD's self-heal. In particular
-# the committed Ingress used the wrong shared-ALB group, so applying it flipped MatterChat onto the
-# backend ALB and 404-ed the public host until the binding was repaired. (See the repo HANDOFF /
-# memory "matterchat-staging-argocd-truth".)
+# This pipeline must still NOT `kubectl apply` the manifests under kubernetes/staging/ in THIS
+# repo (a stale, divergent copy) nor `kubectl set image` — both fight ArgoCD's self-heal. In
+# particular the committed Ingress used the wrong shared-ALB group, so applying it flipped
+# MatterChat onto the backend ALB and 404-ed the public host until the binding was repaired.
+# (See the repo HANDOFF / memory "matterchat-staging-argocd-truth".)
 #
-# So we BUILD + push the image, then deploy it the only ArgoCD-safe way: restart the pod, so the
-# ArgoCD-managed Deployment recreates it and pulls the new :staging-latest. Deleting a pod is
-# invisible to ArgoCD (it reconciles Deployments/Services/Ingress, not individual pods).
+# Why this replaced the previous `kubectl delete pod` deploy: that version made EVERY run since
+# 2026-08-05 red, for two reasons, neither of them the build.
+#
+#   1. RACE. `delete pod --wait=false` was followed by a curl loop that exited on the first 200 —
+#      which came from the OUTGOING pod, still serving for a few seconds after the delete was
+#      accepted. The gate went green on a stale pod, then `staging-smoke` hit the real gap and got
+#      503. On run 31969026511 the deploy step logged `t=10s /api/info=200` at 20:01:30 and the
+#      smoke got 503 at 20:02:27. All four smoke assertions are correct — /api/info, /livez and
+#      /api/v1/settings.public each return 200 against a healthy pod.
+#   2. DOWNTIME. At replicas:1 deleting the only pod leaves ZERO pods serving until the
+#      replacement finishes Rocket.Chat's ~8 minute boot. Staging 503'd on every single deploy —
+#      the opposite of what the EFS RWX uploads volume was introduced to enable.
+#
+# `rollout restart` fixes both. It edits the pod template, so the Deployment's own RollingUpdate
+# (maxSurge=1 / maxUnavailable=0) boots the new pod alongside the old one and drains the old only
+# once the new is Ready — zero downtime — and `rollout status` waits on the NEW ReplicaSet rather
+# than on an HTTP code that any pod, including the one being replaced, can answer.
 #
 # MatterChat's default branch is `develop`; this fires ONLY on `staging`.
 
@@ -27,7 +44,7 @@ env:
   ECR_REPOSITORY: matterchat
   K8S_NAMESPACE: staging
 
-# Avoid two overlapping builds racing on the same image/pod.
+# Avoid two overlapping builds racing on the same image/rollout.
 concurrency:
   group: matterchat-staging-deploy
   cancel-in-progress: false
@@ -84,29 +101,50 @@ jobs:
           cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:cache
           cache-to: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:cache,mode=max
 
-      # --- Deploy the freshly built image the ArgoCD-safe way: restart the pod ---------------------
+      # --- Deploy: the standard OmnisAI staging roll -----------------------------------------
       # NO `kubectl apply` of kubernetes/staging/* and NO `kubectl set image` (both fight ArgoCD).
+      # The Deployment pins :staging-latest with imagePullPolicy: Always, so restarting the pod
+      # template is what pulls the image this job just pushed.
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
 
-      - name: Roll the new image (restart pod; ArgoCD owns the manifests)
-        run: kubectl delete pod -n "${K8S_NAMESPACE}" -l app=matterchat --wait=false
-
-      - name: Wait for the new pod to serve /api/info
+      - name: Restart deployment
         run: |
-          for i in $(seq 1 36); do
-            code=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' "https://matterchat.stg-omnisai.io/api/info" 2>/dev/null || echo 000)
-            echo "t=$((i*10))s  /api/info=$code"
-            [ "$code" = "200" ] && exit 0
-            sleep 10
-          done
-          echo "app did not return 200 within ~6m after restart"; exit 1
+          kubectl rollout restart deployment/matterchat -n "${K8S_NAMESPACE}"
+          echo "🔄 Deployment restarted in the ${K8S_NAMESPACE} namespace"
+
+      - name: Wait for rollout to complete
+        run: |
+          # Waits on the NEW ReplicaSet. maxSurge=1/maxUnavailable=0 keeps the old pod serving
+          # throughout, so this is zero-downtime. 20m because Rocket.Chat runs its DB migrations
+          # at startup and boots slowly (~8 min is normal); kubectl returns the moment the new
+          # pod is Ready.
+          kubectl rollout status deployment/matterchat -n "${K8S_NAMESPACE}" --timeout=20m
+          echo "✅ Rollout complete — the new pod is serving"
+
+      - name: Confirm the running pod is the image this run built
+        run: |
+          set -euo pipefail
+          # rollout status proves a pod came up, not that it came up on the RIGHT image. A
+          # pull failure that silently reused a cached layer would otherwise pass.
+          want="$(aws ecr describe-images --repository-name "${ECR_REPOSITORY}" \
+            --image-ids imageTag="staging-${{ steps.vars.outputs.sha8 }}" \
+            --query 'imageDetails[0].imageDigest' --output text)"
+          got="$(kubectl get pod -n "${K8S_NAMESPACE}" -l app=matterchat \
+            -o jsonpath='{.items[0].status.containerStatuses[0].imageID}')"
+          echo "ecr digest for staging-${{ steps.vars.outputs.sha8 }}: ${want}"
+          echo "running pod imageID                        : ${got}"
+          case "${got}" in
+            *"${want}") echo "✅ running the image this run built" ;;
+            *) echo "::error::The running pod is NOT the image this run built."; exit 1 ;;
+          esac
 
       # On a failed roll, dump WHY the new pod did not become ready (boot crash vs scheduling vs
       # image pull) — pod state, events, and current + previous container logs.
       - name: Diagnose failed roll (pod state + crash logs)
         if: failure()
         run: |
+          echo "===== argocd app ====="; kubectl -n argocd get application matterchat-staging -o jsonpath='sync={.status.sync.status} revision={.status.sync.revision} health={.status.health.status}{"\n"}' 2>&1 || true
           echo "===== pods ====="; kubectl get pods -n "${K8S_NAMESPACE}" -l app=matterchat -o wide 2>&1 || true
           echo "===== describe pod (events + state) ====="; kubectl describe pod -n "${K8S_NAMESPACE}" -l app=matterchat 2>&1 | tail -70 || true
           echo "===== current container logs ====="; kubectl logs -n "${K8S_NAMESPACE}" -l app=matterchat --tail=140 2>&1 || true
