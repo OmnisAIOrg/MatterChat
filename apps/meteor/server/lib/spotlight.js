@@ -7,8 +7,23 @@ import { hasPermissionAsync, hasAllPermissionAsync } from '../../app/authorizati
 import { settings } from '../../app/settings/server';
 import { trim } from '../../lib/utils/stringUtils';
 import { readSecondaryPreferred } from '../database/readSecondaryPreferred';
-import { getFirmScopeExtraQuery, userMatchesFirmScope } from './firms/firmsService';
+import { firmRoomScopeQuery } from './firms/firmsRoomScope';
+import {
+	getCallerFirmCohort,
+	getFirmRoomScopeExtraQuery,
+	getFirmScopeExtraQuery,
+	isSelfServeFirmsEnabled,
+	roomMatchesFirmScope,
+	userMatchesFirmScope,
+} from './firms/firmsService';
 import { roomCoordinator } from './rooms/roomCoordinator';
+
+/**
+ * MATTERCHAT: how many pages of teams to pull from Mongo before the firm
+ * post-filter in _searchTeams, so a page full of foreign-firm matches does not
+ * starve the caller's own firm out of @mention autocomplete.
+ */
+const TEAM_FIRM_OVERFETCH_FACTOR = 4;
 
 export class Spotlight {
 	async fetchRooms(userId, rooms) {
@@ -47,7 +62,15 @@ export class Spotlight {
 				return [];
 			}
 
-			return this.fetchRooms(userId, await Rooms.findByNameAndTypeNotDefault(regex, 'c', roomOptions, includeFederatedRooms).toArray());
+			// MATTERCHAT: self-serve firms — an ANONYMOUS visitor is the unstamped cohort:
+			// legacy/workspace-wide rooms only, never another firm's stamped rooms. Without
+			// this arm, enabling Accounts_AllowAnonymousRead reopens the exact cross-firm
+			// enumeration leak the authenticated path below closes.
+			const anonScope = isSelfServeFirmsEnabled() ? firmRoomScopeQuery(null) : null;
+			return this.fetchRooms(
+				userId,
+				await Rooms.findByNameAndTypeNotDefault(regex, 'c', roomOptions, includeFederatedRooms, anonScope ? [anonScope] : []).toArray(),
+			);
 		}
 
 		if (!(await hasAllPermissionAsync(userId, ['view-outside-room', 'view-c-room']))) {
@@ -61,14 +84,32 @@ export class Spotlight {
 				projection: { rid: 1 },
 			}).toArray()
 		).map((s) => s.rid);
-		const exactRoom = await Rooms.findOneByNameAndType(text, searchableRoomTypeIds, roomOptions, includeFederatedRooms);
+
+		// MATTERCHAT: self-serve firms — room search stays inside the caller's firm cohort.
+		// Legacy rooms without a firmId stay visible to everyone; admins and the
+		// feature-off case get no scope (null). The caller's OWN subscribed rooms are passed
+		// in so membership always beats the firm stamp: the $nin below already excludes them
+		// from the regex query, but the exact-name lookup (findOneByNameAndType) is NOT
+		// id-excluded, so without them a room the caller is legitimately in but that carries
+		// another firm's stamp would be unfindable by its exact name.
+		const roomScope = await getFirmRoomScopeExtraQuery(userId, roomIds);
+		const extraQueries = roomScope ? [roomScope] : [];
+
+		const exactRoom = await Rooms.findOneByNameAndType(text, searchableRoomTypeIds, roomOptions, includeFederatedRooms, extraQueries);
 		if (exactRoom) {
 			roomIds.push(exactRoom.rid);
 		}
 
 		return this.fetchRooms(
 			userId,
-			await Rooms.findByNameOrFNameAndTypesNotInIds(regex, searchableRoomTypeIds, roomIds, roomOptions, includeFederatedRooms).toArray(),
+			await Rooms.findByNameOrFNameAndTypesNotInIds(
+				regex,
+				searchableRoomTypeIds,
+				roomIds,
+				roomOptions,
+				includeFederatedRooms,
+				extraQueries,
+			).toArray(),
 		);
 	}
 
@@ -168,8 +209,44 @@ export class Spotlight {
 			return users;
 		}
 
-		const teamOptions = { ...options, projection: { name: 1, type: 1 } };
-		const teams = await Team.search(userId, text, teamOptions);
+		// MATTERCHAT: self-serve firms — Team.search returns every PUBLIC team, which
+		// would let one firm enumerate another's teams via @mention autocomplete. Teams
+		// carry no firm stamp of their own (the stamp lives on the team's MAIN ROOM), so
+		// this one surface post-filters instead of pushing the scope into Mongo.
+		//
+		// Post-filtering interacts badly with the DB limit — if the first N matches are
+		// foreign-firm teams the caller gets a short page while same-firm teams matched
+		// beyond it — so OVER-FETCH by TEAM_FIRM_OVERFETCH_FACTOR and slice back to the
+		// caller's limit after filtering. Not a hard guarantee (a caller with >4x the
+		// limit in foreign matches can still come up short) but it removes the common case;
+		// the alternative is resolving cohort room ids into Team.search's id restriction.
+		const cohort = await getCallerFirmCohort(userId);
+		const wantedLimit = options.limit;
+		const teamOptions = {
+			...options,
+			...(cohort !== undefined ? { limit: wantedLimit * TEAM_FIRM_OVERFETCH_FACTOR } : {}),
+			projection: { name: 1, type: 1, roomId: 1 },
+		};
+		let teams = await Team.search(userId, text, teamOptions);
+
+		// Teams the caller is a member of always stay (membership beats the stamp), and
+		// unstamped/legacy teams stay visible to everyone.
+		if (cohort !== undefined && teams.length) {
+			const mainRoomIds = teams.map((team) => team.roomId).filter(Boolean);
+			const memberRoomIds = new Set(
+				(await SubscriptionsRaw.findByUserIdAndRoomIds(userId, mainRoomIds, { projection: { rid: 1 } }).toArray()).map((s) => s.rid),
+			);
+			const mainRooms = await Rooms.findByIds(mainRoomIds, { projection: { customFields: 1 } }).toArray();
+			const roomById = new Map(mainRooms.map((room) => [room._id, room]));
+			teams = teams
+				.filter((team) => memberRoomIds.has(team.roomId) || roomMatchesFirmScope(roomById.get(team.roomId), cohort))
+				// back to the page size the caller asked for (we over-fetched above)
+				.slice(0, wantedLimit);
+		}
+		// roomId was only needed for the firm filter — keep the wire shape unchanged
+		for (const team of teams) {
+			delete team.roomId;
+		}
 		users.push(...this.mapTeams(teams));
 
 		return users;

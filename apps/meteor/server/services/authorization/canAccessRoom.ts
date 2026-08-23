@@ -5,6 +5,7 @@ import type { IUser, ITeam, IRoom } from '@rocket.chat/core-typings';
 import { Subscriptions, Rooms, TeamMember, Team, Users } from '@rocket.chat/models';
 
 import { canAccessRoomLivechat } from './canAccessRoomLivechat';
+import { isRoomAllowedByFirmCohort } from '../../lib/firms/firmsRoomAccess';
 
 async function canAccessPublicRoom(user?: Partial<IUser>): Promise<boolean> {
 	if (!user?._id) {
@@ -16,7 +17,7 @@ async function canAccessPublicRoom(user?: Partial<IUser>): Promise<boolean> {
 }
 
 type RoomAccessValidatorConverted = (
-	room?: Pick<IRoom, '_id' | 't' | 'teamId' | 'prid' | 'abacAttributes'>,
+	room?: Pick<IRoom, '_id' | 't' | 'teamId' | 'prid' | 'abacAttributes'> & { customFields?: IRoom['customFields'] },
 	user?: IUser,
 	extraData?: Record<string, any>,
 ) => Promise<boolean>;
@@ -41,6 +42,13 @@ const roomAccessValidators: RoomAccessValidatorConverted[] = [
 			projection: { type: 1 },
 		});
 		if (team?.type === TeamType.PUBLIC) {
+			// MATTERCHAT: a public team's public channels are readable/joinable by anyone with
+			// preview-c-room, which would let one firm walk another firm's rooms via
+			// teams.listRooms → channels.info → channels.join. Non-members outside the room's
+			// firm cohort are denied here (see server/lib/firms/firmsRoomAccess.ts).
+			if (!(await isRoomAllowedByFirmCohort(room, user))) {
+				return false;
+			}
 			return canAccessPublicRoom(user);
 		}
 
@@ -60,6 +68,13 @@ const roomAccessValidators: RoomAccessValidatorConverted[] = [
 
 		// if user is banned from this room, deny access
 		if (user?._id && (await Subscriptions.findOneBannedSubscription(room._id, user._id))) {
+			return false;
+		}
+
+		// MATTERCHAT: firm cohort gate — see the note in _validateAccessToPublicRoomsInTeams.
+		// Membership still wins (the helper checks the subscription), so this only denies
+		// OUTSIDERS of another firm's stamped public channel.
+		if (!(await isRoomAllowedByFirmCohort(room, user))) {
 			return false;
 		}
 

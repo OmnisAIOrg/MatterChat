@@ -35,6 +35,9 @@ import { getSubscribedRoomsForUserWithDetails } from '../../../app/lib/server/fu
 import { removeUserFromRoom } from '../../../app/lib/server/functions/removeUserFromRoom';
 import { notifyOnSubscriptionChangedByRoomIdAndUserId, notifyOnRoomChangedById } from '../../../app/lib/server/lib/notifyListener';
 import { settings } from '../../../app/settings/server';
+// MATTERCHAT: self-serve firms — firm-scoped public-team enumeration
+import { isRoomAllowedByFirmCohort } from '../../lib/firms/firmsRoomAccess';
+import { getFirmRoomScopeExtraQuery } from '../../lib/firms/firmsService';
 
 export class TeamService extends ServiceClassInternal implements ITeamService {
 	protected name = 'team';
@@ -514,8 +517,8 @@ export class TeamService extends ServiceClassInternal implements ITeamService {
 		if (!teamId) {
 			throw new Error('missing-teamId');
 		}
-		const team = await Team.findOneById<Pick<ITeam, '_id' | 'type'>>(teamId, {
-			projection: { _id: 1, type: 1 },
+		const team = await Team.findOneById<Pick<ITeam, '_id' | 'type' | 'roomId'>>(teamId, {
+			projection: { _id: 1, type: 1, roomId: 1 },
 		});
 		if (!team) {
 			throw new Error('invalid-team');
@@ -526,6 +529,17 @@ export class TeamService extends ServiceClassInternal implements ITeamService {
 		const isMember = await TeamMember.findOneByUserIdAndTeamId(uid, teamId);
 		if (team.type === TeamType.PRIVATE && !allowPrivateTeam && !isMember) {
 			throw new Error('user-not-on-private-team');
+		}
+
+		// MATTERCHAT: only PRIVATE teams reject non-members above, so every public channel
+		// inside another firm's public team was enumerable (with its _id) in one call once
+		// the team name was known — teams.listRooms?teamName=. Non-members outside the team
+		// main room's firm cohort are refused the listing entirely.
+		if (!isMember && team.roomId) {
+			const mainRoom = await Rooms.findOneById<Pick<IRoom, '_id' | 'customFields'>>(team.roomId, { projection: { customFields: 1 } });
+			if (mainRoom && !(await isRoomAllowedByFirmCohort(mainRoom, { _id: uid }))) {
+				throw new Error('user-not-on-private-team');
+			}
 		}
 
 		if (getAllRooms) {
@@ -1026,6 +1040,11 @@ export class TeamService extends ServiceClassInternal implements ITeamService {
 		const subscriptions = await Subscriptions.find<Pick<ISubscription, 'rid'>>({ 'u._id': uid }, { projection: { rid: 1 } }).toArray();
 		const subscriptionIds = subscriptions.map(({ rid }) => rid);
 
+		// MATTERCHAT: self-serve firms — the t:'c' arm below matches EVERY public team;
+		// keep autocomplete inside the caller's firm cohort. Own memberships
+		// (subscriptionIds) always stay visible; admins/feature-off get no scope (null).
+		const firmScope = await getFirmRoomScopeExtraQuery(uid, subscriptionIds);
+
 		const rooms = await Rooms.find<ITeamAutocompleteResult>(
 			{
 				teamMain: true,
@@ -1050,6 +1069,7 @@ export class TeamService extends ServiceClassInternal implements ITeamService {
 							},
 						],
 					},
+					...(firmScope ? [firmScope] : []),
 				],
 			},
 			{

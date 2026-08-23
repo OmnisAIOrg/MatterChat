@@ -1,15 +1,18 @@
 /**
- * Auto-provision — mirror a CasePro firm's team into MatterChat on the firm
- * admin's first "Sign in with OmnisAI".
+ * Auto-provision — mirror a CasePro firm's team into MatterChat on the first
+ * "Sign in with OmnisAI" by one of the firm's admins.
  *
  * Flow (server-only, background, idempotent):
- *   firm admin's first OmnisAI login (loginHandler) → fetch the org's member
- *   roster from CentralizedAuth (GET /organizations/:id/members, authed with the
- *   shared `x-provision-key`) → pre-create a LINKED MatterChat user for each
- *   member (services.omnisai.id == member.userId == their CentralizedAuth `sub`)
- *   so the whole team appears in the workspace immediately. When a teammate
- *   later signs in via OmnisAI, upsertOmnisaiUser finds this pre-created doc
- *   (by sub, then email) and adopts it — same person, no duplicate.
+ *   an ORG ADMIN's first OmnisAI login (loginHandler; workspace admins also
+ *   qualify) → claim the org's durable marker in `matterchat_org_provisions`
+ *   (per-ORG, `_id` = orgId — _id uniqueness is the concurrency lock) → fetch
+ *   the org's member roster from CentralizedAuth (GET /organizations/:id/members,
+ *   authed with the shared `x-provision-key`) → pre-create a LINKED MatterChat
+ *   user for each member (services.omnisai.id == member.userId == their
+ *   CentralizedAuth `sub`), stamped with `customFields.firmId` = orgId so PR
+ *   #166's firm scoping applies from day one. When a teammate later signs in via
+ *   OmnisAI, upsertOmnisaiUser finds this pre-created doc (by sub, then email)
+ *   and adopts it — same person, no duplicate.
  *
  * Why IMPORT (pre-create) and not "invite": the firm's team already exists in
  * CentralizedAuth/CasePro (they ARE the org's members), so CentralizedAuth's
@@ -25,6 +28,15 @@ import { Users } from '@rocket.chat/models';
 import { serverFetch as fetch } from '@rocket.chat/server-fetch';
 import { Accounts } from 'meteor/accounts-base';
 
+import type { OrgProvisionCounts, OrgProvisionMarker } from './orgProvisionHelpers';
+import {
+	buildOrgProvisionClaimFilter,
+	decideFirmIdStamp,
+	isDuplicateKeyError,
+	isImportableRosterStatus,
+	orgFirmCohortsEnabled,
+} from './orgProvisionHelpers';
+import { db } from '../../../server/database/utils';
 import { SystemLogger } from '../../../server/lib/logger/system';
 
 type RosterMember = {
@@ -50,13 +62,135 @@ function getProvisionConfig(): ProvisionConfig | null {
 	return { apiBase, provisionKey };
 }
 
+/**
+ * Per-ORG provisioned markers. A dedicated raw collection (NOT a
+ * @rocket.chat/models class — mirrors web-push/server/subscriptions.ts) so this
+ * stays fully self-contained: no packages/models edits, no turbo rebuild. `_id`
+ * is the CentralizedAuth orgId, so the built-in _id unique index doubles as the
+ * claim lock — two simultaneous first-logins from the same org cannot both win.
+ */
+const ORG_PROVISIONS_COLLECTION = 'matterchat_org_provisions';
+
+const orgProvisions = () => db.collection<OrgProvisionMarker>(ORG_PROVISIONS_COLLECTION);
+
+/** Read an org's marker (null = never provisioned). */
+export async function getOrgProvision(orgId: string): Promise<OrgProvisionMarker | null> {
+	return orgProvisions().findOne({ _id: orgId });
+}
+
+/**
+ * Atomically claim the right to provision an org. Returns true when THIS caller
+ * owns the run. Semantics (see buildOrgProvisionClaimFilter): no marker → upsert
+ * inserts 'pending' (claimed); 'failed' or stale-'pending' → re-claimed; 'done'
+ * or fresh-'pending' → the filter misses, the upsert insert hits the _id unique
+ * index (E11000) → claim lost. Even a rare stale-pending takeover racing a zombie
+ * run is harmless: importMember dedups by sub/email.
+ */
+export async function claimOrgProvision(orgId: string, byUserId: string): Promise<boolean> {
+	const now = new Date();
+	try {
+		const res = await orgProvisions().updateOne(
+			buildOrgProvisionClaimFilter(orgId, now),
+			{
+				$set: { status: 'pending', startedAt: now, byUserId },
+				// a re-claimed marker must not carry the PREVIOUS run's outcome while 'pending'
+				$unset: { completedAt: 1, counts: 1, lastError: 1 },
+			},
+			{ upsert: true },
+		);
+		return res.upsertedCount > 0 || res.matchedCount > 0;
+	} catch (err) {
+		if (isDuplicateKeyError(err)) {
+			return false; // already 'done', or a fresh run is in flight
+		}
+		throw err;
+	}
+}
+
+export async function markOrgProvisionDone(orgId: string, counts: OrgProvisionCounts): Promise<void> {
+	await orgProvisions().updateOne({ _id: orgId }, { $set: { status: 'done', completedAt: new Date(), counts }, $unset: { lastError: 1 } });
+}
+
+export async function markOrgProvisionFailed(orgId: string, message: string): Promise<void> {
+	await orgProvisions().updateOne(
+		{ _id: orgId },
+		{ $set: { status: 'failed', completedAt: new Date(), lastError: (message || 'unknown').slice(0, 500) } },
+	);
+}
+
+/**
+ * Seed a 'done' marker for an org provisioned under the OLD per-admin scheme
+ * (services.omnisai.provisionedOrgId — only ever written after a successful run).
+ * $setOnInsert-only, so an existing marker (any status) is never touched.
+ * Returns true when a marker was actually created. Used by orgBackfill.ts so the
+ * first deploy of the per-org trigger never re-runs org #1 on the live workspace.
+ */
+export async function seedOrgProvisionMarkerAsDone(orgId: string): Promise<boolean> {
+	const now = new Date();
+	const res = await orgProvisions().updateOne(
+		{ _id: orgId },
+		{ $setOnInsert: { status: 'done', startedAt: now, completedAt: now, seededFrom: 'legacy-admin-marker' } },
+		{ upsert: true },
+	);
+	return res.upsertedCount > 0;
+}
+
+/** True when ops has opted this deployment into org→firm cohorts (MATTERCHAT_ORG_FIRM_COHORTS). */
+export function isOrgFirmCohortStampEnabled(): boolean {
+	return orgFirmCohortsEnabled(process.env.MATTERCHAT_ORG_FIRM_COHORTS);
+}
+
+/**
+ * Stamp `customFields.firmId` = the CentralizedAuth orgId — the EXACT field PR
+ * #166's firm scoping reads (getFirmScopeExtraQuery / userMatchesFirmScope), so
+ * OIDC users land in their org's cohort. One atomic `$exists:false`-guarded
+ * update (the same non-clobber precedent as firms adoptUserIntoFirm): an
+ * existing firmId — a self-serve firm's Team _id, or a prior org stamp — is
+ * NEVER overwritten; a differing value is warn-logged instead. Never throws:
+ * callers are login/import paths that must not break on a metadata stamp.
+ *
+ * OPT-IN: a no-op unless isOrgFirmCohortStampEnabled(). See orgProvisionHelpers
+ * .orgFirmCohortsEnabled for why the default has to be off on a live workspace.
+ */
+export async function stampFirmIdFromOrg(userId: string, orgId: string, source: 'login' | 'roster-import' | 'backfill'): Promise<void> {
+	// OPT-IN (see orgFirmCohortsEnabled): stamping the org id as customFields.firmId
+	// arms PR #166's user cohorts on a workspace whose accounts are NOT all
+	// OIDC-sourced, splitting it into two mutually invisible halves. Off by default.
+	if (!isOrgFirmCohortStampEnabled()) {
+		return;
+	}
+	try {
+		const res = await Users.updateOne(
+			{ '_id': userId, 'customFields.firmId': { $exists: false } },
+			{ $set: { 'customFields.firmId': orgId, 'customFields.firmIdSource': 'omnisai' } },
+		);
+		if (res.matchedCount > 0) {
+			return;
+		}
+		// The guard didn't match — the user already carries a firmId. Only a DIFFERENT
+		// value warrants noise (equal = already stamped on an earlier login).
+		const user = await Users.findOneById(userId, { projection: { customFields: 1 } });
+		const existing = (user?.customFields as Record<string, unknown> | undefined)?.firmId;
+		if (decideFirmIdStamp(existing, orgId) === 'conflict') {
+			SystemLogger.warn({
+				msg: 'OmnisAI firmId stamp conflict: user already carries a different customFields.firmId — keeping the existing value',
+				userId,
+				orgId,
+				existingFirmId: existing,
+				source,
+			});
+		}
+	} catch (err) {
+		SystemLogger.warn({ msg: 'OmnisAI firmId stamp failed (non-fatal)', err, userId, orgId, source });
+	}
+}
+
 // Local copy of loginHandler's helper (kept here to avoid a loginHandler↔orgProvision
 // import cycle — loginHandler imports THIS module, never the reverse).
 async function uniqueUsername(base: string): Promise<string> {
 	const cleaned = (base || '').replace(/[^a-zA-Z0-9._-]/g, '') || 'omnisai-user';
 	let candidate = cleaned;
 	for (let n = 1; n <= 50; n++) {
-		// eslint-disable-next-line no-await-in-loop
 		const existing = await Users.findOneByUsernameIgnoringCase(candidate, { projection: { _id: 1 } });
 		if (!existing) {
 			return candidate;
@@ -68,28 +202,76 @@ async function uniqueUsername(base: string): Promise<string> {
 
 /**
  * Pre-create one teammate's MatterChat account, linked by their CentralizedAuth
- * subject. Idempotent: a member who already has a MatterChat user (matched by
- * sub, then email) is left untouched. Never promotes to admin and never mints a
- * login token — this is a passive import, not a login.
+ * subject and stamped into the org's firm-scope cohort. Idempotent: a member who
+ * already has a MatterChat user (matched by sub, then email) only gains the
+ * missing link/firmId stamps. Never promotes to admin and never mints a login
+ * token — this is a passive import, not a login.
  */
-async function importMember(member: RosterMember): Promise<'created' | 'exists' | 'skipped'> {
+async function importMember(member: RosterMember, orgId: string): Promise<'created' | 'exists' | 'skipped'> {
 	if (!member?.userId || !member?.email) {
 		return 'skipped';
 	}
 
-	// Match the same way upsertOmnisaiUser does, so a later real login adopts this doc.
-	let existing = await Users.findOne({ 'services.omnisai.id': member.userId }, { projection: { _id: 1, 'services.omnisai.id': 1 } });
-	if (!existing) {
-		existing = await Users.findOneByEmailAddress(member.email);
+	// Invited/pending/suspended/deactivated roster entries are NOT people the org
+	// activated — minting live, pre-verified MatterChat accounts for them is wrong.
+	if (!isImportableRosterStatus(member.status)) {
+		return 'skipped';
 	}
 
-	if (existing) {
-		// A pre-existing account matched only by email won't carry the omnisai link
-		// yet; stamp it so this teammate's later OIDC login resolves by sub too.
-		const hasLink = (existing as any)?.services?.omnisai?.id === member.userId;
-		if (!hasLink) {
-			await Users.updateOne({ _id: existing._id }, { $set: { 'services.omnisai.id': member.userId } });
+	// Match the same way upsertOmnisaiUser does, so a later real login adopts this doc.
+	const linked = await Users.findOne({ 'services.omnisai.id': member.userId }, { projection: { '_id': 1, 'services.omnisai.id': 1 } });
+	if (linked) {
+		// Guarded (never clobbers an existing firmId — see stampFirmIdFromOrg).
+		await stampFirmIdFromOrg(linked._id, orgId, 'roster-import');
+		return 'exists';
+	}
+
+	const byEmail = await Users.findOneByEmailAddress(member.email);
+	if (byEmail) {
+		// SECURITY (2026-07-30 fixer): the SSO link write is strictly ADDITIVE.
+		//
+		// Any holder of a `casepro:role: admin|owner` claim can now fire a roster
+		// import for their own org (qualifiesToProvisionOrg). If this path re-pointed
+		// `services.omnisai.id` on an account matched only by EMAIL, an attacker who
+		// self-serves an org B and puts victim@firma.com in its roster could re-point
+		// that victim's MatterChat account at a CentralizedAuth subject they control —
+		// resolveOmnisaiUser would then log them straight into the victim's account,
+		// firm cohort and admin roles included. So: never touch an account that already
+		// carries a DIFFERENT omnisai subject or a firmId belonging to another cohort,
+		// and write the link only when the field is absent (conditional update = the
+		// race is closed too).
+		const existingLink = (byEmail as any)?.services?.omnisai?.id;
+		const existingFirmId = (byEmail.customFields as Record<string, unknown> | undefined)?.firmId;
+
+		if (typeof existingLink === 'string' && existingLink && existingLink !== member.userId) {
+			SystemLogger.warn({
+				msg: 'OmnisAI auto-provision: refusing to re-point an existing account SSO identity (email match, different omnisai subject)',
+				orgId,
+				userId: byEmail._id,
+			});
+			return 'skipped';
 		}
+		if (typeof existingFirmId === 'string' && existingFirmId && existingFirmId !== orgId) {
+			SystemLogger.warn({
+				msg: 'OmnisAI auto-provision: refusing to link an existing account that belongs to a different firm cohort',
+				orgId,
+				userId: byEmail._id,
+				existingFirmId,
+			});
+			return 'skipped';
+		}
+
+		if (existingLink !== member.userId) {
+			const res = await Users.updateOne(
+				{ '_id': byEmail._id, 'services.omnisai.id': { $exists: false } },
+				{ $set: { 'services.omnisai.id': member.userId } },
+			);
+			if (res.matchedCount === 0) {
+				SystemLogger.warn({ msg: 'OmnisAI auto-provision: SSO link write lost a race; leaving the account untouched', orgId });
+				return 'skipped';
+			}
+		}
+		await stampFirmIdFromOrg(byEmail._id, orgId, 'roster-import');
 		return 'exists';
 	}
 
@@ -103,25 +285,30 @@ async function importMember(member: RosterMember): Promise<'created' | 'exists' 
 			emails: [{ address: member.email, verified: true }],
 			globalRoles: ['user'],
 			services: { omnisai: { id: member.userId } },
+			// firm-scope cohort (PR #166) from day one — opt-in, see isOrgFirmCohortStampEnabled
+			...(isOrgFirmCohortStampEnabled() ? { customFields: { firmId: orgId, firmIdSource: 'omnisai' } } : {}),
 		} as any,
 	);
 	return 'created';
 }
 
+export type ProvisionRunResult = { ok: true; counts: OrgProvisionCounts } | { ok: false; reason: string };
+
 /**
- * Fetch the org roster from CentralizedAuth and import every active member.
- * Returns true when the roster was fetched and processed (so the caller may mark
- * the org provisioned), false when it could not be fetched (so it retries on the
- * admin's next login). Per-member failures are logged and do NOT fail the run.
+ * Fetch the org roster from CentralizedAuth and import every member. Returns
+ * `{ ok: true, counts }` when the roster was fetched and processed (so the
+ * caller marks the org 'done'), `{ ok: false, reason }` when it could not be
+ * fetched (so the caller marks it 'failed' and the next qualifying login
+ * retries). Per-member failures are logged and do NOT fail the run.
  */
-export async function provisionOrgFromRoster(orgId: string): Promise<boolean> {
+export async function provisionOrgFromRoster(orgId: string): Promise<ProvisionRunResult> {
 	const config = getProvisionConfig();
 	if (!config) {
 		SystemLogger.debug({ msg: 'OmnisAI auto-provision skipped: OMNISAI_OIDC_ISSUER or MATTERCHAT_PROVISION_KEY not set' });
-		return false;
+		return { ok: false, reason: 'provision config missing (OMNISAI_OIDC_ISSUER / MATTERCHAT_PROVISION_KEY)' };
 	}
 	if (!orgId) {
-		return false;
+		return { ok: false, reason: 'no orgId' };
 	}
 
 	let members: RosterMember[] = [];
@@ -133,13 +320,13 @@ export async function provisionOrgFromRoster(orgId: string): Promise<boolean> {
 		});
 		if (!res.ok) {
 			SystemLogger.warn({ msg: 'OmnisAI auto-provision: roster fetch failed', status: res.status, orgId });
-			return false;
+			return { ok: false, reason: `roster fetch failed: HTTP ${res.status}` };
 		}
 		const body = await res.json();
 		members = Array.isArray(body?.members) ? body.members : [];
 	} catch (err) {
 		SystemLogger.error({ msg: 'OmnisAI auto-provision: roster fetch error', err });
-		return false;
+		return { ok: false, reason: `roster fetch error: ${err instanceof Error ? err.message : 'unknown'}` };
 	}
 
 	let created = 0;
@@ -147,8 +334,7 @@ export async function provisionOrgFromRoster(orgId: string): Promise<boolean> {
 	let skipped = 0;
 	for (const member of members) {
 		try {
-			// eslint-disable-next-line no-await-in-loop
-			const outcome = await importMember(member);
+			const outcome = await importMember(member, orgId);
 			if (outcome === 'created') {
 				created++;
 			} else if (outcome === 'exists') {
@@ -163,5 +349,5 @@ export async function provisionOrgFromRoster(orgId: string): Promise<boolean> {
 	}
 
 	SystemLogger.info({ msg: 'OmnisAI auto-provision complete', orgId, total: members.length, created, existing: exists, skipped });
-	return true;
+	return { ok: true, counts: { total: members.length, created, existing: exists, skipped } };
 }

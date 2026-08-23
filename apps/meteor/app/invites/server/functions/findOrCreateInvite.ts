@@ -5,8 +5,10 @@ import { Random } from '@rocket.chat/random';
 import { Meteor } from 'meteor/meteor';
 
 import { RoomMemberActions } from '../../../../definition/IRoomTypeConfig';
+import { clampFirmInviteLimits, resolveFirmInviteLimits } from '../../../../server/lib/firms/firmsHelpers';
 import { roomCoordinator } from '../../../../server/lib/rooms/roomCoordinator';
 import { hasPermissionAsync } from '../../../authorization/server/functions/hasPermission';
+import { hasRoleAsync } from '../../../authorization/server/functions/hasRole';
 import { settings } from '../../../settings/server';
 import { getURL } from '../../../utils/server/getURL';
 
@@ -76,7 +78,20 @@ export const findOrCreateInvite = async (userId: string, invite: Pick<IInvite, '
 		});
 	}
 
-	const { days = 1, maxUses = 0 } = invite;
+	let { days = 1, maxUses = 0 } = invite;
+
+	// MATTERCHAT: firm invite links are ALWAYS finite. resolveFirmInviteLimits only ran
+	// inside firms.invite, but a firm owner is the `owner` of their firm team room and
+	// `create-invite-links` is granted to owner/moderator — so this stock endpoint would
+	// mint `days: 0` / `maxUses: 0` (never expires / unlimited) links straight into a firm
+	// room, and redeeming one still runs the firm adoption in useInviteToken. Clamp at the
+	// chokepoint instead of at the caller. Workspace admins are exempt.
+	const roomCustomFields = room.customFields as Record<string, unknown> | undefined;
+	const isFirmRoom = roomCustomFields?.firmTeam === true || (typeof roomCustomFields?.firmId === 'string' && !!roomCustomFields.firmId);
+	if (isFirmRoom && !(await hasRoleAsync(userId, 'admin'))) {
+		const caps = resolveFirmInviteLimits(settings.get<number>('Firms_Invite_Expiry_Days'), settings.get<number>('Firms_Invite_MaxUses'));
+		({ days, maxUses } = clampFirmInviteLimits(days, maxUses, caps));
+	}
 
 	if (!possibleDays.includes(days)) {
 		throw new Meteor.Error('invalid-number-of-days', 'Invite should expire in 1, 7, 15 or 30 days, or send 0 to never expire.');

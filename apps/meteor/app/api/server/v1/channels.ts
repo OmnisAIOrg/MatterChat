@@ -27,6 +27,9 @@ import { Meteor } from 'meteor/meteor';
 
 import { eraseRoom } from '../../../../server/lib/eraseRoom';
 import { findUsersOfRoom } from '../../../../server/lib/findUsersOfRoom';
+// MATTERCHAT: self-serve firms — firm-scoped public-channel enumeration
+import { isRoomAllowedByFirmCohort } from '../../../../server/lib/firms/firmsRoomAccess';
+import { getFirmRoomScopeExtraQuery } from '../../../../server/lib/firms/firmsService';
 import { openRoom } from '../../../../server/lib/openRoom';
 import { addAllUserToRoomFn } from '../../../../server/methods/addAllUserToRoom';
 import { addRoomLeader } from '../../../../server/methods/addRoomLeader';
@@ -83,6 +86,14 @@ async function findChannelByIdOrName({
 	}
 
 	if (!room || (room.t !== 'c' && room.t !== 'l')) {
+		throw new Meteor.Error('error-room-not-found', 'The required "roomId" or "roomName" param provided does not match any channel');
+	}
+
+	// MATTERCHAT: this resolver is a plain name/id lookup with no cohort check, so it hands
+	// a firm-A caller the _id of a firm-B channel (which channels.history / channels.members
+	// / channels.join then consume). Outsiders of the room's firm cohort get the same
+	// "not found" as a non-existent room — never a distinguishable error.
+	if (userId && !(await isRoomAllowedByFirmCohort(room, { _id: userId }))) {
 		throw new Meteor.Error('error-room-not-found', 'The required "roomId" or "roomName" param provided does not match any channel');
 	}
 
@@ -1012,6 +1023,16 @@ API.v1.addRoute(
 					},
 				},
 			];
+
+			// MATTERCHAT: self-serve firms — public-channel listing stays inside the
+			// caller's firm cohort (legacy unstamped rooms + own memberships remain
+			// visible; admins / feature-off get no scope). Composed inside $and so
+			// neither the teams $or above nor a caller-supplied `query` (parseJsonQuery
+			// merges arbitrary user filters into ourQuery) can bypass it.
+			const firmScope = await getFirmRoomScopeExtraQuery(this.userId, ids);
+			if (firmScope) {
+				ourQuery.$and = [...(Array.isArray(ourQuery.$and) ? ourQuery.$and : []), firmScope];
+			}
 
 			const { cursor, totalCount } = Rooms.findPaginated(ourQuery, {
 				sort: sort || { name: 1 },

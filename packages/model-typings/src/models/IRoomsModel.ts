@@ -12,6 +12,7 @@ import type {
 	AggregationCursor,
 	DeleteResult,
 	Document,
+	Filter,
 	FindCursor,
 	FindOptions,
 	UpdateOptions,
@@ -177,12 +178,16 @@ export interface IRoomsModel extends IBaseModel<IRoom> {
 		teamIds: Array<ITeam['_id']>,
 		roomIds: Array<IRoom['_id']>,
 		options?: FindOptions<IRoom>,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries?: Filter<IRoom>[],
 	): FindPaginated<FindCursor<IRoom>>;
 
 	findPaginatedContainingNameOrFNameInIdsAsTeamMain(
 		searchTerm: RegExp | null,
 		rids: Array<IRoom['_id']>,
 		options?: FindOptions<IRoom>,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries?: Filter<IRoom>[],
 	): FindPaginated<FindCursor<IRoom>>;
 
 	findPaginatedByTypeAndIds(type: IRoom['t'], ids: Array<IRoom['_id']>, options?: FindOptions<IRoom>): FindPaginated<FindCursor<IRoom>>;
@@ -237,6 +242,8 @@ export interface IRoomsModel extends IBaseModel<IRoom> {
 		type: IRoom['t'],
 		options?: FindOptions<IRoom>,
 		includeFederatedRooms?: boolean,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries?: Filter<IRoom>[],
 	): Promise<IRoom | null>;
 	findById(rid: string, options?: FindOptions<IRoom>): Promise<IRoom | null>;
 	findByIds(rids: string[], options?: FindOptions<IRoom>): FindCursor<IRoom>;
@@ -251,6 +258,8 @@ export interface IRoomsModel extends IBaseModel<IRoom> {
 		type: IRoom['t'],
 		options?: FindOptions<IRoom>,
 		includeFederatedRooms?: boolean,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries?: Filter<IRoom>[],
 	): FindCursor<IRoom>;
 	findByNameOrFNameAndTypesNotInIds(
 		name: IRoom['name'] | RegExp,
@@ -258,6 +267,8 @@ export interface IRoomsModel extends IBaseModel<IRoom> {
 		ids: string[],
 		options?: FindOptions<IRoom>,
 		includeFederatedRooms?: boolean,
+		// MATTERCHAT: optional extra $and conditions (firm-scoped enumeration)
+		extraQueries?: Filter<IRoom>[],
 	): FindCursor<IRoom>;
 	findByDefaultAndTypes(defaultValue: boolean, types: IRoom['t'][], options?: FindOptions<IRoom>): FindCursor<IRoom>;
 	findDirectRoomContainingAllUsernames(usernames: string[], options?: FindOptions<IRoom>): Promise<IRoom | null>;

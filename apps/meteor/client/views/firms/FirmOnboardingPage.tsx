@@ -42,6 +42,10 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [createdFirmName, setCreatedFirmName] = useState('');
+	// Set when the workspace has no mail transport: nothing was emailed, so the
+	// owner has to distribute this link themselves (2026-07-30 smoke defect — the
+	// UI used to report "invitations sent" for mail that never left the box).
+	const [manualInviteUrl, setManualInviteUrl] = useState<string | null>(null);
 
 	const handleCreate = async (): Promise<void> => {
 		const name = firmName.trim();
@@ -75,12 +79,20 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 		setBusy(true);
 		setError(null);
 		try {
-			const { sent, invalid } = await inviteToFirm({ emails });
-			if (sent.length > 0) {
-				dispatchToastMessage({ type: 'success', message: t('Firm_invites_sent', { count: sent.length }) });
+			const { queued, invalid, undelivered, emailDelivery, inviteUrl } = await inviteToFirm({ emails });
+			if (queued.length > 0) {
+				dispatchToastMessage({ type: 'success', message: t('Firm_invites_queued', { count: queued.length }) });
 			}
 			if (invalid.length > 0) {
 				dispatchToastMessage({ type: 'warning', message: t('Firm_invites_failed', { emails: invalid.join(', ') }) });
+			}
+			if (emailDelivery === 'unavailable') {
+				// keep the user on this step — the link is the only way their team gets in
+				setManualInviteUrl(inviteUrl);
+				return;
+			}
+			if (undelivered.length > 0) {
+				dispatchToastMessage({ type: 'warning', message: t('Firm_invites_undelivered', { emails: undelivered.join(', ') }) });
 			}
 			onDone();
 		} catch (e: unknown) {
@@ -142,6 +154,13 @@ const FirmOnboardingPage = ({ onDone }: { onDone: () => void }): ReactElement =>
 						</Form.Header>
 						<Form.Container>
 							<Callout type='success' title={t('Firm_created_callout', { firmName: createdFirmName })} />
+							{manualInviteUrl && (
+								<Callout mbs={16} type='warning' title={t('Firm_invites_email_unavailable')}>
+									<Box fontScale='p2' style={{ wordBreak: 'break-all' }}>
+										{manualInviteUrl}
+									</Box>
+								</Callout>
+							)}
 							<FieldGroup mbs={16}>
 								<Field>
 									<FieldLabel htmlFor={emailsFieldId}>{t('Firm_invite_emails')}</FieldLabel>

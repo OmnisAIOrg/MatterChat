@@ -26,16 +26,17 @@ import { RoutePolicy } from 'meteor/routepolicy';
 import { WebApp } from 'meteor/webapp';
 
 import { verifyOmnisaiIdToken } from './verifyIdToken';
+import { SystemLogger } from '../../../server/lib/logger/system';
 import {
 	finishDesktopLoginCallback,
 	finishDesktopLoginError,
 	isDesktopAuthorizeRequest,
 	isDesktopState,
 } from '../../connectors/server/desktopOAuth';
-import { SystemLogger } from '../../../server/lib/logger/system';
 import { settings } from '../../settings/server';
 
 import './loginHandler';
+import './orgBackfill';
 import './litboxProxy';
 import './crossFirmProxy';
 import './setupWizard';

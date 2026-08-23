@@ -1,4 +1,5 @@
 import { settingsRegistry } from '../../app/settings/server';
+import { FIRM_INVITE_DEFAULT_DAYS, FIRM_INVITE_DEFAULT_MAX_USES } from '../lib/firms/firmsHelpers';
 
 /**
  * Settings for "Sign in with OmnisAI" (CentralizedAuth OIDC login).
@@ -99,5 +100,24 @@ export const createOmnisAIOAuthSettings = () =>
 			public: false,
 			i18nLabel: 'Firms_Scoped_Directory',
 			i18nDescription: 'Firms_Scoped_Directory_Description',
+		});
+
+		// Firm invite links are ALWAYS finite: capped redemptions + short expiry.
+		// Values are snapped to the sets stock findOrCreateInvite accepts and can
+		// never be 0/unlimited (see resolveFirmInviteLimits in
+		// server/lib/firms/firmsHelpers.ts — allowed values listed in the setting
+		// descriptions).
+		await this.add('Firms_Invite_MaxUses', FIRM_INVITE_DEFAULT_MAX_USES, {
+			type: 'int',
+			public: false,
+			i18nLabel: 'Firms_Invite_MaxUses',
+			i18nDescription: 'Firms_Invite_MaxUses_Description',
+		});
+
+		await this.add('Firms_Invite_Expiry_Days', FIRM_INVITE_DEFAULT_DAYS, {
+			type: 'int',
+			public: false,
+			i18nLabel: 'Firms_Invite_Expiry_Days',
+			i18nDescription: 'Firms_Invite_Expiry_Days_Description',
 		});
 	});

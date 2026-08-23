@@ -31,6 +31,31 @@ export class InvitesRaw extends BaseRaw<IInvite> implements IInvitesModel {
 		);
 	}
 
+	/**
+	 * MATTERCHAT: atomically consume ONE redemption of an invite.
+	 *
+	 * Stock RC reads `uses` in validateInviteToken and increments it later in
+	 * useInviteToken, so N concurrent redemptions of the same link all read the
+	 * pre-increment value and all pass. That race was cosmetic while firm invites
+	 * were unlimited; now that `Firms_Invite_MaxUses` IS the security guarantee for
+	 * a firm link (each redemption also runs adoptUserIntoFirm), the cap has to hold
+	 * under concurrency. A single conditional `findOneAndUpdate` does that.
+	 *
+	 * `maxUses <= 0` still means unlimited (stock semantics for non-firm invites).
+	 * Returns the updated invite, or null when the cap was already reached.
+	 */
+	async consumeUseById(_id: string): Promise<IInvite | null> {
+		// BaseRaw wrapper (not this.col) so `_updatedAt` is maintained, matching increaseUsageById
+		return this.findOneAndUpdate(
+			{
+				_id,
+				$or: [{ maxUses: { $lte: 0 } }, { maxUses: { $exists: false } }, { $expr: { $lt: ['$uses', '$maxUses'] } }],
+			},
+			{ $inc: { uses: 1 } },
+			{ returnDocument: 'after' },
+		);
+	}
+
 	async countUses(): Promise<number> {
 		const [result] = await this.col.aggregate<{ totalUses: number }>([{ $group: { _id: null, totalUses: { $sum: '$uses' } } }]).toArray();
 

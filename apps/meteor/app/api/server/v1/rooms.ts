@@ -50,6 +50,7 @@ import { banUserFromRoomMethod } from '../../../../server/lib/banUserFromRoom';
 import * as dataExport from '../../../../server/lib/dataExport';
 import { eraseRoom } from '../../../../server/lib/eraseRoom';
 import { findUsersOfRoomOrderedByRole } from '../../../../server/lib/findUsersOfRoomOrderedByRole';
+import { isRoomAllowedByFirmCohort } from '../../../../server/lib/firms/firmsRoomAccess';
 import { openRoom } from '../../../../server/lib/openRoom';
 import type { RoomRoles } from '../../../../server/lib/roles/getRoomRoles';
 import { unbanUserFromRoom } from '../../../../server/lib/unbanUserFromRoom';
@@ -153,7 +154,14 @@ API.v1.get(
 	async function action() {
 		const { roomName } = this.queryParams;
 
-		const room = await Rooms.findOneByName(roomName, { projection: { _id: 1 } });
+		// MATTERCHAT: this is an unauthenticated-by-permission existence ORACLE — any logged-in
+		// user can probe any room name. Channel names in this product are matter/case names, so
+		// a firm-A user could confirm a firm-B matter exists and then resolve its _id via
+		// channels.info. Report rooms outside the caller's firm cohort as non-existent.
+		const room = await Rooms.findOneByName(roomName, { projection: { _id: 1, customFields: 1 } });
+		if (room && !(await isRoomAllowedByFirmCohort(room, { _id: this.userId }))) {
+			return API.v1.success({ exists: false });
+		}
 
 		return API.v1.success({ exists: !!room });
 	},
