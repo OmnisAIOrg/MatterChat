@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 
 import { settings } from '../../../../app/settings/server';
 import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { firmScopedLeadFilter } from '../firmScope';
 
 /**
  * Intake tasks: SLA / cold-lead / sequence follow-up ticklers (M6 —
@@ -166,7 +167,9 @@ export type DetectColdLeadsResult = { scanned: number; tasksCreated: number };
  */
 export async function detectColdLeads(uid: string, now: Date = new Date()): Promise<DetectColdLeadsResult> {
 	const thresholdMs = coldLeadDays() * 24 * 60 * 60 * 1000;
-	const open = await BoardsLeads.find({ archived: { $ne: true } }).toArray();
+	// scoped to the caller's own firm — this used to sweep every firm's leads
+	const scope = await firmScopedLeadFilter(uid, 'boards.leads.detectColdLeads');
+	const open = await BoardsLeads.find({ archived: { $ne: true }, ...scope }).toArray();
 
 	let scanned = 0;
 	let tasksCreated = 0;

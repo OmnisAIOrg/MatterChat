@@ -3,6 +3,7 @@ import { BoardsCards, BoardsLeads, BoardsReferralSources } from '@rocket.chat/mo
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { firmScopedLeadFilter } from '../firmScope';
 import { funnel, type FunnelResult } from '../leads/reports';
 import { caseProClient } from '../matters/caseProClient';
 import { aging, financial, caseload, type AgingReport, type FinancialReport, type CaseloadReport } from '../matters/reports';
@@ -246,9 +247,11 @@ export async function sourceToSettlement(
 	const fromMonth = options.from?.slice(0, 7);
 	const toMonth = options.to?.slice(0, 7);
 
+	// scoped to the caller's own firm — this used to read every firm's leads
+	const scope = await firmScopedLeadFilter(uid, 'boards.reports.sourceToSettlement');
 	const [sources, allLeads] = await Promise.all([
 		BoardsReferralSources.findActive().toArray(),
-		BoardsLeads.find({ archived: { $ne: true } }).toArray(),
+		BoardsLeads.find({ archived: { $ne: true }, ...scope }).toArray(),
 	]);
 	const leads = allLeads.filter((l) => inWindow(l, options.from, options.to));
 

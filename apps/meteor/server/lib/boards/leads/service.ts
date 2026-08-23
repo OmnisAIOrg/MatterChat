@@ -19,6 +19,7 @@ import { caseProClient } from '../casepro';
 import type { IntakeCaptureInput } from '../casepro';
 import { createBoard, createList } from '../service';
 import { emitBoardEvent } from '../events';
+import { findBoardsForFirm } from '../firmScope';
 import { ensureMattersBoard, bindMatterCard } from '../matters';
 import { assertBoardRole } from '../permissions';
 import { pushCreate, pushStage, pushQualify } from './caseproSync';
@@ -94,9 +95,14 @@ export type EnsureLeadsBoardResult = { board: IBoard; lists: IBoardList[]; creat
  * board admin on creation so they immediately pass `assertBoardRole`.
  */
 export async function ensureLeadsBoard(uid: string): Promise<EnsureLeadsBoardResult> {
-	// reuse the first existing leads-pipeline board the user can see, else create
-	const existing = await Boards.findByPipelineType('leads').toArray();
-	const board = existing.find((b) => !b.archived) ?? null;
+	// Reuse an existing leads-pipeline board the caller can actually reach — one in
+	// their own firm — preferring one they already belong to. This used to scan
+	// `findByPipelineType('leads')` and return the first non-archived hit in the
+	// WHOLE database, so a second firm on the workspace got handed the first firm's
+	// leads board. In a single-firm workspace every board is reachable, so this
+	// still returns exactly the board the unscoped scan returned.
+	const existing = await findBoardsForFirm(uid, 'boards.ensureLeadsBoard', 'leads');
+	const board = existing.find((b) => b.members.some((m) => m.userId === uid)) ?? existing[0] ?? null;
 
 	if (board) {
 		const lists = await seedMissingStages(uid, board._id);

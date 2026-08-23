@@ -24,9 +24,8 @@ import {
 	validateUnauthorizedErrorResponse,
 } from '@rocket.chat/rest-typings';
 
-import { Boards } from '@rocket.chat/models';
-
 import { caseProTransportDiagnostics } from '../../../../server/lib/boards/casepro';
+import { findBoardsForFirm } from '../../../../server/lib/boards/firmScope';
 import {
 	caseProClient,
 	ensureMattersBoard,
@@ -226,9 +225,11 @@ API.v1.get(
 			return API.v1.unauthorized();
 		}
 
-		// Get the matters board (the primary consumer of this endpoint).
-		const boards = await Boards.findByPipelineType('matters').toArray();
-		const board = boards.find((b) => !b.archived);
+		// Get the matters board (the primary consumer of this endpoint), confined to
+		// the caller's own firm — this used to return the first matters board in the
+		// whole database, leaking another firm's sync state.
+		const boards = await findBoardsForFirm(uid, 'boards.casepro.syncStatus', 'matters');
+		const board = boards.find((b) => b.members.some((m) => m.userId === uid)) ?? boards[0];
 
 		if (!board) {
 			// No board yet; return empty status.

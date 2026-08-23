@@ -1,7 +1,10 @@
 import type { ILead, ICommunication } from '@rocket.chat/core-typings';
 import { BoardsLeads, BoardsCommunications } from '@rocket.chat/models';
+import { Meteor } from 'meteor/meteor';
 import type { Filter } from 'mongodb';
 
+import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { firmScopedLeadFilter } from '../firmScope';
 import { getBoardForUser } from '../permissions';
 
 /**
@@ -17,7 +20,17 @@ export type ListLeadsFilter = { boardId?: string; statusId?: string; ownerId?: s
 export async function listLeads(uid: string, filter: ListLeadsFilter, paging: Paging): Promise<{ leads: ILead[]; total: number }> {
 	if (filter.boardId) {
 		await getBoardForUser(filter.boardId, uid, 'boards.leads.list');
+	} else if (!(await hasPermissionAsync(uid, 'boards-leads-view'))) {
+		// A board-less list ran with NO permission check at all and no scope, so any
+		// authenticated user could read every firm's leads. Gate it like the rest of
+		// the leads surface, then scope it below.
+		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'boards.leads.list' });
 	}
+
+	// `boardId` lists are already confined by getBoardForUser; a board-less list is
+	// confined to the boards the caller's firm can reach. In a single-firm workspace
+	// that is every board, so the result set is unchanged.
+	const scope = filter.boardId ? { boardId: filter.boardId } : await firmScopedLeadFilter(uid, 'boards.leads.list');
 
 	// One Mongo query composes every narrowing filter (the model finders' own
 	// predicates + the JS refinements this used to do), and the page + total come
@@ -36,7 +49,7 @@ export async function listLeads(uid: string, filter: ListLeadsFilter, paging: Pa
 	const rx = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : undefined;
 	const query = {
 		archived: { $ne: true },
-		...(filter.boardId ? { boardId: filter.boardId } : {}),
+		...scope,
 		...(filter.statusId ? { statusId: filter.statusId } : {}),
 		...(filter.ownerId ? { 'ownership.ownerId': filter.ownerId } : {}),
 		...(rx
@@ -71,9 +84,13 @@ export async function getLeadInfo(uid: string, leadId: string): Promise<{ lead: 
 	if (!lead) {
 		throw new Error('error-lead-not-found');
 	}
-	if (lead.boardId) {
-		await getBoardForUser(lead.boardId, uid, 'boards.leads.get');
+	if (!lead.boardId) {
+		// No board means nothing attributes this lead to a firm, and the board check
+		// below used to be skipped entirely — handing the lead to any authenticated
+		// caller. Refuse instead; every lead createLead writes carries a boardId.
+		throw new Meteor.Error('error-not-allowed', 'Not allowed', { method: 'boards.leads.get' });
 	}
+	await getBoardForUser(lead.boardId, uid, 'boards.leads.get');
 	const communications = await BoardsCommunications.findByLead(leadId).toArray();
 	return { lead, communications };
 }

@@ -3,6 +3,7 @@ import { BoardsLeads, BoardsReferralSources } from '@rocket.chat/models';
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermissionAsync } from '../../../../app/authorization/server/functions/hasPermission';
+import { firmScopedLeadFilter } from '../firmScope';
 import { caseProClient } from '../matters/caseProClient';
 
 /**
@@ -113,9 +114,11 @@ export async function sourceRoi(uid: string, options: SourceRoiOptions = {}): Pr
 	const fromMonth = options.from?.slice(0, 7);
 	const toMonth = options.to?.slice(0, 7);
 
+	// scoped to the caller's own firm — this used to read every firm's leads
+	const scope = await firmScopedLeadFilter(uid, 'boards.leads.marketing.sourceRoi');
 	const [sources, allLeads] = await Promise.all([
 		BoardsReferralSources.findActive().toArray(),
-		BoardsLeads.find({ archived: { $ne: true } }).toArray(),
+		BoardsLeads.find({ archived: { $ne: true }, ...scope }).toArray(),
 	]);
 	const leads = allLeads.filter((l) => inWindow(l, options.from, options.to));
 

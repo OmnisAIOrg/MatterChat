@@ -1,6 +1,7 @@
 import type { ILead } from '@rocket.chat/core-typings';
 import { BoardsLeads } from '@rocket.chat/models';
 
+import { firmScopedBoardIds } from '../firmScope';
 import { normalizeName, nameSimilarity } from './conflict';
 import { getMattersSnapshots } from './mattersSnapshotMemo';
 
@@ -79,11 +80,17 @@ function leadStatusLabel(l: ILead): string {
  * persisted candidate (only contact fields needed) or an existing lead — when it
  * carries an `_id` we exclude it from its own match set.
  */
-export async function checkDuplicates(lead: Pick<ILead, 'contact'> & Partial<ILead>): Promise<CheckDuplicatesResult> {
+export async function checkDuplicates(uid: string, lead: Pick<ILead, 'contact'> & Partial<ILead>): Promise<CheckDuplicatesResult> {
 	const phone = normPhone(lead.contact?.phone ?? lead.contact?.mobile);
 	const email = normEmail(lead.contact?.email);
 	const name = leadName(lead);
 	const selfId = lead._id;
+
+	// Confine both sweeps below to boards the caller's firm can reach. They used to
+	// run across the whole database, so one firm could probe another's client list
+	// by phone, email or name and read back the match's name, refNo and status.
+	const reachable = new Set(await firmScopedBoardIds(uid, 'boards.leads.checkDuplicates'));
+	const outOfScope = (other: Pick<ILead, 'boardId'>): boolean => !other.boardId || !reachable.has(other.boardId);
 
 	// ----- 1. existing boards_leads on phone OR email (exact), then refine by name.
 	const leadCandidates: DupLeadCandidate[] = [];
@@ -95,7 +102,7 @@ export async function checkDuplicates(lead: Pick<ILead, 'contact'> & Partial<ILe
 			lead.contact?.email,
 		).toArray();
 		for (const other of byContact) {
-			if (other._id === selfId || seenLeadIds.has(other._id)) {
+			if (other._id === selfId || seenLeadIds.has(other._id) || outOfScope(other)) {
 				continue;
 			}
 			seenLeadIds.add(other._id);
@@ -126,7 +133,7 @@ export async function checkDuplicates(lead: Pick<ILead, 'contact'> & Partial<ILe
 
 	// fuzzy name-only sweep across open leads (catches typo'd / missing contact).
 	if (name && normalizeName(name)) {
-		const openLeads = await BoardsLeads.find({ archived: { $ne: true } }).toArray();
+		const openLeads = await BoardsLeads.find({ archived: { $ne: true }, boardId: { $in: [...reachable] } }).toArray();
 		for (const other of openLeads) {
 			if (other._id === selfId || seenLeadIds.has(other._id)) {
 				continue;
