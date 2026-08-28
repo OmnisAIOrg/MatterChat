@@ -28,7 +28,9 @@ export type ChiTurn =
 	| { kind: 'toolResults'; results: { id: string; name: string; content: string; isError?: boolean }[] };
 
 export type LlmConfig = {
-	provider: 'anthropic' | 'openai';
+	/** `claudecode` is not a wire format — it is the host's Claude sign-in, driven through the
+	 *  Agent SDK in claudecode.ts. It has no base URL and no key; see that file's header. */
+	provider: 'anthropic' | 'openai' | 'claudecode';
 	apiKey: string;
 	model: string;
 	/** Optional override; empty string = provider default. */
@@ -183,6 +185,13 @@ export async function llmStep(
 ): Promise<LlmStep> {
 	const fetcher = opts.fetcher || defaultFetch;
 	const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+	// The Claude sign-in has no endpoint to POST to — it is a local subprocess, not HTTP. Split
+	// off before any URL/header work. Lazily imported so the SDK never loads for key providers.
+	if (config.provider === 'claudecode') {
+		const { claudeCodeStep } = await import('./claudecode');
+		return claudeCodeStep(config.model, system, turns, tools);
+	}
 
 	let url: string;
 	let headers: Record<string, string>;

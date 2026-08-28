@@ -31,6 +31,7 @@ export const createChiAssistantSettings = () =>
 				{ key: 'ollama', i18nLabel: 'Chi_Assistant_Provider_Ollama' },
 				{ key: 'lmstudio', i18nLabel: 'Chi_Assistant_Provider_LMStudio' },
 				{ key: 'llamacpp', i18nLabel: 'Chi_Assistant_Provider_LlamaCpp' },
+				{ key: 'claudecode', i18nLabel: 'Chi_Assistant_Provider_ClaudeCode' },
 				{ key: 'custom', i18nLabel: 'Chi_Assistant_Provider_Custom' },
 			],
 			public: false,

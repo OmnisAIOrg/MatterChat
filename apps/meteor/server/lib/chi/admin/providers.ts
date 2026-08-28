@@ -16,7 +16,8 @@ export type ProviderPreset = {
 	baseUrl: string;
 	/** Default model id for this provider (tool-use capable where the provider supports it). */
 	defaultModel: string;
-	/** Runs on the workspace's own machine (Ollama/LM Studio/llama.cpp) — no API key required. */
+	/** Runs on the workspace's own machine (Ollama/LM Studio/llama.cpp, or the Claude sign-in)
+	 *  — no API key required, and the host must provide it. */
 	local?: boolean;
 };
 
@@ -44,6 +45,12 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
 	ollama: { family: 'openai', baseUrl: 'http://localhost:11434/v1', defaultModel: 'llama3.1:8b', local: true },
 	lmstudio: { family: 'openai', baseUrl: 'http://localhost:1234/v1', defaultModel: '', local: true },
 	llamacpp: { family: 'openai', baseUrl: 'http://localhost:8080/v1', defaultModel: '', local: true },
+	// The host's Claude sign-in — no key, no endpoint, billed to that machine's Claude
+	// subscription instead of per token. Not a wire format: claudecode.ts drives the `claude`
+	// CLI through the Agent SDK. `local` because it has the same host constraint as Ollama —
+	// the CLI must exist and be signed in on the machine running Meteor. Default model
+	// 'inherit' means "whatever that login already defaults to", so it never goes stale here.
+	claudecode: { family: 'claudecode', baseUrl: '', defaultModel: 'inherit', local: true },
 	// Any other OpenAI-compatible endpoint — the admin supplies the Base URL and Model.
 	custom: { family: 'openai', baseUrl: '', defaultModel: '' },
 };
@@ -66,7 +73,10 @@ export function resolveProvider(
 	overrideModel?: string,
 ): { family: LlmConfig['provider']; baseUrl: string | undefined; model: string } {
 	const preset = PROVIDER_PRESETS[(providerId || '').trim()] || PROVIDER_PRESETS.anthropic;
-	const baseUrl = (overrideBaseUrl || '').trim() || preset.baseUrl;
+	// The Claude sign-in has no endpoint at all. Base URL is one shared setting across every
+	// provider, so a value left behind by a previous selection would otherwise ride along and
+	// read as an endpoint for something that never makes an HTTP call.
+	const baseUrl = preset.family === 'claudecode' ? '' : (overrideBaseUrl || '').trim() || preset.baseUrl;
 	const model = (overrideModel || '').trim() || preset.defaultModel || (preset.family === 'openai' ? 'gpt-4o' : 'claude-sonnet-5');
 	return { family: preset.family, baseUrl: baseUrl || undefined, model };
 }

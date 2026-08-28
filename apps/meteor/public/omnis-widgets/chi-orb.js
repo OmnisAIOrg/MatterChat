@@ -122,6 +122,12 @@
 	// (chi-llm-<slug>-url/key/model) until the workspace BE roster lands.
 	var MODELS = [
 		{ slug: 'anthropic', name: 'Claude · Anthropic', hint: 'claude-sonnet-4-5' },
+		// Sign-in rather than key: the Claude login already on the server that runs MatterChat,
+		// billed to that subscription. Nothing to paste here, so the row has no key/URL field —
+		// the workspace admin picks it under Admin → Settings → Chi Assistant. (EvidenceHunt's
+		// roster, which this list came from, also carries a ChatGPT/Codex sign-in; that one has
+		// no chat-with-tools implementation to port yet, so it is deliberately absent.)
+		{ slug: 'claudecode', name: 'Claude · sign-in on this server', signin: true, hint: 'inherit — the login default' },
 		{ slug: 'openai', name: 'OpenAI', hint: 'gpt-4o' },
 		{ slug: 'gemini', name: 'Gemini · Google', hint: 'gemini-2.5-pro' },
 		{ slug: 'xai', name: 'Grok · xAI', hint: 'grok-4' },
@@ -1395,7 +1401,9 @@
 					var key = localStorage.getItem('chi-llm-' + m.slug + '-key') || '';
 					var url = localStorage.getItem('chi-llm-' + m.slug + '-url') || m.url || '';
 					var mdl = localStorage.getItem('chi-llm-' + m.slug + '-model') || '';
-					var configured = m.local ? !!url : !!key;
+					// A sign-in provider has nothing for the member to configure — the credential is
+					// the host's Claude login — so it is always "ready" as far as this panel goes.
+					var configured = m.signin ? true : m.local ? !!url : !!key;
 					var sel = cur === m.slug;
 					return '<div data-drum-base="" style="border-bottom:1px solid rgba(128,128,128,.13);">' +
 						'<div class="mrow" data-model="' + m.slug + '" style="display:flex;align-items:center;gap:8px;padding:9px 2px;cursor:pointer;">' +
@@ -1405,7 +1413,9 @@
 							'<span style="display:inline-flex;opacity:.5;transform:rotate(90deg);">' + chev + '</span>' +
 						'</div>' +
 						'<div class="med" data-med="' + m.slug + '" style="display:none;padding:2px 2px 10px 25px;">' +
-							(m.local
+							(m.signin
+								? '<div style="margin:3px 0 6px;font-size:11px;line-height:1.5;opacity:.55;">No API key — this uses the Claude login on the server running MatterChat, billed to that subscription. An admin enables it under Admin → Settings → Chi Assistant. Leave the model blank to inherit whatever that login already defaults to.</div>'
+								: m.local
 								? '<input class="min" data-store="chi-llm-' + m.slug + '-url" placeholder="Base URL — e.g. ' + (m.url || 'http://localhost:11434') + '" value="' + esc(url) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">'
 								: '<input class="min" data-store="chi-llm-' + m.slug + '-key" type="password" placeholder="API key" value="' + esc(key) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">') +
 							'<input class="min" data-store="chi-llm-' + m.slug + '-model" placeholder="Model — e.g. ' + m.hint + '" value="' + esc(mdl) + '" style="width:100%;box-sizing:border-box;margin:3px 0;padding:7px 10px;border-radius:9px;font-size:11.5px;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.2);">' +

@@ -65,6 +65,7 @@ Main ▸ Language models ▸ Transcription ▸ Dictionary ▸ Modes ▸ History 
 ### Language models (BYO-LLM)
 - Cloud: Anthropic, OpenAI, Gemini, xAI, Groq, Cerebras, OpenRouter, DeepSeek
 - Local ($0, private): Ollama, LM Studio, llama.cpp, custom OpenAI-compatible — **no API key required server-side**
+- Sign-in (no key): **Claude sign-in** — the `claude` CLI login on the machine running MatterChat, driven through the Agent SDK (`server/lib/chi/admin/claudecode.ts`), billed to that subscription. Ported from EvidenceHunt, which is where this roster came from; unlike EvidenceHunt's text-only version it registers Chi's tool schemas and intercepts the model's choice via `canUseTool`, so Chi's own loop, confirm-gate and audit still execute every tool. Same host constraint as Ollama — the CLI must exist and be signed in there, so it is a local-dev/desktop lane, not the staging pod. EvidenceHunt's other sign-in provider (ChatGPT via the Codex CLI) is **not** ported: it has no chat-with-tools implementation there either, only an agent-runner path.
 - Admin (workspace) provider/key/model in Admin → Settings → Chi Assistant; **per-user model override** via `chi.prefs`
 
 ### Product connectors (MCP)
