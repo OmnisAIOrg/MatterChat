@@ -86,14 +86,103 @@ export function splitMcpName(name: string): { server: string; tool: string } | u
 	return { server: rest.slice(0, sep), tool: rest.slice(sep + 1) };
 }
 
-const WRITEY = /^(create|update|delete|remove|post|send|move|complete|set|add|copy|decide|request|assign|archive|invite|upload|write)/i;
+/**
+ * Verbs that only ever read. A tool whose FIRST token is one of these, and which carries no write
+ * verb anywhere, runs without a confirm chip.
+ */
+const READ_VERBS = new Set([
+	'list',
+	'get',
+	'search',
+	'read',
+	'query',
+	'fetch',
+	'show',
+	'describe',
+	'count',
+	'aggregate',
+	'validate',
+	'preview',
+	'lookup',
+	'status',
+	'summarize',
+	'summary',
+	'who',
+	'catch',
+	'upcoming',
+]);
 
-/** Confirm-gate heuristic for MCP tools: readOnly annotation wins; else write-looking names park. */
+/**
+ * Verbs that mutate. Matched against ANY token, so `find_or_create` and `get_or_create` are caught
+ * despite their read-looking first word.
+ */
+const WRITE_VERBS = new Set([
+	'create',
+	'update',
+	'delete',
+	'remove',
+	'insert',
+	'upsert',
+	'write',
+	'post',
+	'send',
+	'move',
+	'complete',
+	'set',
+	'add',
+	'copy',
+	'decide',
+	'request',
+	'assign',
+	'archive',
+	'invite',
+	'upload',
+	'execute',
+	'run',
+	'apply',
+	'import',
+	'sync',
+	'merge',
+	'batch',
+	'mutate',
+	'reset',
+	'revoke',
+	'approve',
+]);
+
+/**
+ * Split a tool name into verb tokens: `find_or_create` → [find, or, create], `getEntity` →
+ * [get, entity]. Tokenizing rather than prefix-matching the raw string is what stops `get_settings`
+ * from reading as a write because "settings" contains "set".
+ */
+function toolTokens(toolName: string): string[] {
+	return String(toolName || '')
+		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+		.toLowerCase()
+		.split(/[^a-z0-9]+/)
+		.filter(Boolean);
+}
+
+/**
+ * Confirm-gate heuristic for MCP tools. An explicit `readOnlyHint` from the server still wins.
+ * Otherwise the default is FAIL-SAFE: a tool confirms unless it looks unmistakably like a read.
+ *
+ * This used to be the inverse — park only names starting with a known write verb — which silently
+ * fell open on every meta-tool API. Against casepro-mcp-v2's 15 tools that let `execute_operation`,
+ * `execute_workflow`, `batch_create/update/delete`, `upsert_entity` and `find_or_create` run with no
+ * chip at all: the two arbitrary-operation tools included, writing into a legal CRM. A name-prefix
+ * allowlist cannot enumerate what a meta-tool does, so the unknown case has to park, not proceed.
+ *
+ * The cost is false positives — a read-only tool with an unusual name (`discuss_document`) now asks
+ * once. That is the right way round, and a connector fixes it properly by setting `readOnlyHint`.
+ */
 export function mcpNeedsConfirm(toolName: string, readOnly: boolean, input: Record<string, unknown>): string | undefined {
 	if (readOnly) {
 		return undefined;
 	}
-	if (!WRITEY.test(toolName)) {
+	const tokens = toolTokens(toolName);
+	const mutates = tokens.some((t) => WRITE_VERBS.has(t));
+	if (!mutates && tokens.length > 0 && READ_VERBS.has(tokens[0])) {
 		return undefined;
 	}
 	const args = JSON.stringify(input || {});

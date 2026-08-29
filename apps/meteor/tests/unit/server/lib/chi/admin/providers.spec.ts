@@ -64,3 +64,31 @@ describe('chi provider presets — cloud additions + locals', () => {
 		}
 	});
 });
+
+describe('chi provider presets — the Claude sign-in (no API key)', () => {
+	it('resolves to its own family with no endpoint, so llm.ts routes it away from the fetch path', () => {
+		const r = resolveProvider('claudecode');
+		expect(r.family).to.equal('claudecode');
+		expect(r.baseUrl).to.be.undefined;
+	});
+
+	it('is flagged local, which is what lets service.ts build a config with no API key', () => {
+		expect(isLocalProvider('claudecode')).to.equal(true);
+	});
+
+	it("defaults the model to 'inherit' so the host login's own default is used", () => {
+		expect(resolveProvider('claudecode').model).to.equal('inherit');
+	});
+
+	it('still honours an explicit model override (pinning one model for the workspace)', () => {
+		expect(resolveProvider('claudecode', '', 'claude-fable-5').model).to.equal('claude-fable-5');
+	});
+
+	it('ignores a stale Base URL left behind by a previously selected provider', () => {
+		// The Base URL setting is shared across providers; a leftover value must not be mistaken
+		// for an endpoint here, because this provider has none.
+		const r = resolveProvider('claudecode', 'https://api.openai.com/v1');
+		expect(r.family).to.equal('claudecode');
+		expect(r.baseUrl).to.be.undefined;
+	});
+});

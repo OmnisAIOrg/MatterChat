@@ -72,6 +72,42 @@ describe('chi MCP connectors — pure parts', () => {
 			expect((summary as string).length).to.be.lessThan(260);
 			expect(summary).to.contain('…');
 		});
+
+		// The gate used to park only names STARTING with a known write verb, which fell open on
+		// every meta-tool API. These are casepro-mcp-v2's real tool names — the ones that were
+		// writing to a legal CRM with no confirm chip.
+		it('parks CasePro meta-tools whose names carry no leading write verb', () => {
+			for (const tool of ['execute_operation', 'execute_workflow', 'batch_create', 'batch_update', 'batch_delete', 'upsert_entity']) {
+				expect(mcpNeedsConfirm(tool, false, { entity: 'matter' }), tool).to.be.a('string');
+			}
+		});
+
+		it('parks find_or_create despite the read-looking first word', () => {
+			expect(mcpNeedsConfirm('find_or_create', false, { entity: 'matter' })).to.be.a('string');
+			expect(mcpNeedsConfirm('get_or_create_party', false, {})).to.be.a('string');
+		});
+
+		it('still lets the genuinely read-only CasePro tools through without a chip', () => {
+			for (const tool of ['query_entities', 'get_entity', 'list_schema', 'aggregate_data', 'search_documents', 'validate_operation']) {
+				expect(mcpNeedsConfirm(tool, false, {}), tool).to.equal(undefined);
+			}
+		});
+
+		it('does not mistake a substring for a verb (settings contains "set")', () => {
+			expect(mcpNeedsConfirm('get_settings', false, {})).to.equal(undefined);
+			expect(mcpNeedsConfirm('list_addresses', false, {})).to.equal(undefined);
+		});
+
+		it('reads camelCase names as well as snake_case', () => {
+			expect(mcpNeedsConfirm('getEntity', false, {})).to.equal(undefined);
+			expect(mcpNeedsConfirm('createEntity', false, {})).to.be.a('string');
+		});
+
+		it('parks an unrecognized name rather than letting it through', () => {
+			// The whole point of the inversion: an unknown tool shape is not evidence that it reads.
+			expect(mcpNeedsConfirm('frobnicate_matter', false, {})).to.be.a('string');
+			expect(mcpNeedsConfirm('', false, {})).to.be.a('string');
+		});
 	});
 });
 
