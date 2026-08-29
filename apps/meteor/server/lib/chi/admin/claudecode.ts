@@ -203,14 +203,20 @@ export async function claudeCodeStep(model: string, system: string, turns: ChiTu
 				// that keeps this from being an arbitrary-execution surface on the workspace host,
 				// and it holds even if a built-in slips past `tools: []`. Only calls that name a
 				// real Chi tool are handed back to the loop; anything else is dropped, so an
-				// unknown name can never reach runAnyTool. `interrupt` ends the SDK turn at once
-				// rather than paying for a second one we would discard.
+				// unknown name can never reach runAnyTool.
+				//
+				// Deny WITHOUT `interrupt`. Interrupting here looked tidier — end the turn the
+				// moment the decision is known — but it makes the SDK finish with an error result
+				// (`[ede_diagnostic] result_type=user stop_reason=null`) instead of a clean stop,
+				// so the captured call was thrown away and every tool-using turn came back
+				// { ok:false }. Text-only turns passed, which is exactly how this hid. Let the
+				// denial flow back as a normal tool result and `maxTurns: 1` ends the turn.
 				canUseTool: async (name: string, input: Record<string, unknown>) => {
 					const chiName = chiToolName(name);
 					if (known.has(chiName)) {
 						record(`cc_${captured.length}`, chiName, input || {});
 					}
-					return { behavior: 'deny', message: 'Chi runs this tool itself.', interrupt: true };
+					return { behavior: 'deny', message: 'Chi runs this tool itself.' };
 				},
 			},
 		});
@@ -236,6 +242,13 @@ export async function claudeCodeStep(model: string, system: string, turns: ChiTu
 		return { ok: true, text: text.trim(), toolCalls: captured };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
+		// The model already made its decision — don't throw it away because the stream ended
+		// untidily afterwards. Denying a tool is an unusual path for the SDK and it has been
+		// seen to finish with an error result; the captured call is still the right answer,
+		// and service.ts's loop will surface any real problem on the next step.
+		if (captured.length) {
+			return { ok: true, text: '', toolCalls: captured };
+		}
 		if (/oauth|401|not logged in|\/login|authenticate/i.test(message)) {
 			return { ok: false, note: NOT_SIGNED_IN };
 		}
