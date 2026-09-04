@@ -2087,10 +2087,15 @@
 					   state, so the amber one below stays: it says work finished
 					   while you were away, which is the one thing this orb does
 					   that is allowed to interrupt. */
+					/* RED, NOT AMBER (founder, 2026-08-24). Amber reads as a
+					   warning and an unread message is not one; a count is red
+					   everywhere else on the screen. `#ff453a` is this file's own
+					   recording red, so the widget has one red rather than two
+					   that nearly match. */
 					(this._unseen > 0
-					? '<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(255,159,10,.34) 30%, rgba(255,159,10,0) 70%);animation:chiHalo 1.6s ease-in-out infinite;"></div>'
+					? '<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(255,69,58,.34) 30%, rgba(255,69,58,0) 70%);animation:chiHalo 1.6s ease-in-out infinite;"></div>'
 					: '') +
-				(this._unseen > 0 ? '<div style="position:absolute;top:-5px;left:-5px;z-index:5;min-width:18px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:#ff9f0a;color:#1a1206;box-shadow:0 2px 7px rgba(0,0,0,.5);">' + (this._unseen > 99 ? '99+' : this._unseen) + '</div>' : '') +
+				(this._unseen > 0 ? '<div style="position:absolute;top:-5px;left:-5px;z-index:5;min-width:18px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:#ff453a;color:#fff;box-shadow:0 2px 7px rgba(0,0,0,.5);">' + (this._unseen > 99 ? '99+' : this._unseen) + '</div>' : '') +
 					(rt ? '<div style="position:absolute;inset:-9px;border-radius:50%;pointer-events:none;box-shadow:0 0 24px 6px rgba(59,155,255,.6);animation:chiHalo 1.5s ease-in-out infinite;"></div>' : '') +
 					'<img src="' + A + 'enso-blue.png" alt="Chi" style="position:absolute;inset:0;width:80px;height:80px;filter:' + (t.markFilter || 'drop-shadow(0 3px 12px rgba(0,0,0,.55))') + ';">' +
 					/* WORKING, not always. This loop used to run whether or not
