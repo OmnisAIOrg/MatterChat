@@ -263,6 +263,27 @@
 			return '<div style="position:absolute;left:50%;top:50%;width:150%;height:185%;transform:translate(-50%,-50%);mix-blend-mode:screen;background:' + RIPPLE + ';animation:chiRipple 1.3s ease-out ' + delay + ' infinite;"></div>';
 		}).join('');
 	}
+
+	/* THE CHARGE. The three build-up strokes from the brand's ensō loader, on
+	 * the hold loop it exposes for exactly this — a mark that is WORKING rather
+	 * than booting. Staggered by thirds of one 2.4s breath (0 / -0.8s / -1.6s),
+	 * which is what makes the stroke look like it is gathering rather than
+	 * blinking, plus the dim wash the loader multiplies underneath so the
+	 * strokes have something to rise out of.
+	 *
+	 * Authored against the brand bundle's own values, not approximated: the
+	 * masks are its b2/b3/b4 files and the timing is its `.enso-hold` rule.
+	 * `base` is the asset path so a host that relocates `enso-assets/` still
+	 * resolves them. */
+	function charge(base) {
+		var strokes = [['enso-b2.svg', '0s'], ['enso-b3.svg', '-0.8s'], ['enso-b4.svg', '-1.6s']];
+		return '<div style="position:absolute;inset:0;background:linear-gradient(160deg,#233a78 0%,#142359 100%);mix-blend-mode:multiply;animation:chiDimHold 2.4s ease-in-out infinite;"></div>' +
+			strokes.map(function (pair) {
+				return '<div style="position:absolute;inset:0;background:#7FA1F2;mix-blend-mode:screen;' +
+					'-webkit-mask:url(' + base + pair[0] + ') center/contain no-repeat;mask:url(' + base + pair[0] + ') center/contain no-repeat;' +
+					'animation:chiBuildHold 2.4s ease-in-out ' + pair[1] + ' infinite;"></div>';
+			}).join('');
+	}
 	function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
 	class ChiOrb extends HTMLElement {
@@ -2045,8 +2066,8 @@
 		}
 		_render() {
 			var t = this._theme, A = this._base, self = this;
-			var mask = '-webkit-mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;mask:url(' + A + 'omnis-enso-bristle.svg) center/contain no-repeat;';
-			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{0%{opacity:0;transform:translateY(14px) scale(.955)}70%{opacity:1;transform:translateY(-2px) scale(1.004)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiBreathe{0%,100%{opacity:.45;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.08)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
+			var mask = '-webkit-mask:url(' + A + 'enso-blue.png) center/contain no-repeat;mask:url(' + A + 'enso-blue.png) center/contain no-repeat;';
+			var kf = '@keyframes chiRipple{0%{transform:translate(-50%,-50%) scale(2.05);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.3);opacity:0}}@keyframes chiMsgIn{0%{opacity:0;transform:translateY(14px) scale(.955)}70%{opacity:1;transform:translateY(-2px) scale(1.004)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes chiBreathe{0%,100%{opacity:.45;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.08)}}@keyframes chiDot{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes chiHalo{0%,100%{opacity:.65}50%{opacity:1}}@keyframes chiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}@keyframes chiSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes chiVoicePulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.22);opacity:.95}}@keyframes chiFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@keyframes chiBuildHold{0%,100%{opacity:0}55%{opacity:.55}}@keyframes chiDimHold{0%,100%{opacity:.6}55%{opacity:.22}}@media (prefers-reduced-motion:reduce){*{animation:none !important}}';
 			var hover = '#grip:hover{background:rgba(31,157,69,.4);color:#fff}.ctl:active,.arcb:active,.sbtn:active,.fdot:active{transform:scale(.92) !important}#sendbtn:active{transform:scale(.93) !important}.chip:hover{box-shadow:0 4px 14px -4px rgba(48,209,88,.35), inset 0 1px 0 rgba(255,255,255,.14)}.srow{border-radius:8px}.fmin{transition:transform .12s ease, background .15s}.fmin:hover{transform:translateY(-1px);background:rgba(59,155,255,.28) !important}.ctl{transition:transform .15s ease, box-shadow .15s ease}.ctl:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 12px rgba(0,0,0,.35)}.arcb{opacity:.72;transition:opacity .15s ease}.arcb:hover{opacity:1}.chip{transition:transform .15s ease, background .18s, border-color .18s}.chip:hover{transform:translateY(-1px)}.sbtn:hover{background:rgba(128,128,128,.28) !important}.srow{transition:opacity .15s}.fdot{transition:transform .12s ease}.fdot:hover{transform:scale(1.2)}#sendbtn{transition:transform .15s ease, box-shadow .18s}#sendbtn:hover{transform:scale(1.08);box-shadow:0 3px 14px rgba(48,209,88,.55) !important}#inputpill:focus-within{border-color:rgba(48,209,88,.55) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px rgba(48,209,88,.12) !important}';
 			var head = '<style>' + kf + hover + ':host{display:block;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}input{outline:none;border:none;background:transparent}button{font-family:inherit}::-webkit-scrollbar{width:0;height:0}</style>';
 
@@ -2058,13 +2079,30 @@
 				var rt = this._realtime;
 				this.shadowRoot.innerHTML = head +
 					'<div id="launch" title="Open Chi (hold to move)" style="position:relative;width:80px;height:80px;cursor:grab;transform:scale(' + this._scale + ');transform-origin:' + (this._hasWinCtrl() ? '50% 50%' : '50% 100%') + ';">' +
+					/* AT REST THERE IS NO HALO. The brand bundle is explicit about
+					   the idle mark — "the plain ensō, exactly as the PNG: no
+					   overlays, no glow, no motion" — and its own `.enso-rest`
+					   class hides every layer to reach that. A glow that never
+					   stops is decoration; a glow that means something is a
+					   state, so the amber one below stays: it says work finished
+					   while you were away, which is the one thing this orb does
+					   that is allowed to interrupt. */
 					(this._unseen > 0
 					? '<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(255,159,10,.34) 30%, rgba(255,159,10,0) 70%);animation:chiHalo 1.6s ease-in-out infinite;"></div>'
-					: '<div style="position:absolute;inset:-14px;border-radius:50%;pointer-events:none;background:radial-gradient(circle, rgba(48,209,88,.22) 30%, rgba(48,209,88,0) 70%);animation:chiHalo 3s ease-in-out infinite;"></div>') +
+					: '') +
 				(this._unseen > 0 ? '<div style="position:absolute;top:-5px;left:-5px;z-index:5;min-width:18px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:#ff9f0a;color:#1a1206;box-shadow:0 2px 7px rgba(0,0,0,.5);">' + (this._unseen > 99 ? '99+' : this._unseen) + '</div>' : '') +
 					(rt ? '<div style="position:absolute;inset:-9px;border-radius:50%;pointer-events:none;box-shadow:0 0 24px 6px rgba(59,155,255,.6);animation:chiHalo 1.5s ease-in-out infinite;"></div>' : '') +
-					'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:80px;height:80px;filter:' + (t.markFilter || 'drop-shadow(0 3px 12px rgba(0,0,0,.55))') + ';">' +
-					'<div style="position:absolute;inset:0;' + mask + '">' + ripples() + '</div>' +
+					'<img src="' + A + 'enso-blue.png" alt="Chi" style="position:absolute;inset:0;width:80px;height:80px;filter:' + (t.markFilter || 'drop-shadow(0 3px 12px rgba(0,0,0,.55))') + ';">' +
+					/* WORKING, not always. This loop used to run whether or not
+					   Chi was doing anything, which is what made the resting orb
+					   read as busy — and made the animation meaningless when it
+					   finally did mean something. It now runs only while a turn
+					   is in flight or a call is live, and it carries the build
+					   strokes with it so the mark charges rather than merely
+					   rippling. */
+					((this._thinking || rt)
+						? '<div style="position:absolute;inset:0;' + mask + '">' + charge(A) + ripples() + '</div>'
+						: '') +
 					(this._hasRealtime() ? '<div id="micdot" title="' + (rt ? 'End voice call' : 'Talk to Chi') + '" style="position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:' + GREEN + ';box-shadow:0 3px 10px rgba(48,209,88,.55);' + (rt ? 'animation:chiPulse 1.1s ease-in-out infinite;' : '') + '">' + (rt ? '<svg width="10" height="10" viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1.5" fill="#fff"/></svg>' : '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"><path d="M4 8v0M6.5 6v4M9.5 4.5v7M12 6.5v3"/></svg>') + '</div>' : '') +
 					'</div>';
 				var launchEl = this.shadowRoot.getElementById('launch');
@@ -2107,7 +2145,7 @@
 					'<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px 70px;text-align:center;">' +
 						'<div style="position:relative;width:150px;height:126px;">' +
 							'<div style="position:absolute;left:50%;top:50%;width:220px;height:220px;border-radius:50%;pointer-events:none;animation:chiVoicePulse 1.9s ease-in-out infinite;background:radial-gradient(circle, rgba(90,160,255,.38) 0%, transparent 62%);"></div>' +
-							'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:' + (t.markFilter || 'drop-shadow(0 0 16px rgba(255,255,255,.25))') + ';">' +
+							'<img src="' + A + 'enso-blue.png" alt="Chi" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:' + (t.markFilter || 'drop-shadow(0 0 16px rgba(255,255,255,.25))') + ';">' +
 							'<div style="position:absolute;inset:0;' + mask + '">' + ripples() + '</div>' +
 						'</div>' +
 						'<div style="font-size:13px;font-weight:800;letter-spacing:2.4px;color:' + ACCENT + ';text-shadow:0 0 14px rgba(59,155,255,.6);animation:chiHalo 1.6s ease-in-out infinite;">LISTENING…</div>' +
@@ -2137,8 +2175,11 @@
 				'<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:2px 0 8px;">' +
 					'<div style="position:relative;width:56px;height:46px;">' +
 						'<div style="position:absolute;left:50%;top:50%;width:110px;height:110px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);background:radial-gradient(circle, ' + t.glow + ' 0%, transparent 62%);animation:chiBreathe 5.5s ease-in-out infinite;"></div>' +
-						'<img src="' + A + 'omnis-enso-bristle.svg" alt="Chi" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:' + (t.markFilter || 'drop-shadow(0 0 10px rgba(255,255,255,.2))') + ';">' +
-						'<div id="markloop" style="position:absolute;inset:0;display:none;' + mask + '">' + ripples() + '</div>' +
+						'<img src="' + A + 'enso-blue.png" alt="Chi" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:' + (t.markFilter || 'drop-shadow(0 0 10px rgba(255,255,255,.2))') + ';">' +
+						/* Same charge as the launcher — one animation for "Chi is
+						   working", wherever the mark is drawn. Already gated on
+						   thinking/listening by `markloop`'s display toggle. */
+						'<div id="markloop" style="position:absolute;inset:0;display:none;' + mask + '">' + charge(A) + ripples() + '</div>' +
 					'</div>' +
 					'<div style="font-size:15px;font-weight:800;letter-spacing:3px;color:' + t.name + ';">CHI</div>' +
 					'<div id="status" style="font-size:10px;letter-spacing:1.4px;font-weight:600;color:' + t.dim + ';min-height:12px;"></div>' +
